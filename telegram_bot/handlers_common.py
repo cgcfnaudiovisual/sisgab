@@ -115,6 +115,18 @@ def register_common_handlers(bot):
                 except Exception as ex:
                     await bot.reply_to(message, f"❌ Erro ao listar pautas: {ex}")
             
+            elif text in ["📅 Agenda Google", "/agenda"]:
+                google_cal_url = "https://calendar.google.com/calendar/u/0?cid=Y2djZm5hdWRpb3Zpc3VhbEBnbWFpbC5jb20"
+                is_operator = profile and str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'supervisor')
+                
+                msg_cal = (
+                    f"📅 **AGENDA GOOGLE CALENDAR OFICIAL COMSOC** ⚓\n\n"
+                    f"📧 **Conta de Gestão:** `cgcfnaudiovisual@gmail.com`\n\n"
+                    f"🔗 [Clique aqui para abrir a Agenda Google Oficial]({google_cal_url})\n\n"
+                    f"💡 *Todos os eventos e pautas criados no SisGAB ou no Bot são sincronizados com 1-clique diretamente na sua agenda Google!*"
+                )
+                await bot.reply_to(message, msg_cal, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
+            
             elif text == "🔌 Cautelas Ativas":
                 from database import get_db_connection
                 db = get_db_connection()

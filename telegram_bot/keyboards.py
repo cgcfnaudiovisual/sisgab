@@ -9,11 +9,11 @@ def get_unauthorized_keyboard():
 def get_main_menu_keyboard(is_operator=False):
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     if is_operator:
-        markup.row(types.KeyboardButton("📋 Pautas COMSOC"), types.KeyboardButton("➕ Criar Demanda"))
-        markup.row(types.KeyboardButton("🤖 Digerir Pauta (IA)"), types.KeyboardButton("🔌 Cautelas Ativas"))
+        markup.row(types.KeyboardButton("📋 Pautas COMSOC"), types.KeyboardButton("📅 Agenda Google"))
+        markup.row(types.KeyboardButton("➕ Criar Demanda"), types.KeyboardButton("🔌 Cautelas Ativas"))
         markup.row(types.KeyboardButton("⚙️ Configurações"), types.KeyboardButton("ℹ️ Ajuda"))
     else:
-        markup.row(types.KeyboardButton("➕ Criar Demanda"), types.KeyboardButton("🔍 Buscar Minhas Fotos"))
+        markup.row(types.KeyboardButton("➕ Criar Demanda"), types.KeyboardButton("📅 Agenda Google"))
         markup.row(types.KeyboardButton("⚙️ Configurações"), types.KeyboardButton("ℹ️ Ajuda"))
     markup.row(types.KeyboardButton("❌ Cancelar"))
     return markup
