@@ -16,7 +16,7 @@ def register_common_handlers(bot):
         if chat_id not in chat_states:
             profile = await check_authorized_user(message.from_user.id)
             if not profile:
-                if text == "📝 Solicitar Acesso":
+                if text.lower() in ["📝 solicitar acesso", "/start", "/solicitar", "/acesso", "solicitar", "solicitar acesso", "acesso"]:
                     # Inicia wizard de solicitação
                     chat_states[chat_id] = {
                         'action': 'settings',
@@ -24,9 +24,24 @@ def register_common_handlers(bot):
                         'user': None,
                         'data': {}
                     }
-                    await bot.reply_to(message, "📝 **Solicitação de Acesso**\n\nPor favor, informe seu **Posto ou Graduação** (ex: Sgt, Ten, Cap):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                    await bot.reply_to(
+                        message, 
+                        f"📝 **SOLICITAÇÃO DE ACESSO — SISGAB** ⚓\n\n"
+                        f"Bem-vindo! Seu Telegram ID é `{chat_id}`.\n\n"
+                        f"Por favor, informe seu **Posto ou Graduação** (ex: Sgt, Ten, Cap, Civ):", 
+                        reply_markup=get_cancel_keyboard(), 
+                        parse_mode='Markdown'
+                    )
                 else:
-                    await bot.reply_to(message, "⚓ Assistente SisGAB: Envie /menu para ver os comandos permitidos.", reply_markup=get_unauthorized_keyboard())
+                    await bot.reply_to(
+                        message, 
+                        f"⚓ **Assistente SisGAB**\n\n"
+                        f"Olá! Seu acesso ainda não está liberado no sistema.\n"
+                        f"📱 **Seu Telegram ID:** `{chat_id}`\n\n"
+                        f"Clique no botão **📝 Solicitar Acesso** abaixo ou envie /solicitar para pedir seu cadastro.", 
+                        reply_markup=get_unauthorized_keyboard(),
+                        parse_mode='Markdown'
+                    )
                 return
 
             allowed = USER_PERMISSIONS_CACHE.get(message.from_user.id, set())
@@ -280,20 +295,40 @@ async def finalizar_solicitacao_acesso(bot, message, chat_id, state):
             # NOTIFICAR OS ADMINISTRADORES E SUPERVISORES VIA TELEGRAM
             try:
                 from notifications_manager import notify_telegram
-                res_admin = conn.table('efetivo').select('telegram_id').in_('role', ['admin', 'supervisor', 'oficial_gab']).execute()
-                if res_admin and res_admin.data:
-                    alert_txt = (
-                        f"🔔 **NOVA SOLICITAÇÃO DE ACESSO AO SISGAB** ⚓\n\n"
-                        f"👤 **Militar:** {reg_guerra} ({reg_nome})\n"
-                        f"📧 **E-mail:** {reg_email}\n"
-                        f"🏢 **OM/Unidade:** {reg_om}\n"
-                        f"🎯 **Seção/Função:** {reg_funcao}\n"
-                        f"📱 **Telegram ID:** `{chat_id}`\n\n"
-                        f"👉 *Acesse o painel 'Usuários e Permissões' no SisGAB para aprovar.*"
-                    )
-                    for adm in res_admin.data:
-                        if adm_tg := adm.get('telegram_id'):
-                            notify_telegram(alert_txt, "system", custom_chat_id=adm_tg)
+                alert_txt = (
+                    f"🔔 **NOVA SOLICITAÇÃO DE ACESSO AO SISGAB** ⚓\n\n"
+                    f"👤 **Militar:** {reg_guerra} ({reg_nome})\n"
+                    f"📧 **E-mail:** {reg_email}\n"
+                    f"🏢 **OM/Unidade:** {reg_om}\n"
+                    f"🎯 **Seção/Função:** {reg_funcao}\n"
+                    f"📱 **Telegram ID:** `{chat_id}`\n\n"
+                    f"👉 *Acesse o painel 'Usuários e Permissões' no SisGAB para aprovar.*"
+                )
+                
+                admin_tg_ids = set()
+                try:
+                    res_admin_ef = conn.table('efetivo').select('telegram_id').in_('role', ['admin', 'supervisor', 'oficial_gab']).execute()
+                    if res_admin_ef and res_admin_ef.data:
+                        for adm in res_admin_ef.data:
+                            if adm_tg := adm.get('telegram_id'):
+                                admin_tg_ids.add(str(adm_tg))
+                except Exception as ef_search_err:
+                    print(f"[EF SEARCH ERR] {ef_search_err}")
+
+                try:
+                    res_admin_u = conn.table('users').select('telegram_id').in_('role', ['admin', 'supervisor', 'oficial_gab']).execute()
+                    if res_admin_u and res_admin_u.data:
+                        for adm in res_admin_u.data:
+                            if adm_tg := adm.get('telegram_id'):
+                                admin_tg_ids.add(str(adm_tg))
+                except Exception as u_search_err:
+                    print(f"[U SEARCH ERR] {u_search_err}")
+
+                if admin_tg_ids:
+                    for adm_tg in admin_tg_ids:
+                        notify_telegram(alert_txt, "system", custom_chat_id=adm_tg)
+                else:
+                    notify_telegram(alert_txt, "system", role_required="admin")
             except Exception as notif_err:
                 print(f"[BOT ADMIN NOTIFY REG ERR] {notif_err}")
 
