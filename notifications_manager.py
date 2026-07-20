@@ -4,7 +4,8 @@ import asyncio
 import threading
 from database import get_bot_db_connection as get_db_connection
 
-PREFERENCES_FILE = r'x:\PROGRAMACAO\COMSOC_IA\telegram_preferences.json'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PREFERENCES_FILE = os.path.join(BASE_DIR, 'telegram_preferences.json')
 file_lock = threading.Lock()
 
 DEFAULT_PREFERENCES = {
