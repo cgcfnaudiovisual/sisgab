@@ -971,13 +971,16 @@ def login_page(request: Request):
                                     if res_ef.data and res_ef.data[0].get('email'):
                                         login_email = res_ef.data[0]['email']
                                     else:
-                                        # Tenta buscar pelo username em Users
-                                        res_u = svc_db.table('Users').select('nome').eq('username', login_email.lower()).execute()
+                                        # Tenta buscar pelo username em users (caixa baixa)
+                                        res_u = svc_db.table('users').select('nome, email').eq('username', login_email.lower()).execute()
                                         if res_u.data:
-                                            guerra = res_u.data[0]['nome']
-                                            res_ef2 = svc_db.table('efetivo').select('email').eq('nome_guerra', guerra.upper()).execute()
-                                            if res_ef2.data and res_ef2.data[0].get('email'):
-                                                login_email = res_ef2.data[0]['email']
+                                            if res_u.data[0].get('email'):
+                                                login_email = res_u.data[0]['email']
+                                            else:
+                                                guerra = res_u.data[0]['nome']
+                                                res_ef2 = svc_db.table('efetivo').select('email').eq('nome_guerra', guerra.upper()).execute()
+                                                if res_ef2.data and res_ef2.data[0].get('email'):
+                                                    login_email = res_ef2.data[0]['email']
                             except Exception as lookup_err:
                                 print(f"[LOGIN LOOKUP ERR] {lookup_err}")
                         
@@ -1106,6 +1109,8 @@ def sync_menu_permissions_db():
 
 # Inicializa o Bot do Telegram concorrente ao servidor
 from alerts_manager import AlertsManager
+from database import seed_default_admin
+app.on_startup(seed_default_admin)
 app.on_startup(sync_menu_permissions_db)
 app.on_startup(telegram_bot.init_bot)
 app.on_startup(AlertsManager.start_alerts_scheduler)
