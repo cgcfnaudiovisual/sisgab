@@ -32,13 +32,23 @@ async def _run_resilient_polling(bot_instance):
     while True:
         try:
             print("[TELEGRAM BOT] Iniciando loop de escuta Polling...", flush=True)
-            await bot_instance.polling(non_stop=True, timeout=20, request_timeout=40)
+            try:
+                await bot_instance.delete_webhook(drop_pending_updates=True)
+            except Exception as e:
+                print(f"[TELEGRAM BOT] Aviso ao limpar webhook: {e}", flush=True)
+
+            await bot_instance.polling(non_stop=True, timeout=15, request_timeout=30)
         except asyncio.CancelledError:
             print("[TELEGRAM BOT] Polling cancelado pelo sistema.", flush=True)
             break
         except Exception as poll_err:
-            print(f"[TELEGRAM BOT POLLING ERR] {poll_err}. Reconectando em 5 segundos...", flush=True)
-            await asyncio.sleep(5)
+            err_str = str(poll_err)
+            if "Conflict" in err_str or "409" in err_str:
+                print(f"[TELEGRAM BOT CONFLITO 409] Outra instância detectada. Limpando sessão e tentando reconectar em 7s...", flush=True)
+                await asyncio.sleep(7)
+            else:
+                print(f"[TELEGRAM BOT POLLING ERR] {poll_err}. Reconectando em 5s...", flush=True)
+                await asyncio.sleep(5)
 
 async def init_bot():
     """Tarefa assíncrona inicializada no startup do NiceGUI para rodar o Telegram bot."""
