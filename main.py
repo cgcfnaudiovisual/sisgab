@@ -186,6 +186,7 @@ import comsoc_brindes
 import comsoc_galeria
 import comsoc_historico
 import comsoc_aniversariantes
+import smart_editor
 from database import authenticate_user, get_user_by_id
 from services import data_service
 
@@ -212,6 +213,7 @@ sisgab_menu_categories = [
             {'name': 'Entrega em Hot', 'icon': 'photo_library', 'path': '/comsoc_galeria', 'subtitle': 'Upload de fotos em campo'},
             {'name': 'Arquivo e Histórico', 'icon': 'history', 'path': '/comsoc_historico', 'subtitle': 'Busca e links de coberturas passadas'},
             {'name': 'Aniversariantes & Datas', 'icon': 'cake', 'path': '/comsoc_aniversariantes', 'subtitle': 'Mensagens com IA e impressão'},
+            {'name': 'Smart Editor IA', 'icon': 'movie_filter', 'path': '/smart_editor', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'supervisor'], 'subtitle': 'Cortes com IA, SFX e FCPXML'},
             {'name': 'Monitor TV (COMSOC TV)', 'icon': 'tv', 'path': '/sisgab_tv', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Modo TV tático'},
         ]
     },
@@ -698,6 +700,12 @@ def comsoc_historico_page():
 def comsoc_aniversariantes_page():
     app.storage.user['current_path'] = '/comsoc_aniversariantes'
     build_layout(comsoc_aniversariantes.render_page)()
+
+
+@ui.page('/smart_editor')
+def smart_editor_page():
+    app.storage.user['current_path'] = '/smart_editor'
+    build_layout(smart_editor.render_page)()
 
 
 @ui.page('/sisgab_tv')

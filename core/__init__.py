@@ -1,0 +1,1 @@
+# Smart Editor — Core Package
