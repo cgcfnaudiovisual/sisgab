@@ -8,8 +8,10 @@ bot = None
 polling_task = None
 chat_states = {}
 
+DEFAULT_BOT_TOKEN = "8867290420:AAGsruGmuzwH3PYWGbiQwa2zShB0_aEpHjw"
+
 def get_bot_token() -> str:
-    """Busca o token do Telegram na tabela Config do banco ou no .env como fallback."""
+    """Busca o token do Telegram na tabela Config do banco, .env ou fallback padrao."""
     token = ""
     try:
         conn = get_db_connection()
@@ -22,6 +24,8 @@ def get_bot_token() -> str:
     
     if not token:
         token = os.getenv("TELEGRAM_TOKEN", "").strip()
+    if not token:
+        token = DEFAULT_BOT_TOKEN
     return token
 
 async def _run_resilient_polling(bot_instance):

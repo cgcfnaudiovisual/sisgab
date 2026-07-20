@@ -8,13 +8,11 @@ base_dir = os.path.dirname(os.path.abspath(__file__))
 env_path = os.path.join(base_dir, '.env')
 load_dotenv(env_path)
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-# SEGURANÇA: Usa a chave anon (que respeita RLS) como padrão.
-# A service_role_key é usada APENAS em get_bot_db_connection() / get_service_db_connection().
-SUPABASE_KEY = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_URL = os.getenv("SUPABASE_URL") or "https://ruabgndnhgdverqlgvef.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1YWJnbmRuaGdkdmVycWxndmVmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDM5NDg2MSwiZXhwIjoyMDk5OTcwODYxfQ._ULU--E5O9zptG6DawmSMvhAKtApTNRFbbnAboSzTRE"
+SUPABASE_KEY = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1YWJnbmRuaGdkdmVycWxndmVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzOTQ4NjEsImV4cCI6MjA5OTk3MDg2MX0.TfbP1UCBUeuNTmJcsvhVNh0436ydctbrapXmbGpP2Po"
 
-DB_MODE = os.getenv("DB_MODE", "local").strip().lower()
+DB_MODE = os.getenv("DB_MODE", "supabase").strip().lower()
 
 # Instância única para banco local para evitar conexões repetidas
 _local_db_instance = None
