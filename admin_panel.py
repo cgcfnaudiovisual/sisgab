@@ -1,6 +1,6 @@
 from nicegui import ui, app
 import theme
-from database import get_db_connection
+from database import get_service_db_connection, get_db_connection
 from services import data_service
 
 THEME = theme.colors
@@ -28,7 +28,7 @@ def render_page():
         container.clear()
         
         # Carregar solicitações pendentes e usuários
-        db_conn = get_db_connection()
+        db_conn = get_service_db_connection() or get_db_connection()
         requests_data = []
         users_data = []
         is_offline = not db_conn
@@ -129,7 +129,7 @@ def render_page():
                                 reload_admin_data()
                                 return
                             
-                            conn = get_db_connection()
+                            conn = get_service_db_connection() or get_db_connection()
                             if not conn:
                                 ui.notify('Sem conexão com banco de dados', color='red')
                                 return
@@ -246,7 +246,7 @@ def render_page():
         def open_edit_dialog(user):
             user_email = user.get('email', '') or ""
             if not user_email:
-                db_conn = get_db_connection()
+                db_conn = get_service_db_connection() or get_db_connection()
                 if db_conn:
                     try:
                         res_ef = db_conn.table('efetivo').select('email').eq('nome_guerra', user.get('nome', '').upper()).execute()
@@ -345,7 +345,7 @@ def render_page():
                             reload_admin_data()
                             return
                         
-                        conn = get_db_connection()
+                        conn = get_service_db_connection() or get_db_connection()
                         if not conn:
                             ui.notify('Sem conexão com banco de dados', color='red')
                             return
@@ -473,7 +473,7 @@ def render_page():
                             pwd_dialog.close()
                             return
                         
-                        conn = get_db_connection()
+                        conn = get_service_db_connection() or get_db_connection()
                         if not conn:
                             ui.notify('Sem conexão com banco de dados', color='red')
                             return
@@ -544,7 +544,7 @@ def render_page():
                             reload_admin_data()
                             return
                         
-                        conn = get_db_connection()
+                        conn = get_service_db_connection() or get_db_connection()
                         if not conn:
                             ui.notify('Sem conexão com banco de dados', color='red')
                             return
@@ -614,7 +614,7 @@ def render_page():
                             reload_admin_data()
                             return
                         
-                        conn = get_db_connection()
+                        conn = get_service_db_connection() or get_db_connection()
                         if not conn:
                             ui.notify('Sem conexão com banco de dados', color='red')
                             return
@@ -716,25 +716,31 @@ def render_page():
                                                     reload_admin_data()
                                                     return
 
-                                                conn = get_db_connection()
+                                                conn = get_service_db_connection() or get_db_connection()
                                                 if not conn:
                                                     ui.notify('Sem conexão com banco de dados', color='red')
                                                     return
                                                 
                                                 try:
                                                     if action == 'approved':
+                                                        req_tg_id = req.get('telegram_id') or None
                                                         conn.table('registration_requests').update({'status': 'approved'}).eq('id', req_id).execute()
+                                                        
+                                                        # Upsert em users e efetivo salvando telegram_id se disponivel
                                                         conn.table('users').upsert({
                                                             'id': req_id,
                                                             'username': req_email.split('@')[0],
                                                             'nome': req_guerra,
-                                                            'role': s['role']
+                                                            'role': s['role'],
+                                                            'telegram_id': req_tg_id
                                                         }, on_conflict='id').execute()
+                                                        
                                                         try:
                                                             conn.table('efetivo').upsert({
                                                                 'nome_guerra': req_guerra,
                                                                 'email': req_email,
-                                                                'role': s['role']
+                                                                'role': s['role'],
+                                                                'telegram_id': req_tg_id
                                                             }, on_conflict='nome_guerra').execute()
                                                         except Exception as ef_upsert_err:
                                                             print(f"[EFETIVO UPSERT ERR] {ef_upsert_err}")
@@ -744,21 +750,25 @@ def render_page():
                                                             confirm_supabase_user(req_id)
                                                         except Exception as conf_err:
                                                             print(f"[CONFIRM ERR] {conf_err}")
+                                                        
                                                         # Notifica o usuário aprovado via Telegram
                                                         try:
-                                                            user_res = conn.table('users').select('telegram_id, nome').eq('id', req_id).execute()
-                                                            if user_res.data and user_res.data[0].get('telegram_id'):
+                                                            tg_id_to_notify = req_tg_id
+                                                            if not tg_id_to_notify:
+                                                                user_res = conn.table('users').select('telegram_id, nome').eq('id', req_id).execute()
+                                                                if user_res.data and user_res.data[0].get('telegram_id'):
+                                                                    tg_id_to_notify = user_res.data[0]['telegram_id']
+                                                            
+                                                            if tg_id_to_notify:
                                                                 from notifications_manager import notify_telegram
-                                                                tg_id = str(user_res.data[0]['telegram_id'])
-                                                                nome_aprovado = user_res.data[0].get('nome', req_guerra).upper()
                                                                 msg_tg = (
                                                                     f"✅ *Acesso ao SisGAB Aprovado!*\n\n"
-                                                                    f"Olá, *{nome_aprovado}*! Seu acesso foi aprovado pelo administrador.\n\n"
+                                                                    f"Olá, *{req_guerra.upper()}*! Seu acesso foi aprovado pelo administrador.\n\n"
                                                                     f"🔑 Papel atribuído: `{s['role']}`\n"
-                                                                    f"📱 Você já pode usar o bot normalmente.\n"
+                                                                    f"📱 Você já pode usar o bot normalmente (/menu).\n"
                                                                     f"🌐 Acesse também o sistema web para operações avançadas."
                                                                 )
-                                                                notify_telegram(msg_tg, "system", custom_chat_id=tg_id)
+                                                                notify_telegram(msg_tg, "system", custom_chat_id=str(tg_id_to_notify))
                                                         except Exception as notif_err:
                                                             print(f"[PANEL NOTIFY APPROVED ERR] {notif_err}")
                                                         ui.notify(f"Usuário {req_guerra} aprovado como {s['role'].upper()}!", color='success')

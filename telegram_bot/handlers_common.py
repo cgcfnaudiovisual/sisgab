@@ -39,6 +39,7 @@ async def finalizar_solicitacao_acesso(bot, message, chat_id, state):
                     'nome_completo': reg_nome,
                     'nome_guerra': reg_guerra,
                     'setor_om': reg_om,
+                    'telegram_id': str(chat_id),
                     'tipo_usuario': 'comsoc' if 'CGCFN' in reg_om.upper() else 'externo',
                     'status': 'pendente'
                 }).execute()
