@@ -382,9 +382,10 @@ def render_page(autofill: str = None):
 
                         chk_sigilo = ui.checkbox('Pauta Sigilosa / Reservada').classes('text-xs text-amber-5 q-mt-xs')
                         
-                        async def salvar_demanda():
-                            if not sol_nome.value or not ev_titulo.value or not ev_data.value or not ev_local.value:
-                                ui.notify('Por favor, preencha os campos obrigatórios.', color='warning')
+                        async def salvar_demanda(status_inicial='pendente', eh_evento_interno=False):
+                            nome_sol = sol_nome.value or ('COMSOC / GABINETE' if eh_evento_interno else '')
+                            if not nome_sol or not ev_titulo.value or not ev_data.value or not ev_local.value:
+                                ui.notify('Por favor, preencha os campos obrigatórios (Título, Data e Local).', color='warning')
                                 return
                                 
                             db = get_db_connection()
@@ -396,9 +397,9 @@ def render_page(autofill: str = None):
                                     if form_state['cobertura_redes']: coberturas.append('redes')
                                     
                                     registro = {
-                                        'solicitante_nome': sol_nome.value,
-                                        'setor': sol_setor.value or 'Gabinete',
-                                        'contato': sol_contato.value or 'N/I',
+                                        'solicitante_nome': nome_sol,
+                                        'setor': sol_setor.value or ('GABINETE / QUARTEL' if eh_evento_interno else 'Gabinete'),
+                                        'contato': sol_contato.value or 'Interno',
                                         'titulo_evento': ev_titulo.value,
                                         'data_evento': ev_data.value,
                                         'data_fim': ev_data_fim.value or ev_data.value,
@@ -408,7 +409,7 @@ def render_page(autofill: str = None):
                                         'autoridades': ev_aut.value or '',
                                         'score_esforco': calcular_score(),
                                         'sigiloso': 1 if chk_sigilo.value else 0,
-                                        'status': 'pendente',
+                                        'status': 'aprovado' if eh_evento_interno else status_inicial,
                                         'captacao_entrega': ev_entrega_tipo.value or 'apenas_captacao_bruto',
                                         'notificar_militar_ids': json.dumps(militar_select.value) if militar_select.value else '[]',
                                         'arquivo_url': uploaded_file_url,
@@ -426,49 +427,24 @@ def render_page(autofill: str = None):
                                             'parecer': 'Solicitação modificada e reenviada após pedido de ajustes.'
                                         }
                                         db.table('demandas_historico_tramitacao').insert(hist).execute()
-                                        
-                                        # Notifica os supervisores e administradores de volta sobre os ajustes concluídos
-                                        try:
-                                            from notifications_manager import notify_telegram
-                                            # Busca supervisores e administradores cadastrados com Telegram ID
-                                            res_super = db.table('efetivo').select('telegram_id').in_('role', ['admin', 'supervisor', 'oficial_gab']).execute()
-                                            if res_super.data:
-                                                anexo_info = f"\n📎 Anexo: {registro['arquivo_nome']}" if registro.get('arquivo_nome') else ""
-                                                alert_txt = (
-                                                    f"⚠️ **AJUSTES CONCLUÍDOS E REENVIADOS** ⚓\n\n"
-                                                    f"📌 Pauta: {registro['titulo_evento']}\n"
-                                                    f"👤 Solicitante: {registro['solicitante_nome']} ({registro['setor']})\n"
-                                                    f"✍️ Ação: Corrigida e reenviada para homologação.{anexo_info}\n"
-                                                    f"⚙️ Modificado por: {user_name_guerra}"
-                                                )
-                                                for s in res_super.data:
-                                                    if tel_id := s.get('telegram_id'):
-                                                        import os
-                                                        doc_enviado = False
-                                                        if registro['arquivo_url']:
-                                                            try:
-                                                                filename = registro['arquivo_nome']
-                                                                file_local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'anexos_pautas', filename)
-                                                                if os.path.exists(file_local_path):
-                                                                    import telegram_bot
-                                                                    bot_inst = telegram_bot.bot
-                                                                    if bot_inst:
-                                                                        with open(file_local_path, 'rb') as pf:
-                                                                            await bot_inst.send_document(chat_id=tel_id, document=pf, caption=alert_txt, parse_mode='Markdown')
-                                                                            doc_enviado = True
-                                                            except Exception as tg_doc_err:
-                                                                print(f"[TG DOC SUBMIT ERR] {tg_doc_err}")
-                                                        
-                                                        if not doc_enviado:
-                                                            notify_telegram(alert_txt, "pauta", custom_chat_id=tel_id)
-                                        except Exception as e_notif:
-                                            print(f"[RE-SUBMIT SUPERVISOR NOTIFY ERR] {e_notif}")
-                                            
-                                        ui.notify('Demanda reenviada com sucesso!', color='success')
+                                        ui.notify('Demanda atualizada com sucesso!', color='success')
                                         edit_id = None
                                     else:
-                                        db.table('demandas_comunicacao').insert(registro).execute()
-                                        ui.notify('Demanda enviada com sucesso! Aguardando aprovação.', color='success')
+                                        res = db.table('demandas_comunicacao').insert(registro).execute()
+                                        if eh_evento_interno:
+                                            dem_id = res.data[0]['id'] if (res.data and isinstance(res.data, list) and len(res.data) > 0) else None
+                                            if dem_id:
+                                                hist = {
+                                                    'demanda_id': dem_id,
+                                                    'data_hora': datetime.now().isoformat(),
+                                                    'usuario': user_name_guerra,
+                                                    'acao': 'Pauta Aprovada Direto (Evento Interno)',
+                                                    'parecer': 'Evento interno cadastrado diretamente na escala oficial do Quartel.'
+                                                }
+                                                db.table('demandas_historico_tramitacao').insert(hist).execute()
+                                            ui.notify('🎖️ Novo Evento do Quartel cadastrado e aprovado com sucesso!', color='success')
+                                        else:
+                                            ui.notify('📝 Solicitação enviada com sucesso! Aguardando aprovação.', color='success')
                                     
                                     sol_nome.value = ''
                                     ev_titulo.value = ''
@@ -479,11 +455,18 @@ def render_page(autofill: str = None):
                                 except Exception as ex:
                                     ui.notify(f'Erro ao salvar: {ex}', color='red')
                          
-                        ui.button(
-                            'Enviar Demanda', 
-                            icon='send', 
-                            on_click=salvar_demanda
-                        ).props('unelevated color=cyan text-color=black bold w-full q-mt-sm').classes('w-full font-bold')
+                        with ui.row().classes('w-full gap-2 q-mt-sm justify-between'):
+                            ui.button(
+                                '🎖️ Novo Evento (Interno do Quartel)', 
+                                icon='stars', 
+                                on_click=lambda: salvar_demanda(status_inicial='aprovado', eh_evento_interno=True)
+                            ).props('unelevated color=emerald text-color=white bold').classes('col-12 font-bold')
+
+                            ui.button(
+                                '📝 Nova Solicitação (Externa)', 
+                                icon='send', 
+                                on_click=lambda: salvar_demanda(status_inicial='pendente', eh_evento_interno=False)
+                            ).props('outline color=cyan text-color=white bold').classes('col-12 font-bold q-mt-xs')
 
                 # 3. Demandas em Ajustes (Direita - 1/3 da largura)
                 with ui.column().classes('col-12 col-md q-pa-none').style('min-width: 320px;'):
