@@ -200,15 +200,40 @@ def register_common_handlers(bot):
                 await bot.reply_to(message, "📧 Digite seu **E-mail cadastrado no sistema** (para vinculação):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
             elif step == 'request_access_email':
                 email_input = text.strip().lower()
+                reg_nome = state['data'].get('reg_nome', '')
+                reg_guerra = state['data'].get('reg_guerra', '')
                 try:
                     from database import get_db_connection
                     conn = get_db_connection()
                     if conn:
-                        # Tenta vincular
-                        conn.table('Users').update({'telegram_id': str(chat_id)}).eq('email', email_input).execute()
-                    await bot.reply_to(message, "✅ Solicitação recebida e vinculada! Aprovando no painel irá liberar o acesso.", reply_markup=get_unauthorized_keyboard())
+                        # Vincular no efetivo por e-mail e nome de guerra
+                        try:
+                            conn.table('efetivo').update({'telegram_id': str(chat_id)}).eq('email', email_input).execute()
+                        except Exception as ef_err:
+                            print(f"[Bot Link Efetivo Email Error] {ef_err}")
+                        try:
+                            conn.table('efetivo').update({'telegram_id': str(chat_id)}).ilike('nome_guerra', reg_guerra).execute()
+                        except Exception as ef_err2:
+                            print(f"[Bot Link Efetivo Guerra Error] {ef_err2}")
+                        try:
+                            conn.table('Users').update({'telegram_id': str(chat_id)}).ilike('username', reg_guerra).execute()
+                        except Exception as u_err:
+                            print(f"[Bot Link Users Error] {u_err}")
+                        try:
+                            import uuid
+                            conn.table('RegistrationRequests').insert({
+                                'id': str(uuid.uuid4()),
+                                'email': email_input,
+                                'nome_completo': reg_nome,
+                                'nome_guerra': reg_guerra,
+                                'status': 'pendente'
+                            }).execute()
+                        except Exception as reg_err:
+                            print(f"[Bot Reg Request Insert Error] {reg_err}")
+
+                    await bot.reply_to(message, "✅ Solicitação de acesso registrada e vinculada com sucesso!\nO administrador aprovará seu acesso em breve.", reply_markup=get_unauthorized_keyboard())
                 except Exception as ex:
-                    await bot.reply_to(message, f"❌ Erro: {ex}", reply_markup=get_unauthorized_keyboard())
+                    await bot.reply_to(message, f"❌ Erro ao registrar solicitação: {ex}", reply_markup=get_unauthorized_keyboard())
                 finally:
                     clear_state(chat_id)
 
