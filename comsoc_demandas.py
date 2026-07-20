@@ -468,6 +468,21 @@ def render_page(autofill: str = None):
                                 on_click=lambda: salvar_demanda(status_inicial='pendente', eh_evento_interno=False)
                             ).props('outline color=cyan text-color=white bold').classes('col-12 font-bold q-mt-xs')
 
+                        # CARD DE INTEGRAÇÃO COM O GOOGLE CALENDAR OFICIAL
+                        with ui.card().classes('w-full q-pa-sm border border-cyan-500/30 rounded-xl bg-black/40 q-mt-sm'):
+                            with ui.row().classes('w-full justify-between items-center wrap gap-2'):
+                                with ui.row().classes('items-center gap-2'):
+                                    ui.icon('calendar_month', color='cyan', size='1.5rem')
+                                    with ui.column().classes('gap-0'):
+                                        ui.label('📅 AGENDA GOOGLE CALENDAR OFICIAL').classes('text-[11px] font-bold text-white')
+                                        ui.label('cgcfnaudiovisual@gmail.com').classes('text-[9px] text-cyan font-mono')
+                                
+                                ui.link(
+                                    '🔗 Abrir Google Calendar',
+                                    'https://calendar.google.com/calendar/u/0?cid=Y2djZm5hdWRpb3Zpc3VhbEBnbWFpbC5jb20',
+                                    new_tab=True
+                                ).classes('text-[10px] font-bold text-cyan underline q-px-xs q-py-xs bg-cyan-950/60 border border-cyan-500/40 rounded-lg')
+
                 # 3. Demandas em Ajustes (Direita - 1/3 da largura)
                 with ui.column().classes('col-12 col-md q-pa-none').style('min-width: 320px;'):
                     with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(

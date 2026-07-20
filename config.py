@@ -26,7 +26,9 @@ DEFAULT_CONFIGS = {
     'google_tts_lang': 'pt-br',
     'basic_tts_voice': '',
     'google_api_key': '',
-    'gemini_model_name': 'gemini-2.0-flash'
+    'gemini_model_name': 'gemini-2.0-flash',
+    'google_calendar_email': 'cgcfnaudiovisual@gmail.com',
+    'google_calendar_url': 'https://calendar.google.com/calendar/u/0?cid=Y2djZm5hdWRpb3Zpc3VhbEBnbWFpbC5jb20'
 }
 
 def render_page():
