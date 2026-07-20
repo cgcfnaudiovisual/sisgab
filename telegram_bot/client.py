@@ -24,6 +24,18 @@ def get_bot_token() -> str:
         token = os.getenv("TELEGRAM_TOKEN", "").strip()
     return token
 
+async def _run_resilient_polling(bot_instance):
+    while True:
+        try:
+            print("[TELEGRAM BOT] Iniciando loop de escuta Polling...", flush=True)
+            await bot_instance.polling(non_stop=True, timeout=20, request_timeout=40)
+        except asyncio.CancelledError:
+            print("[TELEGRAM BOT] Polling cancelado pelo sistema.", flush=True)
+            break
+        except Exception as poll_err:
+            print(f"[TELEGRAM BOT POLLING ERR] {poll_err}. Reconectando em 5 segundos...", flush=True)
+            await asyncio.sleep(5)
+
 async def init_bot():
     """Tarefa assíncrona inicializada no startup do NiceGUI para rodar o Telegram bot."""
     global bot, polling_task
@@ -44,7 +56,6 @@ async def init_bot():
     try:
         print("[TELEGRAM BOT] Conectando ao Telegram...", flush=True)
         
-        # Otimizações de rede e diagnóstico simplificados
         import telebot
         from telebot import asyncio_helper
         
@@ -62,11 +73,9 @@ async def init_bot():
 
         bot = AsyncTeleBot(token)
         
-        # Configura os handlers programáticos
         from .handlers import setup_handlers
         setup_handlers(bot)
         
-        # Configura a lista oficial de comandos no menu do Telegram
         try:
             print("[TELEGRAM BOT] Configurando lista de comandos no menu do Telegram...", flush=True)
             await bot.set_my_commands([
@@ -84,8 +93,8 @@ async def init_bot():
         except Exception as wh_err:
             print(f"[TELEGRAM BOT] Aviso ao deletar webhook: {wh_err}", flush=True)
             
-        polling_task = asyncio.create_task(bot.polling(non_stop=True))
-        print("[TELEGRAM BOT] Bot de Telegram ativo em segundo plano e escutando!", flush=True)
+        polling_task = asyncio.create_task(_run_resilient_polling(bot))
+        print("[TELEGRAM BOT] Bot de Telegram ativo em segundo plano e escutando com reconexão automática!", flush=True)
     except Exception as e:
         print(f"[TELEGRAM BOT] Erro crítico ao iniciar o Bot: {e}", flush=True)
 
