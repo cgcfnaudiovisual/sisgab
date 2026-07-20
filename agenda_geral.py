@@ -1,4 +1,5 @@
 # modules/agenda_geral.py
+import urllib.parse
 from datetime import datetime
 from nicegui import ui, app
 import theme
@@ -6,21 +7,40 @@ from database import get_db_connection
 
 THEME = theme.colors
 
+def make_gcal_sync_url(title, date_str, time_str='09:00', location='CGCFN', details=''):
+    try:
+        clean_date = str(date_str).replace('-', '')
+        clean_time = str(time_str).replace(':', '') + '00'
+        if len(clean_time) == 4:
+            clean_time += '00'
+        start_dt = f"{clean_date}T{clean_time}"
+        params = {
+            'action': 'TEMPLATE',
+            'text': f"[COMSOC/CGCFN] {title}",
+            'dates': f"{start_dt}/{start_dt}",
+            'details': f"Evento/Pauta COMSOC - {details}\nConta Oficial: cgcfnaudiovisual@gmail.com",
+            'location': location,
+            'sf': 'true'
+        }
+        return f"https://calendar.google.com/calendar/render?{urllib.parse.urlencode(params)}"
+    except Exception:
+        return "https://calendar.google.com/calendar/u/0?cid=Y2djZm5hdWRpb3Zpc3VhbEBnbWFpbC5jb20"
+
 def render_page():
     ui.label('📅 AGENDA GERAL DA COMSOC & COMPROMISSOS').classes('text-2xl font-bold text-white cyber-title gt-xs q-mb-md q-ml-md')
 
-    # Header Card com informações de Sincronização
+    # Card Superior com Informações de Sincronização
     with ui.card().classes('w-full q-pa-md border border-cyan-500/30 rounded-xl bg-black/40 q-mb-md'):
         with ui.row().classes('w-full justify-between items-center wrap gap-4'):
             with ui.row().classes('items-center gap-3'):
                 ui.icon('calendar_month', color='cyan', size='2.2rem')
                 with ui.column().classes('gap-0'):
                     ui.label('AGENDA OFICIAL DE COMPROMISSOS — CGCFN / COMSOC').classes('text-sm font-bold text-white cyber-title')
-                    ui.label('Conta de Gestão: cgcfnaudiovisual@gmail.com').classes('text-xs text-cyan font-mono')
+                    ui.label('Conta Oficial: cgcfnaudiovisual@gmail.com').classes('text-xs text-cyan font-mono')
             
             with ui.row().classes('items-center gap-2'):
                 ui.link(
-                    '🔗 Abrir no Google Calendar',
+                    '🔗 Abrir Google Calendar Oficial',
                     'https://calendar.google.com/calendar/u/0?cid=Y2djZm5hdWRpb3Zpc3VhbEBnbWFpbC5jb20',
                     new_tab=True
                 ).classes('text-xs font-bold text-cyan underline q-px-sm q-py-xs bg-cyan-950/60 border border-cyan-500/40 rounded-lg')
@@ -31,56 +51,101 @@ def render_page():
                     on_click=lambda: ui.navigate.to('/comsoc_demandas')
                 ).props('unelevated color=cyan text-color=black bold dense').classes('text-xs font-bold q-px-sm')
 
-    # Grade Principal: Calendário Embutido (Esquerda) + Lista de Pautas Sincronizadas (Direita)
-    with ui.row().classes('w-full gap-4 items-stretch justify-start'):
-        
-        # Coluna 1: Google Calendar Embutido (2/3 da largura)
-        with ui.column().classes('col-12 col-lg-8 q-pa-none').style('min-width: 340px;'):
-            with ui.card().classes('w-full q-pa-none no-shadow rounded-xl overflow-hidden').style(
-                f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]}; min-height: 620px;'
-            ):
-                ui.html('''
-                    <iframe 
-                        src="https://calendar.google.com/calendar/embed?src=cgcfnaudiovisual%40gmail.com&ctz=America%2FSao_Paulo&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=1&showCalendars=0&showTz=1" 
-                        style="border: 0; width: 100%; height: 620px; background: #0b0f19;" 
-                        frameborder="0" 
-                        scrolling="no">
-                    </iframe>
-                ''').classes('w-full h-full')
+    # Abas principais da Agenda
+    with ui.card().classes('w-full q-pa-none no-shadow rounded-xl').style(
+        f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
+    ):
+        with ui.tabs().classes('w-full border-b border-cyan-500/20 text-cyan-4') as tabs:
+            tab_native = ui.tab('native', label='📅 Calendário Nativo SisGAB (100% Automático)', icon='event')
+            tab_gcal = ui.tab('gcal', label='🌐 Google Calendar (cgcfnaudiovisual@gmail.com)', icon='language')
 
-        # Coluna 2: Lista Próximas Pautas e Efemérides (1/3 da largura)
-        with ui.column().classes('col-12 col-lg-4 q-pa-none').style('min-width: 320px;'):
-            with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
-                f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]}; min-height: 620px;'
-            ):
-                ui.label('📌 Próximas Coberturas Sincronizadas').classes('text-md font-bold text-white q-mb-md')
-                
-                pautas = []
-                db = get_db_connection()
-                if db:
-                    try:
-                        res = db.table('demandas_comunicacao').select('*').in_('status', ['aprovado', 'aprovada', 'pendente']).order('data_evento', desc=False).limit(10).execute()
-                        pautas = res.data if res.data else []
-                    except Exception as e:
-                        print(f"[AGENDA GERAL DB ERR] {e}")
-                
-                if pautas:
-                    with ui.column().classes('w-full gap-2'):
-                        for p in pautas:
-                            status_badge = '🟢 APROVADA' if p.get('status') in ('aprovado', 'aprovada') else '🟡 PENDENTE'
-                            badge_color = 'emerald' if p.get('status') in ('aprovado', 'aprovada') else 'amber'
+        with ui.tab_panels(tabs, value=tab_native).classes('w-full q-pa-md bg-transparent'):
+            
+            # =========================================================================
+            # TAB 1: CALENDÁRIO NATIVO TÁTICO (AUTOMÁTICO & INSTANTÂNEO)
+            # =========================================================================
+            with ui.tab_panel(tab_native):
+                with ui.row().classes('w-full gap-4 items-stretch justify-start'):
+                    
+                    # Coluna Esquerda: Seletor de Data Interativo
+                    with ui.column().classes('col-12 col-md-5 col-lg-4 q-pa-none'):
+                        ui.label('📆 Selecione a Data para Ver Eventos:').classes('text-xs font-bold text-cyan q-mb-xs')
+                        selected_date = ui.date(value=datetime.now().strftime('%Y/%m/%d')).props('dark flat bordered w-full').classes('w-full rounded-xl')
+                    
+                    # Coluna Direita: Pautas e Eventos da Data Selecionada
+                    with ui.column().classes('col-12 col-md-7 col-lg-8 q-pa-none flex-grow'):
+                        details_container = ui.column().classes('w-full gap-3')
+
+                        def update_date_events():
+                            details_container.clear()
+                            raw_date = selected_date.value  # Formato YYYY/MM/DD
+                            formatted_date = raw_date.replace('/', '-')
                             
-                            with ui.card().classes('w-full q-pa-sm bg-black/30 border border-cyan-500/20 rounded-lg'):
-                                with ui.row().classes('w-full justify-between items-center no-wrap'):
-                                    ui.label(p['titulo_evento']).classes('text-xs font-bold text-white leading-tight')
-                                    ui.badge(status_badge).props(f'color={badge_color} outline').classes('text-[8px]')
+                            with details_container:
+                                ui.label(f"📌 Compromissos e Coberturas do dia {raw_date}:").classes('text-sm font-bold text-white q-mb-xs')
                                 
-                                with ui.row().classes('w-full justify-between items-center q-mt-xs text-[10px] text-grey-4'):
-                                    ui.label(f"📅 {p['data_evento']} às {p.get('hora_evento', '09:00')}")
-                                    ui.label(f"📍 {p['local_evento']}")
+                                db = get_db_connection()
+                                day_events = []
+                                if db:
+                                    try:
+                                        res = db.table('demandas_comunicacao').select('*').eq('data_evento', formatted_date).execute()
+                                        day_events = res.data if res.data else []
+                                    except Exception as err:
+                                        print(f"[AGENDA DAY ERR] {err}")
                                 
-                                ui.label(f"Sol: {p['solicitante_nome']} ({p.get('setor', 'CGCFN')})").classes('text-[9px] text-cyan q-mt-xs')
-                else:
-                    with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
-                        ui.icon('event_available', size='3rem', color='cyan')
-                        ui.label('Nenhum evento futuro agendado no momento.').classes('text-xs')
+                                if day_events:
+                                    for ev in day_events:
+                                        status_st = '🟢 APROVADO' if ev.get('status') in ('aprovado', 'aprovada') else '🟡 PENDENTE'
+                                        badge_col = 'emerald' if ev.get('status') in ('aprovado', 'aprovada') else 'amber'
+                                        
+                                        with ui.card().classes('w-full q-pa-md bg-black/40 border border-cyan-500/30 rounded-xl gap-2'):
+                                            with ui.row().classes('w-full justify-between items-center wrap gap-2'):
+                                                ui.label(ev['titulo_evento']).classes('text-sm font-bold text-white')
+                                                ui.badge(status_st).props(f'color={badge_col} bold').classes('text-xs')
+                                            
+                                            with ui.row().classes('w-full gap-4 text-xs text-grey-4'):
+                                                ui.label(f"⏱️ Horário: {ev.get('hora_evento', '09:00')}")
+                                                ui.label(f"📍 Local: {ev['local_evento']}")
+                                                ui.label(f"👤 Solicitante: {ev['solicitante_nome']} ({ev.get('setor', 'CGCFN')})")
+                                            
+                                            if ev.get('autoridades'):
+                                                ui.label(f"🎖️ Autoridades: {ev['autoridades']}").classes('text-xs text-cyan')
+                                            
+                                            gcal_link = make_gcal_sync_url(
+                                                title=ev['titulo_evento'],
+                                                date_str=formatted_date,
+                                                time_str=ev.get('hora_evento', '09:00'),
+                                                location=ev['local_evento'],
+                                                details=f"Solicitante: {ev['solicitante_nome']}"
+                                            )
+                                            
+                                            with ui.row().classes('w-full justify-end q-mt-xs'):
+                                                ui.link('📅 Sync com Google Calendar', gcal_link, new_tab=True).classes('text-xs font-bold text-cyan underline bg-cyan-950/50 q-px-sm q-py-xs rounded border border-cyan-500/30')
+                                else:
+                                    with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
+                                        ui.icon('event_busy', size='3rem', color='grey-6')
+                                        ui.label(f"Nenhum evento agendado para o dia {raw_date}.").classes('text-xs')
+
+                        selected_date.on_value_change(update_date_events)
+                        update_date_events()
+
+            # =========================================================================
+            # TAB 2: GOOGLE CALENDAR EMBUTIDO (INSTRUÇÕES E IFRAME)
+            # =========================================================================
+            with ui.tab_panel(tab_gcal):
+                with ui.column().classes('w-full gap-4'):
+                    ui.label('🌐 Agenda Google da Conta Oficial (cgcfnaudiovisual@gmail.com)').classes('text-md font-bold text-cyan')
+                    
+                    with ui.card().classes('w-full q-pa-sm bg-black/40 border border-cyan-500/20 rounded-lg'):
+                        ui.label('💡 Para o iFrame do Google exibir sem tela preta no navegador:').classes('text-xs font-bold text-amber-4')
+                        ui.label('1. Acesse o Google Calendar logado em cgcfnaudiovisual@gmail.com.').classes('text-[11px] text-grey-3')
+                        ui.label('2. Vá em Configurações da Agenda > Permissões de Acesso > Marque "Tornar disponível ao público".').classes('text-[11px] text-grey-3')
+                    
+                    ui.html('''
+                        <iframe 
+                            src="https://calendar.google.com/calendar/embed?src=cgcfnaudiovisual%40gmail.com&ctz=America%2FSao_Paulo&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=1&showCalendars=0&showTz=1" 
+                            style="border: 0; width: 100%; height: 550px; background: #0b0f19; border-radius: 12px;" 
+                            frameborder="0" 
+                            scrolling="no">
+                        </iframe>
+                    ''').classes('w-full')
