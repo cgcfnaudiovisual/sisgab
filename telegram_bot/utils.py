@@ -181,7 +181,7 @@ async def get_allowed_features_for_user(profile) -> set:
     }
     
     try:
-        res = await execute_bot_query_safe(lambda c: c.table('Permissions').select('*'))
+        res = await execute_bot_query_safe(lambda c: c.table('permissions').select('*'))
         if res.data:
             for row in res.data:
                 fk = row.get('feature_key')
@@ -189,7 +189,7 @@ async def get_allowed_features_for_user(profile) -> set:
                 if fk and allowed:
                     defaults[fk] = [r.strip().lower() for r in allowed.split(',') if r.strip()]
     except Exception as e:
-        print(f"[Bot] Erro ao ler Permissions do banco: {e}")
+        print(f"[Bot] Erro ao ler permissions do banco: {e}")
             
     for fk, roles in defaults.items():
         if user_role in roles:
@@ -199,8 +199,17 @@ async def get_allowed_features_for_user(profile) -> set:
 async def check_authorized_user(from_user_id: int):
     current_user_id.set(from_user_id)
     try:
-        res = await execute_bot_query_safe(lambda c: c.table('Users').select('*').eq('telegram_id', str(from_user_id)))
-        if res.data:
+        # Busca primeiro na tabela do efetivo
+        res_ef = await execute_bot_query_safe(lambda c: c.table('efetivo').select('*').eq('telegram_id', str(from_user_id)))
+        if res_ef and res_ef.data:
+            profile = res_ef.data[0]
+            allowed = await get_allowed_features_for_user(profile)
+            USER_PERMISSIONS_CACHE[from_user_id] = allowed
+            return profile
+            
+        # Fallback na tabela users
+        res = await execute_bot_query_safe(lambda c: c.table('users').select('*').eq('telegram_id', str(from_user_id)))
+        if res and res.data:
             sorted_profiles = sorted(res.data, key=lambda u: 1 if u.get('role') == 'aluno' else 0)
             profile = sorted_profiles[0]
             allowed = await get_allowed_features_for_user(profile)
@@ -239,6 +248,6 @@ def set_user_active_year(profile, ano: str):
     try:
         conn = get_user_db_connection()
         if conn:
-            conn.table('Users').update({'ano_letivo': ano}).eq('id', profile['id']).execute()
+            conn.table('users').update({'ano_letivo': ano}).eq('id', profile['id']).execute()
     except Exception as e:
         print(f"[YEAR SAVE DB ERR] {e}")

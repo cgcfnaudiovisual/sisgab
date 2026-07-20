@@ -14,7 +14,7 @@ def get_bot_token() -> str:
     try:
         conn = get_db_connection()
         if conn:
-            res = conn.table('Config').select('*').eq('chave', 'telegram_bot_token').execute()
+            res = conn.table('config').select('*').eq('chave', 'telegram_bot_token').execute()
             if res.data and res.data[0].get('valor'):
                 token = res.data[0]['valor'].strip()
     except Exception as e:

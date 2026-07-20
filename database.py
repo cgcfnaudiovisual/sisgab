@@ -137,7 +137,9 @@ def authenticate_user_supabase(email: str, password: str) -> Optional[dict]:
         if auth_response and auth_response.user:
             user_id = auth_response.user.id
             db_conn.auth.set_session(auth_response.session.access_token, auth_response.session.refresh_token)
-            result = db_conn.table('Users').select('*').eq('id', user_id).execute()
+            result = db_conn.table('users').select('*').eq('id', user_id).execute()
+            if not result.data:
+                result = db_conn.table('efetivo').select('*').eq('email', email).execute()
             if result.data:
                 profile = result.data[0]
                 return {
