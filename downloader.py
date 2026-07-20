@@ -1,13 +1,19 @@
 import os
 import re
 import threading
-import yt_dlp
+
+try:
+    import yt_dlp
+except ImportError:
+    yt_dlp = None
 
 class YouTubeDownloader:
     def __init__(self):
         self.active_downloads = {}  # id: progress_dict
 
     def get_info(self, url):
+        if not yt_dlp:
+            raise Exception("Biblioteca yt-dlp não está instalada no servidor.")
         ydl_opts = {
             'extract_flat': 'in_playlist',
             'skip_download': True,

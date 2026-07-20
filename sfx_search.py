@@ -1,8 +1,16 @@
 import urllib.parse
 import requests
-from bs4 import BeautifulSoup
 import re
-from google import genai
+
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
+
+try:
+    from google import genai
+except ImportError:
+    genai = None
 
 # Dicionário local para tradução rápida de termos comuns de efeitos sonoros (SFX) em português para inglês.
 # Garante o funcionamento da busca direta mesmo se a IA estiver desativada ou sem chave de API configurada.
