@@ -1024,7 +1024,12 @@ def login_page(request: Request):
                         else:
                             # Fallback para autenticação local no banco efetivo (caso tenha sido criado sem Auth por rate limits)
                             from database import authenticate_user
-                            local_user = authenticate_user(login_email, pwd.value)
+                            # Tenta primeiro com o username ORIGINAL digitado pelo usuário (ex: "admin")
+                            original_input = user.value.strip()
+                            local_user = authenticate_user(original_input, pwd.value)
+                            # Se não funcionou com o original, tenta com o email resolvido
+                            if not local_user and login_email != original_input:
+                                local_user = authenticate_user(login_email, pwd.value)
                             if local_user:
                                 profile = {
                                     'id': local_user.get('id') or local_user.get('telegram_id') or 'local-fallback',

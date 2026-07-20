@@ -998,23 +998,112 @@ def seed_default_admin():
             import bcrypt
             pwd_hash = bcrypt.hashpw('admin'.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
             
-            conn.table('users').upsert({
-                'id': '00000000-0000-0000-0000-000000000001',
-                'username': 'admin',
-                'nome': 'ADMINISTRADOR',
-                'role': 'admin'
-            }, on_conflict='id').execute()
+            # Tenta criar no Supabase Auth via service_role (sem disparar email)
+            auth_id = '00000000-0000-0000-0000-000000000001'
+            try:
+                svc = get_service_db_connection()
+                if svc and hasattr(svc, 'auth') and hasattr(svc.auth, 'admin'):
+                    auth_res = svc.auth.admin.create_user({
+                        "email": "admin@marinha.mil.br",
+                        "password": "admin",
+                        "email_confirm": True,
+                        "user_metadata": {"nome_guerra": "ADMINISTRADOR", "role": "admin"}
+                    })
+                    if auth_res and hasattr(auth_res, 'user') and auth_res.user:
+                        auth_id = str(auth_res.user.id)
+                        print(f"[DB SEED] Admin criado no Supabase Auth com ID: {auth_id}", flush=True)
+            except Exception as auth_err:
+                err_str = str(auth_err)
+                if 'already' in err_str.lower() or 'duplicate' in err_str.lower():
+                    print(f"[DB SEED] Admin já existe no Supabase Auth.", flush=True)
+                else:
+                    print(f"[DB SEED AUTH NOTICE] {auth_err}", flush=True)
             
-            conn.table('efetivo').upsert({
-                'nome_guerra': 'ADMIN',
-                'email': 'admin@marinha.mil.br',
-                'senha_hash': pwd_hash,
-                'role': 'admin'
-            }, on_conflict='nome_guerra').execute()
+            try:
+                conn.table('users').upsert({
+                    'id': auth_id,
+                    'username': 'admin',
+                    'nome': 'ADMINISTRADOR',
+                    'role': 'admin'
+                }, on_conflict='id').execute()
+            except Exception as u_err:
+                print(f"[DB SEED users NOTICE] {u_err}", flush=True)
+            
+            try:
+                conn.table('efetivo').upsert({
+                    'nome_guerra': 'ADMIN',
+                    'email': 'admin@marinha.mil.br',
+                    'senha_hash': pwd_hash,
+                    'role': 'admin'
+                }, on_conflict='nome_guerra').execute()
+            except Exception as ef_err:
+                print(f"[DB SEED efetivo NOTICE] {ef_err}", flush=True)
             
             print("[DB SEED SUCCESS] Usuário 'admin' padrão gerado no Supabase com sucesso!", flush=True)
     except Exception as e:
         print(f"[DB SEED NOTICE] {e}", flush=True)
+
+
+def create_admin_user_direct(username: str, password: str, nome_guerra: str, email: str, role: str = 'admin') -> dict:
+    """
+    Cria um novo usuário admin diretamente no Supabase via service_role, 
+    SEM disparar e-mail de confirmação e SEM bater na cota de email.
+    Retorna o dicionário do usuário criado ou None em caso de erro.
+    """
+    import bcrypt
+    import uuid
+    
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn:
+        return None
+    
+    pwd_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
+    user_id = str(uuid.uuid4())
+    
+    # 1. Tenta criar no Supabase Auth via service_role (sem email)
+    try:
+        svc = get_service_db_connection()
+        if svc and hasattr(svc, 'auth') and hasattr(svc.auth, 'admin'):
+            auth_res = svc.auth.admin.create_user({
+                "email": email,
+                "password": password,
+                "email_confirm": True,
+                "user_metadata": {"nome_guerra": nome_guerra, "role": role}
+            })
+            if auth_res and hasattr(auth_res, 'user') and auth_res.user:
+                user_id = str(auth_res.user.id)
+                print(f"[ADMIN CREATE] Auth user criado: {user_id}", flush=True)
+    except Exception as auth_err:
+        print(f"[ADMIN CREATE AUTH] {auth_err} — continuando com criação local", flush=True)
+    
+    # 2. Insere nas tabelas users e efetivo
+    try:
+        conn.table('users').upsert({
+            'id': user_id,
+            'username': username.lower(),
+            'nome': nome_guerra.upper(),
+            'role': role
+        }, on_conflict='id').execute()
+    except Exception as u_err:
+        print(f"[ADMIN CREATE users] {u_err}", flush=True)
+    
+    try:
+        conn.table('efetivo').upsert({
+            'nome_guerra': nome_guerra.upper(),
+            'email': email.lower(),
+            'senha_hash': pwd_hash,
+            'role': role
+        }, on_conflict='nome_guerra').execute()
+    except Exception as ef_err:
+        print(f"[ADMIN CREATE efetivo] {ef_err}", flush=True)
+    
+    return {
+        'id': user_id,
+        'username': username,
+        'nome_guerra': nome_guerra,
+        'email': email,
+        'role': role
+    }
 
 
 def confirm_supabase_user(user_id: str) -> bool:

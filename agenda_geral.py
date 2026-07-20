@@ -76,6 +76,45 @@ def render_page():
                     
                     # Coluna Direita: Pautas e Eventos
                     with ui.column().classes('col-12 col-md-7 col-lg-8 q-pa-none flex-grow'):
+                        
+                        # === EVENTOS DA SEMANA (auto-carregados) ===
+                        with ui.card().classes('w-full q-pa-md bg-emerald-950/30 border border-emerald-500/30 rounded-xl q-mb-md'):
+                            ui.label('📅 EVENTOS DA SEMANA (Próximos 7 dias)').classes('text-sm font-bold text-emerald-4 q-mb-sm')
+                            week_container = ui.column().classes('w-full gap-2')
+                            
+                            def render_week_events():
+                                week_container.clear()
+                                db_w = get_db_connection()
+                                week_events = []
+                                if db_w:
+                                    try:
+                                        from datetime import timedelta
+                                        hoje = datetime.now().date()
+                                        fim = hoje + timedelta(days=7)
+                                        res_w = db_w.table('demandas_comunicacao').select('*').gte(
+                                            'data_evento', hoje.isoformat()
+                                        ).lte(
+                                            'data_evento', fim.isoformat()
+                                        ).order('data_evento', desc=False).execute()
+                                        week_events = res_w.data if res_w.data else []
+                                    except Exception as we:
+                                        print(f"[AGENDA WEEK ERR] {we}")
+                                
+                                with week_container:
+                                    if week_events:
+                                        for ev in week_events:
+                                            st_icon = '🟢' if ev.get('status') in ('aprovado', 'aprovada') else '🟡'
+                                            with ui.row().classes('w-full items-center gap-2 q-py-xs border-b border-cyan-500/10'):
+                                                ui.label(st_icon).classes('text-sm')
+                                                ui.label(f"{ev.get('data_evento', 'N/I')} {ev.get('hora_evento', '')}").classes('text-xs text-cyan font-mono')
+                                                ui.label(f"— {ev.get('titulo_evento', 'Sem Título')}").classes('text-xs text-white font-bold')
+                                                ui.label(f"📍 {ev.get('local_evento', '')}").classes('text-[11px] text-grey-5')
+                                    else:
+                                        ui.label('🟢 Nenhum evento nos próximos 7 dias.').classes('text-xs text-grey-4')
+                            
+                            render_week_events()
+                        
+                        # === TODOS OS EVENTOS (com filtro por data) ===
                         details_container = ui.column().classes('w-full gap-3')
 
                         def render_events(filter_by_date=None):

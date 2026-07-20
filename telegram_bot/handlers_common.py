@@ -1,11 +1,13 @@
 import json
 from telebot import types
-from datetime import datetime
+from datetime import datetime, timedelta
 from .client import chat_states
 from .utils import check_authorized_user, clear_state, USER_PERMISSIONS_CACHE
 from .keyboards import get_main_menu_keyboard, get_cancel_keyboard, get_unauthorized_keyboard
 
+
 async def finalizar_solicitacao_acesso(bot, message, chat_id, state):
+    """Finaliza o wizard de solicitação de acesso: grava no banco e notifica admins."""
     reg_nome = state['data'].get('reg_nome', 'N/I')
     reg_guerra = state['data'].get('reg_guerra', 'N/I')
     reg_email = state['data'].get('reg_email', 'N/I')
@@ -89,16 +91,78 @@ async def finalizar_solicitacao_acesso(bot, message, chat_id, state):
     finally:
         clear_state(chat_id)
 
+
+def _get_weekly_events_text():
+    """Busca eventos dos próximos 7 dias na tabela demandas_comunicacao e retorna texto formatado."""
+    try:
+        from database import get_db_connection
+        db = get_db_connection()
+        if not db:
+            return "⚠️ Banco de dados indisponível."
+        
+        hoje = datetime.now().date()
+        fim_semana = hoje + timedelta(days=7)
+        
+        res = db.table('demandas_comunicacao').select('*').gte(
+            'data_evento', hoje.isoformat()
+        ).lte(
+            'data_evento', fim_semana.isoformat()
+        ).order('data_evento', desc=False).execute()
+        
+        events = res.data if res.data else []
+        
+        if not events:
+            return (
+                f"📅 **AGENDA SEMANAL — COMSOC/CGCFN**\n"
+                f"Período: {hoje.strftime('%d/%m/%Y')} a {fim_semana.strftime('%d/%m/%Y')}\n\n"
+                f"🟢 Nenhum evento ou pauta agendada para os próximos 7 dias.\n\n"
+                f"Use **➕ Criar Demanda** para adicionar uma nova pauta."
+            )
+        
+        msg = (
+            f"📅 **AGENDA SEMANAL — COMSOC/CGCFN**\n"
+            f"Período: {hoje.strftime('%d/%m/%Y')} a {fim_semana.strftime('%d/%m/%Y')}\n\n"
+        )
+        
+        for idx, ev in enumerate(events, 1):
+            status_icon = '🟢' if ev.get('status') in ('aprovado', 'aprovada') else '🟡'
+            try:
+                data_br = datetime.strptime(str(ev.get('data_evento', '')), '%Y-%m-%d').strftime('%d/%m')
+            except Exception:
+                data_br = str(ev.get('data_evento', 'N/I'))
+            
+            msg += (
+                f"{status_icon} **{idx}. {ev.get('titulo_evento', 'Sem Título')}**\n"
+                f"   📅 {data_br} às {ev.get('hora_evento', '09:00')}\n"
+                f"   📍 {ev.get('local_evento', 'N/I')}\n"
+                f"   👤 {ev.get('solicitante_nome', 'N/I')}\n\n"
+            )
+        
+        msg += f"📊 Total: **{len(events)} evento(s)** na semana.\n⚓ _SisGAB — Gestão de Gabinete_"
+        return msg
+    except Exception as e:
+        return f"❌ Erro ao buscar agenda: {e}"
+
+
 def register_common_handlers(bot):
     
     @bot.message_handler(func=lambda msg: True)
     async def handle_all_messages(message):
         chat_id = message.chat.id
+        
+        # Guard: mensagens sem texto (stickers, contatos, etc)
+        if not message.text:
+            return
+        
         text = message.text.strip()
         
-        # 1. Roteamento de Teclado Principal (caso sem estado anterior)
+        # =====================================================================
+        # SEÇÃO 1: Roteamento de Teclado Principal (usuário SEM estado ativo)
+        # =====================================================================
         if chat_id not in chat_states:
             profile = await check_authorized_user(message.from_user.id)
+            
+            # --- Usuário NÃO autorizado ---
             if not profile:
                 if text.lower() in ["📝 solicitar acesso", "/start", "/solicitar", "/acesso", "solicitar", "solicitar acesso", "acesso"]:
                     # Inicia wizard de solicitação
@@ -128,68 +192,81 @@ def register_common_handlers(bot):
                     )
                 return
 
+            # --- Usuário autorizado: roteamento dos botões do menu ---
             allowed = USER_PERMISSIONS_CACHE.get(message.from_user.id, set())
-            
+            is_operator = str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design')
+
             if text == "⚙️ Configurações":
-                from .handlers_settings import register_settings_command
-                await register_settings_command(message)
+                from .handlers_settings import register_settings_handlers
+                # Dispara diretamente o comando /settings via handler
+                clear_state(chat_id)
+                chat_states[chat_id] = {
+                    'action': 'settings',
+                    'step': 'choose_option',
+                    'user': profile,
+                    'data': {}
+                }
+                from .keyboards import get_settings_keyboard
+                is_admin = str(profile.get('role', '')).strip().lower() == 'admin'
+                await bot.reply_to(
+                    message,
+                    "⚙️ **CONFIGURAÇÕES DO OPERADOR - SISGAB**\n\n"
+                    f"👤 **Operador:** `{profile.get('nome', profile.get('nome_guerra', 'Militar'))}`\n\n"
+                    "Escolha uma das opções abaixo:",
+                    reply_markup=get_settings_keyboard(True, is_admin),
+                    parse_mode='Markdown'
+                )
+
             elif text == "📸 Cadastro Facial":
                 chat_states[chat_id] = {
                     'action': 'cadastro_facial',
                     'step': 'send_selfie',
-                    'user': profile
+                    'user': profile,
+                    'data': {}
                 }
                 await bot.reply_to(
-                    message,
-                    "📸 **CADASTRO FACIAL - SISGAB**\n\n"
-                    "Por favor, envie uma **selfie nítida** de frente (sem boné ou óculos de sol).\n\n"
-                    "Esta foto será utilizada como referência para identificá-lo automaticamente nas coberturas fotográficas!",
-                    reply_markup=get_cancel_keyboard(),
+                    message, 
+                    "📸 **CADASTRO FACIAL — RECONHECIMENTO AUTOMÁTICO**\n\n"
+                    "Por favor, envie uma **selfie frontal** com boa iluminação.\n\n"
+                    "O sistema processará sua foto para habilitar o reconhecimento facial nas coberturas fotográficas.", 
+                    reply_markup=get_cancel_keyboard(), 
                     parse_mode='Markdown'
                 )
+
             elif text == "🔍 Buscar Minhas Fotos":
                 from database import get_db_connection
                 db = get_db_connection()
                 if not db:
-                    await bot.reply_to(message, "⚠️ Banco de dados offline. Tente novamente mais tarde.")
+                    await bot.reply_to(message, "⚠️ Banco offline.")
                     return
                 try:
-                    res_m = db.table('photo_matches').select('photo_id, similarity').eq('militar_id', profile['id']).eq('status', 'aprovado').execute()
-                    if res_m.data:
-                        photo_ids = [m['photo_id'] for m in res_m.data]
-                        res_p = db.table('processed_photos').select('*').in_('id', photo_ids).execute()
-                        if res_p.data:
-                            sim_dict = {m['photo_id']: m['similarity'] for m in res_m.data}
-                            response_text = "🔍 **FOTOS ENCONTRADAS EM QUE VOCÊ APARECE:**\n\n"
-                            for p in res_p.data:
-                                p_id = p['id']
-                                sim_val = sim_dict.get(p_id, 0.0) * 100
-                                response_text += (
-                                    f"⚓ *Evento:* {p['event_name']}\n"
-                                    f"📂 *Arquivo:* `{p['filename']}`\n"
-                                    f"📈 *Similaridade:* {sim_val:.1f}%\n"
-                                    f"🔗 [Abrir no Google Drive]({p['drive_link']})\n\n"
-                                )
-                            if len(response_text) > 4000:
-                                response_text = response_text[:3900] + "\n\n*(resultado truncado devido ao tamanho...)*"
-                            await bot.reply_to(message, response_text, reply_markup=get_main_menu_keyboard(), parse_mode='Markdown')
-                        else:
-                            await bot.reply_to(message, "🔍 Nenhuma foto sua foi encontrada no Drive.", reply_markup=get_main_menu_keyboard())
+                    res = db.table('photo_matches').select('*').eq('user_id', profile['id']).execute()
+                    if res.data:
+                        msg = "📸 **MINHAS FOTOS IDENTIFICADAS:**\n\n"
+                        for match in res.data[:10]:
+                            score = match.get('similarity_score', 0)
+                            icon = "🟢" if score > 0.85 else "🟡"
+                            msg += f"{icon} {match.get('photo_file', 'foto')} — Confiança: {score:.0%}\n"
+                        await bot.reply_to(message, msg, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
                     else:
-                        await bot.reply_to(message, "🔍 Nenhuma foto sua foi identificada no banco de dados até agora.", reply_markup=get_main_menu_keyboard())
-                except Exception as ex:
-                    await bot.reply_to(message, f"❌ Erro ao buscar fotos: {ex}", reply_markup=get_main_menu_keyboard())
+                        await bot.reply_to(message, "📭 Nenhuma foto identificada até o momento.", reply_markup=get_main_menu_keyboard(is_operator))
+                except Exception as e:
+                    await bot.reply_to(message, f"❌ Erro: {e}", reply_markup=get_main_menu_keyboard(is_operator))
+
             elif text == "ℹ️ Ajuda":
-                help_text = (
-                    "⚓ **Ajuda - SisGAB Bot** ⚓\n\n"
-                    "Este bot auxilia nas comunicações e alertas do Gabinete.\n\n"
-                    "**Comandos disponíveis:**\n"
-                    "/menu - Menu Principal\n"
-                    "/settings - Painel de Configurações\n"
-                    "/cancelar - Cancela qualquer ação ativa"
+                help_msg = (
+                    "⚓ **AJUDA — SISGAB BOT**\n\n"
+                    "Este é o assistente oficial do Sistema de Gestão de Gabinete (SisGAB) do CGCFN.\n\n"
+                    "📋 **/menu** — Exibe o menu principal\n"
+                    "⚙️ **/settings** — Configurações e notificações\n"
+                    "❌ **/cancelar** — Cancela a operação atual\n\n"
+                    "📅 **Agenda Semanal** — Veja os próximos eventos\n"
+                    "➕ **Criar Demanda** — Solicite cobertura COMSOC\n"
+                    "🤖 **Digerir Pauta (IA)** — Processe questionários com Gemini\n\n"
+                    "💡 _Desenvolvido por Sargento Calaça 🇧🇷_"
                 )
-                is_operator = profile and str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design')
-                await bot.reply_to(message, help_text, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
+                await bot.reply_to(message, help_msg, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
+
             elif text == "📋 Pautas COMSOC":
                 from database import get_db_connection
                 db = get_db_connection()
@@ -197,34 +274,28 @@ def register_common_handlers(bot):
                     await bot.reply_to(message, "⚠️ Banco offline.")
                     return
                 try:
-                    res = db.table('demandas_comunicacao').select('*').in_('status', ['aprovada', 'pendente']).execute()
+                    res = db.table('demandas_comunicacao').select('*').order('data_evento', desc=False).limit(10).execute()
                     if res.data:
-                        msg_p = "📋 **PAUTAS E EVENTOS COMSOC:**\n\n"
-                        for d in res.data:
-                            status_ico = "🟢" if d['status'] == 'aprovada' else "🟡"
-                            msg_p += (
-                                f"{status_ico} **{d['titulo_evento']}**\n"
-                                f"📅 *Data:* {d['data_evento']} às {d['hora_evento']}\n"
-                                f"📍 *Local:* {d['local_evento']}\n"
-                                f"👤 *Solicitante:* {d['solicitante_nome']} ({d['setor']})\n\n"
+                        msg = "📋 **PAUTAS COMSOC — ÚLTIMAS 10:**\n\n"
+                        for p in res.data:
+                            status_icon = '🟢' if p.get('status') in ('aprovado', 'aprovada') else '🟡'
+                            msg += (
+                                f"{status_icon} **{p['titulo_evento']}**\n"
+                                f"   📅 {p.get('data_evento', 'N/I')} | 📍 {p.get('local_evento', 'N/I')}\n"
+                                f"   👤 {p.get('solicitante_nome', 'N/I')} | Status: {p.get('status', 'pendente')}\n\n"
                             )
-                        await bot.reply_to(message, msg_p, reply_markup=get_main_menu_keyboard(True), parse_mode='Markdown')
+                        await bot.reply_to(message, msg, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
                     else:
-                        await bot.reply_to(message, "📋 Nenhuma pauta cadastrada ou pendente.", reply_markup=get_main_menu_keyboard(True))
-                except Exception as ex:
-                    await bot.reply_to(message, f"❌ Erro ao listar pautas: {ex}")
-            
-            elif text in ["📅 Agenda Google", "/agenda"]:
+                        await bot.reply_to(message, "📭 Nenhuma pauta cadastrada no momento.", reply_markup=get_main_menu_keyboard(is_operator))
+                except Exception as e:
+                    await bot.reply_to(message, f"❌ Erro: {e}")
+
+            elif text in ["📅 Agenda Semanal", "📅 Agenda Google", "/agenda"]:
+                # Mostra eventos dos próximos 7 dias do banco
+                weekly_msg = _get_weekly_events_text()
                 google_cal_url = "https://calendar.google.com/calendar/u/0?cid=Y2djZm5hdWRpb3Zpc3VhbEBnbWFpbC5jb20"
-                is_operator = profile and str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'supervisor')
-                
-                msg_cal = (
-                    f"📅 **AGENDA GOOGLE CALENDAR OFICIAL COMSOC** ⚓\n\n"
-                    f"📧 **Conta de Gestão:** `cgcfnaudiovisual@gmail.com`\n\n"
-                    f"🔗 [Clique aqui para abrir a Agenda Google Oficial]({google_cal_url})\n\n"
-                    f"💡 *Todos os eventos e pautas criados no SisGAB ou no Bot são sincronizados com 1-clique diretamente na sua agenda Google!*"
-                )
-                await bot.reply_to(message, msg_cal, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
+                weekly_msg += f"\n\n🔗 [Abrir Google Calendar Oficial]({google_cal_url})"
+                await bot.reply_to(message, weekly_msg, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
             
             elif text == "🔌 Cautelas Ativas":
                 from database import get_db_connection
@@ -254,7 +325,8 @@ def register_common_handlers(bot):
                     'action': 'criar_demanda',
                     'step': 'solicitante_nome',
                     'user': profile,
-                    'data': {}
+                    'data': {},
+                    'history_steps': []
                 }
                 await bot.reply_to(
                     message, 
@@ -281,25 +353,30 @@ def register_common_handlers(bot):
 
             elif text == "❌ Cancelar":
                 clear_state(chat_id)
-                is_operator = profile and str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design')
                 await bot.reply_to(message, "Operação cancelada.", reply_markup=get_main_menu_keyboard(is_operator))
             else:
-                is_operator = profile and str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design')
                 await bot.reply_to(message, "⚓ Assistente SisGAB Ativo. Envie /menu para opções.", reply_markup=get_main_menu_keyboard(is_operator))
             return
 
-        # 2. Processamento do Estado / Wizard Ativo
-        state = chat_states[chat_id]
+        # =====================================================================
+        # SEÇÃO 2: Processamento do Estado / Wizard Ativo
+        # =====================================================================
+        state = chat_states.get(chat_id)
+        if not state:
+            return
+            
         action = state.get('action')
         step = state.get('step')
         profile = state.get('user')
         is_operator = profile and str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design')
         
+        # Cancelamento global
         if text.lower() in ['cancelar', '❌ cancelar']:
             clear_state(chat_id)
             await bot.reply_to(message, "❌ Operação cancelada.", reply_markup=get_main_menu_keyboard(is_operator))
             return
             
+        # ----- WIZARD: Solicitação de Acesso -----
         if action == 'settings':
             if step == 'request_access_name':
                 state['data']['reg_nome'] = text
@@ -337,13 +414,14 @@ def register_common_handlers(bot):
             elif step == 'request_access_funcao':
                 state['data']['reg_funcao'] = text.strip()
                 await finalizar_solicitacao_acesso(bot, message, chat_id, state)
+            return
 
-        elif action == 'digerir_pauta_ia':
+        # ----- WIZARD: Digerir Pauta com IA (Gemini) -----
+        if action == 'digerir_pauta_ia':
             if step == 'send_raw_text':
                 await bot.reply_to(message, "⏳ Analisando questionário com Gemini...")
                 try:
                     import ai_helper
-                    import json
                     
                     response_json = ai_helper.digest_demand_questionnaire(text)
                     dados = json.loads(response_json)
@@ -385,7 +463,7 @@ def register_common_handlers(bot):
                             f"📌 Evento: {registro['titulo_evento']}\n"
                             f"📅 Data: {registro['data_evento']}\n"
                             f"Acesse o painel web ou use o menu do bot para tramitar.",
-                            "new_user" # Reutiliza canal prioritário de avisos urgentes
+                            "new_user"
                         )
                     else:
                         await bot.reply_to(message, "⚠️ Erro ao salvar: Banco indisponível.")
@@ -393,41 +471,15 @@ def register_common_handlers(bot):
                     await bot.reply_to(message, f"❌ Erro ao digerir questionário: {e}\nPor favor, tente enviar novamente ou criar manualmente.", reply_markup=get_main_menu_keyboard(is_operator))
                 finally:
                     clear_state(chat_id)
-
-            elif text == "➕ Criar Demanda":
-                chat_states[chat_id] = {
-                    'action': 'criar_demanda',
-                    'step': 'solicitante_nome',
-                    'user': profile,
-                    'data': {},
-                    'history_steps': []
-                }
-                await bot.reply_to(
-                    message, 
-                    "➕ **SOLICITAÇÃO DE PAUTA E COBERTURA - COMSOC/CGCFN**\n\n"
-                    "[Passo 1/12] 👤 Qual o **Posto/Graduação e Nome Completo** do Solicitante?", 
-                    reply_markup=get_cancel_keyboard(), 
-                    parse_mode='Markdown'
-                )
-
-        # 2. Processamento do Estado / Wizard Ativo
-        state = chat_states[chat_id]
-        action = state.get('action')
-        step = state.get('step')
-        profile = state.get('user')
-        is_operator = profile and str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design')
-        
-        if text.lower() in ['cancelar', '❌ cancelar']:
-            clear_state(chat_id)
-            await bot.reply_to(message, "❌ Operação cancelada.", reply_markup=get_main_menu_keyboard(is_operator))
             return
-            
-        from .keyboards import (
-            get_om_keyboard, get_coverage_keyboard, get_video_format_keyboard,
-            get_yes_no_keyboard, get_confirm_demanda_keyboard
-        )
 
+        # ----- WIZARD: Criar Demanda (12 passos) -----
         if action == 'criar_demanda':
+            from .keyboards import (
+                get_om_keyboard, get_coverage_keyboard, get_video_format_keyboard,
+                get_yes_no_keyboard, get_confirm_demanda_keyboard
+            )
+            
             # Suporte ao botão "⬅️ Voltar"
             if text in ["⬅️ Voltar", "voltar"] and state.get('history_steps'):
                 prev_step, prev_data = state['history_steps'].pop()
@@ -626,6 +678,7 @@ def register_common_handlers(bot):
                     await bot.reply_to(message, "✏️ **Formulação Reiniciada**\n\n[Passo 1/12] 👤 Qual o **Posto/Graduação e Nome Completo** do Solicitante?", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
                 else:
                     await bot.reply_to(message, "Selecione uma das opções nos botões abaixo:", reply_markup=get_confirm_demanda_keyboard())
+            return
 
 
     @bot.message_handler(content_types=['photo'])
@@ -656,7 +709,10 @@ def register_common_handlers(bot):
                     db = get_db_connection()
                     if db:
                         web_path = f"/assets/selfies/{message.from_user.id}.jpg"
-                        db.table('Users').update({'url_foto': web_path}).eq('id', profile['id']).execute()
+                        try:
+                            db.table('users').update({'url_foto': web_path}).eq('id', profile['id']).execute()
+                        except Exception:
+                            pass
                 
                 await bot.reply_to(
                     message,
