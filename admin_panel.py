@@ -33,11 +33,11 @@ def render_page():
         if db_conn:
             try:
                 # Solicitações pendentes
-                req_res = db_conn.table('RegistrationRequests').select('*').eq('status', 'pending').execute()
+                req_res = db_conn.table('registration_requests').select('*').in_('status', ['pending', 'pendente']).execute()
                 requests_data = req_res.data if req_res.data else []
 
                 # Usuários existentes
-                users_res = db_conn.table('Users').select('*').execute()
+                users_res = db_conn.table('users').select('*').execute()
                 users_data = users_res.data if users_res.data else []
             except Exception as e:
                 print(f"[ADMIN] Erro ao carregar dados do Supabase: {e}")

@@ -219,7 +219,7 @@ sisgab_menu_categories = [
         'category': 'FERRAMENTAS E ADMINISTRAÇÃO',
         'items': [
             {'name': 'Configurações', 'icon': 'settings', 'path': '/config', 'roles': ['admin', 'oficial_gab'], 'subtitle': 'Parâmetros do sistema'},
-            {'name': 'Usuários e Permissões', 'icon': 'admin_panel_settings', 'path': '/admin_panel', 'roles': ['admin'], 'subtitle': 'Controle de acesso'},
+            {'name': 'Usuários e Permissões', 'icon': 'admin_panel_settings', 'path': '/admin_panel', 'roles': ['admin', 'supervisor', 'oficial_gab', 'praca_gab', 'comsoc'], 'subtitle': 'Controle de acesso e aprovação de usuários'},
             {'name': 'Ajuda / Sobre', 'icon': 'help_outline', 'path': '/ajuda_sobre', 'subtitle': 'Manuais e informações'},
         ]
     }
