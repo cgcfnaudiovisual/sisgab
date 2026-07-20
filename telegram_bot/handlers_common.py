@@ -5,6 +5,90 @@ from .client import chat_states
 from .utils import check_authorized_user, clear_state, USER_PERMISSIONS_CACHE
 from .keyboards import get_main_menu_keyboard, get_cancel_keyboard, get_unauthorized_keyboard
 
+async def finalizar_solicitacao_acesso(bot, message, chat_id, state):
+    reg_nome = state['data'].get('reg_nome', 'N/I')
+    reg_guerra = state['data'].get('reg_guerra', 'N/I')
+    reg_email = state['data'].get('reg_email', 'N/I')
+    reg_om = state['data'].get('reg_om', 'CGCFN')
+    reg_funcao = state['data'].get('reg_funcao', 'Gabinete')
+    
+    try:
+        from database import get_db_connection
+        conn = get_db_connection()
+        if conn:
+            # Vincular no efetivo por e-mail e nome de guerra
+            try:
+                conn.table('efetivo').update({'telegram_id': str(chat_id)}).eq('email', reg_email).execute()
+            except Exception as ef_err:
+                print(f"[Bot Link Efetivo Email Error] {ef_err}")
+            try:
+                conn.table('efetivo').update({'telegram_id': str(chat_id)}).ilike('nome_guerra', reg_guerra).execute()
+            except Exception as ef_err2:
+                print(f"[Bot Link Efetivo Guerra Error] {ef_err2}")
+            try:
+                conn.table('users').update({'telegram_id': str(chat_id)}).ilike('username', reg_guerra).execute()
+            except Exception as u_err:
+                print(f"[Bot Link Users Error] {u_err}")
+            try:
+                import uuid
+                conn.table('registration_requests').insert({
+                    'id': str(uuid.uuid4()),
+                    'email': reg_email,
+                    'nome_completo': reg_nome,
+                    'nome_guerra': reg_guerra,
+                    'setor_om': reg_om,
+                    'tipo_usuario': 'comsoc' if 'CGCFN' in reg_om.upper() else 'externo',
+                    'status': 'pendente'
+                }).execute()
+            except Exception as reg_err:
+                print(f"[Bot Reg Request Insert Error] {reg_err}")
+
+            # NOTIFICAR OS ADMINISTRADORES E SUPERVISORES VIA TELEGRAM
+            try:
+                from notifications_manager import notify_telegram
+                alert_txt = (
+                    f"🔔 **NOVA SOLICITAÇÃO DE ACESSO AO SISGAB** ⚓\n\n"
+                    f"👤 **Militar:** {reg_guerra} ({reg_nome})\n"
+                    f"📧 **E-mail:** {reg_email}\n"
+                    f"🏢 **OM/Unidade:** {reg_om}\n"
+                    f"🎯 **Seção/Função:** {reg_funcao}\n"
+                    f"📱 **Telegram ID:** `{chat_id}`\n\n"
+                    f"👉 *Acesse o painel 'Usuários e Permissões' no SisGAB para aprovar.*"
+                )
+                
+                admin_tg_ids = set()
+                try:
+                    res_admin_ef = conn.table('efetivo').select('telegram_id').in_('role', ['admin', 'supervisor', 'oficial_gab']).execute()
+                    if res_admin_ef and res_admin_ef.data:
+                        for adm in res_admin_ef.data:
+                            if adm_tg := adm.get('telegram_id'):
+                                admin_tg_ids.add(str(adm_tg))
+                except Exception as ef_search_err:
+                    print(f"[EF SEARCH ERR] {ef_search_err}")
+
+                try:
+                    res_admin_u = conn.table('users').select('telegram_id').in_('role', ['admin', 'supervisor', 'oficial_gab']).execute()
+                    if res_admin_u and res_admin_u.data:
+                        for adm in res_admin_u.data:
+                            if adm_tg := adm.get('telegram_id'):
+                                admin_tg_ids.add(str(adm_tg))
+                except Exception as u_search_err:
+                    print(f"[U SEARCH ERR] {u_search_err}")
+
+                if admin_tg_ids:
+                    for adm_tg in admin_tg_ids:
+                        notify_telegram(alert_txt, "system", custom_chat_id=adm_tg)
+                else:
+                    notify_telegram(alert_txt, "system", role_required="admin")
+            except Exception as notif_err:
+                print(f"[BOT ADMIN NOTIFY REG ERR] {notif_err}")
+
+        await bot.reply_to(message, "✅ Solicitação de acesso registrada e enviada aos administradores!\nVocê receberá uma notificação assim que seu acesso for aprovado.", reply_markup=get_unauthorized_keyboard())
+    except Exception as ex:
+        await bot.reply_to(message, f"❌ Erro ao registrar solicitação: {ex}", reply_markup=get_unauthorized_keyboard())
+    finally:
+        clear_state(chat_id)
+
 def register_common_handlers(bot):
     
     @bot.message_handler(func=lambda msg: True)
@@ -253,90 +337,6 @@ def register_common_handlers(bot):
             elif step == 'request_access_funcao':
                 state['data']['reg_funcao'] = text.strip()
                 await finalizar_solicitacao_acesso(bot, message, chat_id, state)
-
-async def finalizar_solicitacao_acesso(bot, message, chat_id, state):
-    reg_nome = state['data'].get('reg_nome', 'N/I')
-    reg_guerra = state['data'].get('reg_guerra', 'N/I')
-    reg_email = state['data'].get('reg_email', 'N/I')
-    reg_om = state['data'].get('reg_om', 'CGCFN')
-    reg_funcao = state['data'].get('reg_funcao', 'Gabinete')
-    
-    try:
-        from database import get_db_connection
-        conn = get_db_connection()
-        if conn:
-            # Vincular no efetivo por e-mail e nome de guerra
-            try:
-                conn.table('efetivo').update({'telegram_id': str(chat_id)}).eq('email', reg_email).execute()
-            except Exception as ef_err:
-                print(f"[Bot Link Efetivo Email Error] {ef_err}")
-            try:
-                conn.table('efetivo').update({'telegram_id': str(chat_id)}).ilike('nome_guerra', reg_guerra).execute()
-            except Exception as ef_err2:
-                print(f"[Bot Link Efetivo Guerra Error] {ef_err2}")
-            try:
-                conn.table('users').update({'telegram_id': str(chat_id)}).ilike('username', reg_guerra).execute()
-            except Exception as u_err:
-                print(f"[Bot Link Users Error] {u_err}")
-            try:
-                import uuid
-                conn.table('registration_requests').insert({
-                    'id': str(uuid.uuid4()),
-                    'email': reg_email,
-                    'nome_completo': reg_nome,
-                    'nome_guerra': reg_guerra,
-                    'setor_om': reg_om,
-                    'tipo_usuario': 'comsoc' if 'CGCFN' in reg_om.upper() else 'externo',
-                    'status': 'pendente'
-                }).execute()
-            except Exception as reg_err:
-                print(f"[Bot Reg Request Insert Error] {reg_err}")
-
-            # NOTIFICAR OS ADMINISTRADORES E SUPERVISORES VIA TELEGRAM
-            try:
-                from notifications_manager import notify_telegram
-                alert_txt = (
-                    f"🔔 **NOVA SOLICITAÇÃO DE ACESSO AO SISGAB** ⚓\n\n"
-                    f"👤 **Militar:** {reg_guerra} ({reg_nome})\n"
-                    f"📧 **E-mail:** {reg_email}\n"
-                    f"🏢 **OM/Unidade:** {reg_om}\n"
-                    f"🎯 **Seção/Função:** {reg_funcao}\n"
-                    f"📱 **Telegram ID:** `{chat_id}`\n\n"
-                    f"👉 *Acesse o painel 'Usuários e Permissões' no SisGAB para aprovar.*"
-                )
-                
-                admin_tg_ids = set()
-                try:
-                    res_admin_ef = conn.table('efetivo').select('telegram_id').in_('role', ['admin', 'supervisor', 'oficial_gab']).execute()
-                    if res_admin_ef and res_admin_ef.data:
-                        for adm in res_admin_ef.data:
-                            if adm_tg := adm.get('telegram_id'):
-                                admin_tg_ids.add(str(adm_tg))
-                except Exception as ef_search_err:
-                    print(f"[EF SEARCH ERR] {ef_search_err}")
-
-                try:
-                    res_admin_u = conn.table('users').select('telegram_id').in_('role', ['admin', 'supervisor', 'oficial_gab']).execute()
-                    if res_admin_u and res_admin_u.data:
-                        for adm in res_admin_u.data:
-                            if adm_tg := adm.get('telegram_id'):
-                                admin_tg_ids.add(str(adm_tg))
-                except Exception as u_search_err:
-                    print(f"[U SEARCH ERR] {u_search_err}")
-
-                if admin_tg_ids:
-                    for adm_tg in admin_tg_ids:
-                        notify_telegram(alert_txt, "system", custom_chat_id=adm_tg)
-                else:
-                    notify_telegram(alert_txt, "system", role_required="admin")
-            except Exception as notif_err:
-                print(f"[BOT ADMIN NOTIFY REG ERR] {notif_err}")
-
-        await bot.reply_to(message, "✅ Solicitação de acesso registrada e enviada aos administradores!\nVocê receberá uma notificação assim que seu acesso for aprovado.", reply_markup=get_unauthorized_keyboard())
-    except Exception as ex:
-        await bot.reply_to(message, f"❌ Erro ao registrar solicitação: {ex}", reply_markup=get_unauthorized_keyboard())
-    finally:
-        clear_state(chat_id)
 
         elif action == 'digerir_pauta_ia':
             if step == 'send_raw_text':

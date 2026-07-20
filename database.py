@@ -1002,8 +1002,7 @@ def seed_default_admin():
                 'id': '00000000-0000-0000-0000-000000000001',
                 'username': 'admin',
                 'nome': 'ADMINISTRADOR',
-                'role': 'admin',
-                'email': 'admin@marinha.mil.br'
+                'role': 'admin'
             }, on_conflict='id').execute()
             
             conn.table('efetivo').upsert({

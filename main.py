@@ -1072,8 +1072,8 @@ def login_page(request: Request):
 
 def sync_menu_permissions_db():
     try:
-        from database import get_db_connection
-        db = get_db_connection()
+        from database import get_service_db_connection, get_db_connection
+        db = get_service_db_connection() or get_db_connection()
         if not db:
             return
         
