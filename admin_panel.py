@@ -169,10 +169,10 @@ def render_page():
                                 auth_id = str(uuid.uuid4())
                                 ui.notify('Operador registrado com sucesso no banco de dados local!', color='success')
 
-                            # Insere na tabela Users
+                            # Insere na tabela users
                             try:
                                 try:
-                                    conn.table('Users').insert({
+                                    conn.table('users').insert({
                                         'id': auth_id,
                                         'username': c_email.value.split('@')[0],
                                         'nome': c_nome.value.upper(),
@@ -183,7 +183,7 @@ def render_page():
                                     }).execute()
                                 except Exception as e_mail_err:
                                     # Fallback: salva sem a coluna email
-                                    conn.table('Users').insert({
+                                    conn.table('users').insert({
                                         'id': auth_id,
                                         'username': c_email.value.split('@')[0],
                                         'nome': c_nome.value.upper(),
@@ -194,7 +194,7 @@ def render_page():
                             except Exception as db_err:
                                 if 'url_foto' in str(db_err):
                                     # Fallback: salva sem a coluna url_foto
-                                    conn.table('Users').insert({
+                                    conn.table('users').insert({
                                         'id': auth_id,
                                         'username': c_email.value.split('@')[0],
                                         'nome': c_nome.value.upper(),
@@ -365,10 +365,10 @@ def render_page():
                                     except Exception as auth_email_err:
                                         print(f"[AUTH EMAIL UPDATE ERR] {auth_email_err}")
 
-                            # 2. Atualiza a tabela Users
+                            # 2. Atualiza a tabela users
                             try:
                                 try:
-                                    conn.table('Users').update({
+                                    conn.table('users').update({
                                         'nome': e_nome.value.upper(),
                                         'username': e_unm.value,
                                         'telegram_id': e_tg.value or None,
@@ -378,7 +378,7 @@ def render_page():
                                     }).eq('id', user['id']).execute()
                                 except Exception as e_mail_err:
                                     # Fallback: salva sem a coluna email
-                                    conn.table('Users').update({
+                                    conn.table('users').update({
                                         'nome': e_nome.value.upper(),
                                         'username': e_unm.value,
                                         'telegram_id': e_tg.value or None,
@@ -387,7 +387,7 @@ def render_page():
                                     }).eq('id', user['id']).execute()
                             except Exception as db_err:
                                 if 'url_foto' in str(db_err):
-                                    conn.table('Users').update({
+                                    conn.table('users').update({
                                         'nome': e_nome.value.upper(),
                                         'username': e_unm.value,
                                         'telegram_id': e_tg.value or None,
@@ -564,7 +564,7 @@ def render_page():
                                     print(f"[AUTH DELETE ERROR] {auth_err}")
                             
                             # Remove das tabelas locais
-                            conn.table('Users').delete().eq('id', user['id']).execute()
+                            conn.table('users').delete().eq('id', user['id']).execute()
                             try:
                                 conn.table('efetivo').delete().eq('telegram_id', user.get('telegram_id')).execute()
                             except Exception:
@@ -635,8 +635,8 @@ def render_page():
                                     except Exception as auth_err:
                                         print(f"[AUTH BATCH DELETE ERROR] {auth_err} for uid {uid}")
                             
-                            # Remove da tabela Users
-                            conn.table('Users').delete().in_('id', list(uids)).execute()
+                            # Remove da tabela users
+                            conn.table('users').delete().in_('id', list(uids)).execute()
                             
                             # Tenta remover também da tabela efetivo
                             for u in selected_users_objs:
@@ -723,13 +723,22 @@ def render_page():
                                                 
                                                 try:
                                                     if action == 'approved':
-                                                        conn.table('RegistrationRequests').update({'status': 'approved'}).eq('id', req_id).execute()
-                                                        conn.table('Users').upsert({
+                                                        conn.table('registration_requests').update({'status': 'approved'}).eq('id', req_id).execute()
+                                                        conn.table('users').upsert({
                                                             'id': req_id,
                                                             'username': req_email.split('@')[0],
                                                             'nome': req_guerra,
                                                             'role': s['role']
                                                         }, on_conflict='id').execute()
+                                                        try:
+                                                            conn.table('efetivo').upsert({
+                                                                'nome_guerra': req_guerra,
+                                                                'email': req_email,
+                                                                'role': s['role']
+                                                            }, on_conflict='nome_guerra').execute()
+                                                        except Exception as ef_upsert_err:
+                                                            print(f"[EFETIVO UPSERT ERR] {ef_upsert_err}")
+
                                                         try:
                                                             from database import confirm_supabase_user
                                                             confirm_supabase_user(req_id)
@@ -737,7 +746,7 @@ def render_page():
                                                             print(f"[CONFIRM ERR] {conf_err}")
                                                         # Notifica o usuário aprovado via Telegram
                                                         try:
-                                                            user_res = conn.table('Users').select('telegram_id, nome').eq('id', req_id).execute()
+                                                            user_res = conn.table('users').select('telegram_id, nome').eq('id', req_id).execute()
                                                             if user_res.data and user_res.data[0].get('telegram_id'):
                                                                 from notifications_manager import notify_telegram
                                                                 tg_id = str(user_res.data[0]['telegram_id'])
@@ -749,12 +758,12 @@ def render_page():
                                                                     f"📱 Você já pode usar o bot normalmente.\n"
                                                                     f"🌐 Acesse também o sistema web para operações avançadas."
                                                                 )
-                                                                notify_telegram(msg_tg, "system", specific_user_id=req_id)
+                                                                notify_telegram(msg_tg, "system", custom_chat_id=tg_id)
                                                         except Exception as notif_err:
                                                             print(f"[PANEL NOTIFY APPROVED ERR] {notif_err}")
                                                         ui.notify(f"Usuário {req_guerra} aprovado como {s['role'].upper()}!", color='success')
                                                     else:
-                                                        conn.table('RegistrationRequests').update({'status': 'rejected'}).eq('id', req_id).execute()
+                                                        conn.table('registration_requests').update({'status': 'rejected'}).eq('id', req_id).execute()
                                                         ui.notify(f"Solicitação de {req_guerra} rejeitada.", color='warning')
                                                     
                                                     data_service.clear_cache()
