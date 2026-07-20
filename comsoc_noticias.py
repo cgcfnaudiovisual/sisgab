@@ -83,6 +83,28 @@ def render_page():
                     on_click=ir_para_pendentes
                 ).props('unelevated color=amber-9 text-color=black dense bold').classes('text-xs q-px-sm')
 
+        # WIDGET DESTACADO DA AGENDA GOOGLE CALENDAR NA DASHBOARD PRINCIPAL
+        with ui.card().classes('w-full q-pa-sm border border-cyan-500/40 rounded-xl bg-black/40 q-mb-md'):
+            with ui.row().classes('w-full justify-between items-center wrap gap-2'):
+                with ui.row().classes('items-center gap-3'):
+                    ui.icon('calendar_month', color='cyan', size='1.8rem')
+                    with ui.column().classes('gap-0'):
+                        ui.label('📅 AGENDA GOOGLE CALENDAR OFICIAL DO GABINETE / COMSOC').classes('text-xs font-bold text-white cyber-title')
+                        ui.label('Sincronizada em Tempo Real • cgcfnaudiovisual@gmail.com').classes('text-[10px] text-cyan font-mono')
+                
+                with ui.row().classes('items-center gap-2'):
+                    ui.button(
+                        'Ver Agenda Completa',
+                        icon='calendar_today',
+                        on_click=lambda: ui.navigate.to('/agenda_geral')
+                    ).props('unelevated color=cyan text-color=black bold dense').classes('text-xs q-px-xs')
+
+                    ui.link(
+                        '🔗 Abrir no Google',
+                        'https://calendar.google.com/calendar/u/0?cid=Y2djZm5hdWRpb3Zpc3VhbEBnbWFpbC5jb20',
+                        new_tab=True
+                    ).classes('text-[10px] font-bold text-cyan underline q-px-xs q-py-xs bg-cyan-950/60 border border-cyan-500/40 rounded-lg')
+
         with ui.row().classes('w-full gap-4 items-stretch justify-start'):
             # Coluna 1: Canal Oficial e Interno
             with ui.column().classes('col-12 col-md q-pa-none').style('min-width: 320px;'):

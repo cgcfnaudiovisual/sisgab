@@ -187,6 +187,7 @@ import comsoc_galeria
 import comsoc_historico
 import comsoc_aniversariantes
 import smart_editor
+import agenda_geral
 from database import authenticate_user, get_user_by_id
 from services import data_service
 
@@ -205,6 +206,7 @@ sisgab_menu_categories = [
         'category': 'GABINETE & COMSOC',
         'items': [
             {'name': 'Canal de Notícias', 'icon': 'newspaper', 'path': '/comsoc_noticias', 'subtitle': 'Feed e boletins internos'},
+            {'name': 'Agenda Geral', 'icon': 'calendar_month', 'path': '/agenda_geral', 'subtitle': 'Google Calendar e Pautas'},
             {'name': 'Nova Solicitação', 'icon': 'add_box', 'path': '/comsoc_demandas', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar'], 'subtitle': 'Formulário de pautas e coberturas'},
             {'name': 'Homologar Pautas', 'icon': 'gavel', 'path': '/comsoc_homologar', 'roles': ['admin', 'oficial_gab'], 'subtitle': 'Parecer e aprovações de coberturas'},
             {'name': 'Central de IA', 'icon': 'psychology', 'path': '/assistente_ia', 'subtitle': 'Chat, redator e triagem de demandas'},
@@ -700,6 +702,12 @@ def comsoc_historico_page():
 def comsoc_aniversariantes_page():
     app.storage.user['current_path'] = '/comsoc_aniversariantes'
     build_layout(comsoc_aniversariantes.render_page)()
+
+
+@ui.page('/agenda_geral')
+def agenda_geral_page():
+    app.storage.user['current_path'] = '/agenda_geral'
+    build_layout(agenda_geral.render_page)()
 
 
 @ui.page('/smart_editor')
