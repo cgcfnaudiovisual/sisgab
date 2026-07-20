@@ -35,36 +35,30 @@ def render_page():
 
         if db_conn:
             try:
-                # Solicitações pendentes
+                # Solicitações pendentes reais
                 req_res = db_conn.table('registration_requests').select('*').in_('status', ['pending', 'pendente']).execute()
                 requests_data = req_res.data if req_res.data else []
 
-                # Usuários existentes
+                # Usuários e Efetivo reais
                 users_res = db_conn.table('users').select('*').execute()
                 users_data = users_res.data if users_res.data else []
+                
+                efetivo_res = db_conn.table('efetivo').select('*').execute()
+                if efetivo_res and efetivo_res.data:
+                    existing_user_ids = {str(u.get('id')) for u in users_data}
+                    for ef in efetivo_res.data:
+                        ef_id = str(ef.get('id'))
+                        if ef_id not in existing_user_ids:
+                            users_data.append({
+                                'id': ef_id,
+                                'username': ef.get('nome_guerra', 'militar').lower(),
+                                'nome': f"{ef.get('posto_grad', '')} {ef.get('nome_guerra', '')}".strip(),
+                                'role': ef.get('role', 'operador'),
+                                'telegram_id': ef.get('telegram_id', ''),
+                                'url_foto': ef.get('url_foto', '')
+                            })
             except Exception as e:
                 print(f"[ADMIN] Erro ao carregar dados do Supabase: {e}")
-                is_offline = True
-
-        if is_offline:
-            # Fallbacks mockados para desenvolvimento offline
-            requests_data = [
-                {
-                    'id': 'mock-req-1',
-                    'email': 'joao.silva@marinha.mil.br',
-                    'nome_completo': 'João da Silva Souza',
-                    'nome_guerra': 'SILVA',
-                    'status': 'pending',
-                    'created_at': '2026-05-29T10:00:00+00'
-                }
-            ]
-            
-            # Vamos garantir que os dados mockados possuam url_foto e telegram_id para testes perfeitos
-            users_data = [
-                {'id': '8ff93a11-09ee-4383-b4a3-1e4a86866471', 'username': 'admin', 'nome': 'ADMILSON', 'role': 'admin', 'telegram_id': '123456789', 'url_foto': 'https://cdn.quasar.dev/img/avatar.png'},
-                {'id': 'mock-user-2', 'username': 'supervisor_teste', 'nome': 'SGT ALVES', 'role': 'supervisor', 'telegram_id': '987654321', 'url_foto': ''},
-                {'id': 'mock-user-3', 'username': 'comcia_teste', 'nome': 'TEN DUARTE', 'role': 'comcia', 'telegram_id': '', 'url_foto': ''}
-            ]
 
         # --- DIÁLOGOS ADMINISTRATIVOS ---
 

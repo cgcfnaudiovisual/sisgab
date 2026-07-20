@@ -197,45 +197,99 @@ def register_common_handlers(bot):
             elif step == 'request_access_guerra':
                 state['data']['reg_guerra'] = text
                 state['step'] = 'request_access_email'
-                await bot.reply_to(message, "📧 Digite seu **E-mail cadastrado no sistema** (para vinculação):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                await bot.reply_to(message, "📧 Digite seu **E-mail institucional** (ex: militar@marinha.mil.br):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
             elif step == 'request_access_email':
-                email_input = text.strip().lower()
-                reg_nome = state['data'].get('reg_nome', '')
-                reg_guerra = state['data'].get('reg_guerra', '')
-                try:
-                    from database import get_db_connection
-                    conn = get_db_connection()
-                    if conn:
-                        # Vincular no efetivo por e-mail e nome de guerra
-                        try:
-                            conn.table('efetivo').update({'telegram_id': str(chat_id)}).eq('email', email_input).execute()
-                        except Exception as ef_err:
-                            print(f"[Bot Link Efetivo Email Error] {ef_err}")
-                        try:
-                            conn.table('efetivo').update({'telegram_id': str(chat_id)}).ilike('nome_guerra', reg_guerra).execute()
-                        except Exception as ef_err2:
-                            print(f"[Bot Link Efetivo Guerra Error] {ef_err2}")
-                        try:
-                            conn.table('Users').update({'telegram_id': str(chat_id)}).ilike('username', reg_guerra).execute()
-                        except Exception as u_err:
-                            print(f"[Bot Link Users Error] {u_err}")
-                        try:
-                            import uuid
-                            conn.table('RegistrationRequests').insert({
-                                'id': str(uuid.uuid4()),
-                                'email': email_input,
-                                'nome_completo': reg_nome,
-                                'nome_guerra': reg_guerra,
-                                'status': 'pendente'
-                            }).execute()
-                        except Exception as reg_err:
-                            print(f"[Bot Reg Request Insert Error] {reg_err}")
+                state['data']['reg_email'] = text.strip().lower()
+                state['step'] = 'request_access_om'
+                
+                markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+                markup.row(types.KeyboardButton("🏛️ CGCFN"))
+                markup.row(types.KeyboardButton("⚓ ComNavOper"), types.KeyboardButton("⚓ Com1ºDN"))
+                markup.row(types.KeyboardButton("🏢 Outra OM"), types.KeyboardButton("❌ Cancelar"))
+                await bot.reply_to(message, "🏢 **Selecione a sua Organização Militar (OM):**", reply_markup=markup, parse_mode='Markdown')
+                
+            elif step == 'request_access_om':
+                selected_om = text.strip()
+                state['data']['reg_om'] = selected_om
+                
+                if "CGCFN" in selected_om.upper():
+                    state['step'] = 'request_access_funcao'
+                    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+                    markup.row(types.KeyboardButton("📸 ComSoc"), types.KeyboardButton("🛡️ Gabinete"))
+                    markup.row(types.KeyboardButton("📜 Ajudantaria"), types.KeyboardButton("⚙️ Operações / Outro"))
+                    markup.row(types.KeyboardButton("❌ Cancelar"))
+                    await bot.reply_to(message, "🎯 **Informe a sua Seção / Função no CGCFN:**", reply_markup=markup, parse_mode='Markdown')
+                else:
+                    state['data']['reg_funcao'] = 'Solicitante Externo'
+                    await finalizar_solicitacao_acesso(bot, message, chat_id, state)
+                    
+            elif step == 'request_access_funcao':
+                state['data']['reg_funcao'] = text.strip()
+                await finalizar_solicitacao_acesso(bot, message, chat_id, state)
 
-                    await bot.reply_to(message, "✅ Solicitação de acesso registrada e vinculada com sucesso!\nO administrador aprovará seu acesso em breve.", reply_markup=get_unauthorized_keyboard())
-                except Exception as ex:
-                    await bot.reply_to(message, f"❌ Erro ao registrar solicitação: {ex}", reply_markup=get_unauthorized_keyboard())
-                finally:
-                    clear_state(chat_id)
+async def finalizar_solicitacao_acesso(bot, message, chat_id, state):
+    reg_nome = state['data'].get('reg_nome', 'N/I')
+    reg_guerra = state['data'].get('reg_guerra', 'N/I')
+    reg_email = state['data'].get('reg_email', 'N/I')
+    reg_om = state['data'].get('reg_om', 'CGCFN')
+    reg_funcao = state['data'].get('reg_funcao', 'Gabinete')
+    
+    try:
+        from database import get_db_connection
+        conn = get_db_connection()
+        if conn:
+            # Vincular no efetivo por e-mail e nome de guerra
+            try:
+                conn.table('efetivo').update({'telegram_id': str(chat_id)}).eq('email', reg_email).execute()
+            except Exception as ef_err:
+                print(f"[Bot Link Efetivo Email Error] {ef_err}")
+            try:
+                conn.table('efetivo').update({'telegram_id': str(chat_id)}).ilike('nome_guerra', reg_guerra).execute()
+            except Exception as ef_err2:
+                print(f"[Bot Link Efetivo Guerra Error] {ef_err2}")
+            try:
+                conn.table('users').update({'telegram_id': str(chat_id)}).ilike('username', reg_guerra).execute()
+            except Exception as u_err:
+                print(f"[Bot Link Users Error] {u_err}")
+            try:
+                import uuid
+                conn.table('registration_requests').insert({
+                    'id': str(uuid.uuid4()),
+                    'email': reg_email,
+                    'nome_completo': reg_nome,
+                    'nome_guerra': reg_guerra,
+                    'setor_om': reg_om,
+                    'tipo_usuario': 'comsoc' if 'CGCFN' in reg_om.upper() else 'externo',
+                    'status': 'pendente'
+                }).execute()
+            except Exception as reg_err:
+                print(f"[Bot Reg Request Insert Error] {reg_err}")
+
+            # NOTIFICAR OS ADMINISTRADORES E SUPERVISORES VIA TELEGRAM
+            try:
+                from notifications_manager import notify_telegram
+                res_admin = conn.table('efetivo').select('telegram_id').in_('role', ['admin', 'supervisor', 'oficial_gab']).execute()
+                if res_admin and res_admin.data:
+                    alert_txt = (
+                        f"🔔 **NOVA SOLICITAÇÃO DE ACESSO AO SISGAB** ⚓\n\n"
+                        f"👤 **Militar:** {reg_guerra} ({reg_nome})\n"
+                        f"📧 **E-mail:** {reg_email}\n"
+                        f"🏢 **OM/Unidade:** {reg_om}\n"
+                        f"🎯 **Seção/Função:** {reg_funcao}\n"
+                        f"📱 **Telegram ID:** `{chat_id}`\n\n"
+                        f"👉 *Acesse o painel 'Usuários e Permissões' no SisGAB para aprovar.*"
+                    )
+                    for adm in res_admin.data:
+                        if adm_tg := adm.get('telegram_id'):
+                            notify_telegram(alert_txt, "system", custom_chat_id=adm_tg)
+            except Exception as notif_err:
+                print(f"[BOT ADMIN NOTIFY REG ERR] {notif_err}")
+
+        await bot.reply_to(message, "✅ Solicitação de acesso registrada e enviada aos administradores!\nVocê receberá uma notificação assim que seu acesso for aprovado.", reply_markup=get_unauthorized_keyboard())
+    except Exception as ex:
+        await bot.reply_to(message, f"❌ Erro ao registrar solicitação: {ex}", reply_markup=get_unauthorized_keyboard())
+    finally:
+        clear_state(chat_id)
 
         elif action == 'digerir_pauta_ia':
             if step == 'send_raw_text':
