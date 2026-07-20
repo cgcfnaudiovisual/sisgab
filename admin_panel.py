@@ -8,12 +8,15 @@ THEME = theme.colors
 # Opções de papéis/roles no sistema
 ROLE_OPTIONS = {
     'admin': 'Administrador (Acesso Total)',
+    'supervisor': 'Supervisor COMSOC',
     'oficial_gab': 'Oficial do Gabinete',
     'oficial': 'Oficial da OM',
     'praca_gab': 'Praça do Gabinete',
     'comsoc': 'Equipe COMSOC (Fotografia/Vídeo)',
     'comsoc_design': 'Equipe COMSOC (Edições Gráficas/Artes)',
-    'militar': 'Militar em Geral (Autoatendimento)'
+    'operador': 'Operador COMSOC',
+    'militar': 'Militar em Geral (Autoatendimento)',
+    'compel': 'Militar / Efetivo em Geral'
 }
 
 def render_page():
@@ -320,7 +323,10 @@ def render_page():
                         
                     e_foto.on('change', update_foto_preview)
                     
-                    e_role = ui.select(ROLE_OPTIONS, label='Papel do Usuário', value=user.get('role', 'compel')).props('dark outlined dense w-full')
+                    user_role_val = str(user.get('role', 'compel')).strip().lower()
+                    if user_role_val not in ROLE_OPTIONS:
+                        user_role_val = 'compel'
+                    e_role = ui.select(ROLE_OPTIONS, label='Papel do Usuário', value=user_role_val).props('dark outlined dense w-full')
                     
                     e_error = ui.label('').classes('text-xs text-red w-full text-center')
                     
