@@ -216,26 +216,6 @@ def authenticate_user(username: str, password: str) -> Optional[dict]:
                 password_valid = True
 
         if password_valid:
-            return user
-        return None
-                needs_upgrade = True  # Marcar para upgrade para bcrypt
-        
-        if password_valid:
-            # Auto-upgrade: migra hash SHA-256 legado para bcrypt
-            if needs_upgrade:
-                try:
-                    new_hash = bcrypt.hashpw(
-                        password.encode('utf-8'),
-                        bcrypt.gensalt(rounds=12)
-                    ).decode('utf-8')
-                    db.table('efetivo').update(
-                        {'senha_hash': new_hash}
-                    ).eq('id', user['id']).execute()
-                    print(f"[SEGURANÇA] Hash migrado para bcrypt: {username}")
-                except Exception as e:
-                    print(f"[SEGURANÇA] Erro ao migrar hash: {e}")
-            
-            # Remove senha antes de retornar
             user.pop('senha_hash', None)
             return user
         
