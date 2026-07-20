@@ -1,0 +1,75 @@
+RELATÓRIO DE CÓPIA SELETIVA - COMSOC_IA -> GABINETE
+===================================================
+
+ITENS IGNORADOS (Não copiados):
+- .git: Repositório git local (histórico de controle de versão não necessário no novo projeto) (X:\PROGRAMACAO\COMSOC_IA\.git)
+- .nicegui: Arquivos de sessão e cache local do NiceGUI contendo estados de testes anteriores (X:\PROGRAMACAO\COMSOC_IA\.nicegui)
+- .pytest_cache: Cache de testes automatizados do pytest (desnecessário para o funcionamento do app) (X:\PROGRAMACAO\COMSOC_IA\.pytest_cache)
+- .qodo: Arquivos de configuração/cache do plugin Qodo (desnecessário) (X:\PROGRAMACAO\COMSOC_IA\.qodo)
+- comsocia-main: Pasta redundante de backup antigo aninhado dentro do diretório (X:\PROGRAMACAO\COMSOC_IA\comsocia-main)
+- Novo(a) Documento de Texto.txt: Arquivo de texto vazio temporário (X:\PROGRAMACAO\COMSOC_IA\Novo(a) Documento de Texto.txt)
+- __pycache__: Arquivos compilados de bytecode Python (são gerados automaticamente na execução) (X:\PROGRAMACAO\COMSOC_IA\tests\__pycache__)
+- venv: Ambiente virtual Python (contém binários específicos da máquina e deve ser recriado via requirements.txt) (X:\PROGRAMACAO\COMSOC_IA\venv)
+- __pycache__: Arquivos compilados de bytecode Python (são gerados automaticamente na execução) (X:\PROGRAMACAO\COMSOC_IA\__pycache__)
+
+===================================================
+
+ARQUIVOS COPIADOS:
+- .dockerignore
+- .env
+- .gitattributes
+- .gitignore
+- admin.py
+- admin_panel.py
+- ai_helper.py
+- ajuda_sobre.py
+- alerts_manager.py
+- alunos_cadastro.py
+- alunos_escalas.py
+- alunos_fila.py
+- alunos_pernoite.py
+- alunos_presenca.py
+- alunos_rancho.py
+- alunos_saude.py
+- alunos_transporte.py
+- app_state.py
+- assistente_ia.py
+- backup.sh
+- config.py
+- config_alerts.json
+- conselho_avaliacao.py
+- database.py
+- docker-compose.yml
+- Dockerfile
+- env.example
+- geracao_documentos.py
+- gestao_acoes.py
+- importacao_documentos.py
+- iniciar_oculto.vbs
+- logo_base64.py
+- log_acessos.py
+- main.py
+- notifications.py
+- notifications_manager.py
+- pagamentos.py
+- programacao.py
+- rate_limit.py
+- README.md
+- relatorios.py
+- relatorio_geral.py
+- render.yaml
+- requirements.txt
+- run.bat
+- security.py
+- services.py
+- siscomca_dashboard.py
+- siscomca_tv.py
+- SUPABASE\tsetup-x64.6.8.2.exe
+- telegram-proxy\index.js
+- telegram-proxy\package.json
+- telegram_bot.py
+- tests\test_core.py
+- theme.py
+- theme_toggle.py
+- turmas.py
+- implementation_plan.md

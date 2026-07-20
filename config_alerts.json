@@ -1,0 +1,225 @@
+{
+  "bell_enabled": true,
+  "tv_alert_vocativo": "Atenção!",
+  "sound_mappings": {
+    "Registro de Ocorrência": [
+      {
+        "som": "success",
+        "delay": 0.0
+      }
+    ],
+    "Novo Aviso": [
+      {
+        "som": "info",
+        "delay": 0.0
+      },
+      {
+        "som": "success",
+        "delay": 1.0
+      },
+      {
+        "som": "siren",
+        "delay": 1.0
+      }
+    ],
+    "Aviso de Saúde": [
+      {
+        "som": "siren",
+        "delay": 1.0
+      }
+    ],
+    "Dispensa Médica": [
+      {
+        "som": "siren",
+        "delay": 0.0
+      }
+    ],
+    "Licença Médica": [
+      {
+        "som": "warning",
+        "delay": 0.0
+      }
+    ],
+    "Alta Médica": [
+      {
+        "som": "siren",
+        "delay": 0.0
+      }
+    ],
+    "Escala de Serviço": [
+      {
+        "som": "info",
+        "delay": 0.0
+      }
+    ],
+    "Escala de Serviço Atualizada": [
+      {
+        "som": "naval_horn",
+        "delay": 1.0
+      },
+      {
+        "som": "DOBRADA",
+        "delay": 1.0
+      }
+    ],
+    "Chamada Diária": [
+      {
+        "som": "info",
+        "delay": 0.0
+      }
+    ],
+    "Atraso Registrado": [
+      {
+        "som": "camera shutter sound effect",
+        "delay": 0.0
+      }
+    ]
+  },
+  "message_templates": {
+    "Registro de Ocorrência": "🚨 {message}",
+    "Novo Aviso": "📢 {message}",
+    "Aviso de Saúde": "🏥 {message}",
+    "Dispensa Médica": "🩹 Dispensa: {message}",
+    "Licença Médica": "📋 Licença: {message}",
+    "Alta Médica": "✅ Alta Médica: {message}",
+    "Escala de Serviço": "📅 {message}",
+    "Escala de Serviço Atualizada": "🔄 {message}",
+    "Chamada Diária": "🔔 Chamada: {message}",
+    "Atraso Registrado": "⏰ Atraso: {message}"
+  },
+  "custom_alerts": [
+    {
+      "id": "6a9eea72",
+      "time": "08:00",
+      "title": "SINO",
+      "message": "DOBRADA X4",
+      "sound": "DOBRADA X4",
+      "visual_alert": false,
+      "voice_enabled": false,
+      "sound_enabled": true,
+      "enabled": true
+    },
+    {
+      "id": "31bb85a5",
+      "time": "08:30",
+      "title": "SINO",
+      "message": "SINGELA",
+      "sound": "SINGELA",
+      "visual_alert": false,
+      "voice_enabled": false,
+      "sound_enabled": true,
+      "enabled": true
+    },
+    {
+      "id": "266de7f2",
+      "time": "09:00",
+      "title": "SINO",
+      "message": "DOBRADA",
+      "sound": "DOBRADA",
+      "visual_alert": false,
+      "voice_enabled": false,
+      "sound_enabled": true,
+      "enabled": true
+    },
+    {
+      "id": "e3c53cfe",
+      "time": "09:30",
+      "title": "SINO",
+      "message": "DOBRADA + SINGELA",
+      "sound": "DOBRADA SINGELA",
+      "visual_alert": false,
+      "voice_enabled": false,
+      "sound_enabled": true,
+      "enabled": true
+    },
+    {
+      "id": "999fadfa",
+      "time": "10:00",
+      "title": "SINO",
+      "message": "DOBRADA X2",
+      "sound": "DOBRADA DOBRADA",
+      "visual_alert": false,
+      "voice_enabled": false,
+      "sound_enabled": true,
+      "enabled": true
+    },
+    {
+      "id": "41cd2ce5",
+      "time": "10:30",
+      "title": "SINO",
+      "message": "DOBRADA X2 + SINGELA",
+      "sound": "DOBRADA X2 SINGELA",
+      "visual_alert": false,
+      "voice_enabled": false,
+      "sound_enabled": true,
+      "enabled": true
+    },
+    {
+      "id": "bf16031c",
+      "time": "11:00",
+      "title": "SINO",
+      "message": "DOBRADA X3",
+      "sound": "DOBRADA X3",
+      "visual_alert": false,
+      "voice_enabled": false,
+      "sound_enabled": true,
+      "enabled": true
+    },
+    {
+      "id": "23863225",
+      "time": "15:00",
+      "title": "SINO",
+      "message": "DOBRADA X3",
+      "sound": "DOBRADA X3",
+      "visual_alert": false,
+      "voice_enabled": false,
+      "sound_enabled": true,
+      "enabled": true
+    },
+    {
+      "id": "2880d909",
+      "time": "14:30",
+      "title": "SINO",
+      "message": "DOBRADA X2 + SINGELA",
+      "sound": "DOBRADA X2 SINGELA",
+      "visual_alert": false,
+      "voice_enabled": false,
+      "sound_enabled": true,
+      "enabled": true
+    },
+    {
+      "id": "7456998e",
+      "time": "12:30",
+      "title": "SINO",
+      "message": "SINGELA",
+      "sound": "SINGELA",
+      "visual_alert": false,
+      "voice_enabled": false,
+      "sound_enabled": true,
+      "enabled": true
+    },
+    {
+      "id": "b5727084",
+      "time": "11:30",
+      "title": "SINO",
+      "message": "DOBRADA X3 + SINGELA",
+      "sound": "DOBRADA X3 SINGELA",
+      "visual_alert": false,
+      "voice_enabled": false,
+      "sound_enabled": true,
+      "enabled": true
+    },
+    {
+      "id": "32439d16",
+      "time": "14:00",
+      "title": "SINO",
+      "message": "DOBRADA X2",
+      "sound": "DOBRADA DOBRADA",
+      "visual_alert": false,
+      "voice_enabled": false,
+      "sound_enabled": true,
+      "enabled": true
+    }
+  ],
+  "custom_sequences": {}
+}
