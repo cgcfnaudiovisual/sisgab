@@ -1081,7 +1081,7 @@ def sync_menu_permissions_db():
                 menu_items.append(item)
                 
         # Buscar permissões atuais
-        res = db.table('Permissions').select('feature_key').execute()
+        res = db.table('permissions').select('feature_key').execute()
         existing_keys = {row['feature_key'] for row in res.data} if res.data else set()
         
         # Inserir novos itens de menu se não existirem
@@ -1091,7 +1091,7 @@ def sync_menu_permissions_db():
             f_key = f"menu_{path_clean}"
             if f_key not in existing_keys:
                 # Default allowed roles (as configured in main.py)
-                default_roles = ",".join(item.get('roles', [])) if 'roles' in item else "admin,supervisor,operador,comcia,compel,aluno,ajosca"
+                default_roles = ",".join(item.get('roles', [])) if 'roles' in item else "admin,supervisor,oficial_gab,oficial,praca_gab,comsoc,comsoc_design,militar,compel,operador"
                 new_permissions.append({
                     'feature_key': f_key,
                     'feature_name': f"Acesso ao Menu: {item['name']}",
@@ -1099,7 +1099,7 @@ def sync_menu_permissions_db():
                 })
         
         if new_permissions:
-            db.table('Permissions').insert(new_permissions).execute()
+            db.table('permissions').insert(new_permissions).execute()
             print(f"[DB] Sincronizados {len(new_permissions)} novos menus com a tabela Permissions.")
     except Exception as e:
         print(f"[ERRO sync_menu_permissions_db] {e}")

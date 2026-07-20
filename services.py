@@ -25,12 +25,10 @@ class DataService:
                 logger.info("Carregando dados essenciais do sistema em paralelo...")
                 db_conn = get_bot_db_connection() or get_db_connection()
                 tables = {
-                    'alunos': 'Alunos',
-                    'acoes': 'Acoes',
-                    'tipos_acao': 'Tipos_Acao',
-                    'config': 'Config',
-                    'users': 'Users',
-                    'permissions': 'Permissions'
+                    'config': 'config',
+                    'users': 'users',
+                    'permissions': 'permissions',
+                    'efetivo': 'efetivo'
                 }
                 data = {}
                 
