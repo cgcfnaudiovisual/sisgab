@@ -1,11 +1,9 @@
 ---
-title: Sisgab
-emoji: 🛡️
-colorFrom: yellow
-colorTo: blue
-sdk: gradio
-sdk_version: 4.19.0
-app_file: app.py
+title: SisGAB
+emoji: ⚓
+colorFrom: blue
+colorTo: cyan
+sdk: docker
 app_port: 7860
 pinned: false
 ---
