@@ -538,11 +538,25 @@ def register_common_handlers(bot):
             elif step == 'data_evento':
                 history.append(('data_evento', dict(state['data'])))
                 date_txt = text.strip()
-                if '/' in date_txt and 'a' not in date_txt.lower():
+                parsed = False
+                
+                # Tenta formatos comuns de entrada de data
+                for fmt in ('%d/%m/%Y', '%d/%m/%y', '%Y-%m-%d', '%d-%m-%Y', '%d-%m-%y'):
                     try:
-                        date_txt = datetime.strptime(date_txt, '%d/%m/%Y').strftime('%Y-%m-%d')
-                    except:
+                        date_txt = datetime.strptime(date_txt, fmt).strftime('%Y-%m-%d')
+                        parsed = True
+                        break
+                    except ValueError:
+                        continue
+                
+                # Fallback: Se digitou sem ano (ex: "20/07"), assume o ano atual
+                if not parsed and '/' in date_txt and date_txt.count('/') == 1:
+                    try:
+                        temp_date = f"{date_txt}/{datetime.now().year}"
+                        date_txt = datetime.strptime(temp_date, '%d/%m/%Y').strftime('%Y-%m-%d')
+                    except Exception:
                         pass
+                        
                 state['data']['data_evento'] = date_txt
                 state['step'] = 'hora_evento'
                 await bot.reply_to(message, "[Passo 6/12] ⏰ Qual o **Horário de Início e Término previsto**? (ex: 09:00 às 17:00):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
