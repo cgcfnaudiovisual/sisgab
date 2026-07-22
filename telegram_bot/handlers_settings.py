@@ -25,7 +25,7 @@ def register_settings_handlers(bot):
         is_admin = profile and str(profile.get('role', '')).strip().lower() == 'admin'
         status_cadastro = "Não Cadastrado"
         if is_authorized:
-            from database import get_db_connection
+            from database import get_bot_db_connection as get_db_connection
             db = get_db_connection()
             if db:
                 try:

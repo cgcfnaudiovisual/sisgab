@@ -13,7 +13,7 @@ async def send_daily_morning_report(bot, chat_id=None):
         return
         
     try:
-        from database import get_db_connection
+        from database import get_bot_db_connection as get_db_connection
         conn = get_db_connection()
         if not conn:
             return

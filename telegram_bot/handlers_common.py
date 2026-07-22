@@ -15,7 +15,7 @@ async def finalizar_solicitacao_acesso(bot, message, chat_id, state):
     reg_funcao = state['data'].get('reg_funcao', 'Gabinete')
     
     try:
-        from database import get_db_connection
+        from database import get_bot_db_connection as get_db_connection
         conn = get_db_connection()
         if conn:
             # Vincular no efetivo por e-mail e nome de guerra
@@ -96,7 +96,7 @@ async def finalizar_solicitacao_acesso(bot, message, chat_id, state):
 def _get_weekly_events_text():
     """Busca eventos dos próximos 7 dias na tabela demandas_comunicacao e retorna texto formatado."""
     try:
-        from database import get_db_connection
+        from database import get_bot_db_connection as get_db_connection
         db = get_db_connection()
         if not db:
             return "⚠️ Banco de dados indisponível."
@@ -235,7 +235,7 @@ def register_common_handlers(bot):
                 )
 
             elif text == "🔍 Buscar Minhas Fotos":
-                from database import get_db_connection
+                from database import get_bot_db_connection as get_db_connection
                 db = get_db_connection()
                 if not db:
                     await bot.reply_to(message, "⚠️ Banco offline.")
@@ -269,7 +269,7 @@ def register_common_handlers(bot):
                 await bot.reply_to(message, help_msg, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
 
             elif text == "📋 Pautas COMSOC":
-                from database import get_db_connection
+                from database import get_bot_db_connection as get_db_connection
                 db = get_db_connection()
                 if not db:
                     await bot.reply_to(message, "⚠️ Banco offline.")
@@ -299,7 +299,7 @@ def register_common_handlers(bot):
                 await bot.reply_to(message, weekly_msg, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
             
             elif text == "🔌 Cautelas Ativas":
-                from database import get_db_connection
+                from database import get_bot_db_connection as get_db_connection
                 db = get_db_connection()
                 if not db:
                     await bot.reply_to(message, "⚠️ Banco offline.")
@@ -428,7 +428,7 @@ def register_common_handlers(bot):
                     dados = json.loads(response_json)
                     
                     # Salva no banco
-                    from database import get_db_connection
+                    from database import get_bot_db_connection as get_db_connection
                     db = get_db_connection()
                     if db:
                         registro = {
@@ -650,7 +650,7 @@ def register_common_handlers(bot):
 
             elif step == 'review_confirm':
                 if "Confirmar" in text or "✅" in text:
-                    from database import get_db_connection
+                    from database import get_bot_db_connection as get_db_connection
                     db = get_db_connection()
                     if db:
                         try:
@@ -720,7 +720,7 @@ def register_common_handlers(bot):
                 
                 profile = state.get('user')
                 if profile:
-                    from database import get_db_connection
+                    from database import get_bot_db_connection as get_db_connection
                     db = get_db_connection()
                     if db:
                         web_path = f"/assets/selfies/{message.from_user.id}.jpg"
