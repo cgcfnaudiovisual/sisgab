@@ -4,7 +4,7 @@ import json
 import urllib.parse
 from nicegui import ui, app
 import theme
-from database import get_db_connection
+from database import get_db_connection, get_service_db_connection
 import ai_helper
 
 THEME = theme.colors
@@ -388,7 +388,7 @@ def render_page(autofill: str = None):
                                 ui.notify('Por favor, preencha os campos obrigatórios (Título, Data e Local).', color='warning')
                                 return
                                 
-                            db = get_db_connection()
+                            db = get_service_db_connection() or get_db_connection()
                             if db:
                                 try:
                                     coberturas = []
