@@ -17,17 +17,31 @@ def render_page():
     user_name_guerra = user_data.get('nome_guerra', 'Supervisor').upper()
 
     def gerar_link_google_calendar(d):
-        titulo = urllib.parse.quote(f"COBERTURA COMSOC: {d.get('titulo_evento','')}")
-        detalhes = urllib.parse.quote(
-            f"Solicitante: {d.get('solicitante_nome','')} ({d.get('setor','')})\n"
-            f"Autoridades: {d.get('autoridades','')}\n"
-            f"Score de Esforço: {d.get('score_esforco','')}"
-        )
-        local = urllib.parse.quote(d.get('local_evento',''))
-        data_res = d.get('data_evento','').replace('-', '')
-        hora_res = d.get('hora_evento','09:00').replace(':', '') + '00'
-        dates = f"{data_res}T{hora_res}/{data_res}T{int(hora_res[:4] or 900)+200:04d}00"
-        return f"https://calendar.google.com/calendar/render?action=TEMPLATE&text={titulo}&dates={dates}&details={detalhes}&location={local}"
+        try:
+            titulo = urllib.parse.quote(f"COBERTURA COMSOC: {d.get('titulo_evento','')}")
+            detalhes = urllib.parse.quote(
+                f"Solicitante: {d.get('solicitante_nome','')} ({d.get('setor','')})\n"
+                f"Autoridades: {d.get('autoridades','')}\n"
+                f"Score de Esforço: {d.get('score_esforco','')}"
+            )
+            local = urllib.parse.quote(str(d.get('local_evento','') or ''))
+            data_res = str(d.get('data_evento','') or datetime.now().strftime('%Y-%m-%d')).replace('-', '')
+            raw_hora = str(d.get('hora_evento','') or '09:00').replace(':', '')
+            if len(raw_hora) >= 4:
+                h_start = raw_hora[:4]
+            else:
+                h_start = '0900'
+            try:
+                start_int = int(h_start)
+                end_int = start_int + 200
+                h_end = f"{end_int:04d}"
+            except Exception:
+                h_start = '0900'
+                h_end = '1100'
+            dates = f"{data_res}T{h_start}00/{data_res}T{h_end}00"
+            return f"https://calendar.google.com/calendar/render?action=TEMPLATE&text={titulo}&dates={dates}&details={detalhes}&location={local}"
+        except Exception:
+            return "https://calendar.google.com"
 
     def gerar_link_whatsapp_confirmacao(dem, parecer=""):
         import re
@@ -373,11 +387,11 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                     print(f"[LOAD HOMOLOGAR LOCAL WARN] {loc_e}")
 
             # Agrupamento por status com validação estrita
-            pendentes  = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() == 'pendente']
-            aprovadas  = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() == 'aprovada']
-            ajustes    = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() == 'ajustes']
-            concluidas = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() in ('concluida', 'concluída')]
-            rejeitadas = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() in ('rejeitado', 'rejeitada', 'indeferida')]
+            pendentes  = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() in ('pendente', 'pendentes')]
+            aprovadas  = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() in ('aprovada', 'aprovado', 'aprovadas')]
+            ajustes    = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() in ('ajustes', 'ajuste')]
+            concluidas = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() in ('concluida', 'concluída', 'concluido', 'concluído')]
+            rejeitadas = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() in ('rejeitado', 'rejeitada', 'indeferida', 'indeferido')]
 
             with ui.tabs().classes('w-full text-cyan flex-wrap border-b border-cyan/20') as tabs:
                 tab_pend = ui.tab(f'⏳ Pendentes ({len(pendentes)})')
