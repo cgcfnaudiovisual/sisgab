@@ -77,31 +77,77 @@ def get_duration_keyboard():
     markup.row(types.KeyboardButton("15"), types.KeyboardButton("30"))
     return markup
 
-def get_om_keyboard():
+def get_date_keyboard(is_end_date=False):
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-    markup.row(types.KeyboardButton("⚓ CGCFN"), types.KeyboardButton("🏢 Outra OM"))
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    d0 = now.strftime('%d/%m/%Y')
+    d1 = (now + timedelta(days=1)).strftime('%d/%m/%Y')
+    d2 = (now + timedelta(days=2)).strftime('%d/%m/%Y')
+    d3 = (now + timedelta(days=3)).strftime('%d/%m/%Y')
+    d7 = (now + timedelta(days=7)).strftime('%d/%m/%Y')
+
+    if is_end_date:
+        markup.row(types.KeyboardButton("📌 Mesmo Dia (Sem Término)"))
+        markup.row(types.KeyboardButton(f"📅 +1 Dia ({d1[:5]})"), types.KeyboardButton(f"📅 +2 Dias ({d2[:5]})"))
+        markup.row(types.KeyboardButton("⬅️ Voltar"), types.KeyboardButton("❌ Cancelar"))
+    else:
+        markup.row(types.KeyboardButton(f"📅 Hoje ({d0[:5]})"), types.KeyboardButton(f"📅 Amanhã ({d1[:5]})"))
+        markup.row(types.KeyboardButton(f"📅 Em 3 Dias ({d3[:5]})"), types.KeyboardButton(f"📅 Em 1 Semana ({d7[:5]})"))
+        markup.row(types.KeyboardButton("⬅️ Voltar"), types.KeyboardButton("❌ Cancelar"))
+    return markup
+
+def get_time_keyboard():
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    markup.row(types.KeyboardButton("⏰ 08:00"), types.KeyboardButton("⏰ 08:30"), types.KeyboardButton("⏰ 09:00"))
+    markup.row(types.KeyboardButton("⏰ 10:00"), types.KeyboardButton("⏰ 13:30"), types.KeyboardButton("⏰ 14:00"))
+    markup.row(types.KeyboardButton("⏰ 15:00"), types.KeyboardButton("⏰ 16:00"))
     markup.row(types.KeyboardButton("⬅️ Voltar"), types.KeyboardButton("❌ Cancelar"))
     return markup
 
-def get_coverage_keyboard():
+def get_uniform_keyboard():
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-    markup.row(types.KeyboardButton("🎨 Serviço Gráfico / Design"), types.KeyboardButton("📸 Cobertura Fotográfica"))
-    markup.row(types.KeyboardButton("🎥 Cobertura em Vídeo"), types.KeyboardButton("🚁 Imagens Aéreas / Drone"))
-    markup.row(types.KeyboardButton("📱 Mídias Sociais / Reels"), types.KeyboardButton("📦 Apoio Audiovisual Completo"))
+    markup.row(types.KeyboardButton("👔 3.3 (Instalação / Comum)"), types.KeyboardButton("👔 4.4 (Operacional / Camuflado)"))
+    markup.row(types.KeyboardButton("👔 3.1 (Passeio / Branco)"), types.KeyboardButton("👔 1.1 (Gala / Cerimonial)"))
+    markup.row(types.KeyboardButton("👕 Paisano / Esporte"))
     markup.row(types.KeyboardButton("⬅️ Voltar"), types.KeyboardButton("❌ Cancelar"))
     return markup
 
-def get_video_format_keyboard():
+def get_authorities_keyboard():
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-    markup.row(types.KeyboardButton("🎬 Melhores Momentos (Reels/Shorts)"))
-    markup.row(types.KeyboardButton("🎞️ Cobertura Íntegra"), types.KeyboardButton("📦 Apenas Material Bruto"))
+    markup.row(types.KeyboardButton("👑 Comandante do CGCFN"), types.KeyboardButton("👑 Almirantes / Generais"))
+    markup.row(types.KeyboardButton("👑 Nenhuma Autoridade Especial"))
     markup.row(types.KeyboardButton("⬅️ Voltar"), types.KeyboardButton("❌ Cancelar"))
     return markup
 
-def get_yes_no_keyboard(yes_label="Sim", no_label="Não"):
+def get_observations_keyboard():
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-    markup.row(types.KeyboardButton(f"✅ {yes_label}"), types.KeyboardButton(f"❌ {no_label}"))
+    markup.row(types.KeyboardButton("⏭️ Pular / Nenhuma Observação"))
     markup.row(types.KeyboardButton("⬅️ Voltar"), types.KeyboardButton("❌ Cancelar"))
+    return markup
+
+def get_multi_service_inline_keyboard(selected_services=None):
+    if selected_services is None:
+        selected_services = set()
+    
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    
+    services = [
+        ("foto", "📸 Cobertura Fotográfica"),
+        ("video", "🎥 Cobertura em Vídeo / Filmagem"),
+        ("grafico", "🎨 Serviço Gráfico / Design"),
+        ("drone", "🚁 Imagens Aéreas / Drone"),
+        ("redes", "📱 Mídias Sociais / Reels / Shorts")
+    ]
+    
+    for code, label in services:
+        is_sel = code in selected_services
+        icon = "✅" if is_sel else "☑️"
+        btn_txt = f"{icon} {label}"
+        markup.add(types.InlineKeyboardButton(text=btn_txt, callback_data=f"toggle_service:{code}"))
+        
+    markup.add(types.InlineKeyboardButton(text="📦 Selecionar Tudo (Completo)", callback_data="toggle_service:all"))
+    markup.add(types.InlineKeyboardButton(text="➡️ CONCLUIR SELEÇÃO DOS SERVIÇOS ➡️", callback_data="toggle_service:done"))
     return markup
 
 def get_confirm_demanda_keyboard():

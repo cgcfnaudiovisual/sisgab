@@ -146,7 +146,67 @@ def _get_weekly_events_text():
 
 
 def register_common_handlers(bot):
-    
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('toggle_service:'))
+    async def handle_service_toggle_callback(call):
+        chat_id = call.message.chat.id
+        if chat_id not in chat_states or chat_states[chat_id].get('action') != 'criar_demanda':
+            await bot.answer_callback_query(call.id, "Sessão expirada. Inicie com ➕ Criar Demanda.")
+            return
+
+        action_code = call.data.split(':')[1]
+        state = chat_states[chat_id]
+        selected_set = state['data'].setdefault('selected_services_set', set())
+
+        if action_code == 'all':
+            if len(selected_set) == 5:
+                selected_set.clear()
+            else:
+                selected_set.update(['foto', 'video', 'grafico', 'drone', 'redes'])
+            await bot.answer_callback_query(call.id, "Todos os serviços selecionados!")
+        elif action_code == 'done':
+            if not selected_set:
+                selected_set.add('foto')
+            
+            state['data']['tipo_cobertura'] = json.dumps(list(selected_set))
+            
+            labels_map = {
+                'foto': '📸 Cobertura Fotográfica',
+                'video': '🎥 Cobertura em Vídeo / Filmagem',
+                'grafico': '🎨 Serviço Gráfico / Design',
+                'drone': '🚁 Imagens Aéreas / Drone',
+                'redes': '📱 Mídias Sociais / Reels / Shorts'
+            }
+            state['data']['servicos_formatados'] = "\n".join([f"   • {labels_map[c]}" for c in selected_set])
+            
+            state['step'] = 'observacoes'
+            await bot.answer_callback_query(call.id, "Serviços salvos!")
+            
+            from .keyboards import get_observations_keyboard
+            await bot.send_message(
+                chat_id,
+                "[Passo Extra] 📝 **Observações ou Detalhes Adicionais**\n\n"
+                "Deseja registrar alguma informação adicional (ex: roteiro, transmissão, contatos extra)?\n"
+                "Ou clique em **⏭️ Pular / Nenhuma Observação**:",
+                reply_markup=get_observations_keyboard(),
+                parse_mode='Markdown'
+            )
+            return
+        else:
+            if action_code in selected_set:
+                selected_set.remove(action_code)
+                await bot.answer_callback_query(call.id, "Removido")
+            else:
+                selected_set.add(action_code)
+                await bot.answer_callback_query(call.id, "Adicionado")
+
+        from .keyboards import get_multi_service_inline_keyboard
+        new_markup = get_multi_service_inline_keyboard(selected_set)
+        try:
+            await bot.edit_message_reply_markup(chat_id=chat_id, message_id=call.message.message_id, reply_markup=new_markup)
+        except Exception:
+            pass
+
     @bot.message_handler(func=lambda msg: True)
     async def handle_all_messages(message):
         chat_id = message.chat.id
@@ -183,6 +243,7 @@ def register_common_handlers(bot):
                             'user': None,
                             'data': {}
                         }
+                        from .keyboards import get_efetivo_linking_keyboard
                         await bot.reply_to(
                             message,
                             "⚓ **VINCULAR CONTA DE MILITAR DO GABINETE**\n\n"
@@ -226,24 +287,86 @@ def register_common_handlers(bot):
             allowed = USER_PERMISSIONS_CACHE.get(message.from_user.id, set())
             is_operator = str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design')
 
+            from .keyboards import get_settings_keyboard
             if text == "⚙️ Configurações":
-                from .handlers_settings import register_settings_handlers
-                # Dispara diretamente o comando /settings via handler
-                clear_state(chat_id)
                 chat_states[chat_id] = {
                     'action': 'settings',
-                    'step': 'choose_option',
+                    'step': 'main_menu',
                     'user': profile,
                     'data': {}
                 }
-                from .keyboards import get_settings_keyboard
-                is_admin = str(profile.get('role', '')).strip().lower() == 'admin'
+                await bot.reply_to(message, "⚙️ **CONFIGURAÇÕES**\nEscolha uma das opções abaixo:", reply_markup=get_settings_keyboard(True, is_operator))
+
+            elif text == "➕ Criar Demanda":
+                chat_states[chat_id] = {
+                    'action': 'criar_demanda',
+                    'step': 'solicitante_om',
+                    'user': profile,
+                    'data': {
+                        'selected_services_set': set()
+                    }
+                }
+                from .keyboards import get_om_keyboard
+                await bot.reply_to(
+                    message, 
+                    "📋 **NOVA SOLICITAÇÃO DE PAUTA — CGCFN**\n\n[Passo 1/9] ⚓ A solicitação é do **CGCFN** ou de **Outra OM**?", 
+                    reply_markup=get_om_keyboard(), 
+                    parse_mode='Markdown'
+                )
+
+            elif text == "📋 Pautas COMSOC" or text == "📅 Agenda Semanal":
+                txt = _get_weekly_events_text()
+                await bot.reply_to(message, txt, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
+
+            elif text == "📋 Dar Presença" or text == "🟢 Dar Presença" or text == "/presenca":
+                chat_states[chat_id] = {
+                    'action': 'presenca_diaria',
+                    'step': 'choose_sigla',
+                    'user': profile,
+                    'data': {}
+                }
+                from .keyboards import get_presenca_keyboard
                 await bot.reply_to(
                     message,
-                    "⚙️ **CONFIGURAÇÕES DO OPERADOR - SISGAB**\n\n"
-                    f"👤 **Operador:** `{profile.get('nome', profile.get('nome_guerra', 'Militar'))}`\n\n"
-                    "Escolha uma das opções abaixo:",
-                    reply_markup=get_settings_keyboard(True, is_admin),
+                    "🌅 **CHAMADA MATUTINA — CGCFN/SISGAB**\n\n"
+                    "Por favor, selecione a sigla da sua rotina para hoje:",
+                    reply_markup=get_presenca_keyboard(),
+                    parse_mode='Markdown'
+                )
+
+            elif text == "/pronto" or text == "📋 Pronto CheGab":
+                from database import get_bot_db_connection as get_db_connection
+                db = get_db_connection()
+                if db:
+                    dt_str = datetime.now().strftime('%Y-%m-%d')
+                    try:
+                        res_ef = db.table('efetivo').select('*').order('nome_guerra').execute()
+                        efetivo_lista = res_ef.data or []
+                        res_pr = db.table('presenca_diaria').select('*').eq('data', dt_str).execute()
+                        presencas_list = res_pr.data or []
+                        
+                        presencas_dict = {p['nome_guerra'].upper(): p for p in presencas_list}
+                        
+                        from modulo_presenca import gerar_texto_pronto_chegab
+                        relatorio_txt = gerar_texto_pronto_chegab(dt_str, presencas_dict, efetivo_lista)
+                        await bot.reply_to(message, relatorio_txt, parse_mode='Markdown')
+                    except Exception as pr_err:
+                        await bot.reply_to(message, f"❌ Erro ao gerar pronto: {pr_err}")
+                return
+
+            elif text == "🤖 Digerir Pauta (IA)":
+                chat_states[chat_id] = {
+                    'action': 'digerir_pauta_ia',
+                    'step': 'send_raw_text',
+                    'user': profile,
+                    'data': {}
+                }
+                await bot.reply_to(
+                    message, 
+                    "🤖 **DIGESTÃO INTELIGENTE DE PAUTA (IA GEMINI)**\n\n"
+                    "Por favor, cole abaixo o **texto das respostas do questionário/checklist** recebido do solicitante.\n\n"
+                    "O Gemini extrairá automaticamente título, data, local e escopo.", 
+                    reply_markup=get_cancel_keyboard(), 
                     parse_mode='Markdown'
                 )
 
@@ -287,163 +410,68 @@ def register_common_handlers(bot):
                 help_msg = (
                     "⚓ **AJUDA — SISGAB BOT**\n\n"
                     "Este é o assistente oficial do Sistema de Gestão de Gabinete (SisGAB) do CGCFN.\n\n"
-                    "📋 **/menu** — Exibe o menu principal\n"
-                    "⚙️ **/settings** — Configurações e notificações\n"
-                    "❌ **/cancelar** — Cancela a operação atual\n\n"
-                    "📅 **Agenda Semanal** — Veja os próximos eventos\n"
-                    "➕ **Criar Demanda** — Solicite cobertura COMSOC\n"
-                    "🤖 **Digerir Pauta (IA)** — Processe questionários com Gemini\n\n"
-                    "💡 _Desenvolvido por Sargento Calaça 🇧🇷_"
+                    "🔹 **Comandos Principais:**\n"
+                    "• ➕ **Criar Demanda:** Cadastrar nova pauta com seleção por botões.\n"
+                    "• 🟢 **Dar Presença:** Acusar a chamada matutina.\n"
+                    "• 📋 **Pronto CheGab:** Gerar o relatório da Sargenteação.\n"
+                    "• 📅 **Agenda Semanal:** Consultar pautas dos próximos 7 dias.\n"
+                    "• 🤖 **Digerir Pauta (IA):** Criar pauta colando questionário."
                 )
                 await bot.reply_to(message, help_msg, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
-
-            elif text == "📋 Pautas COMSOC":
-                from database import get_bot_db_connection as get_db_connection
-                db = get_db_connection()
-                if not db:
-                    await bot.reply_to(message, "⚠️ Banco offline.")
-                    return
-                try:
-                    res = db.table('demandas_comunicacao').select('*').order('data_evento', desc=False).limit(10).execute()
-                    if res.data:
-                        msg = "📋 **PAUTAS COMSOC — ÚLTIMAS 10:**\n\n"
-                        for p in res.data:
-                            status_icon = '🟢' if p.get('status') in ('aprovado', 'aprovada') else '🟡'
-                            msg += (
-                                f"{status_icon} **{p['titulo_evento']}**\n"
-                                f"   📅 {p.get('data_evento', 'N/I')} | 📍 {p.get('local_evento', 'N/I')}\n"
-                                f"   👤 {p.get('solicitante_nome', 'N/I')} | Status: {p.get('status', 'pendente')}\n\n"
-                            )
-                        await bot.reply_to(message, msg, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
-                    else:
-                        await bot.reply_to(message, "📭 Nenhuma pauta cadastrada no momento.", reply_markup=get_main_menu_keyboard(is_operator))
-                except Exception as e:
-                    await bot.reply_to(message, f"❌ Erro: {e}")
-
-            elif text in ["📅 Agenda Semanal", "📅 Agenda Google", "/agenda"]:
-                # Mostra eventos dos próximos 7 dias do banco
-                weekly_msg = _get_weekly_events_text()
-                google_cal_url = "https://calendar.google.com/calendar/u/0?cid=Y2djZm5hdWRpb3Zpc3VhbEBnbWFpbC5jb20"
-                weekly_msg += f"\n\n🔗 [Abrir Google Calendar Oficial]({google_cal_url})"
-                await bot.reply_to(message, weekly_msg, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
-            
-            elif text == "🔌 Cautelas Ativas":
-                from database import get_bot_db_connection as get_db_connection
-                db = get_db_connection()
-                if not db:
-                    await bot.reply_to(message, "⚠️ Banco offline.")
-                    return
-                try:
-                    res = db.table('cautela_equipamentos').select('*').eq('status', 'retirado').execute()
-                    if res.data:
-                        msg_c = "🔌 **CAUTELAS DE EQUIPAMENTOS ATIVAS:**\n\n"
-                        for c in res.data:
-                            pessoal_tag = " [PESSOAL]" if c.get('e_pessoal') == 1 else ""
-                            msg_c += (
-                                f"🔋 **{c['equipamento']}**{pessoal_tag}\n"
-                                f"👤 *Retirado por:* {c['retirado_por']}\n"
-                                f"📅 *Data:* {c['data_retirada'][:16].replace('T', ' ')}\n\n"
-                            )
-                        await bot.reply_to(message, msg_c, reply_markup=get_main_menu_keyboard(True), parse_mode='Markdown')
-                    else:
-                        await bot.reply_to(message, "🔌 Nenhum equipamento em cautela no momento.", reply_markup=get_main_menu_keyboard(True))
-                except Exception as ex:
-                    await bot.reply_to(message, f"❌ Erro ao listar cautelas: {ex}")
-
-            elif text == "➕ Criar Demanda":
-                chat_states[chat_id] = {
-                    'action': 'criar_demanda',
-                    'step': 'solicitante_nome',
-                    'user': profile,
-                    'data': {},
-                    'history_steps': []
-                }
-                await bot.reply_to(
-                    message, 
-                    "➕ **NOVA DEMANDA COMSOC**\n\nQual o **Nome completo do Solicitante** da cobertura?", 
-                    reply_markup=get_cancel_keyboard(), 
-                    parse_mode='Markdown'
-                )
-
-            elif text == "🤖 Digerir Pauta (IA)":
-                chat_states[chat_id] = {
-                    'action': 'digerir_pauta_ia',
-                    'step': 'send_raw_text',
-                    'user': profile,
-                    'data': {}
-                }
-                await bot.reply_to(
-                    message, 
-                    "🤖 **DIGERIR QUESTIONÁRIO COM IA (GEMINI)**\n\n"
-                    "Por favor, **cole a resposta bruta ou questionário** enviado pelo solicitante no WhatsApp/Telegram.\n\n"
-                    "O Gemini irá processar o texto e criar a pauta de forma automatizada no banco de dados!", 
-                    reply_markup=get_cancel_keyboard(), 
-                    parse_mode='Markdown'
-                )
-
-            elif text == "❌ Cancelar":
-                clear_state(chat_id)
-                await bot.reply_to(message, "Operação cancelada.", reply_markup=get_main_menu_keyboard(is_operator))
             else:
-                await bot.reply_to(message, "⚓ Assistente SisGAB Ativo. Envie /menu para opções.", reply_markup=get_main_menu_keyboard(is_operator))
+                await bot.reply_to(
+                    message, 
+                    f"⚓ **Menu Principal — SisGAB**\n\nOlá, *{profile.get('nome_guerra', 'Militar')}*! Selecione uma opção nos botões abaixo:", 
+                    reply_markup=get_main_menu_keyboard(is_operator), 
+                    parse_mode='Markdown'
+                )
             return
 
         # =====================================================================
-        # SEÇÃO 2: Processamento do Estado / Wizard Ativo
+        # SEÇÃO 2: Processamento de Estados Ativos do Usuário (Wizards)
         # =====================================================================
-        state = chat_states.get(chat_id)
-        if not state:
-            return
-            
+        state = chat_states[chat_id]
         action = state.get('action')
         step = state.get('step')
         profile = state.get('user')
-        is_operator = profile and str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design')
-        
-        # Cancelamento global
-        if text.lower() in ['cancelar', '❌ cancelar']:
+        is_operator = str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design') if profile else False
+
+        if text in ["❌ Cancelar", "cancelar"]:
             clear_state(chat_id)
-            await bot.reply_to(message, "❌ Operação cancelada.", reply_markup=get_main_menu_keyboard(is_operator))
+            await bot.reply_to(message, "❌ Operação cancelada.", reply_markup=get_main_menu_keyboard(is_operator) if profile else get_unauthorized_keyboard())
             return
-            
-        # ----- WIZARD: Solicitação de Acesso -----
-        if action == 'settings':
-            if step == 'request_access_name':
-                state['data']['reg_nome'] = text
-                state['step'] = 'request_access_guerra'
-                await bot.reply_to(message, "👮 Digite seu **Nome de Guerra** (ex: Silva):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
-            elif step == 'request_access_guerra':
-                state['data']['reg_guerra'] = text
-                state['step'] = 'request_access_email'
-                await bot.reply_to(message, "📧 Digite seu **E-mail institucional** (ex: militar@marinha.mil.br):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
-            elif step == 'request_access_email':
-                state['data']['reg_email'] = text.strip().lower()
-                state['step'] = 'request_access_om'
+
+        if action == 'presenca_diaria':
+            step = state.get('step')
+            if step == 'choose_sigla':
+                sigla_txt = text.upper()
+                sigla_code = 'P'
+                if '(MA)' in sigla_txt or 'MA' in sigla_txt: sigla_code = 'MA'
+                elif '(MT)' in sigla_txt or 'MT' in sigla_txt: sigla_code = 'MT'
+                elif '(FE)' in sigla_txt or 'FE' in sigla_txt: sigla_code = 'FE'
+                elif '(L)' in sigla_txt or 'L' in sigla_txt: sigla_code = 'L'
+                elif '(H)' in sigla_txt or 'H' in sigla_txt: sigla_code = 'H'
+                elif '(DM)' in sigla_txt or 'DM' in sigla_txt: sigla_code = 'DM'
+                elif '(S)' in sigla_txt or 'S' in sigla_txt: sigla_code = 'S'
                 
-                markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-                markup.row(types.KeyboardButton("🏛️ CGCFN"))
-                markup.row(types.KeyboardButton("⚓ ComNavOper"), types.KeyboardButton("⚓ Com1ºDN"))
-                markup.row(types.KeyboardButton("🏢 Outra OM"), types.KeyboardButton("❌ Cancelar"))
-                await bot.reply_to(message, "🏢 **Selecione a sua Organização Militar (OM):**", reply_markup=markup, parse_mode='Markdown')
+                state['data']['status'] = sigla_code
                 
-            elif step == 'request_access_om':
-                selected_om = text.strip()
-                state['data']['reg_om'] = selected_om
-                
-                if "CGCFN" in selected_om.upper():
-                    state['step'] = 'request_access_funcao'
-                    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-                    markup.row(types.KeyboardButton("📸 ComSoc"), types.KeyboardButton("🛡️ Gabinete"))
-                    markup.row(types.KeyboardButton("📜 Ajudantaria"), types.KeyboardButton("⚙️ Operações / Outro"))
-                    markup.row(types.KeyboardButton("❌ Cancelar"))
-                    await bot.reply_to(message, "🎯 **Informe a sua Seção / Função no CGCFN:**", reply_markup=markup, parse_mode='Markdown')
+                if sigla_code in ('MA', 'MT', 'H'):
+                    state['step'] = 'input_obs'
+                    await bot.reply_to(
+                        message,
+                        f"✍️ Por favor, digite a localização/motivo para **({sigla_code})**:",
+                        reply_markup=get_cancel_keyboard(),
+                        parse_mode='Markdown'
+                    )
                 else:
-                    state['data']['reg_funcao'] = 'Solicitante Externo'
-                    await finalizar_solicitacao_acesso(bot, message, chat_id, state)
+                    from .utils import _salvar_presenca_bot
+                    await _salvar_presenca_bot(bot, message, chat_id, state, sigla_code, "")
                     
-            elif step == 'request_access_funcao':
-                state['data']['reg_funcao'] = text.strip()
-                await finalizar_solicitacao_acesso(bot, message, chat_id, state)
+            elif step == 'input_obs':
+                sigla_code = state['data'].get('status', 'P')
+                from .utils import _salvar_presenca_bot
+                await _salvar_presenca_bot(bot, message, chat_id, state, sigla_code, text)
             return
 
         if action == 'vincular_efetivo':
@@ -477,7 +505,6 @@ def register_common_handlers(bot):
                     response_json = ai_helper.digest_demand_questionnaire(text)
                     dados = json.loads(response_json)
                     
-                    # Salva no banco
                     from database import get_bot_db_connection as get_db_connection
                     db = get_db_connection()
                     if db:
@@ -507,7 +534,6 @@ def register_common_handlers(bot):
                         )
                         await bot.reply_to(message, confirm_msg, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
                         
-                        # Dispara broadcast para avisar administradores sobre nova pauta
                         from notifications_manager import notify_telegram
                         notify_telegram(
                             f"🆕 **Nova Pauta Criada via IA (Telegram)**\n\n"
@@ -524,11 +550,12 @@ def register_common_handlers(bot):
                     clear_state(chat_id)
             return
 
-        # ----- WIZARD: Criar Demanda (12 passos) -----
+        # ----- WIZARD: Criar Demanda (Interativo com Botões em todas as Etapas) -----
         if action == 'criar_demanda':
             from .keyboards import (
-                get_om_keyboard, get_coverage_keyboard, get_video_format_keyboard,
-                get_yes_no_keyboard, get_confirm_demanda_keyboard
+                get_om_keyboard, get_date_keyboard, get_time_keyboard,
+                get_uniform_keyboard, get_authorities_keyboard, get_observations_keyboard,
+                get_multi_service_inline_keyboard, get_confirm_demanda_keyboard
             )
             
             # Suporte ao botão "⬅️ Voltar"
@@ -546,24 +573,14 @@ def register_common_handlers(bot):
 
             history = state.setdefault('history_steps', [])
 
-            if step == 'solicitante_nome':
-                history.append(('solicitante_nome', dict(state['data'])))
-                state['data']['solicitante_nome'] = text
-                state['step'] = 'solicitante_om'
-                await bot.reply_to(
-                    message, 
-                    "[Passo 2/12] ⚓ Qual a **Organização Militar (OM)** solicitante?", 
-                    reply_markup=get_om_keyboard(), 
-                    parse_mode='Markdown'
-                )
-
-            elif step == 'solicitante_om':
+            if step == 'solicitante_om':
                 history.append(('solicitante_om', dict(state['data'])))
                 if "CGCFN" in text.upper():
+                    state['data']['solicitante_nome'] = "CGCFN / GABINETE"
                     state['data']['setor'] = "CGCFN"
                     state['data']['contato'] = "21982043314 / Ramal CGCFN"
                     state['step'] = 'titulo'
-                    await bot.reply_to(message, "[Passo 3/10] ✍️ Qual o **Título do Evento ou Pauta** da cobertura?", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                    await bot.reply_to(message, "[Passo 2/9] ✍️ Qual o **Título do Evento ou Pauta**?", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
                 else:
                     state['step'] = 'solicitante_om_custom'
                     await bot.reply_to(message, "🏢 Por favor, digite o nome da **Outra OM**:", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
@@ -572,142 +589,120 @@ def register_common_handlers(bot):
                 history.append(('solicitante_om_custom', dict(state['data'])))
                 state['data']['setor'] = text.upper()
                 state['step'] = 'contato'
-                await bot.reply_to(message, "[Passo 3/10] 📞 Qual o **Ramal ou Telefone** de contato?", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                await bot.reply_to(message, "📞 Qual o **Ramal ou Telefone** de contato?", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
 
             elif step == 'contato':
                 history.append(('contato', dict(state['data'])))
                 state['data']['contato'] = text
                 state['step'] = 'titulo'
-                await bot.reply_to(message, "[Passo 4/10] ✍️ Qual o **Título do Evento ou Pauta** da cobertura?", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                await bot.reply_to(message, "[Passo 2/9] ✍️ Qual o **Título do Evento ou Pauta**?", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
 
             elif step == 'titulo':
                 history.append(('titulo', dict(state['data'])))
                 state['data']['titulo'] = text
                 state['step'] = 'data_evento'
-                await bot.reply_to(message, "[Passo 5/10] 📅 Qual a **Data do Evento**? (ex: 25/07/2026 - Término opcional):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                await bot.reply_to(message, "[Passo 3/9] 📅 Qual a **Data de Início** do Evento?", reply_markup=get_date_keyboard(False), parse_mode='Markdown')
 
             elif step == 'data_evento':
                 history.append(('data_evento', dict(state['data'])))
                 date_txt = text.strip()
-                parsed = False
-                
-                # Tenta formatos comuns de entrada de data
-                for fmt in ('%d/%m/%Y', '%d/%m/%y', '%Y-%m-%d', '%d-%m-%Y', '%d-%m-%y'):
+                clean_dt = date_txt.split('(')[-1].replace(')', '').strip() if '(' in date_txt else date_txt
+                parsed_dt = False
+                for fmt in ('%d/%m/%Y', '%d/%m/%y', '%Y-%m-%d', '%d-%m-%Y', '%d-%m-%y', '%d/%m'):
                     try:
-                        date_txt = datetime.strptime(date_txt, fmt).strftime('%Y-%m-%d')
-                        parsed = True
+                        if fmt == '%d/%m':
+                            clean_dt = f"{clean_dt}/{datetime.now().year}"
+                            fmt = '%d/%m/%Y'
+                        clean_dt = datetime.strptime(clean_dt, fmt).strftime('%Y-%m-%d')
+                        parsed_dt = True
                         break
                     except ValueError:
                         continue
+                if not parsed_dt:
+                    clean_dt = datetime.now().strftime('%Y-%m-%d')
+                    
+                state['data']['data_evento'] = clean_dt
+                state['data']['data_fim'] = clean_dt
+                state['step'] = 'data_fim'
+                await bot.reply_to(message, "[Passo 4/9] 📅 Qual a **Data de Término**? (Opcional):", reply_markup=get_date_keyboard(True), parse_mode='Markdown')
+
+            elif step == 'data_fim':
+                history.append(('data_fim', dict(state['data'])))
+                if "Mesmo Dia" not in text:
+                    date_txt = text.strip()
+                    clean_dt = date_txt.split('(')[-1].replace(')', '').strip() if '(' in date_txt else date_txt
+                    for fmt in ('%d/%m/%Y', '%d/%m/%y', '%Y-%m-%d', '%d-%m-%Y', '%d-%m-%y', '%d/%m'):
+                        try:
+                            if fmt == '%d/%m':
+                                clean_dt = f"{clean_dt}/{datetime.now().year}"
+                                fmt = '%d/%m/%Y'
+                            clean_dt = datetime.strptime(clean_dt, fmt).strftime('%Y-%m-%d')
+                            state['data']['data_fim'] = clean_dt
+                            break
+                        except ValueError:
+                            continue
                 
-                # Fallback: Se digitou sem ano (ex: "20/07"), assume o ano atual
-                if not parsed and '/' in date_txt and date_txt.count('/') == 1:
-                    try:
-                        temp_date = f"{date_txt}/{datetime.now().year}"
-                        date_txt = datetime.strptime(temp_date, '%d/%m/%Y').strftime('%Y-%m-%d')
-                    except Exception:
-                        pass
-                        
-                state['data']['data_evento'] = date_txt
-                state['data']['data_fim'] = date_txt # Padrão: início e término no mesmo dia se não informado
                 state['step'] = 'hora_evento'
-                await bot.reply_to(message, "[Passo 6/10] ⏰ Qual o **Horário de Início**? (ex: 09:00):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                await bot.reply_to(message, "[Passo 5/9] ⏰ Qual o **Horário de Início**?", reply_markup=get_time_keyboard(), parse_mode='Markdown')
 
             elif step == 'hora_evento':
                 history.append(('hora_evento', dict(state['data'])))
-                state['data']['hora_evento'] = text
+                state['data']['hora_evento'] = text.replace('⏰', '').strip()
                 state['step'] = 'local'
-                await bot.reply_to(message, "[Passo 7/10] 📍 Qual o **Local exato do Evento**?", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                await bot.reply_to(message, "[Passo 6/9] 📍 Qual o **Local exato do Evento**?", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
 
             elif step == 'local':
                 history.append(('local', dict(state['data'])))
                 state['data']['local'] = text
                 state['step'] = 'uniforme'
-                await bot.reply_to(message, "[Passo 8/10] 👔 Qual o **Uniforme** do evento? (ex: 3.3, 4.4, Passeio):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                await bot.reply_to(message, "[Passo 7/9] 👔 Qual o **Uniforme** do evento?", reply_markup=get_uniform_keyboard(), parse_mode='Markdown')
 
             elif step == 'uniforme':
                 history.append(('uniforme', dict(state['data'])))
                 state['data']['uniforme'] = text
                 state['step'] = 'autoridades'
-                await bot.reply_to(message, "[Passo 9/10] 👑 Quais **Autoridades** estarão presentes? (se nenhuma, digite Nenhuma):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                await bot.reply_to(message, "[Passo 8/9] 👑 Quais **Autoridades** estarão presentes?", reply_markup=get_authorities_keyboard(), parse_mode='Markdown')
 
             elif step == 'autoridades':
                 history.append(('autoridades', dict(state['data'])))
                 state['data']['autoridades'] = text
                 state['step'] = 'choose_coverage'
+                state['data']['selected_services_set'] = set()
                 await bot.reply_to(
                     message, 
-                    "[Passo 10/10] 📸 **Tipo de Serviço / Escopo de Cobertura**\n\nSelecione o serviço nos botões abaixo:", 
-                    reply_markup=get_coverage_keyboard(), 
+                    "[Passo 9/9] 📸 **Selecione os Tipos de Serviço Requeridos**\n\n"
+                    "Clique nos botões inline abaixo para marcar um ou mais serviços.\n"
+                    "Quando terminar, clique em **➡️ CONCLUIR SELEÇÃO DOS SERVIÇOS ➡️**:", 
+                    reply_markup=get_multi_service_inline_keyboard(state['data']['selected_services_set']), 
                     parse_mode='Markdown'
                 )
 
-            elif step == 'choose_coverage':
-                history.append(('choose_coverage', dict(state['data'])))
-                coverage_txt = text.upper()
-                coberturas = []
-                if "GRAFICO" in coverage_txt or "GRÁFICO" in coverage_txt or "DESIGN" in coverage_txt:
-                    coberturas.append("grafico")
-                if "FOTO" in coverage_txt:
-                    coberturas.append("foto")
-                if "VIDEO" in coverage_txt or "VÍDEO" in coverage_txt:
-                    coberturas.append("video")
-                if "DRONE" in coverage_txt:
-                    coberturas.append("drone")
-                if "REDES" in coverage_txt or "MÍDIAS" in coverage_txt:
-                    coberturas.append("redes")
-                if "COMPLETO" in coverage_txt or "TUDO" in coverage_txt:
-                    coberturas = ["foto", "video", "grafico", "drone", "redes"]
-                
-                if not coberturas:
-                    coberturas = ["foto", "video"]
-                state['data']['tipo_cobertura'] = json.dumps(coberturas)
-                if "DRONE" in coverage_txt:
-                    coberturas.append("drone")
-                if not coberturas:
-                    coberturas = ["foto"]
-
-                state['data']['coberturas'] = coberturas
-                state['data']['coberturas_str'] = text
-                state['step'] = 'choose_format'
-                await bot.reply_to(
-                    message, 
-                    "[Passo 11/12] 🎬 **Formato de entrega do Vídeo desejado**\n\nSelecione o formato utilizando os botões abaixo:", 
-                    reply_markup=get_video_format_keyboard(), 
-                    parse_mode='Markdown'
-                )
-
-            elif step == 'choose_format':
-                history.append(('choose_format', dict(state['data'])))
-                state['data']['formato_video'] = text
-                state['step'] = 'transporte'
-                await bot.reply_to(
-                    message, 
-                    "[Passo 12/12] 🚗 **Logística**\nHá transporte assegurado para a equipe de cobertura e equipamentos?", 
-                    reply_markup=get_yes_no_keyboard("Sim, Transporte Assegurado", "Não Assegurado"), 
-                    parse_mode='Markdown'
-                )
-
-            elif step == 'transporte':
-                history.append(('transporte', dict(state['data'])))
-                state['data']['transporte'] = text
+            elif step == 'observacoes':
+                history.append(('observacoes', dict(state['data'])))
+                if "Pular" in text or "Nenhuma" in text:
+                    state['data']['observacoes'] = "Nenhuma"
+                else:
+                    state['data']['observacoes'] = text
+                    
                 state['step'] = 'review_confirm'
-                
                 d = state['data']
+                dt_fim_txt = f" até {d.get('data_fim')}" if d.get('data_fim') and d.get('data_fim') != d.get('data_evento') else " (mesmo dia)"
+                
                 resumo = (
-                    "📋 **REVISÃO DA SOLICITAÇÃO DE PAUTA / CGCFN**\n\n"
+                    "📋 **REVISÃO DA SOLICITAÇÃO DE PAUTA / CGCFN**\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"🏛️ **OM / Setor:** {d.get('setor')}\n"
                     f"👤 **Solicitante:** {d.get('solicitante_nome')}\n"
-                    f"🏢 **OM / Setor:** {d.get('setor')}\n"
                     f"📞 **Contato:** {d.get('contato')}\n"
                     f"📌 **Evento:** {d.get('titulo')}\n"
-                    f"📅 **Data:** {d.get('data_evento')}\n"
+                    f"📅 **Data:** {d.get('data_evento')}{dt_fim_txt}\n"
                     f"⏰ **Horário:** {d.get('hora_evento')}\n"
                     f"📍 **Local:** {d.get('local')}\n"
                     f"👔 **Uniforme:** {d.get('uniforme')}\n"
-                    f"👑 **Autoridades:** {d.get('autoridades')}\n"
-                    f"📸 **Cobertura:** {d.get('coberturas_str')}\n"
-                    f"🎬 **Formato Vídeo:** {d.get('formato_video')}\n"
-                    f"🚗 **Transporte:** {d.get('transporte')}\n\n"
+                    f"👑 **Autoridades:** {d.get('autoridades')}\n\n"
+                    f"📸 **Tipos de Serviços Solicitados:**\n"
+                    f"{d.get('servicos_formatados', '   • 📸 Cobertura Fotográfica')}\n\n"
+                    f"📝 **Observações:** {d.get('observacoes')}\n\n"
                     "⚠️ *Confirma os dados acima para cadastrar a solicitação?*"
                 )
                 await bot.reply_to(message, resumo, reply_markup=get_confirm_demanda_keyboard(), parse_mode='Markdown')
@@ -720,22 +715,23 @@ def register_common_handlers(bot):
                         try:
                             d = state['data']
                             registro = {
-                                'solicitante_nome': d['solicitante_nome'].upper(),
-                                'setor': d['setor'].upper(),
-                                'contato': d['contato'],
-                                'titulo_evento': d['titulo'].upper(),
-                                'data_evento': d['data_evento'],
-                                'hora_evento': d['hora_evento'],
-                                'local_evento': d['local'].upper(),
-                                'tipo_cobertura': json.dumps(d.get('coberturas', ['foto'])),
+                                'solicitante_nome': d.get('solicitante_nome', 'CGCFN').upper(),
+                                'setor': d.get('setor', 'CGCFN').upper(),
+                                'contato': d.get('contato', 'N/I'),
+                                'titulo_evento': d.get('titulo', 'Evento').upper(),
+                                'data_evento': d.get('data_evento'),
+                                'data_fim': d.get('data_fim', d.get('data_evento')),
+                                'hora_evento': d.get('hora_evento', '09:00'),
+                                'local_evento': d.get('local', 'Gabinete').upper(),
+                                'tipo_cobertura': d.get('tipo_cobertura', '["foto"]'),
                                 'autoridades': d.get('autoridades', ''),
+                                'observacoes': d.get('observacoes', ''),
                                 'score_esforco': 1.5,
                                 'status': 'pendente'
                             }
                             db.table('demandas_comunicacao').insert(registro).execute()
                             await bot.reply_to(message, "✅ **Demanda cadastrada com sucesso!**\nAguardando homologação do Supervisor responsável.", reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
 
-                            # Dispara broadcast para avisar administradores sobre nova pauta
                             from notifications_manager import notify_telegram
                             notify_telegram(
                                 f"🆕 **Nova Pauta Criada via Telegram**\n\n"
@@ -751,10 +747,11 @@ def register_common_handlers(bot):
                         await bot.reply_to(message, "⚠️ Banco indisponível. Ação cancelada.", reply_markup=get_main_menu_keyboard(is_operator))
                     clear_state(chat_id)
                 elif "Reiniciar" in text or "✏️" in text:
-                    state['step'] = 'solicitante_nome'
-                    state['data'] = {}
+                    state['step'] = 'solicitante_om'
+                    state['data'] = {'selected_services_set': set()}
                     state['history_steps'] = []
-                    await bot.reply_to(message, "✏️ **Formulação Reiniciada**\n\n[Passo 1/12] 👤 Qual o **Posto/Graduação e Nome Completo** do Solicitante?", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                    from .keyboards import get_om_keyboard
+                    await bot.reply_to(message, "✏️ **Formulação Reiniciada**\n\n[Passo 1/9] ⚓ A solicitação é do **CGCFN** ou de **Outra OM**?", reply_markup=get_om_keyboard(), parse_mode='Markdown')
                 else:
                     await bot.reply_to(message, "Selecione uma das opções nos botões abaixo:", reply_markup=get_confirm_demanda_keyboard())
             return
