@@ -165,7 +165,36 @@ def register_common_handlers(bot):
             
             # --- Usuário NÃO autorizado ---
             if not profile:
-                if text.lower() in ["📝 solicitar acesso", "/start", "/solicitar", "/acesso", "solicitar", "solicitar acesso", "acesso"]:
+                if "vincular" in text.lower() or text == "🔗 Vincular Meu Nome":
+                    from database import get_bot_db_connection as get_db_connection
+                    db = get_db_connection()
+                    ef_lista = []
+                    if db:
+                        try:
+                            res = db.table('efetivo').select('id, nome_guerra').execute()
+                            ef_lista = res.data or []
+                        except Exception as e:
+                            print(f"[VINCULAR LOAD ERR] {e}")
+                    
+                    if ef_lista:
+                        chat_states[chat_id] = {
+                            'action': 'vincular_efetivo',
+                            'step': 'select_militar',
+                            'user': None,
+                            'data': {}
+                        }
+                        await bot.reply_to(
+                            message,
+                            "⚓ **VINCULAR CONTA DE MILITAR DO GABINETE**\n\n"
+                            "Selecione o seu **Nome de Guerra** nos botões abaixo para vincular este Telegram à sua conta:",
+                            reply_markup=get_efetivo_linking_keyboard(ef_lista),
+                            parse_mode='Markdown'
+                        )
+                    else:
+                        await bot.reply_to(message, "⚠️ Nenhum militar cadastrado para vinculação.", reply_markup=get_unauthorized_keyboard())
+                    return
+
+                elif text.lower() in ["📝 solicitar acesso", "/start", "/solicitar", "/acesso", "solicitar", "solicitar acesso", "acesso"]:
                     # Inicia wizard de solicitação
                     chat_states[chat_id] = {
                         'action': 'settings',
@@ -187,7 +216,7 @@ def register_common_handlers(bot):
                         f"⚓ **Assistente SisGAB**\n\n"
                         f"Olá! Seu acesso ainda não está liberado no sistema.\n"
                         f"📱 **Seu Telegram ID:** `{chat_id}`\n\n"
-                        f"Clique no botão **📝 Solicitar Acesso** abaixo ou envie /solicitar para pedir seu cadastro.", 
+                        f"Clique em **🔗 Vincular Meu Nome** se você já é do efetivo ou **📝 Solicitar Acesso** para pedir novo cadastro.", 
                         reply_markup=get_unauthorized_keyboard(),
                         parse_mode='Markdown'
                     )
@@ -416,6 +445,27 @@ def register_common_handlers(bot):
                 state['data']['reg_funcao'] = text.strip()
                 await finalizar_solicitacao_acesso(bot, message, chat_id, state)
             return
+
+        if action == 'vincular_efetivo':
+            if step == 'select_militar':
+                nome_sel = text.replace('🎖️', '').strip().upper()
+                from database import get_bot_db_connection as get_db_connection
+                db = get_db_connection()
+                if db:
+                    try:
+                        db.table('efetivo').update({'telegram_id': str(chat_id)}).eq('nome_guerra', nome_sel).execute()
+                        await bot.reply_to(
+                            message,
+                            f"✅ **VINCULAÇÃO CONCLUÍDA COM SUCESSO!**\n\n"
+                            f"Seu Telegram `{chat_id}` foi vinculado ao militar *{nome_sel}*.\n\n"
+                            f"Você já pode responder às chamadas diárias e utilizar o menu!",
+                            reply_markup=get_main_menu_keyboard(True),
+                            parse_mode='Markdown'
+                        )
+                    except Exception as e_vinc:
+                        await bot.reply_to(message, f"❌ Erro ao vincular: {e_vinc}", reply_markup=get_unauthorized_keyboard())
+                clear_state(chat_id)
+                return
 
         # ----- WIZARD: Digerir Pauta com IA (Gemini) -----
         if action == 'digerir_pauta_ia':

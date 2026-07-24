@@ -3,20 +3,34 @@ from .utils import current_user_id, USER_PERMISSIONS_CACHE
 
 def get_unauthorized_keyboard():
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-    markup.row(types.KeyboardButton("📝 Solicitar Acesso"))
+    markup.row(types.KeyboardButton("🔗 Vincular Meu Nome"), types.KeyboardButton("📝 Solicitar Acesso"))
     return markup
 
 def get_main_menu_keyboard(is_operator=False):
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     if is_operator:
+        markup.row(types.KeyboardButton("🟢 Dar Presença"), types.KeyboardButton("📋 Pronto CheGab"))
         markup.row(types.KeyboardButton("📋 Pautas COMSOC"), types.KeyboardButton("📅 Agenda Semanal"))
         markup.row(types.KeyboardButton("➕ Criar Demanda"), types.KeyboardButton("🤖 Digerir Pauta (IA)"))
         markup.row(types.KeyboardButton("🔌 Cautelas Ativas"), types.KeyboardButton("⚙️ Configurações"))
         markup.row(types.KeyboardButton("ℹ️ Ajuda"), types.KeyboardButton("❌ Cancelar"))
     else:
-        markup.row(types.KeyboardButton("➕ Criar Demanda"), types.KeyboardButton("📅 Agenda Semanal"))
-        markup.row(types.KeyboardButton("⚙️ Configurações"), types.KeyboardButton("ℹ️ Ajuda"))
-        markup.row(types.KeyboardButton("❌ Cancelar"))
+        markup.row(types.KeyboardButton("🟢 Dar Presença"), types.KeyboardButton("📅 Agenda Semanal"))
+        markup.row(types.KeyboardButton("➕ Criar Demanda"), types.KeyboardButton("⚙️ Configurações"))
+        markup.row(types.KeyboardButton("ℹ️ Ajuda"), types.KeyboardButton("❌ Cancelar"))
+    return markup
+
+def get_efetivo_linking_keyboard(efetivo_lista):
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    row = []
+    for ef in efetivo_lista:
+        row.append(types.KeyboardButton(f"🎖️ {ef['nome_guerra']}"))
+        if len(row) == 2:
+            markup.row(*row)
+            row = []
+    if row:
+        markup.row(*row)
+    markup.row(types.KeyboardButton("❌ Cancelar"))
     return markup
 
 def get_cancel_keyboard():
