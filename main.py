@@ -194,6 +194,7 @@ import comsoc_aniversariantes
 import smart_editor
 import agenda_geral
 import modulo_presenca
+import comsoc_assentos
 from database import authenticate_user, get_user_by_id
 from services import data_service
 
@@ -224,6 +225,7 @@ sisgab_menu_categories = [
             {'name': 'Aniversariantes & Datas', 'icon': 'cake', 'path': '/comsoc_aniversariantes', 'subtitle': 'Mensagens com IA e impressão'},
             {'name': 'Smart Editor IA', 'icon': 'movie_filter', 'path': '/smart_editor', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'supervisor'], 'subtitle': 'Cortes com IA, SFX e FCPXML'},
             {'name': 'Monitor TV (COMSOC TV)', 'icon': 'tv', 'path': '/sisgab_tv', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Modo TV tático'},
+            {'name': 'Placas de Assento (Jade)', 'icon': 'event_seat', 'path': '/comsoc_assentos', 'subtitle': 'Mapeamento e alocação de assentos'},
         ]
     },
     {
@@ -691,6 +693,12 @@ def comsoc_cautela_page():
 def comsoc_brindes_page():
     app.storage.user['current_path'] = '/comsoc_brindes'
     build_layout(comsoc_brindes.render_page)()
+
+
+@ui.page('/comsoc_assentos')
+def comsoc_assentos_page():
+    app.storage.user['current_path'] = '/comsoc_assentos'
+    build_layout(comsoc_assentos.render_page)()
 
 
 @ui.page('/comsoc_galeria')
