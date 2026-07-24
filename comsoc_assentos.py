@@ -664,19 +664,40 @@ def render_page():
         diag.open()
 
     def open_allocate_seat_dialog(seat_id, convidados, event_id):
-        # Lista apenas convidados não alocados
-        unallocated = [c for c in convidados if not c.get('assento_id')]
+        def get_category_priority(cat):
+            cat_upper = str(cat or '').upper()
+            if 'VIP' in cat_upper:
+                return 0
+            if 'MILITAR' in cat_upper:
+                return 1
+            if 'CIVIL' in cat_upper:
+                return 2
+            if 'IMPRENSA' in cat_upper:
+                return 3
+            if 'APOIO' in cat_upper:
+                return 4
+            return 5
+
+        # Ordena todos os convidados por prioridade de grupo, posto e nome
+        sorted_convidados = sorted(
+            convidados,
+            key=lambda c: (get_category_priority(c.get('categoria', 'Geral')), c.get('posto_graduacao') or '', c['nome'])
+        )
         
-        with ui.dialog() as diag, ui.card().classes('q-pa-md').style('min-width: 350px;'):
+        with ui.dialog() as diag, ui.card().classes('q-pa-md').style('min-width: 380px;'):
             ui.label(f'Alocar Assento {seat_id}').classes('text-md font-bold text-cyan q-mb-md')
             
-            if unallocated:
-                ui.label('Selecione um convidado para sentar nesta cadeira:').classes('text-xs text-grey-4 q-mb-sm')
+            if sorted_convidados:
+                ui.label('Selecione um convidado para sentar nesta cadeira (ordenados por prioridade):').classes('text-xs text-grey-4 q-mb-sm')
                 
-                options_map = {
-                    c['id']: f"{c.get('posto_graduacao') or ''} {c['nome']}".strip() 
-                    for c in unallocated
-                }
+                options_map = {}
+                for c in sorted_convidados:
+                    seat_info = f" (Assento {c['assento_id']})" if c.get('assento_id') else ""
+                    cat_info = f"[{c.get('categoria', 'Geral').upper()}] "
+                    posto_info = f"{c.get('posto_graduacao') or ''} ".strip()
+                    if posto_info:
+                        posto_info = f"{posto_info} "
+                    options_map[c['id']] = f"{cat_info}{posto_info}{c['nome']}{seat_info}"
                 
                 selected_guest_id = ui.select(options_map).props('dark outlined dense filterable w-full')
                 
@@ -687,7 +708,7 @@ def render_page():
                         on_click=lambda: [allocate_guest(selected_guest_id.value, seat_id, event_id), diag.close()]
                     ).props('unelevated color=primary text-color=black dense')
             else:
-                ui.label('Não há convidados sem assento disponíveis. Cadastre ou desaloque alguém primeiro.').classes('text-xs text-amber q-mb-md')
+                ui.label('Não há convidados cadastrados para este evento. Cadastre ou importe uma lista primeiro.').classes('text-xs text-amber q-mb-md')
                 ui.button('Fechar', on_click=diag.close).props('unelevated color=grey-8 dense w-full')
                 
         diag.open()
