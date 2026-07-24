@@ -333,6 +333,18 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
             except Exception as e:
                 print(f"[LOAD HISTORICO ERR] {e}")
 
+        # Fallback local via SQLite se o Supabase estiver offline ou sem retorno
+        if not todas_demandas:
+            try:
+                from sqlite_adapter import SQLiteDatabaseAdapter
+                local_db = SQLiteDatabaseAdapter()
+                res_d_loc = local_db.table('demandas_comunicacao').select('*').order('id', desc=True).execute()
+                todas_demandas = res_d_loc.data or []
+                res_h_loc = local_db.table('demandas_historico_tramitacao').select('*').order('data_hora', desc=True).execute()
+                historico_global = res_h_loc.data or []
+            except Exception as loc_e:
+                print(f"[LOAD HOMOLOGAR LOCAL WARN] {loc_e}")
+
         # Agrupamento por status
         pendentes  = [d for d in todas_demandas if d.get('status') == 'pendente']
         aprovadas  = [d for d in todas_demandas if d.get('status') == 'aprovada']

@@ -57,6 +57,41 @@ def gerar_texto_pronto_chegab(data_str, presencas_dict, efetivo_lista):
     return texto
 
 
+def fetch_efetivo_and_presencas(dt_str: str):
+    """Busca o efetivo e a presença diária tentando o Supabase e com fallback garantido no SQLite local."""
+    efetivo_lista = []
+    presencas_list = []
+    
+    db = get_service_db_connection() or get_db_connection()
+    if db:
+        try:
+            res_ef = db.table('efetivo').select('*').order('nome_guerra').execute()
+            efetivo_lista = res_ef.data or []
+        except Exception as e:
+            print(f"[PRESENCA LOAD EFETIVO WARN] {e}")
+            
+        try:
+            res_pr = db.table('presenca_diaria').select('*').eq('data', dt_str).execute()
+            presencas_list = res_pr.data or []
+        except Exception as e:
+            print(f"[PRESENCA LOAD DIARIA WARN] {e}")
+
+    # Fallback local via SQLite se o Supabase não respondeu ou não possui a tabela
+    try:
+        from sqlite_adapter import SQLiteDatabaseAdapter
+        local_db = SQLiteDatabaseAdapter()
+        if not efetivo_lista:
+            res_ef_loc = local_db.table('efetivo').select('*').order('nome_guerra').execute()
+            efetivo_lista = res_ef_loc.data or []
+        if not presencas_list:
+            res_pr_loc = local_db.table('presenca_diaria').select('*').eq('data', dt_str).execute()
+            presencas_list = res_pr_loc.data or []
+    except Exception as loc_err:
+        print(f"[PRESENCA LOCAL FALLBACK WARN] {loc_err}")
+        
+    return efetivo_lista, presencas_list
+
+
 def render_page():
     ui.label('📋 CHAMADA MATUTINA & PRONTO AO CHEGAB').classes('text-2xl font-bold text-white cyber-title gt-xs q-mb-md q-ml-md')
     
@@ -67,23 +102,7 @@ def render_page():
     @ui.refreshable
     def render_content():
         dt_str = data_selecionada.value or datetime.now().strftime('%Y-%m-%d')
-        
-        db = get_service_db_connection() or get_db_connection()
-        efetivo_lista = []
-        presencas_list = []
-        
-        if db:
-            try:
-                res_ef = db.table('efetivo').select('*').order('nome_guerra').execute()
-                efetivo_lista = res_ef.data or []
-            except Exception as e:
-                print(f"[PRESENCA LOAD EFETIVO ERR] {e}")
-                
-            try:
-                res_pr = db.table('presenca_diaria').select('*').eq('data', dt_str).execute()
-                presencas_list = res_pr.data or []
-            except Exception as e:
-                print(f"[PRESENCA LOAD DIARIA ERR] {e}")
+        efetivo_lista, presencas_list = fetch_efetivo_and_presencas(dt_str)
 
         # Mapeia presencas por nome_guerra
         presencas_dict = {p['nome_guerra'].upper(): p for p in presencas_list}

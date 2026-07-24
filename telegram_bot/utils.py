@@ -259,3 +259,52 @@ def set_user_active_year(profile, ano: str):
             conn.table('users').update({'ano_letivo': ano}).eq('id', profile['id']).execute()
     except Exception as e:
         print(f"[YEAR SAVE DB ERR] {e}")
+
+
+async def _salvar_presenca_bot(bot, message, chat_id, state, sigla_code, obs_txt):
+    """Salva a presença diária informada pelo Telegram no Supabase e no SQLite local."""
+    profile = state.get('user') or {}
+    nome_g = profile.get('nome_guerra') or profile.get('nome') or 'MILITAR'
+    nome_g = str(nome_g).replace('None ', '').replace('None', '').strip().upper()
+    dt_str = datetime.now().strftime('%Y-%m-%d')
+    
+    payload = {
+        'nome_guerra': nome_g,
+        'data': dt_str,
+        'status': sigla_code,
+        'observacao': obs_txt.strip(),
+        'updated_at': datetime.now().isoformat()
+    }
+    
+    # 1. Salva no Supabase se disponível
+    try:
+        from database import get_bot_db_connection
+        db = get_bot_db_connection()
+        if db:
+            db.table('presenca_diaria').upsert(payload, on_conflict='nome_guerra,data').execute()
+    except Exception as sp_err:
+        print(f"[PRESENCA BOT SUPABASE WARN] {sp_err}")
+        
+    # 2. Salva garantido no SQLite local
+    try:
+        from sqlite_adapter import SQLiteDatabaseAdapter
+        local_db = SQLiteDatabaseAdapter()
+        local_db.table('presenca_diaria').upsert(payload, on_conflict='nome_guerra,data').execute()
+    except Exception as loc_err:
+        print(f"[PRESENCA BOT LOCAL WARN] {loc_err}")
+        
+    is_operator = str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'operador')
+    clear_state(chat_id)
+    
+    from .keyboards import get_main_menu_keyboard
+    await bot.reply_to(
+        message,
+        f"✅ **PRESENÇA REGISTRADA COM SUCESSO!**\n\n"
+        f"👤 Militar: *{nome_g}*\n"
+        f"📌 Rotina: *({sigla_code})*\n"
+        f"📅 Data: *{dt_str}*\n"
+        f"{f'✍️ Obs: _{obs_txt}_\n' if obs_txt else ''}\n"
+        f"Sua presença foi salva na Sargenteação!",
+        reply_markup=get_main_menu_keyboard(is_operator),
+        parse_mode='Markdown'
+    )

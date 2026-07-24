@@ -335,23 +335,16 @@ def register_common_handlers(bot):
                 )
 
             elif text == "/pronto" or text == "📋 Pronto CheGab":
-                from database import get_bot_db_connection as get_db_connection
-                db = get_db_connection()
-                if db:
-                    dt_str = datetime.now().strftime('%Y-%m-%d')
-                    try:
-                        res_ef = db.table('efetivo').select('*').order('nome_guerra').execute()
-                        efetivo_lista = res_ef.data or []
-                        res_pr = db.table('presenca_diaria').select('*').eq('data', dt_str).execute()
-                        presencas_list = res_pr.data or []
-                        
-                        presencas_dict = {p['nome_guerra'].upper(): p for p in presencas_list}
-                        
-                        from modulo_presenca import gerar_texto_pronto_chegab
-                        relatorio_txt = gerar_texto_pronto_chegab(dt_str, presencas_dict, efetivo_lista)
-                        await bot.reply_to(message, relatorio_txt, parse_mode='Markdown')
-                    except Exception as pr_err:
-                        await bot.reply_to(message, f"❌ Erro ao gerar pronto: {pr_err}")
+                dt_str = datetime.now().strftime('%Y-%m-%d')
+                try:
+                    from modulo_presenca import fetch_efetivo_and_presencas, gerar_texto_pronto_chegab
+                    efetivo_lista, presencas_list = fetch_efetivo_and_presencas(dt_str)
+                    presencas_dict = {p['nome_guerra'].upper(): p for p in presencas_list}
+                    
+                    relatorio_txt = gerar_texto_pronto_chegab(dt_str, presencas_dict, efetivo_lista)
+                    await bot.reply_to(message, relatorio_txt, parse_mode='Markdown')
+                except Exception as pr_err:
+                    await bot.reply_to(message, f"❌ Erro ao gerar pronto: {pr_err}")
                 return
 
             elif text == "🤖 Digerir Pauta (IA)":
