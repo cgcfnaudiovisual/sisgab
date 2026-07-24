@@ -41,10 +41,11 @@ def register_settings_handlers(bot):
                 except Exception:
                     status_cadastro = "Erro ao consultar banco"
             
+        nome_user = profile.get('nome_guerra') or profile.get('nome_completo') or profile.get('username') or profile.get('nome', 'Não Identificado') if profile else 'Não Identificado'
         await bot.reply_to(
             message,
             "⚙️ **CONFIGURAÇÕES DO OPERADOR - SISGAB**\n\n"
-            f"👤 **Operador:** `{profile['nome'] if profile else 'Não Identificado'}`\n"
+            f"👤 **Operador:** `{nome_user}`\n"
             f"📸 **Cadastro Facial:** `{status_cadastro}`\n\n"
             "Escolha uma das opções abaixo para gerenciar seu perfil:",
             reply_markup=get_settings_keyboard(is_authorized, is_admin),
