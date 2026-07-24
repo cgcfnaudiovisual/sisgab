@@ -57,7 +57,7 @@ def load_alerts_config() -> dict:
         from database import get_bot_db_connection
         db_conn = get_bot_db_connection()
         if db_conn:
-            res = db_conn.table('Config').select('valor').eq('chave', 'config_alerts_json').execute()
+            res = db_conn.table('config').select('valor').eq('chave', 'config_alerts_json').execute()
             if res.data:
                 data = json.loads(res.data[0]['valor'])
                 merged = DEFAULT_ALERTS_CONFIG.copy()
