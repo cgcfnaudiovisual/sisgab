@@ -28,6 +28,51 @@ def get_row_label(index):
         index = index // 26 - 1
     return label
 
+def sync_companions(main_guest_id, main_guest_name, max_acomp, event_id, category):
+    db = get_db_connection()
+    if not db:
+        return
+    try:
+        # 1. Buscar acompanhantes existentes
+        res = db.table('jade_convidados').select('*').eq('convidado_principal_id', main_guest_id).execute()
+        existing = res.data if res.data else []
+        existing_count = len(existing)
+        
+        # 2. Se precisamos de mais
+        if existing_count < max_acomp:
+            needed = max_acomp - existing_count
+            new_comps = []
+            for i in range(existing_count + 1, max_acomp + 1):
+                new_comps.append({
+                    'evento_id': event_id,
+                    'nome': f"ACOMP. {main_guest_name} ({i}/{max_acomp})",
+                    'categoria': category,
+                    'convidado_principal_id': main_guest_id,
+                    'max_acompanhantes': 0,
+                    'cargo_funcao': f"Acompanhante de {main_guest_name}"
+                })
+            db.table('jade_convidados').insert(new_comps).execute()
+            
+        # 3. Se temos demais
+        elif existing_count > max_acomp:
+            # Ordena por id decrescente e deleta os excedentes
+            sorted_existing = sorted(existing, key=lambda x: x['id'], reverse=True)
+            to_delete = sorted_existing[:existing_count - max_acomp]
+            delete_ids = [d['id'] for d in to_delete]
+            db.table('jade_convidados').delete().in_('id', delete_ids).execute()
+            
+        # 4. Atualiza os nomes e categorias dos acompanhantes existentes
+        else:
+            for idx, comp in enumerate(existing, 1):
+                db.table('jade_convidados').update({
+                    'nome': f"ACOMP. {main_guest_name} ({idx}/{max_acomp})",
+                    'categoria': category,
+                    'cargo_funcao': f"Acompanhante de {main_guest_name}"
+                }).eq('id', comp['id']).execute()
+    except Exception as e:
+        print(f"[SYNC COMPANIONS ERR] {e}")
+
+
 def render_page():
     ui.label('🪑 PROJETAR ASSENTOS (PLACAS JADE)').classes('text-2xl font-bold text-white cyber-title gt-xs q-mb-md q-ml-md')
     
@@ -474,11 +519,15 @@ def render_page():
                     # Update
                     db.table('jade_convidados').update(data).eq('id', guest_id).execute()
                     ui.notify('Dados do convidado atualizados.', color='success')
+                    sync_companions(guest_id, data['nome'], data['max_acompanhantes'], event_id, data['categoria'])
                 else:
                     # Insert
                     data['evento_id'] = event_id
-                    db.table('jade_convidados').insert(data).execute()
+                    res = db.table('jade_convidados').insert(data).execute()
                     ui.notify('Convidado adicionado à lista.', color='success')
+                    if res.data:
+                        new_id = res.data[0]['id']
+                        sync_companions(new_id, data['nome'], data['max_acompanhantes'], event_id, data['categoria'])
                 render_content.refresh()
             except Exception as e:
                 ui.notify(f"Erro ao salvar convidado: {e}", color='red')
@@ -487,8 +536,11 @@ def render_page():
         db = get_db_connection()
         if db:
             try:
+                # Remove acompanhantes primeiro
+                db.table('jade_convidados').delete().eq('convidado_principal_id', guest['id']).execute()
+                # Remove convidado
                 db.table('jade_convidados').delete().eq('id', guest['id']).execute()
-                ui.notify(f"Convidado {guest['nome']} removido.", color='success')
+                ui.notify(f"Convidado {guest['nome']} e acompanhantes removidos.", color='success')
                 render_content.refresh()
             except Exception as e:
                 ui.notify(f"Erro ao excluir convidado: {e}", color='red')
@@ -914,8 +966,11 @@ def render_page():
                 # Evitar duplicados no mesmo evento
                 existing = db.table('jade_convidados').select('id').eq('evento_id', event_id).eq('nome', nome).execute()
                 if not existing.data:
-                    db.table('jade_convidados').insert(registro).execute()
+                    res = db.table('jade_convidados').insert(registro).execute()
                     inserted_count += 1
+                    if res.data:
+                        new_id = res.data[0]['id']
+                        sync_companions(new_id, nome, acomps, event_id, categoria)
                     
             ui.notify(f"Importação concluída. {inserted_count} novos convidados adicionados.", color='success')
             
