@@ -19,6 +19,11 @@ assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
 os.makedirs(assets_dir, exist_ok=True)
 app.add_static_files('/assets', assets_dir)
 
+@app.get('/ping')
+@app.get('/health')
+def get_health_ping():
+    return {"status": "ok", "app": "SisGAB", "bot": "active"}
+
 @app.get('/manifest.json')
 def get_manifest():
     return {
@@ -1136,8 +1141,23 @@ async def memory_cleanup_loop():
     while True:
         await asyncio.sleep(300) # Coleta a cada 5 minutos
         gc.collect()
-        # Força o coletor a limpar referências circulares e liberar blocos para o SO
 app.on_startup(memory_cleanup_loop)
+
+# Loop de Auto-Ping para manter a aplicacao no Render online 24/7 sem entrar em Sleep Mode
+async def render_keepalive_loop():
+    import urllib.request
+    import asyncio
+    render_url = os.environ.get('RENDER_EXTERNAL_URL') or "https://sisgab.onrender.com"
+    ping_endpoint = f"{render_url}/ping"
+    while True:
+        await asyncio.sleep(240)  # Pinga a cada 4 minutos para impedir o Sleep Mode no Render
+        try:
+            req = urllib.request.Request(ping_endpoint, headers={'User-Agent': 'SisGAB-KeepAlive/1.0'})
+            urllib.request.urlopen(req, timeout=10)
+        except Exception as e:
+            print(f"[KEEPALIVE PING] {e}")
+
+app.on_startup(render_keepalive_loop)
 
 # Garante o encerramento limpo da sessão do bot do Telegram ao desligar ou recarregar
 app.on_shutdown(telegram_bot.stop_bot)
