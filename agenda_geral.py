@@ -164,7 +164,12 @@ def render_page():
                                                 details=f"Solicitante: {ev.get('solicitante_nome', 'N/I')}"
                                             )
                                             
-                                            with ui.row().classes('w-full justify-end q-mt-xs'):
+                                            with ui.row().classes('w-full justify-end items-center gap-2 q-mt-xs'):
+                                                def editar_evento(dem=ev):
+                                                    from comsoc_homologar import open_editar_pauta_dialog
+                                                    open_editar_pauta_dialog(dem, lambda: render_events(filter_by_date))
+
+                                                ui.button('✏️ Editar Pauta', on_click=editar_evento).props('flat color=cyan dense icon=edit').classes('text-xs')
                                                 ui.link('📅 Sync com Google Calendar', gcal_link, new_tab=True).classes('text-xs font-bold text-cyan underline bg-cyan-950/50 q-px-sm q-py-xs rounded border border-cyan-500/30')
                                 else:
                                     with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):

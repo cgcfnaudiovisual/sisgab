@@ -485,10 +485,27 @@ def render_page(autofill: str = None):
 
                 # 3. Demandas em Ajustes (Direita - 1/3 da largura)
                 with ui.column().classes('col-12 col-md q-pa-none').style('min-width: 320px;'):
-                    with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
-                        f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]}; min-height: 520px;'
-                    ):
-                        ui.label('⚠️ Aguardando Ajustes').classes('text-md font-bold text-cyan q-mb-md')
+                        with ui.row().classes('w-full justify-between items-center q-mb-md'):
+                            ui.label('⚠️ Aguardando Ajustes').classes('text-md font-bold text-cyan')
+                            def abrir_gerenciador_edicao():
+                                from comsoc_homologar import open_editar_pauta_dialog
+                                db_e = get_service_db_connection() or get_db_connection()
+                                if db_e:
+                                    res = db_e.table('demandas_comunicacao').select('*').order('id', desc=True).limit(30).execute()
+                                    pautas = res.data or []
+                                    with ui.dialog() as dlg_list, ui.card().classes('w-[600px] max-w-[95vw] bg-slate-900 border border-cyan-500/40 q-pa-md'):
+                                        ui.label('✏️ Selecione uma Pauta para Editar').classes('text-sm font-bold text-white cyber-title q-mb-md')
+                                        with ui.column().classes('w-full gap-2').style('max-height: 60vh; overflow-y: auto;'):
+                                            for p in pautas:
+                                                with ui.row().classes('w-full justify-between items-center bg-black/40 p-2 rounded border border-cyan-500/20'):
+                                                    with ui.column().classes('gap-0'):
+                                                        ui.label(p['titulo_evento']).classes('text-xs font-bold text-white')
+                                                        ui.label(f"{p['data_evento']} | {p['solicitante_nome']} ({p['status']})").classes('text-[10px] text-grey-4')
+                                                    ui.button('Editar', icon='edit', on_click=lambda p=p: (dlg_list.close(), open_editar_pauta_dialog(p))).props('unelevated color=cyan text-color=black dense').classes('text-xs')
+                                        ui.button('Fechar', on_click=dlg_list.close).props('flat color=grey').classes('w-full q-mt-md')
+                                    dlg_list.open()
+
+                            ui.button('✏️ Editar Pauta', icon='edit', on_click=abrir_gerenciador_edicao).props('flat color=cyan dense').classes('text-xs')
                         
                         minhas_demandas = []
                         db = get_db_connection()
