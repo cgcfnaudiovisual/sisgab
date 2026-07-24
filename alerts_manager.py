@@ -447,6 +447,22 @@ class AlertsManager:
                                 }
                             )
                             cls._triggered_custom_alerts_today[alert_id] = today_str
+
+                # Trigger da Chamada Matutina no Telegram (07:00) e Cobrança 10min (07:30 a 08:00)
+                try:
+                    import telegram_bot
+                    if telegram_bot.bot:
+                        if hour_min == "07:00" and cls._triggered_custom_alerts_today.get('chamada_0700') != today_str:
+                            cls._triggered_custom_alerts_today['chamada_0700'] = today_str
+                            from telegram_bot.scheduled_jobs import trigger_daily_attendance_call
+                            asyncio.create_task(trigger_daily_attendance_call(telegram_bot.bot))
+                            
+                        if hour_min in ("07:30", "07:40", "07:50") and cls._triggered_custom_alerts_today.get(f'lembrete_{hour_min}') != today_str:
+                            cls._triggered_custom_alerts_today[f'lembrete_{hour_min}'] = today_str
+                            from telegram_bot.scheduled_jobs import trigger_10min_attendance_reminder
+                            asyncio.create_task(trigger_10min_attendance_reminder(telegram_bot.bot))
+                except Exception as tg_sched_err:
+                    print(f"[ATTENDANCE SCHEDULER ERR] {tg_sched_err}")
             except Exception as e:
                 print(f"[SCHEDULER ERRO] Falha no loop principal: {e}")
                 
