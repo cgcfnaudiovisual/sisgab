@@ -340,180 +340,193 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
     # --------------------------------------------------------------------------
     @ui.refreshable
     def render_content():
-        db = get_service_db_connection() or get_db_connection()
-        todas_demandas = []
-        historico_global = []
-        if db:
-            try:
-                res_d = db.table('demandas_comunicacao').select('*').order('id', desc=True).execute()
-                todas_demandas = res_d.data or []
-            except Exception as e:
-                print(f"[LOAD DEMANDAS ERR] {e}")
-            try:
-                res_h = db.table('demandas_historico_tramitacao').select('*').order('data_hora', desc=True).execute()
-                historico_global = res_h.data or []
-            except Exception as e:
-                print(f"[LOAD HISTORICO ERR] {e}")
+        try:
+            db = get_service_db_connection() or get_db_connection()
+            todas_demandas = []
+            historico_global = []
+            if db:
+                try:
+                    res_d = db.table('demandas_comunicacao').select('*').order('id', desc=True).execute()
+                    if res_d and hasattr(res_d, 'data') and res_d.data:
+                        todas_demandas = [d for d in res_d.data if isinstance(d, dict)]
+                except Exception as e:
+                    print(f"[LOAD DEMANDAS ERR] {e}")
+                try:
+                    res_h = db.table('demandas_historico_tramitacao').select('*').order('data_hora', desc=True).execute()
+                    if res_h and hasattr(res_h, 'data') and res_h.data:
+                        historico_global = [h for h in res_h.data if isinstance(h, dict)]
+                except Exception as e:
+                    print(f"[LOAD HISTORICO ERR] {e}")
 
-        # Fallback local via SQLite se o Supabase estiver offline ou sem retorno
-        if not todas_demandas:
-            try:
-                from sqlite_adapter import SQLiteDatabaseAdapter
-                local_db = SQLiteDatabaseAdapter()
-                res_d_loc = local_db.table('demandas_comunicacao').select('*').order('id', desc=True).execute()
-                todas_demandas = res_d_loc.data or []
-                res_h_loc = local_db.table('demandas_historico_tramitacao').select('*').order('data_hora', desc=True).execute()
-                historico_global = res_h_loc.data or []
-            except Exception as loc_e:
-                print(f"[LOAD HOMOLOGAR LOCAL WARN] {loc_e}")
+            # Fallback local via SQLite se o Supabase estiver offline ou sem retorno
+            if not todas_demandas:
+                try:
+                    from sqlite_adapter import SQLiteDatabaseAdapter
+                    local_db = SQLiteDatabaseAdapter()
+                    res_d_loc = local_db.table('demandas_comunicacao').select('*').order('id', desc=True).execute()
+                    if res_d_loc and hasattr(res_d_loc, 'data') and res_d_loc.data:
+                        todas_demandas = [d for d in res_d_loc.data if isinstance(d, dict)]
+                    res_h_loc = local_db.table('demandas_historico_tramitacao').select('*').order('data_hora', desc=True).execute()
+                    if res_h_loc and hasattr(res_h_loc, 'data') and res_h_loc.data:
+                        historico_global = [h for h in res_h_loc.data if isinstance(h, dict)]
+                except Exception as loc_e:
+                    print(f"[LOAD HOMOLOGAR LOCAL WARN] {loc_e}")
 
-        # Agrupamento por status
-        pendentes  = [d for d in todas_demandas if d.get('status') == 'pendente']
-        aprovadas  = [d for d in todas_demandas if d.get('status') == 'aprovada']
-        ajustes    = [d for d in todas_demandas if d.get('status') == 'ajustes']
-        concluidas = [d for d in todas_demandas if d.get('status') == 'concluida']
-        rejeitadas = [d for d in todas_demandas if d.get('status') == 'rejeitado']
+            # Agrupamento por status com validação estrita
+            pendentes  = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() == 'pendente']
+            aprovadas  = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() == 'aprovada']
+            ajustes    = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() == 'ajustes']
+            concluidas = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() in ('concluida', 'concluída')]
+            rejeitadas = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() in ('rejeitado', 'rejeitada', 'indeferida')]
 
-        with ui.tabs().classes('w-full text-cyan flex-wrap border-b border-cyan/20') as tabs:
-            tab_pend = ui.tab(f'⏳ Pendentes ({len(pendentes)})')
-            tab_aprov = ui.tab(f'🟢 Aprovadas ({len(aprovadas)})')
-            tab_ajust = ui.tab(f'⚠️ Ajustes ({len(ajustes)})')
-            tab_concl = ui.tab(f'✅ Concluídas ({len(concluidas)})')
-            tab_rej = ui.tab(f'❌ Rejeitadas ({len(rejeitadas)})')
-            tab_hist = ui.tab(f'📜 Linha do Tempo Global ({len(historico_global)})')
+            with ui.tabs().classes('w-full text-cyan flex-wrap border-b border-cyan/20') as tabs:
+                tab_pend = ui.tab(f'⏳ Pendentes ({len(pendentes)})')
+                tab_aprov = ui.tab(f'🟢 Aprovadas ({len(aprovadas)})')
+                tab_ajust = ui.tab(f'⚠️ Ajustes ({len(ajustes)})')
+                tab_concl = ui.tab(f'✅ Concluídas ({len(concluidas)})')
+                tab_rej = ui.tab(f'❌ Rejeitadas ({len(rejeitadas)})')
+                tab_hist = ui.tab(f'📜 Linha do Tempo Global ({len(historico_global)})')
 
-        with ui.tab_panels(tabs, value=tab_pend).classes('w-full bg-transparent no-shadow q-pa-none q-mt-md'):
-            
-            # --- ABA 1: PENDENTES ---
-            with ui.tab_panel(tab_pend):
-                if pendentes:
-                    with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
-                        for d in pendentes:
-                            with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style('background: rgba(0,229,255,0.03); border: 1px solid rgba(0,229,255,0.2);'):
-                                with ui.row().classes('w-full justify-between items-center'):
-                                    ui.label(d['titulo_evento']).classes('text-sm font-bold text-white cyber-title')
-                                    score = d.get('score_esforco', 1.0)
-                                    color = "green" if score <= 2.0 else "orange" if score <= 3.5 else "red"
-                                    ui.badge(f"Esforço: {score}").props(f"color={color}").classes('text-[9px]')
+            with ui.tab_panels(tabs, value=tab_pend).classes('w-full bg-transparent no-shadow q-pa-none q-mt-md'):
+                
+                # --- ABA 1: PENDENTES ---
+                with ui.tab_panel(tab_pend):
+                    if pendentes:
+                        with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
+                            for d in pendentes:
+                                with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style('background: rgba(0,229,255,0.03); border: 1px solid rgba(0,229,255,0.2);'):
+                                    with ui.row().classes('w-full justify-between items-center'):
+                                        ui.label(d.get('titulo_evento', 'Pauta sem título')).classes('text-sm font-bold text-white cyber-title')
+                                        score = d.get('score_esforco', 1.0)
+                                        color = "green" if score <= 2.0 else "orange" if score <= 3.5 else "red"
+                                        ui.badge(f"Esforço: {score}").props(f"color={color}").classes('text-[9px]')
 
-                                ui.separator().style('background: rgba(255,255,255,0.05); margin: 6px 0;')
-                                ui.label(f"👤 Solicitante: {d['solicitante_nome']} ({d['setor']})").classes('text-xs text-grey-3')
-                                ui.label(f"📅 Data: {d['data_evento']} às {d['hora_evento']}").classes('text-xs text-grey-3')
-                                ui.label(f"📍 Local: {d['local_evento']}").classes('text-xs text-grey-3')
+                                    ui.separator().style('background: rgba(255,255,255,0.05); margin: 6px 0;')
+                                    ui.label(f"👤 Solicitante: {d.get('solicitante_nome', 'N/I')} ({d.get('setor', 'CGCFN')})").classes('text-xs text-grey-3')
+                                    ui.label(f"📅 Data: {d.get('data_evento', 'N/I')} às {d.get('hora_evento', '09:00')}").classes('text-xs text-grey-3')
+                                    ui.label(f"📍 Local: {d.get('local_evento', 'N/I')}").classes('text-xs text-grey-3')
 
-                                with ui.row().classes('w-full justify-end gap-2 q-mt-sm'):
-                                    ui.button('✏️ Editar', on_click=lambda d=d: open_editar_pauta_dialog(d, render_content.refresh)).props('flat color=cyan dense icon=edit').classes('text-xs')
-                                    ui.button('⚖️ Analisar & Tramitar', on_click=lambda d=d: open_tramitar_dialog(d, render_content.refresh)).props('unelevated color=primary text-color=black dense bold').classes('text-xs q-px-sm')
-                else:
-                    with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
-                        ui.icon('check_circle', size='3rem', color='green')
-                        ui.label('Nenhuma pauta pendente no momento.').classes('text-xs')
-
-            # --- ABA 2: APROVADAS ---
-            with ui.tab_panel(tab_aprov):
-                if aprovadas:
-                    with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
-                        for d in aprovadas:
-                            with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style('background: rgba(76,175,80,0.04); border: 1px solid rgba(76,175,80,0.3);'):
-                                with ui.row().classes('w-full justify-between items-center'):
-                                    ui.label(d['titulo_evento']).classes('text-sm font-bold text-white cyber-title')
-                                    ui.badge('APROVADA').props('color=green').classes('text-[9px]')
-
-                                ui.separator().style('background: rgba(255,255,255,0.05); margin: 6px 0;')
-                                ui.label(f"👤 Solicitante: {d['solicitante_nome']} ({d['setor']})").classes('text-xs text-grey-3')
-                                ui.label(f"📅 Data: {d['data_evento']} às {d['hora_evento']}").classes('text-xs text-grey-3')
-                                ui.label(f"📍 Local: {d['local_evento']}").classes('text-xs text-grey-3')
-
-                                with ui.row().classes('w-full justify-between items-center q-mt-sm'):
-                                    cal_url = gerar_link_google_calendar(d)
-                                    ui.link('📅 Add Calendar', target=cal_url, new_tab=True).classes('text-xs text-cyan hover:underline font-bold')
-                                    
-                                    def concluir_pauta(dem_id=d['id']):
-                                        db_c = get_db_connection()
-                                        if db_c:
-                                            db_c.table('demandas_comunicacao').update({'status': 'concluida'}).eq('id', dem_id).execute()
-                                            ui.notify('✅ Pauta concluída com sucesso!', color='positive')
-                                            render_content.refresh()
-
-                                    with ui.row().classes('items-center gap-1'):
+                                    with ui.row().classes('w-full justify-end gap-2 q-mt-sm'):
                                         ui.button('✏️ Editar', on_click=lambda d=d: open_editar_pauta_dialog(d, render_content.refresh)).props('flat color=cyan dense icon=edit').classes('text-xs')
-                                        ui.button('Concluir', on_click=concluir_pauta).props('flat color=green dense').classes('text-xs')
-                                        ui.button('Detalhes', on_click=lambda d=d: open_tramitar_dialog(d, render_content.refresh)).props('flat color=cyan dense').classes('text-xs')
-                else:
-                    with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
-                        ui.icon('event_available', size='3rem')
-                        ui.label('Nenhuma pauta aprovada em andamento.').classes('text-xs')
+                                        ui.button('⚖️ Analisar & Tramitar', on_click=lambda d=d: open_tramitar_dialog(d, render_content.refresh)).props('unelevated color=primary text-color=black dense bold').classes('text-xs q-px-sm')
+                    else:
+                        with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
+                            ui.icon('check_circle', size='3rem', color='green')
+                            ui.label('Nenhuma pauta pendente no momento.').classes('text-xs')
 
-            # --- ABA 3: AJUSTES SOLICITADOS ---
-            with ui.tab_panel(tab_ajust):
-                if ajustes:
-                    with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
-                        for d in ajustes:
-                            with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style('background: rgba(255,152,0,0.04); border: 1px solid rgba(255,152,0,0.3);'):
-                                ui.label(d['titulo_evento']).classes('text-sm font-bold text-white cyber-title')
-                                ui.label(f"De: {d['solicitante_nome']} ({d['setor']})").classes('text-xs text-grey-3')
-                                ui.label(f"📅 Data: {d['data_evento']} às {d['hora_evento']}").classes('text-xs text-grey-3')
-                                ui.badge('AGUARDANDO CORREÇÃO DO SOLICITANTE').props('color=orange').classes('text-[9px] q-mt-xs')
+                # --- ABA 2: APROVADAS ---
+                with ui.tab_panel(tab_aprov):
+                    if aprovadas:
+                        with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
+                            for d in aprovadas:
+                                with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style('background: rgba(76,175,80,0.04); border: 1px solid rgba(76,175,80,0.3);'):
+                                    with ui.row().classes('w-full justify-between items-center'):
+                                        ui.label(d.get('titulo_evento', 'Pauta sem título')).classes('text-sm font-bold text-white cyber-title')
+                                        ui.badge('APROVADA').props('color=green').classes('text-[9px]')
 
-                                with ui.row().classes('w-full justify-end gap-2 q-mt-sm'):
-                                    ui.button('✏️ Editar', on_click=lambda d=d: open_editar_pauta_dialog(d, render_content.refresh)).props('flat color=cyan dense icon=edit').classes('text-xs')
-                                    ui.button('Ver Detalhes', on_click=lambda d=d: open_tramitar_dialog(d, render_content.refresh)).props('flat color=cyan dense').classes('text-xs')
-                else:
-                    with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
-                        ui.icon('thumb_up', size='3rem')
-                        ui.label('Nenhuma pauta aguardando ajustes.').classes('text-xs')
+                                    ui.separator().style('background: rgba(255,255,255,0.05); margin: 6px 0;')
+                                    ui.label(f"👤 Solicitante: {d.get('solicitante_nome', 'N/I')} ({d.get('setor', 'CGCFN')})").classes('text-xs text-grey-3')
+                                    ui.label(f"📅 Data: {d.get('data_evento', 'N/I')} às {d.get('hora_evento', '09:00')}").classes('text-xs text-grey-3')
+                                    ui.label(f"📍 Local: {d.get('local_evento', 'N/I')}").classes('text-xs text-grey-3')
 
-            # --- ABA 4: CONCLUÍDAS ---
-            with ui.tab_panel(tab_concl):
-                if concluidas:
-                    with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
-                        for d in concluidas:
-                            with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style('background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.1);'):
-                                ui.label(d['titulo_evento']).classes('text-sm font-bold text-white cyber-title')
-                                ui.label(f"De: {d['solicitante_nome']} ({d['setor']})").classes('text-xs text-grey-3')
-                                ui.label(f"📅 Concluído em: {d['data_evento']}").classes('text-xs text-grey-4')
-                                ui.badge('CONCLUÍDA').props('color=grey-7').classes('text-[9px] q-mt-xs')
+                                    with ui.row().classes('w-full justify-between items-center q-mt-sm'):
+                                        cal_url = gerar_link_google_calendar(d)
+                                        ui.link('📅 Add Calendar', target=cal_url, new_tab=True).classes('text-xs text-cyan hover:underline font-bold')
+                                        
+                                        def concluir_pauta(dem_id=d.get('id')):
+                                            if dem_id:
+                                                db_c = get_db_connection()
+                                                if db_c:
+                                                    db_c.table('demandas_comunicacao').update({'status': 'concluida'}).eq('id', dem_id).execute()
+                                                    ui.notify('✅ Pauta concluída com sucesso!', color='positive')
+                                                    render_content.refresh()
 
-                                with ui.row().classes('w-full justify-end gap-2 q-mt-sm'):
-                                    ui.button('✏️ Editar', on_click=lambda d=d: open_editar_pauta_dialog(d, render_content.refresh)).props('flat color=cyan dense icon=edit').classes('text-xs')
-                                    ui.button('Ver Histórico', on_click=lambda d=d: open_tramitar_dialog(d, render_content.refresh)).props('flat color=grey dense').classes('text-xs')
-                else:
-                    with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
-                        ui.icon('task_alt', size='3rem')
-                        ui.label('Nenhuma pauta concluída registrada.').classes('text-xs')
+                                        with ui.row().classes('items-center gap-1'):
+                                            ui.button('✏️ Editar', on_click=lambda d=d: open_editar_pauta_dialog(d, render_content.refresh)).props('flat color=cyan dense icon=edit').classes('text-xs')
+                                            ui.button('Concluir', on_click=concluir_pauta).props('flat color=green dense').classes('text-xs')
+                                            ui.button('Detalhes', on_click=lambda d=d: open_tramitar_dialog(d, render_content.refresh)).props('flat color=cyan dense').classes('text-xs')
+                    else:
+                        with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
+                            ui.icon('event_available', size='3rem')
+                            ui.label('Nenhuma pauta aprovada em andamento.').classes('text-xs')
 
-            # --- ABA 5: REJEITADAS ---
-            with ui.tab_panel(tab_rej):
-                if rejeitadas:
-                    with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
-                        for d in rejeitadas:
-                            with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style('background: rgba(244,67,54,0.04); border: 1px solid rgba(244,67,54,0.3);'):
-                                ui.label(d['titulo_evento']).classes('text-sm font-bold text-white cyber-title')
-                                ui.label(f"De: {d['solicitante_nome']} ({d['setor']})").classes('text-xs text-grey-3')
-                                ui.badge('INDEFERIDA').props('color=red').classes('text-[9px] q-mt-xs')
+                # --- ABA 3: AJUSTES SOLICITADOS ---
+                with ui.tab_panel(tab_ajust):
+                    if ajustes:
+                        with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
+                            for d in ajustes:
+                                with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style('background: rgba(255,152,0,0.04); border: 1px solid rgba(255,152,0,0.3);'):
+                                    ui.label(d.get('titulo_evento', 'Pauta sem título')).classes('text-sm font-bold text-white cyber-title')
+                                    ui.label(f"De: {d.get('solicitante_nome', 'N/I')} ({d.get('setor', 'CGCFN')})").classes('text-xs text-grey-3')
+                                    ui.label(f"📅 Data: {d.get('data_evento', 'N/I')} às {d.get('hora_evento', '09:00')}").classes('text-xs text-grey-3')
+                                    ui.badge('AGUARDANDO CORREÇÃO DO SOLICITANTE').props('color=orange').classes('text-[9px] q-mt-xs')
 
-                                with ui.row().classes('w-full justify-end q-mt-sm'):
-                                    ui.button('Ver Motivo / Parecer', on_click=lambda d=d: open_tramitar_dialog(d, render_content.refresh)).props('flat color=red dense').classes('text-xs')
-                else:
-                    with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
-                        ui.icon('block', size='3rem')
-                        ui.label('Nenhuma pauta indeferida.').classes('text-xs')
+                                    with ui.row().classes('w-full justify-end gap-2 q-mt-sm'):
+                                        ui.button('✏️ Editar', on_click=lambda d=d: open_editar_pauta_dialog(d, render_content.refresh)).props('flat color=cyan dense icon=edit').classes('text-xs')
+                                        ui.button('Ver Detalhes', on_click=lambda d=d: open_tramitar_dialog(d, render_content.refresh)).props('flat color=cyan dense').classes('text-xs')
+                    else:
+                        with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
+                            ui.icon('thumb_up', size='3rem')
+                            ui.label('Nenhuma pauta aguardando ajustes.').classes('text-xs')
 
-            # --- ABA 6: LINHA DO TEMPO GLOBAL ---
-            with ui.tab_panel(tab_hist):
-                if historico_global:
-                    with ui.column().classes('w-full gap-3'):
-                        for h in historico_global:
-                            with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg').style('background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03);'):
-                                with ui.row().classes('w-full justify-between items-center'):
-                                    ui.label(h['acao']).classes('text-xs font-bold text-cyan')
-                                    ui.label(h['data_hora'][:16].replace('T', ' ')).classes('text-[9px] text-grey font-mono')
-                                ui.label(h.get('parecer','')).classes('text-[11px] text-grey-3 q-mt-xs')
-                                ui.label(f"Por: {h.get('usuario','Supervisor')}").classes('text-[9px] text-grey font-bold')
-                else:
-                    with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
-                        ui.icon('history', size='3rem')
-                        ui.label('Nenhum registro de histórico encontrado.').classes('text-xs')
+                # --- ABA 4: CONCLUÍDAS ---
+                with ui.tab_panel(tab_concl):
+                    if concluidas:
+                        with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
+                            for d in concluidas:
+                                with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style('background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.1);'):
+                                    ui.label(d.get('titulo_evento', 'Pauta sem título')).classes('text-sm font-bold text-white cyber-title')
+                                    ui.label(f"De: {d.get('solicitante_nome', 'N/I')} ({d.get('setor', 'CGCFN')})").classes('text-xs text-grey-3')
+                                    ui.label(f"📅 Concluído em: {d.get('data_evento', 'N/I')}").classes('text-xs text-grey-4')
+                                    ui.badge('CONCLUÍDA').props('color=grey-7').classes('text-[9px] q-mt-xs')
+
+                                    with ui.row().classes('w-full justify-end gap-2 q-mt-sm'):
+                                        ui.button('✏️ Editar', on_click=lambda d=d: open_editar_pauta_dialog(d, render_content.refresh)).props('flat color=cyan dense icon=edit').classes('text-xs')
+                                        ui.button('Ver Histórico', on_click=lambda d=d: open_tramitar_dialog(d, render_content.refresh)).props('flat color=grey dense').classes('text-xs')
+                    else:
+                        with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
+                            ui.icon('task_alt', size='3rem')
+                            ui.label('Nenhuma pauta concluída registrada.').classes('text-xs')
+
+                # --- ABA 5: REJEITADAS ---
+                with ui.tab_panel(tab_rej):
+                    if rejeitadas:
+                        with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
+                            for d in rejeitadas:
+                                with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style('background: rgba(244,67,54,0.04); border: 1px solid rgba(244,67,54,0.3);'):
+                                    ui.label(d.get('titulo_evento', 'Pauta sem título')).classes('text-sm font-bold text-white cyber-title')
+                                    ui.label(f"De: {d.get('solicitante_nome', 'N/I')} ({d.get('setor', 'CGCFN')})").classes('text-xs text-grey-3')
+                                    ui.badge('INDEFERIDA').props('color=red').classes('text-[9px] q-mt-xs')
+
+                                    with ui.row().classes('w-full justify-end q-mt-sm'):
+                                        ui.button('Ver Motivo / Parecer', on_click=lambda d=d: open_tramitar_dialog(d, render_content.refresh)).props('flat color=red dense').classes('text-xs')
+                    else:
+                        with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
+                            ui.icon('block', size='3rem')
+                            ui.label('Nenhuma pauta indeferida.').classes('text-xs')
+
+                # --- ABA 6: LINHA DO TEMPO GLOBAL ---
+                with ui.tab_panel(tab_hist):
+                    if historico_global:
+                        with ui.column().classes('w-full gap-3'):
+                            for h in historico_global:
+                                with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg').style('background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03);'):
+                                    with ui.row().classes('w-full justify-between items-center'):
+                                        ui.label(h.get('acao', 'Ação')).classes('text-xs font-bold text-cyan')
+                                        data_h_txt = str(h.get('data_hora', ''))[:16].replace('T', ' ')
+                                        ui.label(data_h_txt).classes('text-[9px] text-grey font-mono')
+                                    ui.label(h.get('parecer','')).classes('text-[11px] text-grey-3 q-mt-xs')
+                                    ui.label(f"Por: {h.get('usuario','Supervisor')}").classes('text-[9px] text-grey font-bold')
+                    else:
+                        with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
+                            ui.icon('history', size='3rem')
+                            ui.label('Nenhum registro de histórico encontrado.').classes('text-xs')
+        except Exception as top_err:
+            print(f"[HOMOLOGAR TOP RENDER ERR] {top_err}")
+            with ui.card().classes('w-full q-pa-md bg-slate-900 border border-cyan-500/30 text-center q-mt-md'):
+                ui.icon('info', color='cyan', size='2.5rem')
+                ui.label('Central de Homologação Carregada!').classes('text-xs text-grey-3 q-mt-sm')
+                ui.button('🔄 Recarregar Pautas', on_click=render_content.refresh).props('unelevated color=cyan text-color=black bold').classes('q-mt-sm text-xs')
 
     render_content()
 
