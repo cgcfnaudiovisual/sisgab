@@ -47,11 +47,8 @@ async def _run_resilient_polling(bot_instance):
         except Exception as poll_err:
             err_str = str(poll_err)
             if "Conflict" in err_str or "409" in err_str:
-                print(f"[TELEGRAM BOT CONFLITO 409] Outra instância detectada. Limpando sessão e tentando reconectar em 7s...", flush=True)
+                print(f"[TELEGRAM BOT CONFLITO 409] Outra instância detectada. Tentando reconectar em 7s...", flush=True)
                 await asyncio.sleep(7)
-            elif "closed" in err_str.lower() or "none" in err_str.lower():
-                print(f"[TELEGRAM BOT ENCERRAMENTO] Sessão fechada. Encerrando loop de polling antigo.", flush=True)
-                break
             else:
                 print(f"[TELEGRAM BOT POLLING ERR] {poll_err}. Reconectando em 5s...", flush=True)
                 await asyncio.sleep(5)

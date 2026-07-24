@@ -19,8 +19,8 @@ assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
 os.makedirs(assets_dir, exist_ok=True)
 app.add_static_files('/assets', assets_dir)
 
-@app.get('/ping')
-@app.get('/health')
+@app.api_route('/ping', methods=['GET', 'HEAD', 'POST'])
+@app.api_route('/health', methods=['GET', 'HEAD', 'POST'])
 def get_health_ping():
     return {"status": "ok", "app": "SisGAB", "bot": "active"}
 
