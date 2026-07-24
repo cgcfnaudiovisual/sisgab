@@ -60,84 +60,106 @@ def render_page():
         return f"https://wa.me/{digits}?text={encoded}" if digits else f"https://wa.me/?text={encoded}", msg
 
 def open_editar_pauta_dialog(demanda, callback_refresh=None):
-    with ui.dialog() as edit_dialog, ui.card().classes('w-[680px] max-w-[95vw] q-pa-lg border bg-slate-900 border-cyan-500/40').style('max-height: 90vh; overflow-y: auto;'):
-        ui.label(f"✏️ Editar Pauta: {demanda.get('titulo_evento','')}").classes('text-white text-md font-bold cyber-title q-mb-md')
+    if not demanda:
+        ui.notify('Pauta inválida.', color='warning')
+        return
         
-        with ui.column().classes('w-full gap-3 text-xs'):
-            in_titulo = ui.input('Título do Evento / Pauta', value=demanda.get('titulo_evento','')).props('dark outlined dense w-full')
+    try:
+        raw_cob = demanda.get('tipo_cobertura')
+        cob_list = []
+        if isinstance(raw_cob, list):
+            cob_list = raw_cob
+        elif isinstance(raw_cob, str):
+            try:
+                cob_list = json.loads(raw_cob)
+            except Exception:
+                cob_list = [s.strip() for s in raw_cob.split(',') if s.strip()]
+        if not isinstance(cob_list, list):
+            cob_list = []
+
+        with ui.dialog() as edit_dialog, ui.card().classes('w-[680px] max-w-[95vw] q-pa-lg border bg-slate-900 border-cyan-500/40').style('max-height: 90vh; overflow-y: auto;'):
+            ui.label(f"✏️ Editar Pauta: {demanda.get('titulo_evento','')}").classes('text-white text-md font-bold cyber-title q-mb-md')
             
-            with ui.row().classes('w-full gap-2 no-wrap'):
-                in_solicitante = ui.input('Nome do Solicitante', value=demanda.get('solicitante_nome','')).props('dark outlined dense').classes('w-1/2')
-                in_setor = ui.input('Setor / OM', value=demanda.get('setor','')).props('dark outlined dense').classes('w-1/2')
+            with ui.column().classes('w-full gap-3 text-xs'):
+                in_titulo = ui.input('Título do Evento / Pauta', value=str(demanda.get('titulo_evento','') or '')).props('dark outlined dense w-full')
                 
-            with ui.row().classes('w-full gap-2 no-wrap'):
-                in_contato = ui.input('Telefone / Contato', value=demanda.get('contato','')).props('dark outlined dense').classes('w-1/2')
-                in_local = ui.input('Local do Evento', value=demanda.get('local_evento','')).props('dark outlined dense').classes('w-1/2')
+                with ui.row().classes('w-full gap-2 no-wrap'):
+                    in_solicitante = ui.input('Nome do Solicitante', value=str(demanda.get('solicitante_nome','') or '')).props('dark outlined dense').classes('w-1/2')
+                    in_setor = ui.input('Setor / OM', value=str(demanda.get('setor','') or '')).props('dark outlined dense').classes('w-1/2')
+                    
+                with ui.row().classes('w-full gap-2 no-wrap'):
+                    in_contato = ui.input('Telefone / Contato', value=str(demanda.get('contato','') or '')).props('dark outlined dense').classes('w-1/2')
+                    in_local = ui.input('Local do Evento', value=str(demanda.get('local_evento','') or '')).props('dark outlined dense').classes('w-1/2')
 
-            with ui.row().classes('w-full gap-2 no-wrap'):
-                in_data_inicio = ui.input('Data Início', value=demanda.get('data_evento','')).props('type=date dark outlined dense').classes('w-1/3')
-                in_data_fim = ui.input('Data Término (Opcional)', value=demanda.get('data_fim', demanda.get('data_evento',''))).props('type=date dark outlined dense').classes('w-1/3')
-                in_hora = ui.input('Hora', value=demanda.get('hora_evento','09:00')).props('type=time dark outlined dense').classes('w-1/3')
+                with ui.row().classes('w-full gap-2 no-wrap'):
+                    in_data_inicio = ui.input('Data Início', value=str(demanda.get('data_evento','') or '')).props('type=date dark outlined dense').classes('w-1/3')
+                    in_data_fim = ui.input('Data Término (Opcional)', value=str(demanda.get('data_fim', demanda.get('data_evento','')) or '')).props('type=date dark outlined dense').classes('w-1/3')
+                    in_hora = ui.input('Hora', value=str(demanda.get('hora_evento','09:00') or '09:00')).props('type=time dark outlined dense').classes('w-1/3')
 
-            in_autoridades = ui.input('Autoridades Presentes', value=demanda.get('autoridades','')).props('dark outlined dense w-full')
-            
-            in_status = ui.select(
-                {'pendente': 'Pendente (Aguardando Avaliação)', 'aprovada': 'Aprovada (Na Agenda)', 'ajustes': 'Solicitado Ajustes', 'concluida': 'Concluída', 'rejeitado': 'Rejeitada'},
-                value=demanda.get('status', 'pendente'),
-                label='Status da Pauta'
-            ).props('dark outlined dense w-full option-dark')
-
-            ui.label('📸 Tipos de Serviço Requeridos').classes('text-xs font-bold text-cyan q-mt-xs')
-            raw_cob = demanda.get('tipo_cobertura', '[]')
-            cob_list = json.loads(raw_cob) if isinstance(raw_cob, str) and raw_cob.startswith('[') else []
-            
-            chk_foto = ui.checkbox('Fotografia', value='foto' in cob_list)
-            chk_video = ui.checkbox('Vídeo / Filmagem', value='video' in cob_list)
-            chk_grafico = ui.checkbox('🎨 Serviço Gráfico / Design', value='grafico' in cob_list)
-            chk_drone = ui.checkbox('🚁 Imagens Aéreas / Drone', value='drone' in cob_list)
-            chk_redes = ui.checkbox('📱 Mídias Sociais / Reels', value='redes' in cob_list)
-
-            def salvar_edicao():
-                if not in_titulo.value or not in_data_inicio.value or not in_local.value:
-                    ui.notify('Título, Data de Início e Local são obrigatórios.', color='warning')
-                    return
+                in_autoridades = ui.input('Autoridades Presentes', value=str(demanda.get('autoridades','') or '')).props('dark outlined dense w-full')
                 
-                cobs = []
-                if chk_foto.value: cobs.append('foto')
-                if chk_video.value: cobs.append('video')
-                if chk_grafico.value: cobs.append('grafico')
-                if chk_drone.value: cobs.append('drone')
-                if chk_redes.value: cobs.append('redes')
+                st_val = str(demanda.get('status', 'pendente') or 'pendente').lower()
+                if st_val not in ('pendente', 'aprovada', 'ajustes', 'concluida', 'rejeitado'):
+                    st_val = 'pendente'
+                    
+                in_status = ui.select(
+                    {'pendente': 'Pendente (Aguardando Avaliação)', 'aprovada': 'Aprovada (Na Agenda)', 'ajustes': 'Solicitado Ajustes', 'concluida': 'Concluída', 'rejeitado': 'Rejeitada'},
+                    value=st_val,
+                    label='Status da Pauta'
+                ).props('dark outlined dense w-full option-dark')
 
-                db = get_service_db_connection() or get_db_connection()
-                if db:
-                    try:
-                        update_payload = {
-                            'titulo_evento': in_titulo.value.strip(),
-                            'solicitante_nome': in_solicitante.value.strip(),
-                            'setor': in_setor.value.strip(),
-                            'contato': in_contato.value.strip(),
-                            'local_evento': in_local.value.strip(),
-                            'data_evento': in_data_inicio.value,
-                            'data_fim': in_data_fim.value or in_data_inicio.value,
-                            'hora_evento': in_hora.value or '09:00',
-                            'autoridades': in_autoridades.value.strip(),
-                            'status': in_status.value,
-                            'tipo_cobertura': json.dumps(cobs)
-                        }
-                        db.table('demandas_comunicacao').update(update_payload).eq('id', demanda['id']).execute()
-                        ui.notify('✅ Pauta editada e salva com sucesso!', color='positive')
-                        edit_dialog.close()
-                        if callback_refresh:
-                            callback_refresh()
-                    except Exception as e_save:
-                        ui.notify(f'Erro ao editar pauta: {e_save}', color='negative')
-
-            with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
-                ui.button('Cancelar', on_click=edit_dialog.close).props('flat color=grey')
-                ui.button('💾 Salvar Alterações', on_click=salvar_edicao).props('unelevated color=green text-color=white bold')
+                ui.label('📸 Tipos de Serviço Requeridos').classes('text-xs font-bold text-cyan q-mt-xs')
                 
-    edit_dialog.open()
+                chk_foto = ui.checkbox('Fotografia', value='foto' in cob_list)
+                chk_video = ui.checkbox('Vídeo / Filmagem', value='video' in cob_list)
+                chk_grafico = ui.checkbox('🎨 Serviço Gráfico / Design', value='grafico' in cob_list)
+                chk_drone = ui.checkbox('🚁 Imagens Aéreas / Drone', value='drone' in cob_list)
+                chk_redes = ui.checkbox('📱 Mídias Sociais / Reels', value='redes' in cob_list)
+
+                def salvar_edicao():
+                    if not in_titulo.value or not in_data_inicio.value or not in_local.value:
+                        ui.notify('Título, Data de Início e Local são obrigatórios.', color='warning')
+                        return
+                    
+                    cobs = []
+                    if chk_foto.value: cobs.append('foto')
+                    if chk_video.value: cobs.append('video')
+                    if chk_grafico.value: cobs.append('grafico')
+                    if chk_drone.value: cobs.append('drone')
+                    if chk_redes.value: cobs.append('redes')
+
+                    db = get_service_db_connection() or get_db_connection()
+                    if db:
+                        try:
+                            update_payload = {
+                                'titulo_evento': in_titulo.value.strip(),
+                                'solicitante_nome': in_solicitante.value.strip(),
+                                'setor': in_setor.value.strip(),
+                                'contato': in_contato.value.strip(),
+                                'local_evento': in_local.value.strip(),
+                                'data_evento': in_data_inicio.value,
+                                'data_fim': in_data_fim.value or in_data_inicio.value,
+                                'hora_evento': in_hora.value or '09:00',
+                                'autoridades': in_autoridades.value.strip(),
+                                'status': in_status.value,
+                                'tipo_cobertura': json.dumps(cobs)
+                            }
+                            db.table('demandas_comunicacao').update(update_payload).eq('id', demanda['id']).execute()
+                            ui.notify('✅ Pauta editada e salva com sucesso!', color='positive')
+                            edit_dialog.close()
+                            if callback_refresh:
+                                callback_refresh()
+                        except Exception as e_save:
+                            ui.notify(f'Erro ao editar pauta: {e_save}', color='negative')
+
+                with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
+                    ui.button('Cancelar', on_click=edit_dialog.close).props('flat color=grey')
+                    ui.button('💾 Salvar Alterações', on_click=salvar_edicao).props('unelevated color=green text-color=white bold')
+                    
+        edit_dialog.open()
+    except Exception as err_dlg:
+        print(f"[EDIT PAUTA DIALOG ERR] {err_dlg}")
+        ui.notify(f"Erro ao abrir modal de edição: {err_dlg}", color="negative")
 
     def open_tramitar_dialog(demanda, callback_refresh=None):
         efetivo_options = {}

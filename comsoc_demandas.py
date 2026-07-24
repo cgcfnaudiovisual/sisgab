@@ -286,11 +286,32 @@ def render_page(autofill: str = None):
                         nonlocal sol_nome, sol_setor, sol_contato, ev_titulo, ev_data, ev_data_fim, ev_hora, ev_local, ev_aut, ev_entrega_tipo, militar_select, uploaded_file_url, uploaded_file_name, upload_status_lbl
                         
                         ui.label('📝 Detalhes do Evento').classes('text-md font-bold text-cyan q-mb-xs')
-                        sol_nome = ui.input('Nome do Solicitante').props('dark outlined dense w-full')
+                        
+                        ui.label('🏛️ Origem da Demanda:').classes('text-xs font-bold text-cyan q-mt-xs')
+                        
+                        def ao_mudar_origem(e):
+                            if e.value == 'cgcfn':
+                                if not sol_nome.value:
+                                    sol_nome.value = 'CGCFN / GABINETE'
+                                sol_setor.value = 'CGCFN'
+                                sol_contato.value = '21982043314 / Ramal CGCFN'
+                                ui.notify('🏛️ Preenchido automaticamente com dados do CGCFN!', color='info')
+                            else:
+                                sol_setor.value = ''
+                                sol_contato.value = ''
+                                ui.notify('🏢 Digite a OM solicitante e o telefone de contato.', color='warning')
+
+                        ui.radio(
+                            {'cgcfn': '🏛️ CGCFN (Dados Padrão)', 'outra_om': '🏢 Outra OM'},
+                            value='cgcfn',
+                            on_change=ao_mudar_origem
+                        ).props('dark inline text-color=white dense').classes('text-xs q-mb-sm')
+
+                        sol_nome = ui.input('Nome do Solicitante', value='CGCFN / GABINETE').props('dark outlined dense w-full')
                         
                         with ui.row().classes('w-full gap-3 no-wrap'):
-                            sol_setor = ui.input('Setor / Divisão').props('dark outlined dense').classes('w-1/2')
-                            sol_contato = ui.input('Telefone / Ramal').props('dark outlined dense').classes('w-1/2')
+                            sol_setor = ui.input('Setor / Divisão', value='CGCFN').props('dark outlined dense').classes('w-1/2')
+                            sol_contato = ui.input('Telefone / Ramal', value='21982043314 / Ramal CGCFN').props('dark outlined dense').classes('w-1/2')
                             
                         ev_titulo = ui.input('Título do Evento / Pauta').props('dark outlined dense w-full')
                         
