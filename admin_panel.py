@@ -19,6 +19,59 @@ ROLE_OPTIONS = {
     'compel': 'Militar / Efetivo em Geral'
 }
 
+ROLE_DESCRIPTIONS = {
+    'admin': {
+        'title': '👑 Administrador (Acesso Total)',
+        'web': '✅ ACESSO TOTAL: Painel Admin, Edição de Operadores, Homologação & Tramitação, Chamada Diária, Agenda, Cautelas, Brindes, TV Gabinete, Cadastro Facial e IA.',
+        'telegram': '✅ ACESSO TOTAL: Criar Demandas por Botões, Chamada Matutina, Relatório /pronto CheGab, Digerir Pauta (IA), Cautelas e Painel de Aprovação.'
+    },
+    'supervisor': {
+        'title': '⚖️ Supervisor COMSOC',
+        'web': '✅ GESTÃO & HOMOLOGAÇÃO: Homologação e Tramitação de Pautas, Modulo de Presença & Pronto CheGab, Agenda Geral, Cautelas e Mídia TV.',
+        'telegram': '✅ GESTÃO: Criar Demandas, Chamada Matutina, Relatório /pronto CheGab, Digerir IA, Agenda e Cautelas.'
+    },
+    'oficial_gab': {
+        'title': '⚖️ Oficial do Gabinete',
+        'web': '✅ CHEFIA DO GABINETE: Visualizar Pautas Homologadas, Acompanhar Agenda Geral, Chamada Diária & Pronto CheGab.',
+        'telegram': '✅ CHEFIA: Receber Notificações, Dar Presença Diária, Consultar Agenda e /pronto CheGab.'
+    },
+    'oficial': {
+        'title': '⚓ Oficial da OM',
+        'web': '✅ OFICIALIDADE: Solicitar Demandas COMSOC, Acompanhar Pautas Homologadas e Consultar Agenda Geral.',
+        'telegram': '✅ SOLICITAÇÕES: Criar Demandas por Botões, Consultar Agenda Semanal e Dar Presença.'
+    },
+    'praca_gab': {
+        'title': '📜 Praça do Gabinete',
+        'web': '✅ SARGENTEARIA & OPERACIONAL: Registrar Presença Diária, Apoiar Chamada, Cautela de Equipamentos e Agenda.',
+        'telegram': '✅ SARGENTEARIA: Dar Presença Diária, Gerar /pronto CheGab, Criar Demandas e Cautelas.'
+    },
+    'comsoc': {
+        'title': '📸 Equipe COMSOC (Fotografia/Vídeo)',
+        'web': '🎨 EQUIPE COMSOC / PRODUÇÃO: Criar Demandas, Tramitação, Cautelas de Equipamentos, Estoque de Brindes e Mídia TV.',
+        'telegram': '🎨 COMSOC: Criar Demandas com Botões, Dar Presença, Cautelas Ativas e Digerir Pauta (IA).'
+    },
+    'comsoc_design': {
+        'title': '🎨 Equipe COMSOC (Edições Gráficas/Artes)',
+        'web': '🎨 DESIGN & ARTES: Modulo de Produção Gráfica, Galeria de Artes, Demandas COMSOC e Brindes.',
+        'telegram': '🎨 DESIGN: Criar Demandas, Digerir IA, Consultar Agenda e Dar Presença.'
+    },
+    'operador': {
+        'title': '⚙️ Operador COMSOC',
+        'web': '⚙️ OPERADOR COMSOC: Painel de Tramitação, Demandas, Cautelas, Presença Diária e Galeria de Fotos.',
+        'telegram': '⚙️ OPERADOR: Criar Demandas por Botões, Dar Presença, /pronto, IA e Cautelas.'
+    },
+    'militar': {
+        'title': '⚓ Militar em Geral (Autoatendimento)',
+        'web': '⚓ MILITAR DO EFETIVO: Registrar Presença Diária, Solicitar Pautas COMSOC, Consultar Agenda e Reconhecimento Facial.',
+        'telegram': '⚓ MILITAR: Dar Presença Diária Matutina, Criar Demandas e Consultar Agenda Semanal.'
+    },
+    'compel': {
+        'title': '⚓ Militar / Efetivo em Geral',
+        'web': '⚓ EFETIVO EM GERAL: Registrar Presença Diária, Solicitar Novas Pautas e Agenda.',
+        'telegram': '⚓ EFETIVO: Dar Presença Diária e Criar Demandas COMSOC.'
+    }
+}
+
 def render_page():
     # Container principal com refresh/carregamento dinâmico
     container = ui.column().classes('w-full q-pa-lg gap-6')
@@ -267,7 +320,9 @@ def render_page():
                         ui.icon('edit', size='1.5rem').style(f'color: {THEME["accent"]}')
                     ui.separator().style('background-color: rgba(0, 229, 255, 0.15);')
 
-                    e_nome = ui.input('Nome de Guerra', value=user.get('nome', '')).props('dark outlined dense w-full')
+                    # Limpa o prefixo 'None ' se existir
+                    clean_nome_val = str(user.get('nome', '') or '').replace('None ', '').replace('None', '').strip()
+                    e_nome = ui.input('Nome de Guerra', value=clean_nome_val).props('dark outlined dense w-full')
                     e_email = ui.input('E-mail (Login)', value=user_email).props('dark outlined dense w-full')
                     e_unm = ui.input('Username (Login)', value=user.get('username', '')).props('dark outlined dense w-full')
                     e_tg = ui.input('Telegram ID', value=user.get('telegram_id', '') or '').props('dark outlined dense w-full')
@@ -297,7 +352,7 @@ def render_page():
                         if inspect.isawaitable(file_bytes):
                             file_bytes = await file_bytes
                         clean_name = re.sub(r'\W+', '', e_nome.value or 'operador').lower()
-                        filename = f"operadores/{clean_name}_{user['id'][:8]}.jpg"
+                        filename = f"operadores/{clean_name}_{str(user['id'])[:8]}.jpg"
                         from database import upload_file_to_supabase_storage
                         public_url = await asyncio.to_thread(upload_file_to_supabase_storage, file_bytes, filename, e.file.content_type)
                         if public_url:
@@ -322,6 +377,22 @@ def render_page():
                         user_role_val = 'compel'
                     e_role = ui.select(ROLE_OPTIONS, label='Papel do Usuário', value=user_role_val).props('dark outlined dense w-full')
                     
+                    # Painel Dinâmico de Detalhamento das Permissões do Papel
+                    role_info_box = ui.column().classes('w-full q-pa-sm border border-cyan-500/30 rounded-lg bg-black/50 gap-1')
+                    
+                    def render_role_permissions_info(r_val):
+                        role_info_box.clear()
+                        info = ROLE_DESCRIPTIONS.get(r_val, ROLE_DESCRIPTIONS['militar'])
+                        with role_info_box:
+                            ui.label(f"📋 PERMISSÕES DE ACESSO DO PERFIL ({r_val.upper()}):").classes('text-[10px] font-bold text-cyan')
+                            ui.label(f"🌐 Web App SisGAB:").classes('text-[10px] font-bold text-white q-mt-xs')
+                            ui.label(info['web']).classes('text-[10px] text-grey-3 font-mono leading-tight')
+                            ui.label(f"📱 Telegram Bot:").classes('text-[10px] font-bold text-cyan-4 q-mt-xs')
+                            ui.label(info['telegram']).classes('text-[10px] text-cyan-2 font-mono leading-tight')
+
+                    e_role.on_value_change(lambda e: render_role_permissions_info(e.value))
+                    render_role_permissions_info(user_role_val)
+
                     e_error = ui.label('').classes('text-xs text-red w-full text-center')
                     
                     def handle_edit():
@@ -334,9 +405,11 @@ def render_page():
                             e_error.text = 'Nome de Guerra e Username são obrigatórios.'
                             return
                         
+                        nome_final = e_nome.value.replace('None ', '').replace('None', '').strip().upper()
+                        
                         if is_offline:
                             ui.notify(f"[OFFLINE] Dados de {user['username']} atualizados!", color='success')
-                            user['nome'] = e_nome.value.upper()
+                            user['nome'] = nome_final
                             user['username'] = e_unm.value
                             user['telegram_id'] = e_tg.value or ''
                             user['url_foto'] = e_foto.value or ''
@@ -351,8 +424,11 @@ def render_page():
                             return
                         
                         try:
+                            uid_str = str(user.get('id', ''))
+                            is_uuid = len(uid_str) == 36 and '-' in uid_str
+
                             # 1. Atualiza o e-mail no Supabase Auth se fornecido e alterado
-                            if e_email.value and e_email.value.strip() != user_email:
+                            if is_uuid and e_email.value and e_email.value.strip() != user_email:
                                 from database import get_bot_db_connection
                                 admin_conn = None
                                 try:
@@ -361,75 +437,60 @@ def render_page():
                                     pass
                                 if admin_conn and hasattr(admin_conn, 'auth') and hasattr(admin_conn.auth, 'admin'):
                                     try:
-                                        admin_conn.auth.admin.update_user_by_id(user['id'], {"email": e_email.value.strip()})
+                                        admin_conn.auth.admin.update_user_by_id(uid_str, {"email": e_email.value.strip()})
                                     except Exception as auth_email_err:
                                         print(f"[AUTH EMAIL UPDATE ERR] {auth_email_err}")
 
-                            # 2. Atualiza a tabela users
-                            try:
+                            # 2. Atualiza a tabela users de forma segura
+                            user_payload = {
+                                'nome': nome_final,
+                                'username': e_unm.value,
+                                'telegram_id': e_tg.value or None,
+                                'url_foto': e_foto.value or None,
+                                'role': e_role.value
+                            }
+                            if e_email.value:
+                                user_payload['email'] = e_email.value.strip()
+
+                            if is_uuid:
                                 try:
-                                    conn.table('users').update({
-                                        'nome': e_nome.value.upper(),
-                                        'username': e_unm.value,
-                                        'telegram_id': e_tg.value or None,
-                                        'url_foto': e_foto.value or None,
-                                        'role': e_role.value,
-                                        'email': e_email.value.strip() if e_email.value else None
-                                    }).eq('id', user['id']).execute()
-                                except Exception as e_mail_err:
-                                    # Fallback: salva sem a coluna email
-                                    conn.table('users').update({
-                                        'nome': e_nome.value.upper(),
-                                        'username': e_unm.value,
-                                        'telegram_id': e_tg.value or None,
-                                        'url_foto': e_foto.value or None,
-                                        'role': e_role.value
-                                    }).eq('id', user['id']).execute()
-                            except Exception as db_err:
-                                if 'url_foto' in str(db_err):
-                                    conn.table('users').update({
-                                        'nome': e_nome.value.upper(),
-                                        'username': e_unm.value,
-                                        'telegram_id': e_tg.value or None,
-                                        'role': e_role.value
-                                    }).eq('id', user['id']).execute()
-                                    ui.notify('Operador atualizado sem foto. Adicione a coluna url_foto no Supabase!', color='warning', duration=6)
-                                else:
-                                    raise db_err
-                            
+                                    conn.table('users').update(user_payload).eq('id', uid_str).execute()
+                                except Exception as u_err:
+                                    if 'email' in user_payload:
+                                        user_payload.pop('email')
+                                        conn.table('users').update(user_payload).eq('id', uid_str).execute()
+                            else:
+                                # Se o id não for UUID (ex: id de efetivo "16"), atualiza users por username ou email
+                                try:
+                                    if user_email:
+                                        conn.table('users').update(user_payload).eq('email', user_email).execute()
+                                    else:
+                                        conn.table('users').update(user_payload).eq('username', user.get('username')).execute()
+                                except Exception as u_err_non_uuid:
+                                    print(f"[USERS UPDATE NON-UUID WARN] {u_err_non_uuid}")
+
                             # 3. Tenta manter a integridade da tabela efetivo
                             try:
                                 update_fields = {
-                                    'nome_guerra': e_nome.value.upper(),
+                                    'nome_guerra': nome_final,
                                     'telegram_id': e_tg.value or None,
                                     'role': e_role.value,
                                     'email': e_email.value or None,
                                     'url_foto': e_foto.value or None
                                 }
-                                try:
-                                    ef_query = conn.table('efetivo').update(update_fields)
-                                    if user_email:
-                                        ef_query.eq('email', user_email).execute()
-                                    elif user.get('telegram_id'):
-                                        ef_query.eq('telegram_id', user.get('telegram_id')).execute()
-                                    else:
-                                        ef_query.eq('nome_guerra', user.get('nome', '').upper()).execute()
-                                except Exception as db_err:
-                                    if 'url_foto' in str(db_err):
-                                        update_fields.pop('url_foto', None)
-                                        ef_query_alt = conn.table('efetivo').update(update_fields)
-                                        if user_email:
-                                            ef_query_alt.eq('email', user_email).execute()
-                                        elif user.get('telegram_id'):
-                                            ef_query_alt.eq('telegram_id', user.get('telegram_id')).execute()
-                                        else:
-                                            ef_query_alt.eq('nome_guerra', user.get('nome', '').upper()).execute()
-                                    else:
-                                        raise db_err
+                                ef_query = conn.table('efetivo').update(update_fields)
+                                if not is_uuid and uid_str.isdigit():
+                                    ef_query.eq('id', int(uid_str)).execute()
+                                elif user_email:
+                                    ef_query.eq('email', user_email).execute()
+                                elif user.get('telegram_id'):
+                                    ef_query.eq('telegram_id', user.get('telegram_id')).execute()
+                                else:
+                                    ef_query.eq('nome_guerra', user.get('nome', '').upper()).execute()
                             except Exception as sync_err:
                                 print(f"[DB WARN] Erro ao sincronizar efetivo: {sync_err}")
                             
-                            ui.notify(f"Cadastro de {e_nome.value.upper()} atualizado!", color='success')
+                            ui.notify(f"Cadastro de {nome_final} atualizado!", color='success')
                             data_service.clear_cache()
                             edit_dialog.close()
                             reload_admin_data()
