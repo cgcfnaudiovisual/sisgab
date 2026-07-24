@@ -296,6 +296,7 @@ async def _salvar_presenca_bot(bot, message, chat_id, state, sigla_code, obs_txt
     is_operator = str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'operador')
     clear_state(chat_id)
     
+    obs_line = f"✍️ Obs: _{obs_txt}_\n" if obs_txt else ""
     from .keyboards import get_main_menu_keyboard
     await bot.reply_to(
         message,
@@ -303,7 +304,7 @@ async def _salvar_presenca_bot(bot, message, chat_id, state, sigla_code, obs_txt
         f"👤 Militar: *{nome_g}*\n"
         f"📌 Rotina: *({sigla_code})*\n"
         f"📅 Data: *{dt_str}*\n"
-        f"{f'✍️ Obs: _{obs_txt}_\n' if obs_txt else ''}\n"
+        f"{obs_line}\n"
         f"Sua presença foi salva na Sargenteação!",
         reply_markup=get_main_menu_keyboard(is_operator),
         parse_mode='Markdown'
