@@ -1056,17 +1056,17 @@ EFETIVO_PADRAO_GABINETE = [
     {"nome_guerra": "SG SILVA", "role": "praca_gab"},
     {"nome_guerra": "SG SANTANA", "role": "praca_gab"},
     {"nome_guerra": "SG CALAÇA", "role": "admin"},
-    {"nome_guerra": "SG TONETTI", "role": "comsoc_design"},
+    {"nome_guerra": "SG TONETTI", "role": "comsoc"},
     {"nome_guerra": "SG THIAGO NUNES", "role": "comsoc"},
-    {"nome_guerra": "SG BORGES", "role": "operador"},
+    {"nome_guerra": "SG BORGES", "role": "comsoc"},
     {"nome_guerra": "SG TAVARES", "role": "operador"},
     {"nome_guerra": "SG SOUZA", "role": "operador"},
-    {"nome_guerra": "SG ESDRAS", "role": "operador"},
-    {"nome_guerra": "SG MICHELLE FIDELIS", "role": "comsoc"},
-    {"nome_guerra": "CB THIAGO FERREIRA", "role": "militar"},
-    {"nome_guerra": "CB DE SOUZA", "role": "militar"},
-    {"nome_guerra": "CB HENTTYZY", "role": "militar"},
-    {"nome_guerra": "CB TANAKA", "role": "militar"}
+    {"nome_guerra": "SG ESDRAS", "role": "comsoc_design"},
+    {"nome_guerra": "SG MICHELLE FIDELIS", "role": "comsoc_design"},
+    {"nome_guerra": "CB THIAGO FERREIRA", "role": "comsoc"},
+    {"nome_guerra": "CB DE SOUZA", "role": "comsoc"},
+    {"nome_guerra": "CB HENTTYZY", "role": "comsoc"},
+    {"nome_guerra": "CB TANAKA", "role": "comsoc"}
 ]
 
 def seed_efetivo_gabinete():

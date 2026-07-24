@@ -61,14 +61,14 @@ ROLE_DESCRIPTIONS = {
         'telegram': '⚙️ OPERADOR: Criar Demandas por Botões, Dar Presença, /pronto, IA e Cautelas.'
     },
     'militar': {
-        'title': '⚓ Militar em Geral (Autoatendimento)',
-        'web': '⚓ MILITAR DO EFETIVO: Registrar Presença Diária, Solicitar Pautas COMSOC, Consultar Agenda e Reconhecimento Facial.',
-        'telegram': '⚓ MILITAR: Dar Presença Diária Matutina, Criar Demandas e Consultar Agenda Semanal.'
+        'title': '⚓ Militar Externo / Outras OMs (Acesso Mínimo)',
+        'web': '⚓ ACESSO MÍNIMO: Preencher Nova Solicitação de Cobertura COMSOC, Consultar Agenda Geral e Buscar Fotos por Reconhecimento Facial.',
+        'telegram': '⚓ ACESSO MÍNIMO: Criar Demanda por Botões, Consultar Agenda Semanal, Enviar Selfie e Buscar Fotos por Reconhecimento Facial.'
     },
     'compel': {
         'title': '⚓ Militar / Efetivo em Geral',
-        'web': '⚓ EFETIVO EM GERAL: Registrar Presença Diária, Solicitar Novas Pautas e Agenda.',
-        'telegram': '⚓ EFETIVO: Dar Presença Diária e Criar Demandas COMSOC.'
+        'web': '⚓ ACESSO MÍNIMO: Preencher Nova Solicitação de Cobertura, Consultar Agenda e Reconhecimento Facial.',
+        'telegram': '⚓ ACESSO MÍNIMO: Criar Demanda por Botões, Consultar Agenda e Buscar Fotos.'
     }
 }
 
