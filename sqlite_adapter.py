@@ -470,6 +470,19 @@ class LocalSQLiteClient:
                     parecer TEXT
                 )
             ''',
+            'fainas_historico_militares': '''
+                CREATE TABLE IF NOT EXISTS fainas_historico_militares (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    demanda_id INTEGER,
+                    militar_id TEXT,
+                    nome_guerra TEXT,
+                    titulo_evento TEXT,
+                    data_evento TEXT,
+                    status TEXT,
+                    tipo_servico TEXT,
+                    created_at TEXT
+                )
+            ''',
             'cautela_equipamentos': '''
                 CREATE TABLE IF NOT EXISTS cautela_equipamentos (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,

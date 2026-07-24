@@ -65,6 +65,7 @@ def render_page(autofill: str = None):
     user_data = app.storage.user.get('user_data', {})
     user_role = str(user_data.get('role', 'compel')).strip().lower()
     is_approver = user_role in ('admin', 'supervisor')
+    is_internal_staff = user_role in ('admin', 'supervisor', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'operador')
     user_name_guerra = user_data.get('nome_guerra', 'Operador').upper()
 
     # Estado local do formulário de viabilidade
@@ -343,12 +344,15 @@ def render_page(autofill: str = None):
                             label='Formato de Entrega'
                         ).props('dark outlined dense w-full option-dark').classes('w-full')
                         
-                        lbl_militar = '🎯 Designar Encarregados da Missão (Chefia / Homologação)' if is_approver else '👤 Sugestão de Encarregado / Contato (Opcional)'
-                        militar_select = ui.select(
-                            efetivo_options,
-                            multiple=True,
-                            label=lbl_militar
-                        ).props('dark outlined dense w-full option-dark').classes('w-full')
+                        if is_internal_staff:
+                            lbl_militar = '🎯 Designar Encarregados / Equipe da Missão (Chefia & COMSOC)' if is_approver else '👤 Sugestão de Encarregado da Equipe (Opcional)'
+                            militar_select = ui.select(
+                                efetivo_options,
+                                multiple=True,
+                                label=lbl_militar
+                            ).props('dark outlined dense w-full option-dark').classes('w-full')
+                        else:
+                            militar_select = None
 
                         ui.separator().style('background-color: rgba(255, 255, 255, 0.05); margin: 12px 0;')
 

@@ -275,11 +275,33 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                                     
                                     if militar_ids:
                                         militar_ids = list(set(militar_ids))
-                                        res_ef = db.table('efetivo').select('telegram_id').in_('id', militar_ids).execute()
-                                        if res_ef.data:
-                                            for m in res_ef.data:
-                                                if tel_id := m.get('telegram_id'):
-                                                    notify_telegram(alert_txt, "pauta", custom_chat_id=tel_id)
+                                        # Registra no histórico de fainas para o novo relatório de missões executadas
+                                        for m_id in militar_ids:
+                                            try:
+                                                payload_faina = {
+                                                    'demanda_id': demanda_id,
+                                                    'militar_id': str(m_id),
+                                                    'nome_guerra': str(m_id),
+                                                    'titulo_evento': demanda.get('titulo_evento', ''),
+                                                    'data_evento': demanda.get('data_evento', ''),
+                                                    'status': novo_status,
+                                                    'tipo_servico': str(demanda.get('tipo_cobertura', '')),
+                                                    'created_at': datetime.now().isoformat()
+                                                }
+                                                if db:
+                                                    db.table('fainas_historico_militares').insert(payload_faina).execute()
+                                                from sqlite_adapter import SQLiteDatabaseAdapter
+                                                local_db = SQLiteDatabaseAdapter()
+                                                local_db.table('fainas_historico_militares').insert(payload_faina).execute()
+                                            except Exception as faina_err:
+                                                print(f"[FAINA SAVE WARN] {faina_err}")
+
+                                        if db:
+                                            res_ef = db.table('efetivo').select('telegram_id').in_('id', militar_ids).execute()
+                                            if res_ef.data:
+                                                for m in res_ef.data:
+                                                    if tel_id := m.get('telegram_id'):
+                                                        notify_telegram(alert_txt, "pauta", custom_chat_id=tel_id)
                                 except Exception as e_notif:
                                     print(f"[TRAMITAR NOTIFY ERR] {e_notif}")
                                 
