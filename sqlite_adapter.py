@@ -560,6 +560,19 @@ class LocalSQLiteClient:
                     titulo TEXT NOT NULL,
                     criado_em TEXT
                 )
+            ''',
+            'presenca_diaria': '''
+                CREATE TABLE IF NOT EXISTS presenca_diaria (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT,
+                    telegram_id TEXT,
+                    nome_guerra TEXT NOT NULL,
+                    data TEXT NOT NULL,
+                    hora_presenca TEXT,
+                    status TEXT NOT NULL,
+                    observacao TEXT,
+                    criado_em TEXT
+                )
             '''
         }
         

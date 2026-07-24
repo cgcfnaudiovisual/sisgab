@@ -1044,6 +1044,61 @@ def seed_default_admin():
         print(f"[DB SEED NOTICE] {e}", flush=True)
 
 
+EFETIVO_PADRAO_GABINETE = [
+    {"nome_guerra": "SO ROBERTO", "role": "militar"},
+    {"nome_guerra": "SO CARVALHO", "role": "militar"},
+    {"nome_guerra": "SO HENRIQUE", "role": "militar"},
+    {"nome_guerra": "SO ABREU", "role": "militar"},
+    {"nome_guerra": "SO COSTA", "role": "militar"},
+    {"nome_guerra": "SO CRISTIAN", "role": "militar"},
+    {"nome_guerra": "SG ERBE", "role": "militar"},
+    {"nome_guerra": "SG MOISÉS", "role": "militar"},
+    {"nome_guerra": "SG SILVA", "role": "militar"},
+    {"nome_guerra": "SG SANTANA", "role": "militar"},
+    {"nome_guerra": "SG CALAÇA", "role": "operador"},
+    {"nome_guerra": "SG TONETTI", "role": "militar"},
+    {"nome_guerra": "SG THIAGO NUNES", "role": "militar"},
+    {"nome_guerra": "SG BORGES", "role": "militar"},
+    {"nome_guerra": "SG TAVARES", "role": "militar"},
+    {"nome_guerra": "SG SOUZA", "role": "militar"},
+    {"nome_guerra": "SG ESDRAS", "role": "militar"},
+    {"nome_guerra": "SG MICHELLE FIDELIS", "role": "militar"},
+    {"nome_guerra": "CB THIAGO FERREIRA", "role": "militar"},
+    {"nome_guerra": "CB DE SOUZA", "role": "militar"},
+    {"nome_guerra": "CB HENTTYZY", "role": "militar"},
+    {"nome_guerra": "CB TANAKA", "role": "militar"}
+]
+
+def seed_efetivo_gabinete():
+    """Realiza a carga automatizada dos 22 militares do efetivo do Gabinete nas tabelas efetivo e users."""
+    try:
+        conn = get_service_db_connection() or get_db_connection()
+        if not conn:
+            return
+        
+        import bcrypt
+        pwd_hash = bcrypt.hashpw('militar123'.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
+        
+        for m in EFETIVO_PADRAO_GABINETE:
+            nome_g = m['nome_guerra'].upper()
+            username_slug = nome_g.lower().replace(' ', '.').replace('á','a').replace('é','e').replace('í','i').replace('ó','o').replace('ú','u').replace('ã','a')
+            email_fake = f"{username_slug}@marinha.mil.br"
+            
+            try:
+                conn.table('efetivo').upsert({
+                    'nome_guerra': nome_g,
+                    'email': email_fake,
+                    'senha_hash': pwd_hash,
+                    'role': m['role']
+                }, on_conflict='nome_guerra').execute()
+            except Exception as ef_err:
+                print(f"[EFETIVO SEED WARN] {nome_g}: {ef_err}", flush=True)
+                
+        print(f"[DB SEED SUCCESS] {len(EFETIVO_PADRAO_GABINETE)} militares cadastrados no efetivo com sucesso!", flush=True)
+    except Exception as e:
+        print(f"[DB SEED EFETIVO ERR] {e}", flush=True)
+
+
 def create_admin_user_direct(username: str, password: str, nome_guerra: str, email: str, role: str = 'admin') -> dict:
     """
     Cria um novo usuário admin diretamente no Supabase via service_role, 

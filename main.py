@@ -188,6 +188,7 @@ import comsoc_historico
 import comsoc_aniversariantes
 import smart_editor
 import agenda_geral
+import modulo_presenca
 from database import authenticate_user, get_user_by_id
 from services import data_service
 
@@ -206,6 +207,7 @@ sisgab_menu_categories = [
         'category': 'GABINETE & COMSOC',
         'items': [
             {'name': 'Canal de Notícias', 'icon': 'newspaper', 'path': '/comsoc_noticias', 'subtitle': 'Feed e boletins internos'},
+            {'name': 'Chamada & Presença Diária', 'icon': 'assignment_ind', 'path': '/presenca', 'subtitle': 'Chamada matutina e Pronto do CheGab'},
             {'name': 'Agenda Geral', 'icon': 'calendar_month', 'path': '/agenda_geral', 'subtitle': 'Google Calendar e Pautas'},
             {'name': 'Nova Solicitação', 'icon': 'add_box', 'path': '/comsoc_demandas', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar'], 'subtitle': 'Formulário de pautas e coberturas'},
             {'name': 'Homologar Pautas', 'icon': 'gavel', 'path': '/comsoc_homologar', 'roles': ['admin', 'oficial_gab'], 'subtitle': 'Parecer e aprovações de coberturas'},
@@ -710,6 +712,12 @@ def agenda_geral_page():
     build_layout(agenda_geral.render_page)()
 
 
+@ui.page('/presenca')
+def presenca_page():
+    app.storage.user['current_path'] = '/presenca'
+    build_layout(modulo_presenca.render_page)()
+
+
 @ui.page('/smart_editor')
 def smart_editor_page():
     app.storage.user['current_path'] = '/smart_editor'
@@ -1114,8 +1122,9 @@ def sync_menu_permissions_db():
 
 # Inicializa o Bot do Telegram concorrente ao servidor
 from alerts_manager import AlertsManager
-from database import seed_default_admin
+from database import seed_default_admin, seed_efetivo_gabinete
 app.on_startup(seed_default_admin)
+app.on_startup(seed_efetivo_gabinete)
 app.on_startup(sync_menu_permissions_db)
 app.on_startup(telegram_bot.init_bot)
 app.on_startup(AlertsManager.start_alerts_scheduler)

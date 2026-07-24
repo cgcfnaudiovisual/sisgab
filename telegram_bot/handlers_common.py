@@ -509,31 +509,32 @@ def register_common_handlers(bot):
 
             elif step == 'solicitante_om':
                 history.append(('solicitante_om', dict(state['data'])))
-                if "Outra" in text:
+                if "CGCFN" in text.upper():
+                    state['data']['setor'] = "CGCFN"
+                    state['data']['contato'] = "21982043314 / Ramal CGCFN"
+                    state['step'] = 'titulo'
+                    await bot.reply_to(message, "[Passo 3/10] ✍️ Qual o **Título do Evento ou Pauta** da cobertura?", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                else:
                     state['step'] = 'solicitante_om_custom'
                     await bot.reply_to(message, "🏢 Por favor, digite o nome da **Outra OM**:", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
-                else:
-                    state['data']['setor'] = "CGCFN"
-                    state['step'] = 'contato'
-                    await bot.reply_to(message, "[Passo 3/12] 📞 Qual o **Ramal ou Telefone** de contato?", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
 
             elif step == 'solicitante_om_custom':
                 history.append(('solicitante_om_custom', dict(state['data'])))
                 state['data']['setor'] = text.upper()
                 state['step'] = 'contato'
-                await bot.reply_to(message, "[Passo 3/12] 📞 Qual o **Ramal ou Telefone** de contato?", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                await bot.reply_to(message, "[Passo 3/10] 📞 Qual o **Ramal ou Telefone** de contato?", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
 
             elif step == 'contato':
                 history.append(('contato', dict(state['data'])))
                 state['data']['contato'] = text
                 state['step'] = 'titulo'
-                await bot.reply_to(message, "[Passo 4/12] ✍️ Qual o **Título do Evento ou Pauta** da cobertura?", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                await bot.reply_to(message, "[Passo 4/10] ✍️ Qual o **Título do Evento ou Pauta** da cobertura?", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
 
             elif step == 'titulo':
                 history.append(('titulo', dict(state['data'])))
                 state['data']['titulo'] = text
                 state['step'] = 'data_evento'
-                await bot.reply_to(message, "[Passo 5/12] 📅 Qual a **Data de Início e Término**? (ex: 25/07/2026 a 27/07/2026):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                await bot.reply_to(message, "[Passo 5/10] 📅 Qual a **Data do Evento**? (ex: 25/07/2026 - Término opcional):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
 
             elif step == 'data_evento':
                 history.append(('data_evento', dict(state['data'])))
@@ -558,26 +559,27 @@ def register_common_handlers(bot):
                         pass
                         
                 state['data']['data_evento'] = date_txt
+                state['data']['data_fim'] = date_txt # Padrão: início e término no mesmo dia se não informado
                 state['step'] = 'hora_evento'
-                await bot.reply_to(message, "[Passo 6/12] ⏰ Qual o **Horário de Início e Término previsto**? (ex: 09:00 às 17:00):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                await bot.reply_to(message, "[Passo 6/10] ⏰ Qual o **Horário de Início**? (ex: 09:00):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
 
             elif step == 'hora_evento':
                 history.append(('hora_evento', dict(state['data'])))
                 state['data']['hora_evento'] = text
                 state['step'] = 'local'
-                await bot.reply_to(message, "[Passo 7/12] 📍 Qual o **Local exato do Evento**?", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                await bot.reply_to(message, "[Passo 7/10] 📍 Qual o **Local exato do Evento**?", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
 
             elif step == 'local':
                 history.append(('local', dict(state['data'])))
                 state['data']['local'] = text
                 state['step'] = 'uniforme'
-                await bot.reply_to(message, "[Passo 8/12] 👔 Qual o **Uniforme** do evento? (ex: 3.3, 4.4, Passeio):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                await bot.reply_to(message, "[Passo 8/10] 👔 Qual o **Uniforme** do evento? (ex: 3.3, 4.4, Passeio):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
 
             elif step == 'uniforme':
                 history.append(('uniforme', dict(state['data'])))
                 state['data']['uniforme'] = text
                 state['step'] = 'autoridades'
-                await bot.reply_to(message, "[Passo 9/12] 👑 Quais **Autoridades** estarão presentes? (se nenhuma, digite Nenhuma):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                await bot.reply_to(message, "[Passo 9/10] 👑 Quais **Autoridades** estarão presentes? (se nenhuma, digite Nenhuma):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
 
             elif step == 'autoridades':
                 history.append(('autoridades', dict(state['data'])))
@@ -585,7 +587,7 @@ def register_common_handlers(bot):
                 state['step'] = 'choose_coverage'
                 await bot.reply_to(
                     message, 
-                    "[Passo 10/12] 📸 **Escopo / Tipo de Cobertura Requerida**\n\nSelecione uma das opções nos botões:", 
+                    "[Passo 10/10] 📸 **Tipo de Serviço / Escopo de Cobertura**\n\nSelecione o serviço nos botões abaixo:", 
                     reply_markup=get_coverage_keyboard(), 
                     parse_mode='Markdown'
                 )
@@ -594,10 +596,22 @@ def register_common_handlers(bot):
                 history.append(('choose_coverage', dict(state['data'])))
                 coverage_txt = text.upper()
                 coberturas = []
+                if "GRAFICO" in coverage_txt or "GRÁFICO" in coverage_txt or "DESIGN" in coverage_txt:
+                    coberturas.append("grafico")
                 if "FOTO" in coverage_txt:
                     coberturas.append("foto")
                 if "VIDEO" in coverage_txt or "VÍDEO" in coverage_txt:
                     coberturas.append("video")
+                if "DRONE" in coverage_txt:
+                    coberturas.append("drone")
+                if "REDES" in coverage_txt or "MÍDIAS" in coverage_txt:
+                    coberturas.append("redes")
+                if "COMPLETO" in coverage_txt or "TUDO" in coverage_txt:
+                    coberturas = ["foto", "video", "grafico", "drone", "redes"]
+                
+                if not coberturas:
+                    coberturas = ["foto", "video"]
+                state['data']['tipo_cobertura'] = json.dumps(coberturas)
                 if "DRONE" in coverage_txt:
                     coberturas.append("drone")
                 if not coberturas:

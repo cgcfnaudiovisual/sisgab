@@ -4,7 +4,7 @@ import json
 import urllib.parse
 from nicegui import ui, app
 import theme
-from database import get_db_connection
+from database import get_service_db_connection, get_db_connection
 
 THEME = theme.colors
 
@@ -61,7 +61,7 @@ def render_page():
 
     def open_tramitar_dialog(demanda, callback_refresh=None):
         efetivo_options = {}
-        db = get_db_connection()
+        db = get_service_db_connection() or get_db_connection()
         if db:
             try:
                 res_ef = db.table('efetivo').select('id, nome_guerra, role').execute()
@@ -214,7 +214,7 @@ def render_page():
     # --------------------------------------------------------------------------
     @ui.refreshable
     def render_content():
-        db = get_db_connection()
+        db = get_service_db_connection() or get_db_connection()
         todas_demandas = []
         historico_global = []
         if db:

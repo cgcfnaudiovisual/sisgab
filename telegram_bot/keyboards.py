@@ -71,8 +71,9 @@ def get_om_keyboard():
 
 def get_coverage_keyboard():
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-    markup.row(types.KeyboardButton("📸 Fotografia"), types.KeyboardButton("🎥 Vídeo"))
-    markup.row(types.KeyboardButton("📸+🎥 Ambos (Foto & Vídeo)"), types.KeyboardButton("🚁 Foto, Vídeo & Drone"))
+    markup.row(types.KeyboardButton("🎨 Serviço Gráfico / Design"), types.KeyboardButton("📸 Cobertura Fotográfica"))
+    markup.row(types.KeyboardButton("🎥 Cobertura em Vídeo"), types.KeyboardButton("🚁 Imagens Aéreas / Drone"))
+    markup.row(types.KeyboardButton("📱 Mídias Sociais / Reels"), types.KeyboardButton("📦 Apoio Audiovisual Completo"))
     markup.row(types.KeyboardButton("⬅️ Voltar"), types.KeyboardButton("❌ Cancelar"))
     return markup
 
@@ -93,5 +94,14 @@ def get_confirm_demanda_keyboard():
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     markup.row(types.KeyboardButton("✅ Confirmar & Enviar Pauta"))
     markup.row(types.KeyboardButton("✏️ Reiniciar Formulação"), types.KeyboardButton("❌ Cancelar"))
+    return markup
+
+def get_presenca_keyboard():
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    markup.row(types.KeyboardButton("🟢 (P) Presente"), types.KeyboardButton("💼 (MA) Missão Adm"))
+    markup.row(types.KeyboardButton("⚔️ (MT) Missão Tática"), types.KeyboardButton("🏖️ (FE) Férias"))
+    markup.row(types.KeyboardButton("📜 (L) Licença"), types.KeyboardButton("🏥 (H) Hospital"))
+    markup.row(types.KeyboardButton("💊 (DM) Disp. Médica"), types.KeyboardButton("🛡️ (S) Serviço"))
+    markup.row(types.KeyboardButton("❌ Cancelar"))
     return markup
 
