@@ -1084,13 +1084,17 @@ def seed_efetivo_gabinete():
             username_slug = nome_g.lower().replace(' ', '.').replace('á','a').replace('é','e').replace('í','i').replace('ó','o').replace('ú','u').replace('ã','a')
             email_fake = f"{username_slug}@marinha.mil.br"
             
+            payload = {
+                'nome_guerra': nome_g,
+                'email': email_fake,
+                'senha_hash': pwd_hash,
+                'role': m['role']
+            }
+            if "CALAÇA" in nome_g or "CALACA" in nome_g:
+                payload['telegram_id'] = '5425877837'
+
             try:
-                conn.table('efetivo').upsert({
-                    'nome_guerra': nome_g,
-                    'email': email_fake,
-                    'senha_hash': pwd_hash,
-                    'role': m['role']
-                }, on_conflict='nome_guerra').execute()
+                conn.table('efetivo').upsert(payload, on_conflict='nome_guerra').execute()
             except Exception as ef_err:
                 print(f"[EFETIVO SEED WARN] {nome_g}: {ef_err}", flush=True)
                 

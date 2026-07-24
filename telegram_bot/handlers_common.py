@@ -482,6 +482,8 @@ def register_common_handlers(bot):
                 if db:
                     try:
                         db.table('efetivo').update({'telegram_id': str(chat_id)}).eq('nome_guerra', nome_sel).execute()
+                        from .utils import AUTHORIZED_PROFILES_CACHE
+                        AUTHORIZED_PROFILES_CACHE[str(chat_id)] = {'nome_guerra': nome_sel, 'role': 'operador', 'telegram_id': str(chat_id)}
                         await bot.reply_to(
                             message,
                             f"✅ **VINCULAÇÃO CONCLUÍDA COM SUCESSO!**\n\n"

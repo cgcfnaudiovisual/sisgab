@@ -144,7 +144,9 @@ def format_health_report(records, title) -> str:
         
     return msg
 
-async def execute_bot_query_safe(query_fn, retries=3):
+AUTHORIZED_PROFILES_CACHE = {}
+
+async def execute_bot_query_safe(query_fn, retries=1):
     last_err = None
     for attempt in range(retries):
         try:
@@ -157,9 +159,7 @@ async def execute_bot_query_safe(query_fn, retries=3):
             print(f"[BOT DB QUERY TRY {attempt+1}/{retries}] Falha na query: {e}")
             from database import reset_db_connection
             reset_db_connection()
-            import asyncio
-            await asyncio.sleep(0.5 * (attempt + 1))
-    raise last_err
+    return None
 
 async def get_allowed_features_for_user(profile) -> set:
     allowed_features = set()
@@ -168,21 +168,21 @@ async def get_allowed_features_for_user(profile) -> set:
     user_role = str(profile.get('role', 'compel')).strip().lower()
     
     defaults = {
-        'menu_comsoc_noticias': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar'],
-        'menu_comsoc_demandas': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar'],
-        'menu_comsoc_cautela': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design'],
-        'menu_comsoc_brindes': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design'],
-        'menu_comsoc_galeria': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar'],
-        'menu_sisgab_tv': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design'],
-        'menu_assistente_ia': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar'],
-        'menu_config': ['admin', 'oficial_gab'],
+        'menu_comsoc_noticias': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar', 'operador'],
+        'menu_comsoc_demandas': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar', 'operador'],
+        'menu_comsoc_cautela': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'operador'],
+        'menu_comsoc_brindes': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'operador'],
+        'menu_comsoc_galeria': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar', 'operador'],
+        'menu_sisgab_tv': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'operador'],
+        'menu_assistente_ia': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar', 'operador'],
+        'menu_config': ['admin', 'oficial_gab', 'operador'],
         'menu_admin_panel': ['admin'],
-        'menu_ajuda_sobre': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar']
+        'menu_ajuda_sobre': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar', 'operador']
     }
     
     try:
         res = await execute_bot_query_safe(lambda c: c.table('permissions').select('*'))
-        if res.data:
+        if res and res.data:
             for row in res.data:
                 fk = row.get('feature_key')
                 allowed = row.get('allowed_roles')
@@ -198,22 +198,30 @@ async def get_allowed_features_for_user(profile) -> set:
 
 async def check_authorized_user(from_user_id: int):
     current_user_id.set(from_user_id)
+    str_uid = str(from_user_id)
+    
+    # 1. Checa cache de memória para resposta ultra-rápida (0ms)
+    if str_uid in AUTHORIZED_PROFILES_CACHE:
+        return AUTHORIZED_PROFILES_CACHE[str_uid]
+        
     try:
         # Busca primeiro na tabela do efetivo
-        res_ef = await execute_bot_query_safe(lambda c: c.table('efetivo').select('*').eq('telegram_id', str(from_user_id)))
+        res_ef = await execute_bot_query_safe(lambda c: c.table('efetivo').select('*').eq('telegram_id', str_uid))
         if res_ef and res_ef.data:
             profile = res_ef.data[0]
             allowed = await get_allowed_features_for_user(profile)
             USER_PERMISSIONS_CACHE[from_user_id] = allowed
+            AUTHORIZED_PROFILES_CACHE[str_uid] = profile
             return profile
             
         # Fallback na tabela users
-        res = await execute_bot_query_safe(lambda c: c.table('users').select('*').eq('telegram_id', str(from_user_id)))
+        res = await execute_bot_query_safe(lambda c: c.table('users').select('*').eq('telegram_id', str_uid))
         if res and res.data:
             sorted_profiles = sorted(res.data, key=lambda u: 1 if u.get('role') == 'aluno' else 0)
             profile = sorted_profiles[0]
             allowed = await get_allowed_features_for_user(profile)
             USER_PERMISSIONS_CACHE[from_user_id] = allowed
+            AUTHORIZED_PROFILES_CACHE[str_uid] = profile
             return profile
     except Exception as e:
         print(f"[Bot] Erro ao validar telegram_id {from_user_id}: {e}")
