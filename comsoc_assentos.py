@@ -865,7 +865,23 @@ def render_page():
         diag.open()
 
     def open_seat_actions_dialog(seat_id, guest, convidados, event_id):
-        with ui.dialog() as diag, ui.card().classes('q-pa-md').style('min-width: 350px;'):
+        # 1. Carrega dados do layout para identificar assentos livres
+        rows_count = 5
+        cols_count = 8
+        blocked_seats = []
+        db = get_db_connection()
+        if db:
+            try:
+                res_ev = db.table('jade_eventos').select('layout_json').eq('id', event_id).execute()
+                if res_ev.data:
+                    layout = json.loads(res_ev.data[0]['layout_json'])
+                    rows_count = layout.get('rows', 5)
+                    cols_count = layout.get('cols', 8)
+                    blocked_seats = layout.get('blocked_seats', [])
+            except Exception as ex:
+                print(f"[FETCH LAYOUT FOR ACTIONS ERR] {ex}")
+
+        with ui.dialog() as diag, ui.card().classes('q-pa-md').style('min-width: 400px; max-height: 600px;'):
             ui.label(f'Ações do Assento {seat_id}').classes('text-md font-bold text-cyan q-mb-xs')
             
             # Detalhes do ocupante
@@ -896,6 +912,71 @@ def render_page():
                     'Confirmar Troca de Assentos', 
                     on_click=lambda: [swap_guests(guest, swap_target.value, event_id), diag.close()]
                 ).props('unelevated color=primary text-color=black w-full q-mt-sm dense')
+            
+            # 3. Acompanhantes vinculados
+            companions = [c for c in convidados if c.get('convidado_principal_id') == guest['id']]
+            if companions:
+                ui.separator().classes('q-my-sm')
+                ui.label('Acompanhantes Vinculados:').classes('text-[11px] font-bold text-cyan q-mb-xs')
+                
+                # Lista de assentos livres
+                free_seats = sorted(list(set(
+                    f"{get_row_label(r)}-{col}" 
+                    for r in range(rows_count) 
+                    for col in range(1, cols_count + 1)
+                ) - set(c['assento_id'] for c in convidados if c.get('assento_id')) - set(blocked_seats)))
+                
+                # Ordenação por proximidade
+                try:
+                    main_row_label, main_col_str = seat_id.split('-')
+                    main_row_idx = 0
+                    for r in range(rows_count):
+                        if get_row_label(r) == main_row_label:
+                            main_row_idx = r
+                            break
+                    main_col_idx = int(main_col_str)
+                    
+                    def get_seat_distance(s_id):
+                        try:
+                            r_lbl, c_str = s_id.split('-')
+                            r_idx = 0
+                            for r in range(rows_count):
+                                if get_row_label(r) == r_lbl:
+                                    r_idx = r
+                                    break
+                            c_idx = int(c_str)
+                            return abs(main_row_idx - r_idx) + abs(main_col_idx - c_idx)
+                        except:
+                            return 999
+                    
+                    sorted_free_seats = sorted(free_seats, key=get_seat_distance)
+                except:
+                    sorted_free_seats = free_seats
+
+                with ui.column().classes('w-full gap-2 q-mt-xs'):
+                    for comp in companions:
+                        comp_seat = comp.get('assento_id')
+                        with ui.row().classes('w-full items-center justify-between no-wrap gap-2').style('background: rgba(255,255,255,0.02); padding: 4px; border-radius: 4px;'):
+                            ui.label(comp['nome']).classes('text-xs text-white col-grow truncate')
+                            
+                            if comp_seat:
+                                ui.badge(f"Assento {comp_seat}").props('color=cyan text-color=black').classes('text-[9px]')
+                                ui.button(
+                                    icon='cancel',
+                                    on_click=lambda c=comp: [remove_guest_allocation(c), diag.close()]
+                                ).props('flat round dense color=danger').classes('text-xs')
+                            else:
+                                if sorted_free_seats:
+                                    seat_select = ui.select(options=sorted_free_seats, label='Assento').props('dark outlined dense').style('width: 100px; font-size: 10px;')
+                                    ui.button(
+                                        icon='check',
+                                        on_click=lambda c=comp, sel=seat_select: [
+                                            allocate_guest(c['id'], sel.value, event_id) if sel.value else None,
+                                            diag.close()
+                                        ]
+                                    ).props('unelevated color=success text-color=black dense').classes('q-px-xs')
+                                else:
+                                    ui.label('Sem vagas').classes('text-[9px] text-grey-5')
             
             ui.separator().classes('q-my-sm')
             ui.button('Fechar', on_click=diag.close).props('unelevated color=grey-8 w-full dense')
