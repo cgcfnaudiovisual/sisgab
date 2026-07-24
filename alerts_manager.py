@@ -463,6 +463,21 @@ class AlertsManager:
                             asyncio.create_task(trigger_10min_attendance_reminder(telegram_bot.bot))
                 except Exception as tg_sched_err:
                     print(f"[ATTENDANCE SCHEDULER ERR] {tg_sched_err}")
+
+                # Keep-Alive Self-Ping (disparado a cada 5 minutos para impedir Sleep Mode na nuvem)
+                try:
+                    now_ts = datetime.now().timestamp()
+                    if not hasattr(cls, '_last_keep_alive') or (now_ts - getattr(cls, '_last_keep_alive', 0)) > 300:
+                        cls._last_keep_alive = now_ts
+                        app_url = os.getenv('RENDER_EXTERNAL_URL') or os.getenv('APP_URL')
+                        if app_url:
+                            import urllib.request
+                            req = urllib.request.Request(app_url, headers={'User-Agent': 'SisGAB-KeepAlive/1.0'})
+                            with urllib.request.urlopen(req, timeout=5) as resp:
+                                print(f"[KEEP-ALIVE PING] Ping enviado para {app_url} - Status: {resp.status}")
+                except Exception as ping_err:
+                    print(f"[KEEP-ALIVE PING WARN] {ping_err}")
+
             except Exception as e:
                 print(f"[SCHEDULER ERRO] Falha no loop principal: {e}")
                 
