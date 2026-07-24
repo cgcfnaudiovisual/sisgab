@@ -93,8 +93,50 @@ async def finalizar_solicitacao_acesso(bot, message, chat_id, state):
         clear_state(chat_id)
 
 
+def _format_militar_responsavel(ev, db=None):
+    """Retorna os nomes dos militares responsáveis pela pauta ou 'ASD' (A Ser Designado)."""
+    try:
+        raw_m = ev.get('notificar_militar_ids') or ev.get('encarregado_id') or ev.get('militares_escalados_json')
+        if not raw_m:
+            return "ASD"
+            
+        m_ids = []
+        if isinstance(raw_m, list):
+            m_ids = raw_m
+        elif isinstance(raw_m, str):
+            try:
+                m_ids = json.loads(raw_m)
+            except Exception:
+                m_ids = [s.strip() for s in raw_m.split(',') if s.strip()]
+                
+        if not m_ids:
+            return "ASD"
+            
+        nomes = []
+        if db:
+            try:
+                res_ef = db.table('efetivo').select('id, nome_guerra').execute()
+                if res_ef and res_ef.data:
+                    ef_map = {str(item['id']): item['nome_guerra'] for item in res_ef.data}
+                    for mid in m_ids:
+                        mid_str = str(mid)
+                        if mid_str in ef_map:
+                            nomes.append(ef_map[mid_str])
+                        elif not mid_str.isdigit():
+                            nomes.append(mid_str)
+            except Exception:
+                pass
+                
+        if not nomes:
+            nomes = [str(x) for x in m_ids if str(x).strip()]
+            
+        return ", ".join(nomes) if nomes else "ASD"
+    except Exception:
+        return "ASD"
+
+
 def _get_weekly_events_text():
-    """Busca eventos dos próximos 7 dias na tabela demandas_comunicacao e retorna texto formatado."""
+    """Busca eventos dos próximos 7 dias na tabela demandas_comunicacao e retorna texto formatado com encarregados/responsáveis."""
     try:
         from database import get_bot_db_connection as get_db_connection
         db = get_db_connection()
@@ -132,11 +174,14 @@ def _get_weekly_events_text():
             except Exception:
                 data_br = str(ev.get('data_evento', 'N/I'))
             
+            resp_txt = _format_militar_responsavel(ev, db)
+            
             msg += (
                 f"{status_icon} **{idx}. {ev.get('titulo_evento', 'Sem Título')}**\n"
                 f"   📅 {data_br} às {ev.get('hora_evento', '09:00')}\n"
                 f"   📍 {ev.get('local_evento', 'N/I')}\n"
-                f"   👤 {ev.get('solicitante_nome', 'N/I')}\n\n"
+                f"   👤 Solicitante: {ev.get('solicitante_nome', 'N/I')} ({ev.get('setor', 'CGCFN')})\n"
+                f"   👨‍✈️ Responsável: {resp_txt}\n\n"
             )
         
         msg += f"📊 Total: **{len(events)} evento(s)** na semana.\n⚓ _SisGAB — Gestão de Gabinete_"

@@ -153,6 +153,10 @@ def render_page():
                                                 ui.label(f"📍 Local: {ev.get('local_evento', 'N/I')}")
                                                 ui.label(f"👤 Solicitante: {ev.get('solicitante_nome', 'N/I')} ({ev.get('setor', 'CGCFN')})")
                                             
+                                            from telegram_bot.handlers_common import _format_militar_responsavel
+                                            resp_str = _format_militar_responsavel(ev, db)
+                                            ui.label(f"👨‍✈️ Responsável(is): {resp_str}").classes('text-xs text-amber-4 font-bold q-mt-xs')
+
                                             if ev.get('autoridades'):
                                                 ui.label(f"🎖️ Autoridades: {ev['autoridades']}").classes('text-xs text-cyan')
                                             
