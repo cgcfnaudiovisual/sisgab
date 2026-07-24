@@ -86,6 +86,12 @@ def render_page():
                     
                     if current_event:
                         ui.button(
+                            'Editar Evento',
+                            icon='edit',
+                            on_click=lambda: open_edit_event_dialog(current_event, layout)
+                        ).props('unelevated color=accent dense outline').classes('q-px-sm')
+                        
+                        ui.button(
                             'Excluir Evento', 
                             icon='delete', 
                             on_click=lambda: confirm_delete_event(current_event)
@@ -273,6 +279,12 @@ def render_page():
 
                     # Renderizador de Grid HTML/CSS embutido responsivo
                     with ui.column().classes('w-full items-center justify-start q-py-md scroll-container').style('overflow-x: auto;'):
+                        # Referência Superior (Palco, etc.)
+                        ref_top = layout.get('ref_top', 'PALCO PRINCIPAL')
+                        if ref_top:
+                            with ui.row().classes('w-full justify-center q-mb-sm'):
+                                ui.label(f"▲ {ref_top.upper()} ▲").classes('text-[10px] font-black tracking-widest text-cyan px-4 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/5')
+
                         # Grid de Assentos
                         with ui.grid(columns=cols_count + 1).classes('gap-2 items-center').style('min-width: 600px;'):
                             # Célula canto superior esquerdo (vazia)
@@ -280,7 +292,7 @@ def render_page():
                             
                             # Cabeçalhos das Colunas (1, 2, 3...)
                             for col in range(1, cols_count + 1):
-                                ui.label(str(col)).classes('text-center font-bold text-grey-5').style('width: 65px; font-size: 11px;')
+                                ui.label(str(col)).classes('text-center font-bold text-grey-5').style('width: 70px; font-size: 11px;')
                                 
                             # Fileiras (A, B, C...)
                             for r in range(rows_count):
@@ -297,41 +309,60 @@ def render_page():
                                     if is_blocked:
                                         # Espaço vazio / Corredor
                                         if state.edit_mode == "layout":
-                                            ui.button(
-                                                'Corredor',
-                                                on_click=lambda s=seat_id: toggle_seat_block(s, current_event, layout)
-                                            ).props('unelevated color=grey-9 dense outline').style('width: 65px; height: 45px; font-size: 8px; border: 1px dashed rgba(255,255,255,0.1);')
+                                            with ui.column().classes('items-center justify-center cursor-pointer transition-all hover:scale-105').style(
+                                                'width: 70px; height: 48px; border: 1px dashed rgba(255,255,255,0.15); border-radius: 4px; background: rgba(255,255,255,0.02); gap: 0;'
+                                            ).on('click', lambda s=seat_id: toggle_seat_block(s, current_event, layout)):
+                                                ui.label(seat_id).classes('text-[8px] text-grey-5 font-mono')
+                                                ui.label('CORREDOR').classes('text-[7px] text-grey-6 font-bold')
                                         else:
                                             # Apenas espaço em branco
-                                            ui.label('').style('width: 65px; height: 45px;')
+                                            ui.label('').style('width: 70px; height: 48px;')
                                     else:
                                         if guest:
                                             # Cadeira Ocupada
                                             display_name = f"{guest.get('posto_graduacao') or ''} {guest['nome']}".strip()
-                                            # Encurta nome para caber na caixinha
                                             if len(display_name) > 12:
                                                 display_name = display_name[:10] + '..'
                                                 
-                                            btn_color = 'primary' if guest.get('categoria') == 'VIP' else 'accent'
+                                            # Cores por categoria
+                                            is_vip = guest.get('categoria') == 'VIP'
+                                            border_c = THEME['primary'] if is_vip else THEME['accent']
+                                            bg_c = 'rgba(0, 229, 255, 0.15)' if is_vip else 'rgba(0, 162, 255, 0.15)'
+                                            text_c = THEME['primary'] if is_vip else THEME['accent']
                                             
-                                            ui.button(
-                                                display_name,
-                                                on_click=lambda s=seat_id, g=guest: open_seat_actions_dialog(s, g, convidados, current_event['id'])
-                                            ).props(f'unelevated color={btn_color} text-color=black dense').style('width: 65px; height: 45px; font-size: 9px; line-height: 1.1; font-weight: bold;')
+                                            with ui.column().classes('items-center justify-between q-pa-xs cursor-pointer transition-all hover:scale-105 border').style(
+                                                f'width: 70px; height: 48px; border-radius: 4px; border-color: {border_c} !important; background: {bg_c}; gap: 0;'
+                                            ).on('click', lambda s=seat_id, g=guest: open_seat_actions_dialog(s, g, convidados, current_event['id'])):
+                                                ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono leading-none')
+                                                ui.label(display_name).classes('text-[9px] font-bold text-center leading-none text-white overflow-hidden w-full')
+                                                
+                                                category_label = str(guest.get('categoria', 'Geral')).upper()
+                                                if len(category_label) > 10:
+                                                    category_label = category_label[:8] + '..'
+                                                ui.label(category_label).classes(f'text-[7px] text-center leading-none').style(f'color: {text_c}; font-weight: bold;')
                                         else:
                                             # Cadeira Livre
                                             if state.edit_mode == "layout":
                                                 # No modo layout, clica para bloquear (virar corredor)
-                                                ui.button(
-                                                    seat_id,
-                                                    on_click=lambda s=seat_id: toggle_seat_block(s, current_event, layout)
-                                                ).props('unelevated color=grey-8 dense').style('width: 65px; height: 45px; font-size: 10px; background: #1e293b !important;')
+                                                with ui.column().classes('items-center justify-center cursor-pointer transition-all hover:scale-105 border').style(
+                                                    'width: 70px; height: 48px; border-radius: 4px; border-color: rgba(255,255,255,0.15) !important; background: #1b2535; gap: 0;'
+                                                ).on('click', lambda s=seat_id: toggle_seat_block(s, current_event, layout)):
+                                                    ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono')
+                                                    ui.label('BLOQUEAR').classes('text-[7px] text-grey-5 font-bold')
                                             else:
-                                                # Modo alocação, clica para alocar convidado livre
-                                                ui.button(
-                                                    seat_id,
-                                                    on_click=lambda s=seat_id: open_allocate_seat_dialog(s, convidados, current_event['id'])
-                                                ).props('unelevated color=positive dense outline').style('width: 65px; height: 45px; font-size: 10px;')
+                                                # Modo alocação, clica para alocar
+                                                with ui.column().classes('items-center justify-between q-pa-xs cursor-pointer transition-all hover:scale-105 border').style(
+                                                    f'width: 70px; height: 48px; border-radius: 4px; border-color: {THEME["success"]}40 !important; background: rgba(0, 230, 118, 0.05); gap: 0;'
+                                                ).on('click', lambda s=seat_id: open_allocate_seat_dialog(s, convidados, current_event['id'])):
+                                                    ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono leading-none')
+                                                    ui.label('LIVRE').classes('text-[9px] font-bold text-center leading-none').style(f'color: {THEME["success"]};')
+                                                    ui.label('(vazio)').classes('text-[7px] text-grey-5 text-center leading-none')
+
+                        # Referência Inferior (Entrada, etc.)
+                        ref_bottom = layout.get('ref_bottom', 'ENTRADA / FACHADA')
+                        if ref_bottom:
+                            with ui.row().classes('w-full justify-center q-mt-sm q-mb-md'):
+                                ui.label(f"▼ {ref_bottom.upper()} ▼").classes('text-[10px] font-black tracking-widest text-cyan px-4 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/5')
 
                     # Controles de Dimensão do Layout na Base
                     ui.separator().classes('q-my-md').style('border-color: rgba(255,255,255,0.05);')
@@ -376,7 +407,7 @@ def render_page():
 
     # --- COMANDOS E TRANSAÇÕES NO BANCO DE DADOS ---
 
-    def create_event(nome, data, local, layout_tipo, rows, cols):
+    def create_event(nome, data, local, layout_tipo, rows, cols, ref_top="PALCO PRINCIPAL", ref_bottom="ENTRADA / FACHADA"):
         if not nome or not data:
             ui.notify('Nome e Data do Evento são obrigatórios.', color='warning')
             return
@@ -387,7 +418,9 @@ def render_page():
                 layout_json = json.dumps({
                     'rows': int(rows),
                     'cols': int(cols),
-                    'blocked_seats': []
+                    'blocked_seats': [],
+                    'ref_top': ref_top or 'PALCO PRINCIPAL',
+                    'ref_bottom': ref_bottom or 'ENTRADA / FACHADA'
                 })
                 registro = {
                     'nome': nome.upper(),
@@ -580,9 +613,12 @@ def render_page():
         with ui.dialog() as diag, ui.card().classes('q-pa-md').style('min-width: 380px;'):
             ui.label('📅 Novo Evento de Assento').classes('text-md font-bold text-cyan q-mb-md')
             
-            nome = ui.input('Nome do Evento / Solenidade').props('dark outlined dense')
-            data = ui.input('Data do Evento').props('type=date dark outlined dense')
-            local = ui.input('Local (ex: Auditório)').props('dark outlined dense')
+            nome = ui.input('Nome do Evento / Solenidade').props('dark outlined dense w-full')
+            data = ui.input('Data do Evento').props('type=date dark outlined dense w-full')
+            local = ui.input('Local (ex: Auditório)').props('dark outlined dense w-full')
+            
+            ref_top = ui.input('Referência Superior (ex: Palco)', value='PALCO PRINCIPAL').props('dark outlined dense w-full')
+            ref_bottom = ui.input('Referência Inferior (ex: Entrada)', value='ENTRADA / FACHADA').props('dark outlined dense w-full')
             
             with ui.row().classes('w-full gap-2'):
                 rows = ui.number('Linhas (Grid)', value=5, min=1, max=20, step=1).props('dark outlined dense').classes('col')
@@ -597,8 +633,45 @@ def render_page():
                 ui.button('Cancelar', on_click=diag.close).props('unelevated color=grey-8 text-color=white dense')
                 ui.button(
                     'Criar', 
-                    on_click=lambda: [create_event(nome.value, data.value, local.value, layout_tipo.value, rows.value, cols.value), diag.close()]
+                    on_click=lambda: [create_event(nome.value, data.value, local.value, layout_tipo.value, rows.value, cols.value, ref_top.value, ref_bottom.value), diag.close()]
                 ).props('unelevated color=primary text-color=black dense')
+                
+        diag.open()
+
+    def open_edit_event_dialog(event, layout):
+        with ui.dialog() as diag, ui.card().classes('q-pa-md').style('min-width: 380px;'):
+            ui.label('📝 Editar Detalhes do Evento').classes('text-md font-bold text-cyan q-mb-md')
+            
+            nome = ui.input('Nome do Evento / Solenidade', value=event['nome']).props('dark outlined dense w-full')
+            data = ui.input('Data do Evento', value=event['data_evento']).props('type=date dark outlined dense w-full')
+            local = ui.input('Local', value=event.get('local') or '').props('dark outlined dense w-full')
+            
+            ref_top = ui.input('Referência Superior (ex: Palco)', value=layout.get('ref_top', 'PALCO PRINCIPAL')).props('dark outlined dense w-full')
+            ref_bottom = ui.input('Referência Inferior (ex: Entrada)', value=layout.get('ref_bottom', 'ENTRADA / FACHADA')).props('dark outlined dense w-full')
+            
+            with ui.row().classes('w-full justify-end q-mt-md gap-2'):
+                ui.button('Cancelar', on_click=diag.close).props('unelevated color=grey-8 dense')
+                
+                def salvar_alteracoes():
+                    db = get_db_connection()
+                    if db:
+                        layout['ref_top'] = ref_top.value
+                        layout['ref_bottom'] = ref_bottom.value
+                        try:
+                            db.table('jade_eventos').update({
+                                'nome': nome.value.upper(),
+                                'data_evento': data.value,
+                                'local': local.value or '',
+                                'layout_json': json.dumps(layout)
+                            }).eq('id', event['id']).execute()
+                            
+                            ui.notify('Evento atualizado com sucesso!', color='success')
+                            render_content.refresh()
+                            diag.close()
+                        except Exception as e:
+                            ui.notify(f"Erro ao salvar: {e}", color='red')
+                            
+                ui.button('Salvar', on_click=salvar_alteracoes).props('unelevated color=primary text-color=black dense')
                 
         diag.open()
 
@@ -684,32 +757,58 @@ def render_page():
             key=lambda c: (get_category_priority(c.get('categoria', 'Geral')), c.get('posto_graduacao') or '', c['nome'])
         )
         
-        with ui.dialog() as diag, ui.card().classes('q-pa-md').style('min-width: 380px;'):
-            ui.label(f'Alocar Assento {seat_id}').classes('text-md font-bold text-cyan q-mb-md')
+        with ui.dialog() as diag, ui.card().classes('q-pa-md').style('min-width: 420px; max-height: 550px;'):
+            ui.label(f'Alocar Assento {seat_id}').classes('text-md font-bold text-cyan q-mb-xs')
+            ui.label('Selecione um convidado na lista para alocar imediatamente:').classes('text-xs text-grey-4 q-mb-md')
             
-            if sorted_convidados:
-                ui.label('Selecione um convidado para sentar nesta cadeira (ordenados por prioridade):').classes('text-xs text-grey-4 q-mb-sm')
+            # Campo de busca tático
+            search_input = ui.input(placeholder='Filtrar por nome ou cargo...').props('dark outlined dense clearable w-full q-mb-md')
+            
+            # Container da lista reativa
+            @ui.refreshable
+            def render_dialog_guests():
+                query = search_input.value.lower() if search_input.value else ""
+                filtered = sorted_convidados
+                if query:
+                    filtered = [
+                        c for c in sorted_convidados
+                        if query in c['nome'].lower() or
+                        (c.get('cargo_funcao') and query in c['cargo_funcao'].lower()) or
+                        (c.get('posto_graduacao') and query in c['posto_graduacao'].lower())
+                    ]
                 
-                options_map = {}
-                for c in sorted_convidados:
-                    seat_info = f" (Assento {c['assento_id']})" if c.get('assento_id') else ""
-                    cat_info = f"[{c.get('categoria', 'Geral').upper()}] "
-                    posto_info = f"{c.get('posto_graduacao') or ''} ".strip()
-                    if posto_info:
-                        posto_info = f"{posto_info} "
-                    options_map[c['id']] = f"{cat_info}{posto_info}{c['nome']}{seat_info}"
-                
-                selected_guest_id = ui.select(options_map).props('dark outlined dense filterable w-full')
-                
-                with ui.row().classes('w-full justify-end q-mt-md gap-2'):
-                    ui.button('Cancelar', on_click=diag.close).props('unelevated color=grey-8 dense')
-                    ui.button(
-                        'Confirmar', 
-                        on_click=lambda: [allocate_guest(selected_guest_id.value, seat_id, event_id), diag.close()]
-                    ).props('unelevated color=primary text-color=black dense')
-            else:
-                ui.label('Não há convidados cadastrados para este evento. Cadastre ou importe uma lista primeiro.').classes('text-xs text-amber q-mb-md')
-                ui.button('Fechar', on_click=diag.close).props('unelevated color=grey-8 dense w-full')
+                with ui.column().classes('w-full gap-2 scroll-container q-py-xs').style('overflow-y: auto; max-height: 320px;'):
+                    if filtered:
+                        for c in filtered:
+                            is_seated = bool(c.get('assento_id'))
+                            card_bg = 'rgba(0, 229, 255, 0.08)' if is_seated else 'rgba(255, 255, 255, 0.02)'
+                            card_border = 'rgba(0, 229, 255, 0.25)' if is_seated else 'rgba(255, 255, 255, 0.06)'
+                            text_style = 'opacity-70' if is_seated else ''
+                            
+                            # Clicar no convidado faz a alocação e fecha o modal
+                            with ui.card().classes('w-full q-pa-xs px-2 no-shadow rounded-lg cursor-pointer transition-all hover:bg-cyan-500/20').style(
+                                f'background: {card_bg}; border: 1px solid {card_border}; gap: 0;'
+                            ).on('click', lambda c_id=c['id']: [allocate_guest(c_id, seat_id, event_id), diag.close()]):
+                                with ui.row().classes('w-full justify-between items-center no-wrap'):
+                                    with ui.column().classes('gap-0'):
+                                        nome_exibicao = f"{c.get('posto_graduacao') or ''} {c['nome']}".strip()
+                                        ui.label(nome_exibicao).classes(f'text-xs font-bold text-white {text_style}')
+                                        
+                                        sub = c.get('cargo_funcao') or 'Sem cargo/função'
+                                        ui.label(f"[{c.get('categoria', 'Geral').upper()}] {sub}").classes('text-[9px] text-grey-4')
+                                    
+                                    if is_seated:
+                                        ui.badge(f"Assento {c['assento_id']}").props('color=cyan text-color=black').classes('text-[8px]')
+                    else:
+                        with ui.column().classes('w-full items-center justify-center q-py-md text-grey'):
+                            ui.label('Nenhum convidado disponível').classes('text-xs')
+                            
+            search_input.on('value-change', render_dialog_guests.refresh)
+            
+            render_dialog_guests()
+            
+            with ui.row().classes('w-full justify-end q-mt-md'):
+                ui.button('Cancelar', on_click=diag.close).props('unelevated color=grey-8 dense')
                 
         diag.open()
 
