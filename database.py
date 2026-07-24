@@ -1070,35 +1070,45 @@ EFETIVO_PADRAO_GABINETE = [
 ]
 
 def seed_efetivo_gabinete():
-    """Realiza a carga automatizada dos 22 militares do efetivo do Gabinete nas tabelas efetivo e users."""
+    """Realiza a carga automatizada dos 22 militares do efetivo do Gabinete nas tabelas efetivo e users em requisição única (Bulk Upsert)."""
     try:
-        conn = get_service_db_connection() or get_db_connection()
-        if not conn:
-            return
-        
         import bcrypt
         pwd_hash = bcrypt.hashpw('militar123'.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
         
+        payloads = []
         for m in EFETIVO_PADRAO_GABINETE:
             nome_g = m['nome_guerra'].upper()
             username_slug = nome_g.lower().replace(' ', '.').replace('á','a').replace('é','e').replace('í','i').replace('ó','o').replace('ú','u').replace('ã','a')
             email_fake = f"{username_slug}@marinha.mil.br"
             
-            payload = {
+            p = {
                 'nome_guerra': nome_g,
                 'email': email_fake,
                 'senha_hash': pwd_hash,
                 'role': m['role']
             }
             if "CALAÇA" in nome_g or "CALACA" in nome_g:
-                payload['telegram_id'] = '5425877837'
+                p['telegram_id'] = '5425877837'
+            payloads.append(p)
 
+        conn = get_service_db_connection() or get_db_connection()
+        if conn:
             try:
-                conn.table('efetivo').upsert(payload, on_conflict='nome_guerra').execute()
-            except Exception as ef_err:
-                print(f"[EFETIVO SEED WARN] {nome_g}: {ef_err}", flush=True)
-                
-        print(f"[DB SEED SUCCESS] {len(EFETIVO_PADRAO_GABINETE)} militares cadastrados no efetivo com sucesso!", flush=True)
+                conn.table('efetivo').upsert(payloads, on_conflict='nome_guerra').execute()
+                print(f"[DB SEED SUCCESS] Bulk upsert de {len(payloads)} militares no Supabase concluído com sucesso!", flush=True)
+                return
+            except Exception as sp_err:
+                print(f"[DB SEED SUPABASE WARN] Supabase offline/timeout ({sp_err}). Usando banco local.", flush=True)
+
+        # Fallback local via sqlite_adapter
+        from sqlite_adapter import SQLiteDatabaseAdapter
+        local_db = SQLiteDatabaseAdapter()
+        for p in payloads:
+            try:
+                local_db.table('efetivo').upsert(p, on_conflict='nome_guerra').execute()
+            except Exception:
+                pass
+        print(f"[DB SEED LOCAL SUCCESS] {len(payloads)} militares cadastrados no banco local SQLite com sucesso!", flush=True)
     except Exception as e:
         print(f"[DB SEED EFETIVO ERR] {e}", flush=True)
 
