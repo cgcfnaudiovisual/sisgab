@@ -201,9 +201,9 @@ def render_page(autofill: str = None):
 
     @ui.refreshable
     def render_content():
-        # Busca efetivo militar do banco para notificação
+        # Busca efetivo militar do banco para notificação / designação de equipe
         efetivo_options = {}
-        db = get_db_connection()
+        db = get_db_connection() or get_service_db_connection()
         if db:
             try:
                 res_ef = db.table('efetivo').select('id, nome_guerra, role').execute()
@@ -211,6 +211,17 @@ def render_page(autofill: str = None):
                     efetivo_options = {item['id']: f"{item['nome_guerra']} ({item['role'].upper()})" for item in res_ef.data}
             except Exception as e:
                 print(f"[EFETIVO LOAD ERR] {e}")
+
+        # Fallback local via SQLite se o Supabase estiver offline/vazio
+        if not efetivo_options:
+            try:
+                from sqlite_adapter import SQLiteDatabaseAdapter
+                local_db = SQLiteDatabaseAdapter()
+                res_ef = local_db.table('efetivo').select('id, nome_guerra, role').execute()
+                if res_ef.data:
+                    efetivo_options = {item['id']: f"{item['nome_guerra']} ({item['role'].upper()})" for item in res_ef.data}
+            except Exception as loc_err:
+                print(f"[EFETIVO LOCAL LOAD ERR] {loc_err}")
 
         with ui.column().classes('w-full gap-4'):
             # SEÇÃO SUPERIOR: ASSISTENTE DE ENTRADA COM IA (100% de largura)
@@ -332,10 +343,11 @@ def render_page(autofill: str = None):
                             label='Formato de Entrega'
                         ).props('dark outlined dense w-full option-dark').classes('w-full')
                         
+                        lbl_militar = '🎯 Designar Encarregados da Missão (Chefia / Homologação)' if is_approver else '👤 Sugestão de Encarregado / Contato (Opcional)'
                         militar_select = ui.select(
                             efetivo_options,
                             multiple=True,
-                            label='Selecionar Militares'
+                            label=lbl_militar
                         ).props('dark outlined dense w-full option-dark').classes('w-full')
 
                         ui.separator().style('background-color: rgba(255, 255, 255, 0.05); margin: 12px 0;')
