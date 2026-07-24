@@ -36,11 +36,11 @@ async def _run_resilient_polling(bot_instance):
                 break
             print("[TELEGRAM BOT] Iniciando loop de escuta Polling...", flush=True)
             try:
-                await bot_instance.delete_webhook(drop_pending_updates=True)
+                await bot_instance.delete_webhook()
             except Exception as e:
                 print(f"[TELEGRAM BOT] Aviso ao limpar webhook: {e}", flush=True)
 
-            await bot_instance.polling(non_stop=True, timeout=15, request_timeout=30)
+            await bot_instance.polling(non_stop=True, timeout=10, request_timeout=20)
         except asyncio.CancelledError:
             print("[TELEGRAM BOT] Polling cancelado pelo sistema.", flush=True)
             break
@@ -108,8 +108,8 @@ async def init_bot():
             print(f"[TELEGRAM BOT] Aviso ao configurar lista de comandos: {cmd_err}", flush=True)
 
         try:
-            print("[TELEGRAM BOT] Limpando webhooks e atualizações pendentes...", flush=True)
-            await bot.delete_webhook(drop_pending_updates=True)
+            print("[TELEGRAM BOT] Limpando webhooks...", flush=True)
+            await bot.delete_webhook()
         except Exception as wh_err:
             print(f"[TELEGRAM BOT] Aviso ao deletar webhook: {wh_err}", flush=True)
             
