@@ -4,11 +4,11 @@ from datetime import datetime
 import pandas as pd
 from nicegui import ui, app
 import theme
-from database import get_db_connection
+from database import get_db_connection, get_service_db_connection
 
 THEME = theme.colors
 
-# Estado local do módulo (reativo por usuário na sessão se necessário, mas mantido na UI do NiceGUI)
+# Estado local do módulo
 class ModuleState:
     def __init__(self):
         self.selected_event_id = None
@@ -17,7 +17,6 @@ class ModuleState:
         self.filter_category = "Todos"
         self.filter_only_unallocated = False
 
-# Inicializar estado na memória do app por conexão do NiceGUI
 state = ModuleState()
 
 def get_row_label(index):
@@ -54,7 +53,7 @@ def sync_companions(main_guest_id, main_guest_name, max_acomp, event_id, categor
             if new_comps:
                 db.table('jade_convidados').insert(new_comps).execute()
             
-        # 3. Se temos demais (deleta excedentes mais novos)
+        # 3. Se temos demais (deleta excedentes)
         elif existing_count > max_acomp:
             to_delete = existing[max_acomp:]
             delete_ids = [d['id'] for d in to_delete]
@@ -80,10 +79,9 @@ def render_page():
     user_data = app.storage.user.get('user_data', {})
     user_name = user_data.get('nome_guerra', 'Operador')
     
-    # Refreshable principal do conteúdo do painel
     @ui.refreshable
     def render_content():
-        db = get_db_connection()
+        db = get_service_db_connection() or get_db_connection()
         if not db:
             with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
                 ui.icon('cloud_off', size='4rem')
@@ -98,14 +96,12 @@ def render_page():
         except Exception as e:
             print(f"[JADE EVENTS FETCH ERR] {e}")
 
-        # Se não há evento selecionado e existem eventos, seleciona o primeiro
         if not state.selected_event_id and eventos:
             state.selected_event_id = eventos[0]['id']
 
-        # Encontra dados do evento selecionado
         current_event = next((e for e in eventos if e['id'] == state.selected_event_id), None)
 
-        # Cabeçalho de Controle de Eventos
+        # --- CABEÇALHO DE CONTROLE DE EVENTOS ---
         with ui.card().classes('w-full q-pa-md no-shadow rounded-xl q-mb-md').style(
             f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
         ):
@@ -153,7 +149,7 @@ def render_page():
         # Carregar convidados do evento ativo
         convidados = []
         try:
-            res_conv = db.table('jade_convidados').select('*').eq('evento_id', current_event['id']).execute()
+            res_conv = db.table('jade_convidados').select('*').eq('evento_id', current_event['id']).order('id', desc=False).execute()
             convidados = res_conv.data if res_conv.data else []
         except Exception as e:
             print(f"[JADE GUESTS FETCH ERR] {e}")
@@ -169,356 +165,321 @@ def render_page():
         cols_count = layout.get('cols', 8)
         blocked_seats = layout.get('blocked_seats', [])
 
-        # Lista de categorias encontradas nos convidados para o filtro
         categories = sorted(list(set(c['categoria'] for c in convidados if c.get('categoria'))))
         category_options = ["Todos"] + categories
 
-        # Divisão da página
-        with ui.row().classes('w-full gap-4 wrap-mobile items-stretch justify-start'):
-            
-            # --- COLUNA ESQUERDA: LISTA DE CONVIDADOS ---
-            with ui.column().classes('col-12 col-md-4 q-pa-none').style('min-width: 320px;'):
-                with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
-                    f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]}; min-height: 550px;'
-                ):
-                    ui.label('👥 Convidados').classes('text-md font-bold text-cyan q-mb-md')
-                    
-                    # Filtros de Convidados
-                    with ui.row().classes('w-full gap-2 items-center q-mb-sm'):
-                        ui.input(
-                            placeholder='Buscar por nome ou cargo...',
-                            on_change=lambda e: update_search(e.value)
-                        ).props('dark outlined dense clearable').classes('col')
-                        
-                        ui.select(
-                            options=category_options,
-                            value=state.filter_category,
-                            on_change=lambda e: update_filter_category(e.value)
-                        ).props('dark outlined dense').style('width: 110px;')
-                        
-                    ui.checkbox(
-                        'Apenas não alocados', 
-                        value=state.filter_only_unallocated,
-                        on_change=lambda e: update_filter_unallocated(e.value)
-                    ).props('dark dense').classes('text-xs text-grey-4 q-mb-md')
-                    
-                    # Lista de cards dos convidados
-                    with ui.column().classes('w-full gap-2 q-mb-md scroll-container').style('max-height: 380px; overflow-y: auto;'):
-                        # Filtrar convidados localmente
-                        filtered_convidados = convidados
-                        if state.search_query:
-                            q = state.search_query.lower()
-                            filtered_convidados = [
-                                c for c in filtered_convidados 
-                                if q in c['nome'].lower() or 
-                                (c.get('cargo_funcao') and q in c['cargo_funcao'].lower()) or
-                                (c.get('posto_graduacao') and q in c['posto_graduacao'].lower())
-                            ]
-                        if state.filter_category != "Todos":
-                            filtered_convidados = [c for c in filtered_convidados if c.get('categoria') == state.filter_category]
-                        if state.filter_only_unallocated:
-                            filtered_convidados = [c for c in filtered_convidados if not c.get('assento_id')]
+        allocated_map = {c['assento_id']: c for c in convidados if c.get('assento_id')}
 
-                        if filtered_convidados:
-                            for c in filtered_convidados:
-                                is_allocated = bool(c.get('assento_id'))
-                                card_bg = 'rgba(0, 229, 255, 0.05)' if is_allocated else 'rgba(255, 255, 255, 0.02)'
-                                card_border = 'rgba(0, 229, 255, 0.2)' if is_allocated else 'rgba(255, 255, 255, 0.05)'
-                                
-                                with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg').style(
-                                    f'background: {card_bg}; border: 1px solid {card_border};'
-                                ):
-                                    with ui.row().classes('w-full justify-between items-center no-wrap'):
-                                        with ui.column().classes('gap-0 col'):
-                                            # Exibe Posto + Nome ou apenas Nome
-                                            nome_exibicao = f"{c.get('posto_graduacao') or ''} {c['nome']}".strip()
-                                            ui.label(nome_exibicao).classes('text-xs font-bold text-white')
-                                            
-                                            sub_label = c.get('cargo_funcao') or c.get('categoria') or 'Convidado'
-                                            ui.label(sub_label).classes('text-[10px] text-grey-4')
-                                            
-                                            # Acompanhantes e controle rapido (+ / -)
-                                            max_ac = c.get('max_acompanhantes', 0)
-                                            with ui.row().classes('items-center gap-1 q-mt-xs'):
-                                                ui.label(f"Acomp: {max_ac}").classes('text-[10px] text-amber font-bold')
-                                                
-                                                # Decrementar acompanhante (-)
-                                                if max_ac > 0:
-                                                    def dec_acomp(c_ref=c):
-                                                        new_ac = max(0, c_ref.get('max_acompanhantes', 0) - 1)
-                                                        reg = {
-                                                            'nome': c_ref['nome'],
-                                                            'posto_graduacao': c_ref.get('posto_graduacao'),
-                                                            'cargo_funcao': c_ref.get('cargo_funcao'),
-                                                            'categoria': c_ref.get('categoria', 'Geral'),
-                                                            'max_acompanhantes': new_ac
-                                                        }
-                                                        save_guest(c_ref['id'], reg, current_event['id'])
-                                                    
-                                                    ui.button('-', on_click=dec_acomp).props('unelevated color=amber text-color=black dense round').style('width: 18px; height: 18px; min-height: 18px; font-size: 11px; font-weight: bold;')
-
-                                                # Incrementar acompanhante (+)
-                                                def inc_acomp(c_ref=c):
-                                                    new_ac = c_ref.get('max_acompanhantes', 0) + 1
-                                                    reg = {
-                                                        'nome': c_ref['nome'],
-                                                        'posto_graduacao': c_ref.get('posto_graduacao'),
-                                                        'cargo_funcao': c_ref.get('cargo_funcao'),
-                                                        'categoria': c_ref.get('categoria', 'Geral'),
-                                                        'max_acompanhantes': new_ac
-                                                    }
-                                                    save_guest(c_ref['id'], reg, current_event['id'])
-
-                                                ui.button('+', on_click=inc_acomp).props('unelevated color=amber text-color=black dense round').style('width: 18px; height: 18px; min-height: 18px; font-size: 11px; font-weight: bold;')
-
-                                        # Status do assento
-                                        with ui.row().classes('items-center gap-1'):
-                                            if is_allocated:
-                                                ui.badge(f"Assento {c['assento_id']}").props('color=cyan text-color=black').classes('text-[9px]')
-                                                ui.button(
-                                                    icon='cancel', 
-                                                    on_click=lambda c=c: remove_guest_allocation(c)
-                                                ).props('unelevated color=danger dense flat round').classes('text-xs')
-                                            else:
-                                                ui.badge('Não Alocado').props('color=grey-7').classes('text-[9px]')
-                                                
-                                            # Botão editar convidado
-                                            ui.button(
-                                                icon='edit',
-                                                on_click=lambda c=c: open_edit_guest_dialog(c)
-                                            ).props('unelevated color=primary dense flat round').classes('text-xs')
-                                            
-                                            # Botão excluir convidado
-                                            ui.button(
-                                                icon='delete',
-                                                on_click=lambda c=c: confirm_delete_guest(c)
-                                            ).props('unelevated color=danger dense flat round').classes('text-xs')
-                        else:
-                            with ui.column().classes('w-full items-center justify-center q-py-lg text-grey'):
-                                ui.icon('person_off', size='2.5rem')
-                                ui.label('Nenhum convidado encontrado.').classes('text-xs q-mt-xs')
-                    
-                    # Botões de Ação na base da lista
-                    ui.separator().classes('q-my-md').style('border-color: rgba(255,255,255,0.05);')
-                    
-                    with ui.row().classes('w-full justify-between gap-2'):
-                        ui.button(
-                            'Modelo Excel', 
-                            icon='download', 
-                            on_click=download_template
-                        ).props('unelevated color=cyan dense outline').classes('col text-xs')
-                        
-                        # Upload para importação
-                        with ui.button('Importar Lista', icon='upload').props('unelevated color=primary text-color=black dense').classes('col text-xs'):
-                            ui.upload(
-                                on_upload=lambda e: handle_import_list(e, current_event['id']),
-                                multiple=False,
-                                auto_upload=True
-                            ).props('dark accept=.xlsx,.csv').classes('hidden')
-                            
+        # =========================================================================
+        # SEÇÃO 1 (TOPO): MAPA DE ASSENTOS / GRID
+        # =========================================================================
+        with ui.card().classes('w-full q-pa-md no-shadow rounded-xl q-mb-md').style(
+            f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
+        ):
+            with ui.row().classes('w-full items-center justify-between q-mb-sm wrap-mobile gap-2'):
+                with ui.column().classes('gap-0'):
+                    ui.label('🗺️ MAPA DE ASSENTOS DA SOLENIDADE').classes('text-md font-bold text-cyan cyber-title')
+                    ui.label(f"Grid: {rows_count} fileiras × {cols_count} colunas • {len(allocated_map)} de {rows_count * cols_count - len(blocked_seats)} lugares ocupados").classes('text-[11px] text-grey-4')
+                
+                # Seletor de Modo de Edição
+                with ui.row().classes('items-center bg-black/30 rounded-lg q-pa-xs border border-white/10'):
                     ui.button(
-                        'Adicionar Convidado Manual', 
-                        icon='person_add', 
-                        on_click=lambda: open_edit_guest_dialog(None, current_event['id'])
-                    ).props('unelevated color=primary text-color=black dense w-full q-mt-sm').classes('w-full text-xs')
-
-            # --- COLUNA DIREITA: GRID DO MAPA DE ASSENTOS ---
-            with ui.column().classes('col-12 col-md q-pa-none').style('flex-grow: 1;'):
-                with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
-                    f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]}; min-height: 550px;'
-                ):
-                    with ui.row().classes('w-full items-center justify-between q-mb-md wrap-mobile gap-2'):
-                        with ui.column().classes('gap-0'):
-                            ui.label('🗺️ Mapa de Assentos').classes('text-md font-bold text-cyan')
-                            ui.label(f"Layout atual: {rows_count} fileiras × {cols_count} colunas").classes('text-[11px] text-grey')
-                        
-                        # Seletor de Modo de Edição
-                        with ui.row().classes('items-center bg-black-10 rounded-lg q-pa-xs border border-white-10'):
-                            ui.button(
-                                'Alocação', 
-                                icon='event_seat', 
-                                on_click=lambda: toggle_mode("alocacao")
-                            ).props(f'dense unelevated {"color=primary text-color=black" if state.edit_mode == "alocacao" else "flat text-color=grey"}').classes('text-xs q-px-sm')
-                            
-                            ui.button(
-                                'Editor Layout', 
-                                icon='edit_road', 
-                                on_click=lambda: toggle_mode("layout")
-                            ).props(f'dense unelevated {"color=primary text-color=black" if state.edit_mode == "layout" else "flat text-color=grey"}').classes('text-xs q-px-sm')
-
-                    # Grid Renderizado
-                    # Dicionário de Assento -> Convidado
-                    allocated_map = {}
-                    for c in convidados:
-                        if c.get('assento_id'):
-                            allocated_map[c['assento_id']] = c
-
-                    # Renderizador de Grid HTML/CSS embutido responsivo
-                    with ui.column().classes('w-full items-center justify-start q-py-md scroll-container').style('overflow-x: auto;'):
-                        # Referência Superior (Palco, etc.)
-                        ref_top = layout.get('ref_top', 'PALCO PRINCIPAL')
-                        if ref_top:
-                            with ui.row().classes('w-full justify-center q-mb-sm'):
-                                ui.label(f"▲ {ref_top.upper()} ▲").classes('text-[10px] font-black tracking-widest text-cyan px-4 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/5')
-
-                        # Grid de Assentos
-                        with ui.grid(columns=cols_count + 1).classes('gap-2 items-center').style('min-width: 600px;'):
-                            # Célula canto superior esquerdo (vazia)
-                            ui.label('').classes('text-center font-bold text-grey-5').style('width: 40px;')
-                            
-                            # Cabeçalhos das Colunas (1, 2, 3...)
-                            for col in range(1, cols_count + 1):
-                                ui.label(str(col)).classes('text-center font-bold text-grey-5').style('width: 70px; font-size: 11px;')
-                                
-                            # Fileiras (A, B, C...)
-                            for r in range(rows_count):
-                                row_label = get_row_label(r)
-                                # Lote da Fileira (Cabeçalho lateral)
-                                ui.label(row_label).classes('text-center font-bold text-grey-5 text-md').style('width: 40px;')
-                                
-                                for col in range(1, cols_count + 1):
-                                    seat_id = f"{row_label}-{col}"
-                                    is_blocked = seat_id in blocked_seats
-                                    guest = allocated_map.get(seat_id)
-                                    
-                                    # Estilo do assento baseado no estado
-                                    if is_blocked:
-                                        # Espaço vazio / Corredor
-                                        if state.edit_mode == "layout":
-                                            with ui.column().classes('items-center justify-center cursor-pointer transition-all hover:scale-105').style(
-                                                'width: 70px; height: 48px; border: 1px dashed rgba(255,255,255,0.15); border-radius: 4px; background: rgba(255,255,255,0.02); gap: 0;'
-                                            ).on('click', lambda s=seat_id: toggle_seat_block(s, current_event, layout)):
-                                                ui.label(seat_id).classes('text-[8px] text-grey-5 font-mono')
-                                                ui.label('CORREDOR').classes('text-[7px] text-grey-6 font-bold')
-                                        else:
-                                            # Apenas espaço em branco
-                                            ui.label('').style('width: 70px; height: 48px;')
-                                    else:
-                                        if guest:
-                                            # Cadeira Ocupada
-                                            display_name = f"{guest.get('posto_graduacao') or ''} {guest['nome']}".strip()
-                                            if len(display_name) > 12:
-                                                display_name = display_name[:10] + '..'
-                                                
-                                            # Cores por categoria
-                                            is_vip = guest.get('categoria') == 'VIP'
-                                            border_c = THEME['primary'] if is_vip else THEME['accent']
-                                            bg_c = 'rgba(0, 229, 255, 0.15)' if is_vip else 'rgba(0, 162, 255, 0.15)'
-                                            text_c = THEME['primary'] if is_vip else THEME['accent']
-                                            
-                                            with ui.column().classes('items-center justify-between q-pa-xs cursor-pointer transition-all hover:scale-105 border').style(
-                                                f'width: 70px; height: 48px; border-radius: 4px; border-color: {border_c} !important; background: {bg_c}; gap: 0;'
-                                            ).on('click', lambda s=seat_id, g=guest: open_seat_actions_dialog(s, g, convidados, current_event['id'])):
-                                                ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono leading-none')
-                                                ui.label(display_name).classes('text-[9px] font-bold text-center leading-none text-white overflow-hidden w-full')
-                                                
-                                                category_label = str(guest.get('categoria', 'Geral')).upper()
-                                                if len(category_label) > 10:
-                                                    category_label = category_label[:8] + '..'
-                                                ui.label(category_label).classes(f'text-[7px] text-center leading-none').style(f'color: {text_c}; font-weight: bold;')
-                                        else:
-                                            # Cadeira Livre
-                                            if state.edit_mode == "layout":
-                                                # No modo layout, clica para bloquear (virar corredor)
-                                                with ui.column().classes('items-center justify-center cursor-pointer transition-all hover:scale-105 border').style(
-                                                    'width: 70px; height: 48px; border-radius: 4px; border-color: rgba(255,255,255,0.15) !important; background: #1b2535; gap: 0;'
-                                                ).on('click', lambda s=seat_id: toggle_seat_block(s, current_event, layout)):
-                                                    ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono')
-                                                    ui.label('BLOQUEAR').classes('text-[7px] text-grey-5 font-bold')
-                                            else:
-                                                # Modo alocação, clica para alocar
-                                                with ui.column().classes('items-center justify-between q-pa-xs cursor-pointer transition-all hover:scale-105 border').style(
-                                                    f'width: 70px; height: 48px; border-radius: 4px; border-color: {THEME["success"]}40 !important; background: rgba(0, 230, 118, 0.05); gap: 0;'
-                                                ).on('click', lambda s=seat_id: open_allocate_seat_dialog(s, convidados, current_event['id'])):
-                                                    ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono leading-none')
-                                                    ui.label('LIVRE').classes('text-[9px] font-bold text-center leading-none').style(f'color: {THEME["success"]};')
-                                                    ui.label('(vazio)').classes('text-[7px] text-grey-5 text-center leading-none')
-
-                        # Referência Inferior (Entrada, etc.)
-                        ref_bottom = layout.get('ref_bottom', 'ENTRADA / FACHADA')
-                        if ref_bottom:
-                            with ui.row().classes('w-full justify-center q-mt-sm q-mb-md'):
-                                ui.label(f"▼ {ref_bottom.upper()} ▼").classes('text-[10px] font-black tracking-widest text-cyan px-4 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/5')
-
-                    # Controles de Dimensão do Layout na Base
-                    ui.separator().classes('q-my-md').style('border-color: rgba(255,255,255,0.05);')
+                        'Alocação Rápida', 
+                        icon='event_seat', 
+                        on_click=lambda: toggle_mode("alocacao")
+                    ).props(f'dense unelevated {"color=primary text-color=black" if state.edit_mode == "alocacao" else "flat text-color=grey"}').classes('text-xs q-px-sm')
                     
-                    with ui.row().classes('w-full justify-between items-center wrap-mobile gap-2'):
-                        with ui.row().classes('items-center gap-1'):
-                            ui.label('Fileiras:').classes('text-xs text-grey-4')
-                            ui.button(icon='remove', on_click=lambda: update_grid_size(current_event, layout, -1, 0)).props('unelevated color=grey-8 dense round flat')
-                            ui.button(icon='add', on_click=lambda: update_grid_size(current_event, layout, 1, 0)).props('unelevated color=grey-8 dense round flat')
-                            
-                            ui.label('Colunas:').classes('text-xs text-grey-4 q-ml-md')
-                            ui.button(icon='remove', on_click=lambda: update_grid_size(current_event, layout, 0, -1)).props('unelevated color=grey-8 dense round flat')
-                            ui.button(icon='add', on_click=lambda: update_grid_size(current_event, layout, 0, 1)).props('unelevated color=grey-8 dense round flat')
-                        
-                        ui.button(
-                            'Exportar Planilha de Assentos', 
-                            icon='table_chart', 
-                            on_click=lambda: export_map(current_event['id'], current_event['nome'], rows_count, cols_count, blocked_seats, convidados)
-                        ).props('unelevated color=cyan dense').classes('text-xs')
+                    ui.button(
+                        'Editor de Layout / Corredores', 
+                        icon='edit_road', 
+                        on_click=lambda: toggle_mode("layout")
+                    ).props(f'dense unelevated {"color=primary text-color=black" if state.edit_mode == "layout" else "flat text-color=grey"}').classes('text-xs q-px-sm')
 
-    # --- FUNÇÕES AUXILIARES DE ESTADO ---
-    
+            # Renderizador de Grid de Assentos
+            with ui.column().classes('w-full items-center justify-start q-py-md scroll-container').style('overflow-x: auto;'):
+                ref_top = layout.get('ref_top', 'PALCO PRINCIPAL')
+                if ref_top:
+                    with ui.row().classes('w-full justify-center q-mb-sm'):
+                        ui.label(f"▲ {ref_top.upper()} ▲").classes('text-[10px] font-black tracking-widest text-cyan px-4 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/5')
+
+                with ui.grid(columns=cols_count + 1).classes('gap-2 items-center').style('min-width: 600px;'):
+                    ui.label('').classes('text-center font-bold text-grey-5').style('width: 40px;')
+                    
+                    for col in range(1, cols_count + 1):
+                        ui.label(str(col)).classes('text-center font-bold text-grey-5').style('width: 70px; font-size: 11px;')
+                        
+                    for r in range(rows_count):
+                        row_label = get_row_label(r)
+                        ui.label(row_label).classes('text-center font-bold text-grey-5 text-md').style('width: 40px;')
+                        
+                        for col in range(1, cols_count + 1):
+                            seat_id = f"{row_label}-{col}"
+                            is_blocked = seat_id in blocked_seats
+                            guest = allocated_map.get(seat_id)
+                            
+                            if is_blocked:
+                                if state.edit_mode == "layout":
+                                    with ui.column().classes('items-center justify-center cursor-pointer transition-all hover:scale-105').style(
+                                        'width: 70px; height: 48px; border: 1px dashed rgba(255,255,255,0.15); border-radius: 4px; background: rgba(255,255,255,0.02); gap: 0;'
+                                    ).on('click', lambda s=seat_id: toggle_seat_block(s, current_event, layout)):
+                                        ui.label(seat_id).classes('text-[8px] text-grey-5 font-mono')
+                                        ui.label('CORREDOR').classes('text-[7px] text-grey-6 font-bold')
+                                else:
+                                    ui.label('').style('width: 70px; height: 48px;')
+                            else:
+                                if guest:
+                                    display_name = f"{guest.get('posto_graduacao') or ''} {guest['nome']}".strip()
+                                    if len(display_name) > 12:
+                                        display_name = display_name[:10] + '..'
+                                        
+                                    is_vip = guest.get('categoria') == 'VIP'
+                                    is_acomp = bool(guest.get('convidado_principal_id'))
+                                    
+                                    border_c = THEME['primary'] if is_vip else ('#ffb74d' if is_acomp else THEME['accent'])
+                                    bg_c = 'rgba(0, 229, 255, 0.15)' if is_vip else ('rgba(255, 183, 77, 0.12)' if is_acomp else 'rgba(0, 162, 255, 0.15)')
+                                    text_c = THEME['primary'] if is_vip else ('#ffb74d' if is_acomp else THEME['accent'])
+                                    
+                                    with ui.column().classes('items-center justify-between q-pa-xs cursor-pointer transition-all hover:scale-105 border').style(
+                                        f'width: 70px; height: 48px; border-radius: 4px; border-color: {border_c} !important; background: {bg_c}; gap: 0;'
+                                    ).on('click', lambda s=seat_id, g=guest: open_seat_actions_dialog(s, g, convidados, current_event['id'])):
+                                        ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono leading-none')
+                                        ui.label(display_name).classes('text-[9px] font-bold text-center leading-none text-white overflow-hidden w-full')
+                                        
+                                        category_label = 'ACOMP' if is_acomp else str(guest.get('categoria', 'Geral')).upper()
+                                        if len(category_label) > 10:
+                                            category_label = category_label[:8] + '..'
+                                        ui.label(category_label).classes(f'text-[7px] text-center leading-none').style(f'color: {text_c}; font-weight: bold;')
+                                else:
+                                    if state.edit_mode == "layout":
+                                        with ui.column().classes('items-center justify-center cursor-pointer transition-all hover:scale-105 border').style(
+                                            'width: 70px; height: 48px; border-radius: 4px; border-color: rgba(255,255,255,0.15) !important; background: #1b2535; gap: 0;'
+                                        ).on('click', lambda s=seat_id: toggle_seat_block(s, current_event, layout)):
+                                            ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono')
+                                            ui.label('BLOQUEAR').classes('text-[7px] text-grey-5 font-bold')
+                                    else:
+                                        with ui.column().classes('items-center justify-between q-pa-xs cursor-pointer transition-all hover:scale-105 border').style(
+                                            f'width: 70px; height: 48px; border-radius: 4px; border-color: {THEME["success"]}40 !important; background: rgba(0, 230, 118, 0.05); gap: 0;'
+                                        ).on('click', lambda s=seat_id: open_allocate_seat_dialog(s, convidados, current_event['id'])):
+                                            ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono leading-none')
+                                            ui.label('LIVRE').classes('text-[9px] font-bold text-center leading-none').style(f'color: {THEME["success"]};')
+                                            ui.label('(vazio)').classes('text-[7px] text-grey-5 text-center leading-none')
+
+                ref_bottom = layout.get('ref_bottom', 'ENTRADA / FACHADA')
+                if ref_bottom:
+                    with ui.row().classes('w-full justify-center q-mt-sm q-mb-sm'):
+                        ui.label(f"▼ {ref_bottom.upper()} ▼").classes('text-[10px] font-black tracking-widest text-cyan px-4 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/5')
+
+            # Controles de Dimensão do Layout na Base
+            with ui.row().classes('w-full justify-between items-center wrap-mobile gap-2 q-mt-xs'):
+                with ui.row().classes('items-center gap-1'):
+                    ui.label('Fileiras:').classes('text-xs text-grey-4')
+                    ui.button(icon='remove', on_click=lambda: update_grid_size(current_event, layout, -1, 0)).props('unelevated color=grey-8 dense round flat')
+                    ui.button(icon='add', on_click=lambda: update_grid_size(current_event, layout, 1, 0)).props('unelevated color=grey-8 dense round flat')
+                    
+                    ui.label('Colunas:').classes('text-xs text-grey-4 q-ml-sm')
+                    ui.button(icon='remove', on_click=lambda: update_grid_size(current_event, layout, 0, -1)).props('unelevated color=grey-8 dense round flat')
+                    ui.button(icon='add', on_click=lambda: update_grid_size(current_event, layout, 0, 1)).props('unelevated color=grey-8 dense round flat')
+                    
+                ui.label('Dica: Clique nos lugares vagos para alocar convidados.').classes('text-[11px] text-grey-5 italic')
+
+        # =========================================================================
+        # SEÇÃO 2 (ABAIXO DO GRID): LISTA DE CONVIDADOS HIERÁRQUICA E ACOMPANHANTES
+        # =========================================================================
+        with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
+            f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
+        ):
+            with ui.row().classes('w-full justify-between items-center wrap-mobile gap-2 q-mb-md'):
+                ui.label('👥 PAINEL DE CONVIDADOS E ACOMPANHANTES').classes('text-md font-bold text-cyan cyber-title')
+                
+                with ui.row().classes('items-center gap-2'):
+                    ui.button('Modelo Excel', icon='download', on_click=download_template).props('unelevated color=cyan dense outline').classes('text-xs')
+                    
+                    with ui.button('Importar Lista', icon='upload').props('unelevated color=primary text-color=black dense').classes('text-xs'):
+                        ui.upload(
+                            on_upload=lambda e: handle_import_list(e, current_event['id']),
+                            multiple=False,
+                            auto_upload=True
+                        ).props('dark accept=.xlsx,.csv').classes('hidden')
+                        
+                    ui.button('➕ Adicionar Convidado Principal', icon='person_add', on_click=lambda: open_edit_guest_dialog(None, current_event['id'])).props('unelevated color=primary text-color=black dense').classes('text-xs')
+
+            # Filtros de Convidados
+            with ui.row().classes('w-full gap-2 items-center q-mb-md'):
+                ui.input(
+                    placeholder='Buscar autoridade, convidado ou acompanhante...',
+                    on_change=lambda e: update_search(e.value)
+                ).props('dark outlined dense clearable').classes('col')
+                
+                ui.select(
+                    options=category_options,
+                    value=state.filter_category,
+                    on_change=lambda e: update_filter_category(e.value)
+                ).props('dark outlined dense').style('width: 140px;')
+                
+                ui.checkbox(
+                    'Apenas não alocados', 
+                    value=state.filter_only_unallocated,
+                    on_change=lambda e: update_filter_unallocated(e.value)
+                ).props('dark dense').classes('text-xs text-grey-4')
+
+            # Filtra autoridades principais (sem convidado_principal_id)
+            principais = [c for c in convidados if not c.get('convidado_principal_id')]
+            
+            # Filtro local
+            if state.search_query:
+                q = state.search_query.lower()
+                # Mantém se a própria autoridade ou algum de seus acompanhantes casar com a busca
+                filtered_principais = []
+                for p in principais:
+                    acomp_p = [c for c in convidados if c.get('convidado_principal_id') == p['id']]
+                    match_p = q in p['nome'].lower() or (p.get('cargo_funcao') and q in p['cargo_funcao'].lower()) or (p.get('posto_graduacao') and q in p['posto_graduacao'].lower())
+                    match_ac = any(q in a['nome'].lower() for a in acomp_p)
+                    if match_p or match_ac:
+                        filtered_principais.append(p)
+                principais = filtered_principais
+
+            if state.filter_category != "Todos":
+                principais = [p for p in principais if p.get('categoria') == state.filter_category]
+
+            if state.filter_only_unallocated:
+                principais = [p for p in principais if not p.get('assento_id')]
+
+            if principais:
+                with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
+                    for p in principais:
+                        # Busca acompanhantes deste convidado principal
+                        acomp_list = [c for c in convidados if c.get('convidado_principal_id') == p['id']]
+                        
+                        is_p_allocated = bool(p.get('assento_id'))
+                        card_border = 'rgba(0, 229, 255, 0.4)' if is_p_allocated else 'rgba(255, 255, 255, 0.08)'
+                        
+                        with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
+                            f'background: rgba(19, 26, 38, 0.95); border: 1px solid {card_border};'
+                        ):
+                            # --- CABEÇALHO DA AUTORIDADE PRINCIPAL ---
+                            with ui.row().classes('w-full justify-between items-start no-wrap'):
+                                with ui.column().classes('gap-0 col'):
+                                    nome_p = f"{p.get('posto_graduacao') or ''} {p['nome']}".strip()
+                                    ui.label(nome_p).classes('text-sm font-bold text-white cyber-title')
+                                    
+                                    cargo_p = p.get('cargo_funcao') or p.get('categoria') or 'Autoridade'
+                                    ui.label(f"[{p.get('categoria', 'Geral')}] {cargo_p}").classes('text-xs text-grey-4')
+
+                                # Badge de Alocação da Autoridade
+                                with ui.row().classes('items-center gap-1'):
+                                    if is_p_allocated:
+                                        ui.badge(f"Assento {p['assento_id']}").props('color=cyan text-color=black bold').classes('text-xs')
+                                        ui.button(icon='cancel', on_click=lambda p=p: remove_guest_allocation(p)).props('unelevated color=danger dense flat round').classes('text-xs')
+                                    else:
+                                        ui.badge('Sem Assento').props('color=grey-8').classes('text-xs')
+                                        
+                                    ui.button(icon='edit', on_click=lambda p=p: open_edit_guest_dialog(p)).props('unelevated color=primary dense flat round').classes('text-xs')
+                                    ui.button(icon='delete', on_click=lambda p=p: confirm_delete_guest(p)).props('unelevated color=danger dense flat round').classes('text-xs')
+
+                            # --- CONTROLE QUANTITATIVO DE ACOMPANHANTES (+ / -) ---
+                            max_ac = p.get('max_acompanhantes', 0)
+                            ui.separator().classes('q-my-xs').style('border-color: rgba(255,255,255,0.05);')
+                            
+                            with ui.row().classes('w-full justify-between items-center q-py-xs bg-black/20 px-2 rounded-lg'):
+                                ui.label(f"Acompanhantes Vagas: {max_ac}").classes('text-xs text-amber font-bold')
+                                
+                                with ui.row().classes('items-center gap-1'):
+                                    if max_ac > 0:
+                                        def dec_acomp(p_ref=p):
+                                            new_ac = max(0, p_ref.get('max_acompanhantes', 0) - 1)
+                                            reg = {
+                                                'nome': p_ref['nome'],
+                                                'posto_graduacao': p_ref.get('posto_graduacao'),
+                                                'cargo_funcao': p_ref.get('cargo_funcao'),
+                                                'categoria': p_ref.get('categoria', 'Geral'),
+                                                'max_acompanhantes': new_ac
+                                            }
+                                            save_guest(p_ref['id'], reg, current_event['id'])
+                                        
+                                        ui.button('-', on_click=dec_acomp).props('unelevated color=amber text-color=black dense round').style('width: 22px; height: 22px; font-weight: bold;')
+
+                                    def inc_acomp(p_ref=p):
+                                        new_ac = p_ref.get('max_acompanhantes', 0) + 1
+                                        reg = {
+                                            'nome': p_ref['nome'],
+                                            'posto_graduacao': p_ref.get('posto_graduacao'),
+                                            'cargo_funcao': p_ref.get('cargo_funcao'),
+                                            'categoria': p_ref.get('categoria', 'Geral'),
+                                            'max_acompanhantes': new_ac
+                                        }
+                                        save_guest(p_ref['id'], reg, current_event['id'])
+
+                                    ui.button('+', on_click=inc_acomp).props('unelevated color=amber text-color=black dense round').style('width: 22px; height: 22px; font-weight: bold;')
+
+                            # --- SUB-LISTA DE ACOMPANHANTES VINCULADOS (ABAIXO) ---
+                            if acomp_list:
+                                with ui.column().classes('w-full gap-1 q-mt-xs pl-2 border-l-2 border-amber-500/40'):
+                                    for ac in acomp_list:
+                                        is_ac_allocated = bool(ac.get('assento_id'))
+                                        ac_bg = 'rgba(255, 183, 77, 0.08)' if is_ac_allocated else 'rgba(255, 255, 255, 0.02)'
+                                        
+                                        with ui.card().classes('w-full q-pa-xs px-2 no-shadow rounded-md').style(f'background: {ac_bg}; border: 1px solid rgba(255,183,77,0.2);'):
+                                            with ui.row().classes('w-full justify-between items-center no-wrap'):
+                                                with ui.column().classes('gap-0'):
+                                                    ui.label(ac['nome']).classes('text-xs text-grey-2 font-medium')
+                                                    ui.label('(Acompanhante)').classes('text-[9px] text-amber-4 italic')
+                                                
+                                                if is_ac_allocated:
+                                                    with ui.row().classes('items-center gap-1'):
+                                                        ui.badge(f"Assento {ac['assento_id']}").props('color=amber text-color=black').classes('text-[9px]')
+                                                        ui.button(icon='cancel', on_click=lambda ac=ac: remove_guest_allocation(ac)).props('unelevated color=danger dense flat round').classes('text-xs')
+                                                else:
+                                                    ui.badge('Sem Assento').props('color=grey-8').classes('text-[9px]')
+            else:
+                with ui.column().classes('w-full items-center justify-center q-py-xl text-grey'):
+                    ui.icon('person_off', size='3rem')
+                    ui.label('Nenhuma autoridade ou convidado encontrado.').classes('text-sm q-mt-xs')
+
+    # Métodos utilitários do painel
     def select_event(event_id):
         state.selected_event_id = event_id
         render_content.refresh()
-        
+
     def toggle_mode(mode):
         state.edit_mode = mode
         render_content.refresh()
-        
-    def update_search(val):
-        state.search_query = val or ""
+
+    def update_search(query):
+        state.search_query = query
         render_content.refresh()
-        
-    def update_filter_category(val):
-        state.filter_category = val
+
+    def update_filter_category(cat):
+        state.filter_category = cat
         render_content.refresh()
-        
+
     def update_filter_unallocated(val):
         state.filter_only_unallocated = val
         render_content.refresh()
 
-    # --- COMANDOS E TRANSAÇÕES NO BANCO DE DADOS ---
-
-    def create_event(nome, data, local, layout_tipo, rows, cols, ref_top="PALCO PRINCIPAL", ref_bottom="ENTRADA / FACHADA"):
+    def create_event(nome, data, local, layout_tipo, rows, cols, ref_top, ref_bottom):
         if not nome or not data:
-            ui.notify('Nome e Data do Evento são obrigatórios.', color='warning')
+            ui.notify('Nome e Data do evento são obrigatórios.', color='warning')
             return
             
-        db = get_db_connection()
+        db = get_service_db_connection() or get_db_connection()
         if db:
+            layout_data = {
+                'tipo': layout_tipo,
+                'rows': int(rows),
+                'cols': int(cols),
+                'ref_top': ref_top or 'PALCO PRINCIPAL',
+                'ref_bottom': ref_bottom or 'ENTRADA / FACHADA',
+                'blocked_seats': []
+            }
             try:
-                layout_json = json.dumps({
-                    'rows': int(rows),
-                    'cols': int(cols),
-                    'blocked_seats': [],
-                    'ref_top': ref_top or 'PALCO PRINCIPAL',
-                    'ref_bottom': ref_bottom or 'ENTRADA / FACHADA'
-                })
-                registro = {
+                res = db.table('jade_eventos').insert({
                     'nome': nome.upper(),
                     'data_evento': data,
                     'local': local or '',
-                    'tipo_layout': layout_tipo,
-                    'layout_json': layout_json,
-                    'status': 'ativo',
-                    'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                }
-                res = db.table('jade_eventos').insert(registro).execute()
-                ui.notify('Evento criado com sucesso!', color='success')
-                
-                # Salva log
-                db.table('jade_log').insert({
-                    'evento_id': res.data[0]['id'] if res.data else None,
-                    'acao': 'criar_evento',
-                    'detalhes': f"Evento {nome.upper()} criado por {user_name}",
-                    'usuario': user_name,
-                    'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    'layout_json': json.dumps(layout_data)
                 }).execute()
                 
+                ui.notify('Evento criado com sucesso!', color='success')
                 if res.data:
                     state.selected_event_id = res.data[0]['id']
                 render_content.refresh()
@@ -526,17 +487,12 @@ def render_page():
                 ui.notify(f"Erro ao criar evento: {e}", color='red')
 
     def delete_event(event):
-        db = get_db_connection()
+        db = get_service_db_connection() or get_db_connection()
         if db:
             try:
-                # 1. Remove convidados do evento
                 db.table('jade_convidados').delete().eq('evento_id', event['id']).execute()
-                # 2. Remove logs
-                db.table('jade_log').delete().eq('evento_id', event['id']).execute()
-                # 3. Remove evento
                 db.table('jade_eventos').delete().eq('id', event['id']).execute()
-                
-                ui.notify('Evento e todos os dados vinculados foram excluídos.', color='success')
+                ui.notify('Evento e dados associados excluídos.', color='success')
                 state.selected_event_id = None
                 render_content.refresh()
             except Exception as e:
@@ -547,12 +503,10 @@ def render_page():
         if db:
             try:
                 if guest_id:
-                    # Update
                     db.table('jade_convidados').update(data).eq('id', guest_id).execute()
                     ui.notify('Dados do convidado atualizados.', color='success')
                     sync_companions(guest_id, data['nome'], data['max_acompanhantes'], event_id, data['categoria'])
                 else:
-                    # Insert
                     data['evento_id'] = event_id
                     res = db.table('jade_convidados').insert(data).execute()
                     ui.notify('Convidado adicionado à lista.', color='success')
@@ -564,12 +518,10 @@ def render_page():
                 ui.notify(f"Erro ao salvar convidado: {e}", color='red')
 
     def delete_guest(guest):
-        db = get_db_connection()
+        db = get_service_db_connection() or get_db_connection()
         if db:
             try:
-                # Remove acompanhantes primeiro
                 db.table('jade_convidados').delete().eq('convidado_principal_id', guest['id']).execute()
-                # Remove convidado
                 db.table('jade_convidados').delete().eq('id', guest['id']).execute()
                 ui.notify(f"Convidado {guest['nome']} e acompanhantes removidos.", color='success')
                 render_content.refresh()
@@ -577,74 +529,39 @@ def render_page():
                 ui.notify(f"Erro ao excluir convidado: {e}", color='red')
 
     def allocate_guest(guest_id, seat_id, event_id):
-        db = get_db_connection()
+        db = get_service_db_connection() or get_db_connection()
         if db:
             try:
-                # 1. Garante que ninguém mais está no mesmo assento
                 db.table('jade_convidados').update({'assento_id': None}).eq('evento_id', event_id).eq('assento_id', seat_id).execute()
-                
-                # 2. Aloca o convidado selecionado
                 db.table('jade_convidados').update({'assento_id': seat_id}).eq('id', guest_id).execute()
-                
-                # 3. Log
-                db.table('jade_log').insert({
-                    'evento_id': event_id,
-                    'acao': 'alocar_assento',
-                    'detalhes': f"Convidado ID {guest_id} alocado ao assento {seat_id}",
-                    'usuario': user_name,
-                    'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                }).execute()
-                
                 ui.notify(f"Assento {seat_id} ocupado com sucesso.", color='success')
                 render_content.refresh()
             except Exception as e:
                 ui.notify(f"Erro ao alocar assento: {e}", color='red')
 
     def remove_guest_allocation(guest):
-        db = get_db_connection()
+        db = get_service_db_connection() or get_db_connection()
         if db:
             try:
                 db.table('jade_convidados').update({'assento_id': None}).eq('id', guest['id']).execute()
                 ui.notify(f"Convidado {guest['nome']} removido do assento {guest['assento_id']}.", color='success')
-                
-                # Log
-                db.table('jade_log').insert({
-                    'evento_id': guest['evento_id'],
-                    'acao': 'desalocar_assento',
-                    'detalhes': f"Convidado {guest['nome']} removido do assento {guest['assento_id']}",
-                    'usuario': user_name,
-                    'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                }).execute()
-                
                 render_content.refresh()
             except Exception as e:
                 ui.notify(f"Erro ao remover alocação: {e}", color='red')
 
     def swap_guests(guest_a, guest_b_id, event_id):
-        db = get_db_connection()
+        db = get_service_db_connection() or get_db_connection()
         if db:
             try:
                 seat_a = guest_a.get('assento_id')
-                
-                # Resgata o outro convidado
                 res_b = db.table('jade_convidados').select('*').eq('id', guest_b_id).execute()
                 if not res_b.data:
                     return
                 guest_b = res_b.data[0]
                 seat_b = guest_b.get('assento_id')
                 
-                # Troca os assentos
                 db.table('jade_convidados').update({'assento_id': seat_b}).eq('id', guest_a['id']).execute()
                 db.table('jade_convidados').update({'assento_id': seat_a}).eq('id', guest_b['id']).execute()
-                
-                # Log
-                db.table('jade_log').insert({
-                    'evento_id': event_id,
-                    'acao': 'swap_assentos',
-                    'detalhes': f"Troca de assentos: {guest_a['nome']} ({seat_a} -> {seat_b}) e {guest_b['nome']} ({seat_b} -> {seat_a})",
-                    'usuario': user_name,
-                    'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                }).execute()
                 
                 ui.notify("Troca de assentos efetuada.", color='success')
                 render_content.refresh()
@@ -652,7 +569,7 @@ def render_page():
                 ui.notify(f"Erro ao realizar troca: {e}", color='red')
 
     def toggle_seat_block(seat_id, event, layout):
-        db = get_db_connection()
+        db = get_service_db_connection() or get_db_connection()
         if db:
             blocked = layout.get('blocked_seats', [])
             if seat_id in blocked:
@@ -664,18 +581,14 @@ def render_page():
             new_layout_json = json.dumps(layout)
             
             try:
-                # 1. Garante que qualquer convidado alocado nesse assento agora bloqueado seja desalocado
                 db.table('jade_convidados').update({'assento_id': None}).eq('evento_id', event['id']).eq('assento_id', seat_id).execute()
-                
-                # 2. Atualiza o layout do evento
                 db.table('jade_eventos').update({'layout_json': new_layout_json}).eq('id', event['id']).execute()
-                
                 render_content.refresh()
             except Exception as e:
                 ui.notify(f"Erro ao atualizar layout: {e}", color='red')
 
     def update_grid_size(event, layout, row_delta, col_delta):
-        db = get_db_connection()
+        db = get_service_db_connection() or get_db_connection()
         if db:
             r = max(1, min(20, layout.get('rows', 5) + row_delta))
             c = max(1, min(25, layout.get('cols', 8) + col_delta))
@@ -690,8 +603,7 @@ def render_page():
             except Exception as e:
                 ui.notify(f"Erro ao alterar dimensões do grid: {e}", color='red')
 
-    # --- COMPONENTES DE INTERFACE DE DIÁLOGOS (MODAIS) ---
-
+    # --- MODAIS E DIÁLOGOS ---
     def open_create_event_dialog():
         with ui.dialog() as diag, ui.card().classes('q-pa-md').style('min-width: 380px;'):
             ui.label('📅 Novo Evento de Assento').classes('text-md font-bold text-cyan q-mb-md')
@@ -736,7 +648,7 @@ def render_page():
                 ui.button('Cancelar', on_click=diag.close).props('unelevated color=grey-8 dense')
                 
                 def salvar_alteracoes():
-                    db = get_db_connection()
+                    db = get_service_db_connection() or get_db_connection()
                     if db:
                         layout['ref_top'] = ref_top.value
                         layout['ref_bottom'] = ref_bottom.value
@@ -800,7 +712,7 @@ def render_page():
                         'categoria': categoria.value,
                         'max_acompanhantes': int(acomps.value)
                     }
-                    save_guest(guest['id'] if guest else None, reg, event_id)
+                    save_guest(guest['id'] if guest else None, reg, event_id or state.selected_event_id)
                     diag.close()
                     
                 ui.button('Salvar', on_click=salvar).props('unelevated color=primary text-color=black dense')
@@ -822,19 +734,13 @@ def render_page():
     def open_allocate_seat_dialog(seat_id, convidados, event_id):
         def get_category_priority(cat):
             cat_upper = str(cat or '').upper()
-            if 'VIP' in cat_upper:
-                return 0
-            if 'MILITAR' in cat_upper:
-                return 1
-            if 'CIVIL' in cat_upper:
-                return 2
-            if 'IMPRENSA' in cat_upper:
-                return 3
-            if 'APOIO' in cat_upper:
-                return 4
+            if 'VIP' in cat_upper: return 0
+            if 'MILITAR' in cat_upper: return 1
+            if 'CIVIL' in cat_upper: return 2
+            if 'IMPRENSA' in cat_upper: return 3
+            if 'APOIO' in cat_upper: return 4
             return 5
 
-        # Ordena todos os convidados por prioridade de grupo, posto e nome
         sorted_convidados = sorted(
             convidados,
             key=lambda c: (get_category_priority(c.get('categoria', 'Geral')), c.get('posto_graduacao') or '', c['nome'])
@@ -844,10 +750,8 @@ def render_page():
             ui.label(f'Alocar Assento {seat_id}').classes('text-md font-bold text-cyan q-mb-xs')
             ui.label('Selecione um convidado na lista para alocar imediatamente:').classes('text-xs text-grey-4 q-mb-md')
             
-            # Campo de busca tático
             search_input = ui.input(placeholder='Filtrar por nome ou cargo...').props('dark outlined dense clearable w-full q-mb-md')
             
-            # Container da lista reativa
             @ui.refreshable
             def render_dialog_guests():
                 query = search_input.value.lower() if search_input.value else ""
@@ -868,7 +772,6 @@ def render_page():
                             card_border = 'rgba(0, 229, 255, 0.25)' if is_seated else 'rgba(255, 255, 255, 0.06)'
                             text_style = 'opacity-70' if is_seated else ''
                             
-                            # Clicar no convidado faz a alocação e fecha o modal
                             with ui.card().classes('w-full q-pa-xs px-2 no-shadow rounded-lg cursor-pointer transition-all hover:bg-cyan-500/20').style(
                                 f'background: {card_bg}; border: 1px solid {card_border}; gap: 0;'
                             ).on('click', lambda c_id=c['id']: [allocate_guest(c_id, seat_id, event_id), diag.close()]):
@@ -887,7 +790,6 @@ def render_page():
                             ui.label('Nenhum convidado disponível').classes('text-xs')
                             
             search_input.on('value-change', render_dialog_guests.refresh)
-            
             render_dialog_guests()
             
             with ui.row().classes('w-full justify-end q-mt-md'):
@@ -896,38 +798,19 @@ def render_page():
         diag.open()
 
     def open_seat_actions_dialog(seat_id, guest, convidados, event_id):
-        # 1. Carrega dados do layout para identificar assentos livres
-        rows_count = 5
-        cols_count = 8
-        blocked_seats = []
-        db = get_db_connection()
-        if db:
-            try:
-                res_ev = db.table('jade_eventos').select('layout_json').eq('id', event_id).execute()
-                if res_ev.data:
-                    layout = json.loads(res_ev.data[0]['layout_json'])
-                    rows_count = layout.get('rows', 5)
-                    cols_count = layout.get('cols', 8)
-                    blocked_seats = layout.get('blocked_seats', [])
-            except Exception as ex:
-                print(f"[FETCH LAYOUT FOR ACTIONS ERR] {ex}")
-
         with ui.dialog() as diag, ui.card().classes('q-pa-md').style('min-width: 400px; max-height: 600px;'):
             ui.label(f'Ações do Assento {seat_id}').classes('text-md font-bold text-cyan q-mb-xs')
             
-            # Detalhes do ocupante
             nome_completo = f"{guest.get('posto_graduacao') or ''} {guest['nome']}".strip()
             ui.label(nome_completo).classes('text-sm font-bold text-white')
             ui.label(guest.get('cargo_funcao') or guest.get('categoria') or 'Convidado').classes('text-xs text-grey-4 q-mb-md')
             
-            # 1. Desalocar
             ui.button(
                 'Liberar / Desalocar Assento', 
                 icon='block', 
                 on_click=lambda: [remove_guest_allocation(guest), diag.close()]
             ).props('unelevated color=danger w-full q-mb-sm dense')
             
-            # 2. Trocar (Swap) com outra pessoa alocada
             other_allocated = [c for c in convidados if c.get('assento_id') and c['id'] != guest['id']]
             if other_allocated:
                 ui.separator().classes('q-my-sm')
@@ -940,201 +823,94 @@ def render_page():
                 swap_target = ui.select(swap_options).props('dark outlined dense w-full')
                 
                 ui.button(
-                    'Confirmar Troca de Assentos', 
+                    'Confirmar Troca', 
+                    icon='swap_horiz', 
                     on_click=lambda: [swap_guests(guest, swap_target.value, event_id), diag.close()]
-                ).props('unelevated color=primary text-color=black w-full q-mt-sm dense')
-            
-            # 3. Acompanhantes vinculados
-            companions = [c for c in convidados if c.get('convidado_principal_id') == guest['id']]
-            if companions:
-                ui.separator().classes('q-my-sm')
-                ui.label('Acompanhantes Vinculados:').classes('text-[11px] font-bold text-cyan q-mb-xs')
+                ).props('unelevated color=primary text-color=black w-full q-mt-xs dense')
                 
-                # Lista de assentos livres
-                free_seats = sorted(list(set(
-                    f"{get_row_label(r)}-{col}" 
-                    for r in range(rows_count) 
-                    for col in range(1, cols_count + 1)
-                ) - set(c['assento_id'] for c in convidados if c.get('assento_id')) - set(blocked_seats)))
+            with ui.row().classes('w-full justify-end q-mt-md'):
+                ui.button('Fechar', on_click=diag.close).props('unelevated color=grey-8 dense')
                 
-                # Ordenação por proximidade
-                try:
-                    main_row_label, main_col_str = seat_id.split('-')
-                    main_row_idx = 0
-                    for r in range(rows_count):
-                        if get_row_label(r) == main_row_label:
-                            main_row_idx = r
-                            break
-                    main_col_idx = int(main_col_str)
-                    
-                    def get_seat_distance(s_id):
-                        try:
-                            r_lbl, c_str = s_id.split('-')
-                            r_idx = 0
-                            for r in range(rows_count):
-                                if get_row_label(r) == r_lbl:
-                                    r_idx = r
-                                    break
-                            c_idx = int(c_str)
-                            return abs(main_row_idx - r_idx) + abs(main_col_idx - c_idx)
-                        except:
-                            return 999
-                    
-                    sorted_free_seats = sorted(free_seats, key=get_seat_distance)
-                except:
-                    sorted_free_seats = free_seats
-
-                with ui.column().classes('w-full gap-2 q-mt-xs'):
-                    for comp in companions:
-                        comp_seat = comp.get('assento_id')
-                        with ui.row().classes('w-full items-center justify-between no-wrap gap-2').style('background: rgba(255,255,255,0.02); padding: 4px; border-radius: 4px;'):
-                            ui.label(comp['nome']).classes('text-xs text-white col-grow truncate')
-                            
-                            if comp_seat:
-                                ui.badge(f"Assento {comp_seat}").props('color=cyan text-color=black').classes('text-[9px]')
-                                ui.button(
-                                    icon='cancel',
-                                    on_click=lambda c=comp: [remove_guest_allocation(c), diag.close()]
-                                ).props('flat round dense color=danger').classes('text-xs')
-                            else:
-                                if sorted_free_seats:
-                                    seat_select = ui.select(options=sorted_free_seats, label='Assento').props('dark outlined dense').style('width: 100px; font-size: 10px;')
-                                    ui.button(
-                                        icon='check',
-                                        on_click=lambda c=comp, sel=seat_select: [
-                                            allocate_guest(c['id'], sel.value, event_id) if sel.value else None,
-                                            diag.close()
-                                        ]
-                                    ).props('unelevated color=success text-color=black dense').classes('q-px-xs')
-                                else:
-                                    ui.label('Sem vagas').classes('text-[9px] text-grey-5')
-            
-            ui.separator().classes('q-my-sm')
-            ui.button('Fechar', on_click=diag.close).props('unelevated color=grey-8 w-full dense')
-            
         diag.open()
 
-    # --- IMPLEMENTAÇÃO DE PARSER DE IMPORTAÇÃO (PANDAS/EXCEL) ---
-
     def download_template():
-        # Cria dataframe modelo
-        df = pd.DataFrame(columns=['Nome', 'Posto_Graduacao', 'Cargo_Funcao', 'Categoria', 'Acompanhantes'])
-        # Adiciona um registro de exemplo
-        df.loc[0] = ['Exemplo de Silva', 'Capitão-Tenente', 'Chefe de Relações Públicas', 'VIP', 0]
+        df = pd.DataFrame([
+            {
+                'Nome': 'ALMIRANTE SILVA', 
+                'Posto/Graduacao': 'AE', 
+                'Cargo/Função': 'Comandante da Marinha', 
+                'Categoria': 'VIP', 
+                'Max Acompanhantes': 2
+            },
+            {
+                'Nome': 'MINISTRO SANTOS', 
+                'Posto/Graduacao': 'Dr.', 
+                'Cargo/Função': 'Ministro de Estado', 
+                'Categoria': 'Autoridade Civil', 
+                'Max Acompanhantes': 1
+            }
+        ])
         
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name='Convidados')
-            
-        xlsx_data = output.getvalue()
-        ui.download(xlsx_data, 'modelo_importacao_jade.xlsx')
+        output.seek(0)
+        
+        ui.download(output.read(), 'modelo_importacao_jade.xlsx')
 
     def handle_import_list(e, event_id):
-        # Lê arquivo importado pelo NiceGUI
-        content = e.content.read()
         try:
-            if e.name.endswith('.csv'):
+            file = e.files[0]
+            content = file.content.read()
+            
+            if file.name.endswith('.csv'):
                 df = pd.read_csv(io.BytesIO(content))
             else:
                 df = pd.read_excel(io.BytesIO(content))
                 
-            # Verifica colunas necessárias
             required_cols = ['Nome']
             for col in required_cols:
                 if col not in df.columns:
                     ui.notify(f"Coluna obrigatória '{col}' não encontrada na planilha.", color='red')
                     return
                     
-            db = get_db_connection()
+            db = get_service_db_connection() or get_db_connection()
             if not db:
                 return
                 
-            inserted_count = 0
+            count = 0
             for _, row in df.iterrows():
-                if pd.isna(row['Nome']):
+                nome = str(row['Nome']).strip().upper()
+                if not nome or nome == 'NAN':
                     continue
                     
-                nome = str(row['Nome']).strip().upper()
-                posto = str(row['Posto_Graduacao']).strip() if 'Posto_Graduacao' in df.columns and not pd.isna(row['Posto_Graduacao']) else None
-                cargo = str(row['Cargo_Funcao']).strip() if 'Cargo_Funcao' in df.columns and not pd.isna(row['Cargo_Funcao']) else None
-                categoria = str(row['Categoria']).strip() if 'Categoria' in df.columns and not pd.isna(row['Categoria']) else 'Geral'
+                posto = str(row.get('Posto/Graduacao', '')).strip() if pd.notna(row.get('Posto/Graduacao')) else None
+                cargo = str(row.get('Cargo/Função', '')).strip() if pd.notna(row.get('Cargo/Função')) else None
+                cat = str(row.get('Categoria', 'Geral')).strip() if pd.notna(row.get('Categoria')) else 'Geral'
                 
-                acomps = 0
-                if 'Acompanhantes' in df.columns and not pd.isna(row['Acompanhantes']):
-                    try:
-                        acomps = int(row['Acompanhantes'])
-                    except:
-                        pass
-                        
-                registro = {
+                try:
+                    acomp = int(row.get('Max Acompanhantes', 0)) if pd.notna(row.get('Max Acompanhantes')) else 0
+                except ValueError:
+                    acomp = 0
+                    
+                guest_data = {
                     'evento_id': event_id,
                     'nome': nome,
                     'posto_graduacao': posto,
                     'cargo_funcao': cargo,
-                    'categoria': categoria,
-                    'max_acompanhantes': acomps
+                    'categoria': cat,
+                    'max_acompanhantes': acomp
                 }
                 
-                # Evitar duplicados no mesmo evento
-                existing = db.table('jade_convidados').select('id').eq('evento_id', event_id).eq('nome', nome).execute()
-                if not existing.data:
-                    res = db.table('jade_convidados').insert(registro).execute()
-                    inserted_count += 1
-                    if res.data:
-                        new_id = res.data[0]['id']
-                        sync_companions(new_id, nome, acomps, event_id, categoria)
-                    
-            ui.notify(f"Importação concluída. {inserted_count} novos convidados adicionados.", color='success')
-            
-            # Log
-            db.table('jade_log').insert({
-                'evento_id': event_id,
-                'acao': 'importacao_convidados',
-                'detalhes': f"Importação de {inserted_count} convidados via planilha",
-                'usuario': user_name,
-                'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            }).execute()
-            
+                res = db.table('jade_convidados').insert(guest_data).execute()
+                if res.data:
+                    new_id = res.data[0]['id']
+                    sync_companions(new_id, nome, acomp, event_id, cat)
+                count += 1
+                
+            ui.notify(f"Importados {count} convidados com sucesso!", color='success')
             render_content.refresh()
         except Exception as ex:
-            ui.notify(f"Erro ao processar planilha: {ex}", color='red')
+            ui.notify(f"Erro ao importar planilha: {ex}", color='red')
 
-    def export_map(event_id, event_name, rows, cols, blocked_seats, guests):
-        # Gera matriz para planilha excel
-        grid_data = []
-        
-        # Mapeamento assento -> nome
-        seat_map = {}
-        for g in guests:
-            if g.get('assento_id'):
-                seat_map[g['assento_id']] = f"{g.get('posto_graduacao') or ''} {g['nome']}".strip()
-                
-        for r in range(rows):
-            row_label = get_row_label(r)
-            row_cells = []
-            for c in range(1, cols + 1):
-                seat_id = f"{row_label}-{c}"
-                if seat_id in blocked_seats:
-                    row_cells.append("[Corredor]")
-                elif seat_id in seat_map:
-                    row_cells.append(seat_map[seat_id])
-                else:
-                    row_cells.append("Livre")
-            grid_data.append(row_cells)
-            
-        df = pd.DataFrame(
-            grid_data, 
-            index=[get_row_label(r) for r in range(rows)], 
-            columns=[str(c) for c in range(1, cols + 1)]
-        )
-        
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, sheet_name='Mapa de Assentos')
-            
-        xlsx_data = output.getvalue()
-        file_name = f"mapa_assentos_{event_name.lower().replace(' ', '_')}.xlsx"
-        ui.download(xlsx_data, file_name)
-
-    # Renderiza o layout inicial
     render_content()
