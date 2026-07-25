@@ -53,11 +53,31 @@ def sync_companions(main_guest_id, main_guest_name, max_acomp, event_id, categor
             if new_comps:
                 db.table('jade_convidados').insert(new_comps).execute()
             
-        # 3. Se temos demais (deleta excedentes)
+        # 3. Se temos demais (deleta excedentes dando prioridade aos NÃO ALOCADOS)
         elif existing_count > max_acomp:
-            to_delete = existing[max_acomp:]
+            needed_delete = existing_count - max_acomp
+            # Separa acompanhantes sem assento e com assento
+            unallocated = [d for d in existing if not d.get('assento_id')]
+            allocated = [d for d in existing if d.get('assento_id')]
+            
+            # Ordena não alocados decrescente por ID e alocados decrescente por ID
+            unallocated_sorted = sorted(unallocated, key=lambda x: x['id'], reverse=True)
+            allocated_sorted = sorted(allocated, key=lambda x: x['id'], reverse=True)
+            
+            # Prioriza deletar os não alocados primeiro
+            candidates = unallocated_sorted + allocated_sorted
+            to_delete = candidates[:needed_delete]
             delete_ids = [d['id'] for d in to_delete]
+            
             if delete_ids:
+                # 3.1 Garante que se algum alocado for deletado, a cadeira é liberada no mapa
+                for d in to_delete:
+                    if d.get('assento_id'):
+                        try:
+                            db.table('jade_convidados').update({'assento_id': None}).eq('id', d['id']).execute()
+                        except Exception:
+                            pass
+                # 3.2 Deleta os registros excedentes
                 db.table('jade_convidados').delete().in_('id', delete_ids).execute()
 
         # 4. Atualiza obrigatoriamente nomes, categorias e índices de todos os acompanhantes remanescentes
@@ -303,8 +323,12 @@ def render_page():
                         
                     ui.button('➕ Adicionar Convidado Principal', icon='person_add', on_click=lambda: open_edit_guest_dialog(None, current_event['id'])).props('unelevated color=primary text-color=black dense').classes('text-xs')
 
+            # Estado de colapsar tudo / expandir tudo se desejado
+            if not hasattr(state, 'filter_seat_status'):
+                state.filter_seat_status = "Todos"
+
             # Filtros de Convidados
-            with ui.row().classes('w-full gap-2 items-center q-mb-md'):
+            with ui.row().classes('w-full gap-2 items-center q-mb-md wrap-mobile'):
                 ui.input(
                     placeholder='Buscar autoridade, convidado ou acompanhante...',
                     on_change=lambda e: update_search(e.value)
@@ -313,22 +337,22 @@ def render_page():
                 ui.select(
                     options=category_options,
                     value=state.filter_category,
-                    on_change=lambda e: update_filter_category(e.value)
+                    on_change=lambda e: update_filter_category(e.value),
+                    label='Categoria'
                 ).props('dark outlined dense').style('width: 140px;')
                 
-                ui.checkbox(
-                    'Apenas não alocados', 
-                    value=state.filter_only_unallocated,
-                    on_change=lambda e: update_filter_unallocated(e.value)
-                ).props('dark dense').classes('text-xs text-grey-4')
+                ui.select(
+                    options={'Todos': 'Status: Todos', 'pendentes': '⏳ Com Pendências', 'completos': '✅ Assentos Completos'},
+                    value=getattr(state, 'filter_seat_status', 'Todos'),
+                    on_change=lambda e: update_filter_seat_status(e.value)
+                ).props('dark outlined dense').style('width: 170px;')
 
             # Filtra autoridades principais (sem convidado_principal_id)
             principais = [c for c in convidados if not c.get('convidado_principal_id')]
             
-            # Filtro local
+            # Filtro por busca de texto
             if state.search_query:
                 q = state.search_query.lower()
-                # Mantém se a própria autoridade ou algum de seus acompanhantes casar com a busca
                 filtered_principais = []
                 for p in principais:
                     acomp_p = [c for c in convidados if c.get('convidado_principal_id') == p['id']]
@@ -341,95 +365,115 @@ def render_page():
             if state.filter_category != "Todos":
                 principais = [p for p in principais if p.get('categoria') == state.filter_category]
 
-            if state.filter_only_unallocated:
-                principais = [p for p in principais if not p.get('assento_id')]
+            # Filtro por status de alocação (Pendente x Completo)
+            status_filter = getattr(state, 'filter_seat_status', 'Todos')
+            if status_filter == 'pendentes':
+                # Tem pendência se a própria autoridade ou algum acompanhante não tem assento
+                principais = [
+                    p for p in principais 
+                    if not p.get('assento_id') or any(not c.get('assento_id') for c in convidados if c.get('convidado_principal_id') == p['id'])
+                ]
+            elif status_filter == 'completos':
+                # 100% alocado se a autoridade E todos os seus acompanhantes têm assento
+                principais = [
+                    p for p in principais 
+                    if p.get('assento_id') and all(c.get('assento_id') for c in convidados if c.get('convidado_principal_id') == p['id'])
+                ]
 
             if principais:
-                with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
-                    for p in principais:
-                        # Busca acompanhantes deste convidado principal
-                        acomp_list = [c for c in convidados if c.get('convidado_principal_id') == p['id']]
-                        
-                        is_p_allocated = bool(p.get('assento_id'))
-                        card_border = 'rgba(0, 229, 255, 0.4)' if is_p_allocated else 'rgba(255, 255, 255, 0.08)'
-                        
-                        with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
-                            f'background: rgba(19, 26, 38, 0.95); border: 1px solid {card_border};'
-                        ):
-                            # --- CABEÇALHO DA AUTORIDADE PRINCIPAL ---
-                            with ui.row().classes('w-full justify-between items-start no-wrap'):
-                                with ui.column().classes('gap-0 col'):
-                                    nome_p = f"{p.get('posto_graduacao') or ''} {p['nome']}".strip()
-                                    ui.label(nome_p).classes('text-sm font-bold text-white cyber-title')
-                                    
-                                    cargo_p = p.get('cargo_funcao') or p.get('categoria') or 'Autoridade'
-                                    ui.label(f"[{p.get('categoria', 'Geral')}] {cargo_p}").classes('text-xs text-grey-4')
-
-                                # Badge de Alocação da Autoridade
-                                with ui.row().classes('items-center gap-1'):
-                                    if is_p_allocated:
-                                        ui.badge(f"Assento {p['assento_id']}").props('color=cyan text-color=black bold').classes('text-xs')
-                                        ui.button(icon='cancel', on_click=lambda p=p: remove_guest_allocation(p)).props('unelevated color=danger dense flat round').classes('text-xs')
-                                    else:
-                                        ui.badge('Sem Assento').props('color=grey-8').classes('text-xs')
-                                        
-                                    ui.button(icon='edit', on_click=lambda p=p: open_edit_guest_dialog(p)).props('unelevated color=primary dense flat round').classes('text-xs')
-                                    ui.button(icon='delete', on_click=lambda p=p: confirm_delete_guest(p)).props('unelevated color=danger dense flat round').classes('text-xs')
-
-                            # --- CONTROLE QUANTITATIVO DE ACOMPANHANTES (+ / -) ---
-                            max_ac = p.get('max_acompanhantes', 0)
-                            ui.separator().classes('q-my-xs').style('border-color: rgba(255,255,255,0.05);')
+                with ui.column().classes('w-full gap-3 scroll-container q-pr-xs').style('max-height: 680px; overflow-y: auto;'):
+                    with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
+                        for p in principais:
+                            acomp_list = [c for c in convidados if c.get('convidado_principal_id') == p['id']]
                             
-                            with ui.row().classes('w-full justify-between items-center q-py-xs bg-black/20 px-2 rounded-lg'):
-                                ui.label(f"Acompanhantes Vagas: {max_ac}").classes('text-xs text-amber font-bold')
-                                
-                                with ui.row().classes('items-center gap-1'):
-                                    if max_ac > 0:
-                                        def dec_acomp(p_ref=p):
-                                            new_ac = max(0, p_ref.get('max_acompanhantes', 0) - 1)
-                                            reg = {
-                                                'nome': p_ref['nome'],
-                                                'posto_graduacao': p_ref.get('posto_graduacao'),
-                                                'cargo_funcao': p_ref.get('cargo_funcao'),
-                                                'categoria': p_ref.get('categoria', 'Geral'),
-                                                'max_acompanhantes': new_ac
-                                            }
-                                            save_guest(p_ref['id'], reg, current_event['id'])
+                            is_p_allocated = bool(p.get('assento_id'))
+                            all_acomp_allocated = len(acomp_list) > 0 and all(bool(ac.get('assento_id')) for ac in acomp_list)
+                            is_group_complete = is_p_allocated and (len(acomp_list) == 0 or all_acomp_allocated)
+
+                            card_border = 'rgba(0, 230, 118, 0.4)' if is_group_complete else ('rgba(0, 229, 255, 0.4)' if is_p_allocated else 'rgba(255, 255, 255, 0.08)')
+                            header_icon = '✅' if is_group_complete else ('⏳' if is_p_allocated else '⚠️')
+                            
+                            nome_p = f"{p.get('posto_graduacao') or ''} {p['nome']}".strip()
+                            cargo_p = p.get('cargo_funcao') or p.get('categoria') or 'Autoridade'
+                            
+                            with ui.expansion().classes('w-full rounded-xl border no-shadow').style(
+                                f'background: rgba(19, 26, 38, 0.95); border-color: {card_border} !important;'
+                            ) as exp:
+                                with exp.add_slot('header'):
+                                    with ui.row().classes('w-full justify-between items-center no-wrap gap-2'):
+                                        with ui.column().classes('gap-0 col'):
+                                            ui.label(f"{header_icon} {nome_p}").classes('text-sm font-bold text-white cyber-title')
+                                            ui.label(f"[{p.get('categoria', 'Geral')}] {cargo_p}").classes('text-xs text-grey-4')
+
+                                        with ui.row().classes('items-center gap-1'):
+                                            if is_p_allocated:
+                                                ui.badge(f"Assento {p['assento_id']}").props('color=cyan text-color=black bold').classes('text-[10px]')
+                                            else:
+                                                ui.badge('Sem Assento').props('color=grey-8').classes('text-[10px]')
+
+                                # --- CONTEÚDO DO CARD COLAPSÁVEL ---
+                                with ui.column().classes('w-full q-pa-sm gap-2'):
+                                    # Ações da Autoridade
+                                    with ui.row().classes('w-full justify-between items-center bg-black/30 q-pa-xs rounded-lg'):
+                                        ui.label('Ações da Autoridade:').classes('text-[11px] text-grey-4 font-bold')
+                                        with ui.row().classes('items-center gap-1'):
+                                            if is_p_allocated:
+                                                ui.button('Desalocar', icon='cancel', on_click=lambda p=p: remove_guest_allocation(p)).props('unelevated color=danger dense flat').classes('text-xs')
+                                            ui.button('Editar', icon='edit', on_click=lambda p=p: open_edit_guest_dialog(p)).props('unelevated color=primary dense flat').classes('text-xs')
+                                            ui.button('Excluir', icon='delete', on_click=lambda p=p: confirm_delete_guest(p)).props('unelevated color=danger dense flat').classes('text-xs')
+
+                                    # Controle Quantitativo (+ / -)
+                                    max_ac = p.get('max_acompanhantes', 0)
+                                    with ui.row().classes('w-full justify-between items-center q-py-xs bg-black/20 px-2 rounded-lg'):
+                                        ui.label(f"Acompanhantes Vagas: {max_ac}").classes('text-xs text-amber font-bold')
                                         
-                                        ui.button('-', on_click=dec_acomp).props('unelevated color=amber text-color=black dense round').style('width: 22px; height: 22px; font-weight: bold;')
-
-                                    def inc_acomp(p_ref=p):
-                                        new_ac = p_ref.get('max_acompanhantes', 0) + 1
-                                        reg = {
-                                            'nome': p_ref['nome'],
-                                            'posto_graduacao': p_ref.get('posto_graduacao'),
-                                            'cargo_funcao': p_ref.get('cargo_funcao'),
-                                            'categoria': p_ref.get('categoria', 'Geral'),
-                                            'max_acompanhantes': new_ac
-                                        }
-                                        save_guest(p_ref['id'], reg, current_event['id'])
-
-                                    ui.button('+', on_click=inc_acomp).props('unelevated color=amber text-color=black dense round').style('width: 22px; height: 22px; font-weight: bold;')
-
-                            # --- SUB-LISTA DE ACOMPANHANTES VINCULADOS (ABAIXO) ---
-                            if acomp_list:
-                                with ui.column().classes('w-full gap-1 q-mt-xs pl-2 border-l-2 border-amber-500/40'):
-                                    for ac in acomp_list:
-                                        is_ac_allocated = bool(ac.get('assento_id'))
-                                        ac_bg = 'rgba(255, 183, 77, 0.08)' if is_ac_allocated else 'rgba(255, 255, 255, 0.02)'
-                                        
-                                        with ui.card().classes('w-full q-pa-xs px-2 no-shadow rounded-md').style(f'background: {ac_bg}; border: 1px solid rgba(255,183,77,0.2);'):
-                                            with ui.row().classes('w-full justify-between items-center no-wrap'):
-                                                with ui.column().classes('gap-0'):
-                                                    ui.label(ac['nome']).classes('text-xs text-grey-2 font-medium')
-                                                    ui.label('(Acompanhante)').classes('text-[9px] text-amber-4 italic')
+                                        with ui.row().classes('items-center gap-1'):
+                                            if max_ac > 0:
+                                                def dec_acomp(p_ref=p):
+                                                    new_ac = max(0, p_ref.get('max_acompanhantes', 0) - 1)
+                                                    reg = {
+                                                        'nome': p_ref['nome'],
+                                                        'posto_graduacao': p_ref.get('posto_graduacao'),
+                                                        'cargo_funcao': p_ref.get('cargo_funcao'),
+                                                        'categoria': p_ref.get('categoria', 'Geral'),
+                                                        'max_acompanhantes': new_ac
+                                                    }
+                                                    save_guest(p_ref['id'], reg, current_event['id'])
                                                 
-                                                if is_ac_allocated:
-                                                    with ui.row().classes('items-center gap-1'):
-                                                        ui.badge(f"Assento {ac['assento_id']}").props('color=amber text-color=black').classes('text-[9px]')
-                                                        ui.button(icon='cancel', on_click=lambda ac=ac: remove_guest_allocation(ac)).props('unelevated color=danger dense flat round').classes('text-xs')
-                                                else:
-                                                    ui.badge('Sem Assento').props('color=grey-8').classes('text-[9px]')
+                                                ui.button('-', on_click=dec_acomp).props('unelevated color=amber text-color=black dense round').style('width: 22px; height: 22px; font-weight: bold;')
+
+                                            def inc_acomp(p_ref=p):
+                                                new_ac = p_ref.get('max_acompanhantes', 0) + 1
+                                                reg = {
+                                                    'nome': p_ref['nome'],
+                                                    'posto_graduacao': p_ref.get('posto_graduacao'),
+                                                    'cargo_funcao': p_ref.get('cargo_funcao'),
+                                                    'categoria': p_ref.get('categoria', 'Geral'),
+                                                    'max_acompanhantes': new_ac
+                                                }
+                                                save_guest(p_ref['id'], reg, current_event['id'])
+
+                                            ui.button('+', on_click=inc_acomp).props('unelevated color=amber text-color=black dense round').style('width: 22px; height: 22px; font-weight: bold;')
+
+                                    # Lista de Acompanhantes
+                                    if acomp_list:
+                                        with ui.column().classes('w-full gap-1 q-mt-xs pl-2 border-l-2 border-amber-500/40'):
+                                            for ac in acomp_list:
+                                                is_ac_allocated = bool(ac.get('assento_id'))
+                                                ac_bg = 'rgba(255, 183, 77, 0.08)' if is_ac_allocated else 'rgba(255, 255, 255, 0.02)'
+                                                
+                                                with ui.card().classes('w-full q-pa-xs px-2 no-shadow rounded-md').style(f'background: {ac_bg}; border: 1px solid rgba(255,183,77,0.2);'):
+                                                    with ui.row().classes('w-full justify-between items-center no-wrap'):
+                                                        with ui.column().classes('gap-0'):
+                                                            ui.label(ac['nome']).classes('text-xs text-grey-2 font-medium')
+                                                            ui.label('(Acompanhante)').classes('text-[9px] text-amber-4 italic')
+                                                        
+                                                        if is_ac_allocated:
+                                                            with ui.row().classes('items-center gap-1'):
+                                                                ui.badge(f"Assento {ac['assento_id']}").props('color=amber text-color=black').classes('text-[9px]')
+                                                                ui.button(icon='cancel', on_click=lambda ac=ac: remove_guest_allocation(ac)).props('unelevated color=danger dense flat round').classes('text-xs')
+                                                        else:
+                                                            ui.badge('Sem Assento').props('color=grey-8').classes('text-[9px]')
             else:
                 with ui.column().classes('w-full items-center justify-center q-py-xl text-grey'):
                     ui.icon('person_off', size='3rem')
@@ -454,6 +498,10 @@ def render_page():
 
     def update_filter_unallocated(val):
         state.filter_only_unallocated = val
+        render_content.refresh()
+
+    def update_filter_seat_status(val):
+        state.filter_seat_status = val
         render_content.refresh()
 
     def create_event(nome, data, local, layout_tipo, rows, cols, ref_top, ref_bottom):
