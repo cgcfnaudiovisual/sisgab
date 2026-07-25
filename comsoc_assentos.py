@@ -922,14 +922,44 @@ def render_page():
     def open_tactical_scanner_dialog(event, convidados):
         scanned_history = []
 
-        with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 580px; max-width: 90vw;'):
-            ui.label('🔍 SCANNER & CONFERÊNCIA DE CARTÕES').classes('text-md font-bold text-amber cyber-title q-mb-xs')
-            ui.label('Bipe com o Leitor de Código de Barras / Digite o Nome ou Assento para Conferência Automática').classes('text-xs text-grey-4 q-mb-md')
+        with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 620px; max-width: 95vw;'):
+            ui.label('🔍 SCANNER & CONFERÊNCIA TÁTICA').classes('text-md font-bold text-amber cyber-title q-mb-xs')
+            ui.label('Use a Câmera do Celular ou Leitor Físico para separar e bater a lista por Fileira').classes('text-xs text-grey-4 q-mb-md')
             
-            scan_input = ui.input(placeholder='Bipe o cartão ou digite Nome / Assento (ex: AE OLSEN ou G-5)...').props('dark outlined dense autofocus w-full').classes('q-mb-md')
+            with ui.row().classes('w-full gap-2 q-mb-md items-center'):
+                scan_input = ui.input(placeholder='Bipe o QR Code ou digite ID/Nome/Assento (ex: G-5)...').props('dark outlined dense autofocus').classes('col')
+                cam_btn = ui.button('📸 Câmera do Celular', icon='videocam').props('unelevated color=primary text-color=black dense').classes('text-xs')
+
+            # Container da Câmera do Celular (HTML5 QR Scanner)
+            cam_container = ui.column().classes('w-full hidden q-mb-md border border-cyan-500/40 rounded-xl q-pa-sm bg-black/60')
+            with cam_container:
+                ui.label('📸 Aponta a câmera para o QR Code impresso no cartão:').classes('text-xs font-bold text-cyan text-center w-full q-mb-xs')
+                ui.html('''
+                    <div id="qr-reader" style="width:100%; max-width:400px; margin:0 auto; background:#000; border-radius:8px;"></div>
+                    <script src="https://unpkg.com/html5-qrcode"></script>
+                ''').classes('w-full flex justify-center')
+                ui.button('🛑 Fechar Câmera', on_click=lambda: cam_container.classes(add='hidden')).props('flat color=grey dense').classes('w-full text-xs q-mt-xs')
+
+            def toggle_camera():
+                cam_container.classes(remove='hidden')
+                ui.run_javascript('''
+                    if (window.html5QrcodeScanner) {
+                        try { window.html5QrcodeScanner.clear(); } catch(e){}
+                    }
+                    window.html5QrcodeScanner = new Html5QrcodeScanner("qr-reader", { fps: 10, qrbox: {width: 250, height: 250} }, false);
+                    window.html5QrcodeScanner.render(function(decodedText, decodedResult) {
+                        let inp = document.querySelector('input[placeholder*="Bipe"]');
+                        if (inp) {
+                            inp.value = decodedText;
+                            inp.dispatchEvent(new KeyboardEvent('keydown', {'key': 'Enter', 'keyCode': 13, 'bubbles': true}));
+                        }
+                    }, function(error) {});
+                ''')
+
+            cam_btn.on_click(toggle_camera)
             feedback_container = ui.column().classes('w-full')
 
-            # Script de áudio para bipe sonoro
+            # Script de áudio para bipe sonoro tático
             audio_script = """
             function playBeep(type) {
                 try {
@@ -940,14 +970,14 @@ def render_page():
                     gain.connect(ctx.destination);
                     if (type === 'success') {
                         osc.frequency.value = 880;
-                        gain.gain.value = 0.1;
+                        gain.gain.value = 0.12;
                         osc.start();
                         setTimeout(() => osc.stop(), 150);
                     } else if (type === 'duplicate') {
-                        osc.frequency.value = 300;
-                        gain.gain.value = 0.2;
+                        osc.frequency.value = 280;
+                        gain.gain.value = 0.25;
                         osc.start();
-                        setTimeout(() => osc.stop(), 300);
+                        setTimeout(() => osc.stop(), 320);
                     }
                 } catch(e) {}
             }
@@ -961,7 +991,7 @@ def render_page():
                 scan_input.value = ''
                 feedback_container.clear()
                 
-                # Busca convidado no evento por ID exato do QR Code, Assento ou Nome
+                # Busca convidado por ID exato do QR Code, Assento ou Nome
                 matches = [
                     c for c in convidados
                     if str(c.get('id', '')) == query or
@@ -976,7 +1006,7 @@ def render_page():
                         with ui.card().classes('w-full q-pa-md bg-red-950/80 border border-red-500 rounded-xl text-center'):
                             ui.icon('cancel', color='red', size='3rem')
                             ui.label('❌ CARTÃO / CONVIDADO NÃO ENCONTRADO!').classes('text-sm font-bold text-red-3')
-                            ui.label(f"Nenhum assento ou convidado registrado para: '{val}'").classes('text-xs text-grey-4')
+                            ui.label(f"Nenhum assento ou convidado registrado para o código: '{val}'").classes('text-xs text-grey-4')
                     else:
                         target = matches[0]
                         seat = target.get('assento_id', 'NÃO ALOCADO')
@@ -987,14 +1017,13 @@ def render_page():
                             ui.run_javascript("playBeep('duplicate')")
                             with ui.card().classes('w-full q-pa-md bg-amber-950/80 border border-amber-500 rounded-xl text-center'):
                                 ui.icon('warning', color='amber', size='3rem')
-                                ui.label('⚠️ ATENÇÃO: CARTÃO JÁ CONFERIDO / SEPARADO!').classes('text-sm font-bold text-amber-3')
+                                ui.label('⚠️ ATENÇÃO: CARTÃO JÁ CONFERIDO & SEPARADO!').classes('text-sm font-bold text-amber-3')
                                 ui.label(f"{target['nome']} — Assento: {seat} (Fileira {row_name})").classes('text-xs text-grey-3 font-bold')
                                 ui.label('Este cartão já passou pela triagem anteriormente.').classes('text-[11px] text-amber-4 q-mt-xs')
                         else:
                             scanned_history.append(target['id'])
                             ui.run_javascript("playBeep('success')")
                             
-                            # Busca autoridade principal se for acompanhante
                             main_info = ""
                             if target.get('convidado_principal_id'):
                                 p_main = next((x for x in convidados if x['id'] == target['convidado_principal_id']), None)
@@ -1007,13 +1036,13 @@ def render_page():
                                 ui.label(f"{target.get('posto_graduacao') or ''} {target['nome']}{main_info}").classes('text-md font-bold text-white')
                                 
                                 with ui.row().classes('w-full justify-center items-center gap-2 q-mt-xs'):
-                                    ui.badge(f"FILEIRA {row_name}").props('color=cyan text-color=black bold').classes('text-sm q-px-sm')
+                                    ui.badge(f"COLOCAR NA FILEIRA {row_name}").props('color=cyan text-color=black bold').classes('text-sm q-px-sm')
                                     ui.badge(f"ASSENTO {seat}").props('color=green text-color=white bold').classes('text-sm q-px-sm')
 
             scan_input.on('keydown.enter', lambda: process_scan(scan_input.value))
 
             with ui.row().classes('w-full justify-between items-center q-mt-md'):
-                ui.label(f"Total Conferidos: {len(scanned_history)} cartões").classes('text-xs text-cyan font-bold')
+                ui.label(f"Total Conferidos: {len(scanned_history)} de {len([c for c in convidados if c.get('assento_id')])} cartões").classes('text-xs text-cyan font-bold')
                 ui.button('Concluir Conferência', on_click=diag.close).props('unelevated color=grey-8 dense')
         diag.open()
 
