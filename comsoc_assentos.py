@@ -526,7 +526,7 @@ def render_page():
         state.filter_seat_status = val
         render_content.refresh()
 
-    def create_event(nome, data, local, layout_tipo, rows, cols, ref_top, ref_bottom):
+    def create_event(nome, data, local, layout_tipo, rows, cols, ref_top, ref_bottom, custom_sectors=None):
         if not nome or not data:
             ui.notify('Nome e Data do evento são obrigatórios.', color='warning')
             return
@@ -539,7 +539,8 @@ def render_page():
                 'cols': int(cols),
                 'ref_top': ref_top or 'PALCO PRINCIPAL',
                 'ref_bottom': ref_bottom or 'ENTRADA / FACHADA',
-                'blocked_seats': []
+                'blocked_seats': [],
+                'sectors': custom_sectors or []
             }
             try:
                 res = db.table('jade_eventos').insert({
@@ -673,47 +674,89 @@ def render_page():
             except Exception as e:
                 ui.notify(f"Erro ao alterar dimensões do grid: {e}", color='red')
 
-    # --- MODAIS E DIÁLOGOS ---
+    # --- MODAIS E DIÁLOGOS DE GERENCIAMENTO DE SETORES E EVENTOS ---
     def open_create_event_dialog():
-        with ui.dialog() as diag, ui.card().classes('q-pa-md').style('min-width: 380px;'):
-            ui.label('📅 Novo Evento de Assento').classes('text-md font-bold text-cyan q-mb-md')
+        with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 520px; max-width: 90vw;'):
+            ui.label('📅 Novo Evento com Gestão de Setores').classes('text-md font-bold text-cyan cyber-title q-mb-xs')
+            ui.label('Cadastre a solenidade e configure as dimensões e nomes dos setores').classes('text-xs text-grey-4 q-mb-md')
             
             nome = ui.input('Nome do Evento / Solenidade').props('dark outlined dense w-full')
             data = ui.input('Data do Evento').props('type=date dark outlined dense w-full')
-            local = ui.input('Local (ex: Auditório)').props('dark outlined dense w-full')
-            
-            ref_top = ui.input('Referência Superior (ex: Palco)', value='PALCO PRINCIPAL').props('dark outlined dense w-full')
-            ref_bottom = ui.input('Referência Inferior (ex: Entrada)', value='ENTRADA / FACHADA').props('dark outlined dense w-full')
+            local = ui.input('Local (ex: Auditório Principal)').props('dark outlined dense w-full')
             
             with ui.row().classes('w-full gap-2'):
-                rows = ui.number('Linhas (Grid)', value=5, min=1, max=20, step=1).props('dark outlined dense').classes('col')
-                cols = ui.number('Colunas (Grid)', value=8, min=1, max=25, step=1).props('dark outlined dense').classes('col')
+                ref_top = ui.input('Referência Superior', value='PALCO PRINCIPAL').props('dark outlined dense').classes('col')
+                ref_bottom = ui.input('Referência Inferior', value='ENTRADA / FACHADA').props('dark outlined dense').classes('col')
+            
+            with ui.row().classes('w-full gap-2'):
+                rows = ui.number('Linhas (Grid Total)', value=6, min=1, max=25, step=1).props('dark outlined dense').classes('col')
+                cols = ui.number('Colunas (Grid Total)', value=12, min=1, max=30, step=1).props('dark outlined dense').classes('col')
                 
             layout_tipo = ui.select(
-                options={'auditorio': 'Auditório (Fileiras)', 'mesas': 'Mesas Redondas'}, 
+                options={'auditorio': 'Auditório (Fileiras em Setores)', 'mesas': 'Mesas Redondas'}, 
                 value='auditorio'
             ).props('dark outlined dense w-full')
             
+            ui.separator().classes('q-my-sm')
+            ui.label('⚙️ Nomes dos Setores Customizados (Opcional):').classes('text-xs text-amber font-bold')
+            sec1 = ui.input('Setor 1 (Esquerda/Alpha)', value='SETOR ALPHA (ESQUERDA)').props('dark outlined dense w-full')
+            sec2 = ui.input('Setor 2 (Centro/Nobre)', value='SETOR NOBRE (CENTRO)').props('dark outlined dense w-full')
+            sec3 = ui.input('Setor 3 (Direita/Bravo)', value='SETOR BRAVO (DIREITA)').props('dark outlined dense w-full')
+
             with ui.row().classes('w-full justify-end q-mt-md gap-2'):
-                ui.button('Cancelar', on_click=diag.close).props('unelevated color=grey-8 text-color=white dense')
-                ui.button(
-                    'Criar', 
-                    on_click=lambda: [create_event(nome.value, data.value, local.value, layout_tipo.value, rows.value, cols.value, ref_top.value, ref_bottom.value), diag.close()]
-                ).props('unelevated color=primary text-color=black dense')
+                ui.button('Cancelar', on_click=diag.close).props('unelevated color=grey-8 dense')
+                
+                def criar_evento_custom():
+                    c_total = int(cols.value)
+                    custom_sectors = [
+                        {'name': sec1.value.strip().upper(), 'start_col': 1, 'end_col': max(1, c_total // 3)},
+                        {'name': sec2.value.strip().upper(), 'start_col': max(1, c_total // 3) + 1, 'end_col': max(1, (c_total * 2) // 3)},
+                        {'name': sec3.value.strip().upper(), 'start_col': max(1, (c_total * 2) // 3) + 1, 'end_col': c_total}
+                    ]
+                    create_event(nome.value, data.value, local.value, layout_tipo.value, rows.value, cols.value, ref_top.value, ref_bottom.value, custom_sectors)
+                    diag.close()
+
+                ui.button('Criar Evento', on_click=criar_evento_custom).props('unelevated color=primary text-color=black dense bold')
                 
         diag.open()
 
     def open_edit_event_dialog(event, layout):
-        with ui.dialog() as diag, ui.card().classes('q-pa-md').style('min-width: 380px;'):
-            ui.label('📝 Editar Detalhes do Evento').classes('text-md font-bold text-cyan q-mb-md')
+        sectors_list = layout.get('sectors', [])
+        c_total = layout.get('cols', 12)
+
+        with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 580px; max-width: 90vw; max-height: 85vh; overflow-y: auto;'):
+            ui.label('📝 Configuração de Layout e Gestão de Setores').classes('text-md font-bold text-cyan cyber-title q-mb-xs')
+            ui.label('Edite os nomes dos setores, faixas de colunas e referências do auditório').classes('text-xs text-grey-4 q-mb-md')
             
             nome = ui.input('Nome do Evento / Solenidade', value=event['nome']).props('dark outlined dense w-full')
             data = ui.input('Data do Evento', value=event['data_evento']).props('type=date dark outlined dense w-full')
             local = ui.input('Local', value=event.get('local') or '').props('dark outlined dense w-full')
             
-            ref_top = ui.input('Referência Superior (ex: Palco)', value=layout.get('ref_top', 'PALCO PRINCIPAL')).props('dark outlined dense w-full')
-            ref_bottom = ui.input('Referência Inferior (ex: Entrada)', value=layout.get('ref_bottom', 'ENTRADA / FACHADA')).props('dark outlined dense w-full')
+            with ui.row().classes('w-full gap-2'):
+                ref_top = ui.input('Referência Superior', value=layout.get('ref_top', 'PALCO PRINCIPAL')).props('dark outlined dense').classes('col')
+                ref_bottom = ui.input('Referência Inferior', value=layout.get('ref_bottom', 'ENTRADA / FACHADA')).props('dark outlined dense').classes('col')
             
+            ui.separator().classes('q-my-md')
+            ui.label('📍 EDITAÇÃO DOS SETORES DO AUDITÓRIO (Nomes pelo Gestor)').classes('text-xs text-amber font-bold')
+
+            # Renderizador dinâmico de campos de setores
+            sector_inputs = []
+            with ui.column().classes('w-full gap-2 q-my-xs'):
+                if not sectors_list:
+                    sectors_list = [
+                        {'name': 'SETOR ALPHA (ESQUERDA)', 'start_col': 1, 'end_col': max(1, c_total // 3)},
+                        {'name': 'SETOR NOBRE (CENTRO)', 'start_col': max(1, c_total // 3) + 1, 'end_col': max(1, (c_total * 2) // 3)},
+                        {'name': 'SETOR BRAVO (DIREITA)', 'start_col': max(1, (c_total * 2) // 3) + 1, 'end_col': c_total}
+                    ]
+
+                for idx, sec in enumerate(sectors_list):
+                    with ui.card().classes('w-full q-pa-xs px-2 bg-black/40 border border-cyan-500/20 rounded-lg'):
+                        with ui.row().classes('w-full items-center gap-2'):
+                            s_name = ui.input(f'Setor {idx+1}', value=sec['name']).props('dark outlined dense').classes('col')
+                            s_start = ui.number('Col Inicial', value=sec['start_col'], min=1, max=c_total).props('dark outlined dense').style('width: 90px;')
+                            s_end = ui.number('Col Final', value=sec['end_col'], min=1, max=c_total).props('dark outlined dense').style('width: 90px;')
+                            sector_inputs.append((s_name, s_start, s_end))
+
             with ui.row().classes('w-full justify-end q-mt-md gap-2'):
                 ui.button('Cancelar', on_click=diag.close).props('unelevated color=grey-8 dense')
                 
@@ -722,6 +765,18 @@ def render_page():
                     if db:
                         layout['ref_top'] = ref_top.value
                         layout['ref_bottom'] = ref_bottom.value
+                        
+                        # Salva a lista de setores editados pelo Gestor
+                        new_sectors = []
+                        for inp_name, inp_start, inp_end in sector_inputs:
+                            if inp_name.value and inp_name.value.strip():
+                                new_sectors.append({
+                                    'name': inp_name.value.strip().upper(),
+                                    'start_col': int(inp_start.value),
+                                    'end_col': int(inp_end.value)
+                                })
+                        layout['sectors'] = new_sectors
+
                         try:
                             db.table('jade_eventos').update({
                                 'nome': nome.value.upper(),
@@ -730,13 +785,13 @@ def render_page():
                                 'layout_json': json.dumps(layout)
                             }).eq('id', event['id']).execute()
                             
-                            ui.notify('Evento atualizado com sucesso!', color='success')
+                            ui.notify('Evento e Setores atualizados com sucesso!', color='success')
                             render_content.refresh()
                             diag.close()
                         except Exception as e:
                             ui.notify(f"Erro ao salvar: {e}", color='red')
                             
-                ui.button('Salvar', on_click=salvar_alteracoes).props('unelevated color=primary text-color=black dense')
+                ui.button('Salvar Alterações', on_click=salvar_alteracoes).props('unelevated color=primary text-color=black dense bold')
                 
         diag.open()
 
