@@ -590,44 +590,48 @@ def open_change_password_dialog(user):
                     return
                 
                 try:
-                    # 1. Tenta atualizar no Supabase Auth
-                    auth_updated = False
-                    try:
-                        db_conn.auth.update_user({"password": new_pwd.value})
-                        auth_updated = True
-                    except Exception as auth_err:
-                        # Se falhar por falta de sessão ativa no client (Auth session missing), tenta usando a chave de serviço (service_role)
-                        err_msg = str(auth_err)
-                        if 'session missing' in err_msg.lower() or 'auth session' in err_msg.lower() or 'not found' in err_msg.lower():
-                            svc_conn = get_service_db_connection()
-                            user_id = user.get('id')
-                            if svc_conn and user_id and hasattr(svc_conn, 'auth') and hasattr(svc_conn.auth, 'admin'):
-                                try:
-                                    svc_conn.auth.admin.update_user_by_id(user_id, {"password": new_pwd.value})
-                                    auth_updated = True
-                                except Exception as admin_auth_err:
-                                    print(f"[ADMIN AUTH PASSWORD UPDATE ERROR] {admin_auth_err}")
-                        if not auth_updated:
-                            raise auth_err
-                    
-                    # 2. Atualiza a tabela efetivo se houver e-mail ou nome_guerra
                     import bcrypt
                     pwd_hash = bcrypt.hashpw(new_pwd.value.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
                     
-                    svc_conn = get_service_db_connection()
+                    svc_conn = get_service_db_connection() or db_conn
+                    updated_in_db = False
+
                     if svc_conn:
+                        user_email = user.get('email')
+                        nome_guerra = user.get('nome_guerra')
+                        user_id = user.get('id')
+
+                        # 1. Atualiza na tabela efetivo
                         try:
-                            user_email = user.get('email')
-                            nome_guerra = user.get('nome_guerra')
                             if user_email:
                                 svc_conn.table('efetivo').update({'senha_hash': pwd_hash}).eq('email', user_email).execute()
+                                updated_in_db = True
                             elif nome_guerra:
                                 svc_conn.table('efetivo').update({'senha_hash': pwd_hash}).eq('nome_guerra', nome_guerra.upper()).execute()
-                        except Exception as db_err:
-                            print(f"[DB ERR SYNC PASSWORD] {db_err}")
-                    
-                    ui.notify('Sua senha foi alterada com sucesso!', color='success')
-                    pwd_dialog.close()
+                                updated_in_db = True
+                        except Exception as ef_err:
+                            print(f"[EFETIVO PWD UPDATE ERR] {ef_err}")
+
+                        # 2. Atualiza na tabela users se existir id
+                        try:
+                            if user_id:
+                                svc_conn.table('users').update({'senha_hash': pwd_hash}).eq('id', user_id).execute()
+                                updated_in_db = True
+                        except Exception as u_err:
+                            print(f"[USERS PWD UPDATE ERR] {u_err}")
+
+                        # 3. Tenta atualizar no Supabase Auth em segundo plano (se configurado)
+                        try:
+                            if hasattr(db_conn, 'auth') and hasattr(db_conn.auth, 'update_user'):
+                                db_conn.auth.update_user({"password": new_pwd.value})
+                        except Exception:
+                            pass
+
+                    if updated_in_db:
+                        ui.notify('Sua senha foi alterada com sucesso!', color='success')
+                        pwd_dialog.close()
+                    else:
+                        pwd_error.text = "Erro ao localizar registro do usuário para atualização."
                 except Exception as err:
                     pwd_error.text = f"Erro ao atualizar: {err}"
             
