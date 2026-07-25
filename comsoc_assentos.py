@@ -17,6 +17,7 @@ class ModuleState:
         self.filter_category = "Todos"
         self.filter_only_unallocated = False
         self.selected_sector = "Todos"  # "Todos" ou nome específico do Setor
+        self.zoom_level = "normal"  # "compact", "normal", "large"
 
 state = ModuleState()
 
@@ -210,26 +211,42 @@ def render_page():
                     ui.label('🗺️ MAPA DE ASSENTOS DA SOLENIDADE').classes('text-md font-bold text-cyan cyber-title')
                     ui.label(f"Grid: {rows_count} fileiras × {cols_count} colunas • Exibindo: {getattr(state, 'selected_sector', 'Todos').upper()} ({display_cols_count} colunas)").classes('text-[11px] text-grey-4')
                 
-                with ui.row().classes('items-center gap-2 wrap'):
-                    # SELETOR DE SETOR ATIVO NO MESMO EVENTO
-                    if sectors:
-                        sector_options = {'Todos': '🌐 Todos os Setores'}
-                        for s in sectors:
-                            sector_options[s['name']] = f"📍 {s['name']}"
-                            
+                    with ui.row().classes('items-center gap-2 wrap'):
+                        # SELETOR DE SETOR ATIVO NO MESMO EVENTO
+                        if sectors:
+                            sector_options = {'Todos': '🌐 Todos os Setores'}
+                            for s in sectors:
+                                sector_options[s['name']] = f"📍 {s['name']}"
+                                
+                            ui.select(
+                                options=sector_options,
+                                value=getattr(state, 'selected_sector', 'Todos'),
+                                on_change=lambda e: [setattr(state, 'selected_sector', e.value), render_content.refresh()]
+                            ).props('dark outlined dense').style('min-width: 200px;').classes('text-xs')
+
+                        # SELETOR DE ZOOM / TAMANHO DOS ASSENTOS (COMPACTO / NORMAL / AMPLO)
                         ui.select(
-                            options=sector_options,
-                            value=getattr(state, 'selected_sector', 'Todos'),
-                            on_change=lambda e: [setattr(state, 'selected_sector', e.value), render_content.refresh()]
-                        ).props('dark outlined dense').style('min-width: 220px;').classes('text-xs')
+                            options={'compact': '🔍 Zoom: Compacto', 'normal': '🔍 Zoom: Normal', 'large': '🔍 Zoom: Amplo'},
+                            value=getattr(state, 'zoom_level', 'normal'),
+                            on_change=lambda e: [setattr(state, 'zoom_level', e.value), render_content.refresh()]
+                        ).props('dark outlined dense').style('width: 145px;').classes('text-xs')
 
-                    # Seletor de Modo de Edição
-                    with ui.row().classes('items-center bg-black/30 rounded-lg q-pa-xs border border-white/10'):
-                        ui.button('Alocação Rápida', icon='event_seat', on_click=lambda: toggle_mode("alocacao")).props(f'dense unelevated {"color=primary text-color=black" if state.edit_mode == "alocacao" else "flat text-color=grey"}').classes('text-xs q-px-sm')
-                        ui.button('Editor de Layout / Corredores', icon='edit_road', on_click=lambda: toggle_mode("layout")).props(f'dense unelevated {"color=primary text-color=black" if state.edit_mode == "layout" else "flat text-color=grey"}').classes('text-xs q-px-sm')
+                        # Seletor de Modo de Edição
+                        with ui.row().classes('items-center bg-black/30 rounded-lg q-pa-xs border border-white/10'):
+                            ui.button('Alocação Rápida', icon='event_seat', on_click=lambda: toggle_mode("alocacao")).props(f'dense unelevated {"color=primary text-color=black" if state.edit_mode == "alocacao" else "flat text-color=grey"}').classes('text-xs q-px-sm')
+                            ui.button('Editor de Layout / Corredores', icon='edit_road', on_click=lambda: toggle_mode("layout")).props(f'dense unelevated {"color=primary text-color=black" if state.edit_mode == "layout" else "flat text-color=grey"}').classes('text-xs q-px-sm')
 
-            # Renderizador de Grid de Assentos por Setores
-            with ui.column().classes('w-full items-center justify-start q-py-md scroll-container').style('overflow-x: auto;'):
+            # Dimensões dinâmicas conforme Zoom
+            zoom = getattr(state, 'zoom_level', 'normal')
+            if zoom == 'compact':
+                seat_w, seat_h, font_name, font_sub = '52px', '38px', '8px', '6px'
+            elif zoom == 'large':
+                seat_w, seat_h, font_name, font_sub = '90px', '58px', '11px', '8px'
+            else:
+                seat_w, seat_h, font_name, font_sub = '70px', '48px', '9px', '7px'
+
+            # Renderizador de Grid de Assentos por Setores com Rolagem Dupla
+            with ui.column().classes('w-full items-center justify-start q-py-md scroll-container').style('overflow-x: auto; overflow-y: auto; max-height: 520px;'):
                 ref_top = layout.get('ref_top', 'PALCO PRINCIPAL')
                 if ref_top:
                     with ui.row().classes('w-full justify-center q-mb-sm'):
@@ -248,7 +265,7 @@ def render_page():
                     ui.label('').classes('text-center font-bold text-grey-5').style('width: 40px;')
                     
                     for col in display_cols:
-                        ui.label(str(col)).classes('text-center font-bold text-grey-5').style('width: 70px; font-size: 11px;')
+                        ui.label(str(col)).classes('text-center font-bold text-grey-5').style(f'width: {seat_w}; font-size: 11px;')
                         
                     for r in range(rows_count):
                         row_label = get_row_label(r)
@@ -262,12 +279,12 @@ def render_page():
                             if is_blocked:
                                 if state.edit_mode == "layout":
                                     with ui.column().classes('items-center justify-center cursor-pointer transition-all hover:scale-105').style(
-                                        'width: 70px; height: 48px; border: 1px dashed rgba(255,255,255,0.15); border-radius: 4px; background: rgba(255,255,255,0.02); gap: 0;'
+                                        f'width: {seat_w}; height: {seat_h}; border: 1px dashed rgba(255,255,255,0.15); border-radius: 4px; background: rgba(255,255,255,0.02); gap: 0;'
                                     ).on('click', lambda s=seat_id: toggle_seat_block(s, current_event, layout)):
                                         ui.label(seat_id).classes('text-[8px] text-grey-5 font-mono')
                                         ui.label('CORREDOR').classes('text-[7px] text-grey-6 font-bold')
                                 else:
-                                    ui.label('').style('width: 70px; height: 48px;')
+                                    ui.label('').style(f'width: {seat_w}; height: {seat_h};')
                             else:
                                 if guest:
                                     display_name = f"{guest.get('posto_graduacao') or ''} {guest['nome']}".strip()
@@ -282,29 +299,29 @@ def render_page():
                                     text_c = THEME['primary'] if is_vip else ('#ffb74d' if is_acomp else THEME['accent'])
                                     
                                     with ui.column().classes('items-center justify-between q-pa-xs cursor-pointer transition-all hover:scale-105 border').style(
-                                        f'width: 70px; height: 48px; border-radius: 4px; border-color: {border_c} !important; background: {bg_c}; gap: 0;'
+                                        f'width: {seat_w}; height: {seat_h}; border-radius: 4px; border-color: {border_c} !important; background: {bg_c}; gap: 0;'
                                     ).on('click', lambda s=seat_id, g=guest: open_seat_actions_dialog(s, g, convidados, current_event['id'])):
                                         ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono leading-none')
-                                        ui.label(display_name).classes('text-[9px] font-bold text-center leading-none text-white overflow-hidden w-full')
+                                        ui.label(display_name).classes(f'font-bold text-center leading-none text-white overflow-hidden w-full').style(f'font-size: {font_name};')
                                         
                                         category_label = 'ACOMP' if is_acomp else str(guest.get('categoria', 'Geral')).upper()
                                         if len(category_label) > 10:
                                             category_label = category_label[:8] + '..'
-                                        ui.label(category_label).classes(f'text-[7px] text-center leading-none').style(f'color: {text_c}; font-weight: bold;')
+                                        ui.label(category_label).classes(f'text-center leading-none').style(f'color: {text_c}; font-weight: bold; font-size: {font_sub};')
                                 else:
                                     if state.edit_mode == "layout":
                                         with ui.column().classes('items-center justify-center cursor-pointer transition-all hover:scale-105 border').style(
-                                            'width: 70px; height: 48px; border-radius: 4px; border-color: rgba(255,255,255,0.15) !important; background: #1b2535; gap: 0;'
+                                            f'width: {seat_w}; height: {seat_h}; border-radius: 4px; border-color: rgba(255,255,255,0.15) !important; background: #1b2535; gap: 0;'
                                         ).on('click', lambda s=seat_id: toggle_seat_block(s, current_event, layout)):
                                             ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono')
                                             ui.label('BLOQUEAR').classes('text-[7px] text-grey-5 font-bold')
                                     else:
                                         with ui.column().classes('items-center justify-between q-pa-xs cursor-pointer transition-all hover:scale-105 border').style(
-                                            f'width: 70px; height: 48px; border-radius: 4px; border-color: {THEME["success"]}40 !important; background: rgba(0, 230, 118, 0.05); gap: 0;'
+                                            f'width: {seat_w}; height: {seat_h}; border-radius: 4px; border-color: {THEME["success"]}40 !important; background: rgba(0, 230, 118, 0.05); gap: 0;'
                                         ).on('click', lambda s=seat_id: open_allocate_seat_dialog(s, convidados, current_event['id'])):
                                             ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono leading-none')
-                                            ui.label('LIVRE').classes('text-[9px] font-bold text-center leading-none').style(f'color: {THEME["success"]};')
-                                            ui.label('(vazio)').classes('text-[7px] text-grey-5 text-center leading-none')
+                                            ui.label('LIVRE').classes('font-bold text-center leading-none').style(f'color: {THEME["success"]}; font-size: {font_name};')
+                                            ui.label('(vazio)').classes('text-grey-5 text-center leading-none').style(f'font-size: {font_sub};')
 
                 ref_bottom = layout.get('ref_bottom', 'ENTRADA / FACHADA')
                 if ref_bottom:
@@ -721,12 +738,19 @@ def render_page():
         diag.open()
 
     def open_edit_event_dialog(event, layout):
-        sectors_list = layout.get('sectors', [])
+        sectors_list = list(layout.get('sectors', []))
         c_total = layout.get('cols', 12)
 
-        with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 580px; max-width: 90vw; max-height: 85vh; overflow-y: auto;'):
-            ui.label('📝 Configuração de Layout e Gestão de Setores').classes('text-md font-bold text-cyan cyber-title q-mb-xs')
-            ui.label('Edite os nomes dos setores, faixas de colunas e referências do auditório').classes('text-xs text-grey-4 q-mb-md')
+        if not sectors_list:
+            sectors_list = [
+                {'name': 'SETOR ALPHA (ESQUERDA)', 'start_col': 1, 'end_col': max(1, c_total // 3)},
+                {'name': 'SETOR NOBRE (CENTRO)', 'start_col': max(1, c_total // 3) + 1, 'end_col': max(1, (c_total * 2) // 3)},
+                {'name': 'SETOR BRAVO (DIREITA)', 'start_col': max(1, (c_total * 2) // 3) + 1, 'end_col': c_total}
+            ]
+
+        with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 650px; max-width: 95vw; max-height: 88vh; overflow-y: auto;'):
+            ui.label('📝 Configuração do Layout e Gestão de Setores').classes('text-md font-bold text-cyan cyber-title q-mb-xs')
+            ui.label('Adicione, exclua ou renomeie setores e configure os limites de colunas').classes('text-xs text-grey-4 q-mb-md')
             
             nome = ui.input('Nome do Evento / Solenidade', value=event['nome']).props('dark outlined dense w-full')
             data = ui.input('Data do Evento', value=event['data_evento']).props('type=date dark outlined dense w-full')
@@ -737,25 +761,46 @@ def render_page():
                 ref_bottom = ui.input('Referência Inferior', value=layout.get('ref_bottom', 'ENTRADA / FACHADA')).props('dark outlined dense').classes('col')
             
             ui.separator().classes('q-my-md')
-            ui.label('📍 EDITAÇÃO DOS SETORES DO AUDITÓRIO (Nomes pelo Gestor)').classes('text-xs text-amber font-bold')
+            
+            with ui.row().classes('w-full justify-between items-center q-mb-xs'):
+                ui.label('📍 SETORES DO AUDITÓRIO (Adicionar / Excluir)').classes('text-xs text-amber font-bold')
+                
+                def add_sector_item():
+                    next_idx = len(sectors_list) + 1
+                    sectors_list.append({
+                        'name': f"NOVO SETOR {next_idx}",
+                        'start_col': 1,
+                        'end_col': c_total
+                    })
+                    render_sectors_editor.refresh()
 
-            # Renderizador dinâmico de campos de setores
+                ui.button('➕ Adicionar Setor', icon='add', on_click=add_sector_item).props('unelevated color=amber text-color=black dense').classes('text-xs')
+
+            # Renderizador dinâmico de campos de setores com botão de exclusão
             sector_inputs = []
-            with ui.column().classes('w-full gap-2 q-my-xs'):
-                if not sectors_list:
-                    sectors_list = [
-                        {'name': 'SETOR ALPHA (ESQUERDA)', 'start_col': 1, 'end_col': max(1, c_total // 3)},
-                        {'name': 'SETOR NOBRE (CENTRO)', 'start_col': max(1, c_total // 3) + 1, 'end_col': max(1, (c_total * 2) // 3)},
-                        {'name': 'SETOR BRAVO (DIREITA)', 'start_col': max(1, (c_total * 2) // 3) + 1, 'end_col': c_total}
-                    ]
 
-                for idx, sec in enumerate(sectors_list):
-                    with ui.card().classes('w-full q-pa-xs px-2 bg-black/40 border border-cyan-500/20 rounded-lg'):
-                        with ui.row().classes('w-full items-center gap-2'):
-                            s_name = ui.input(f'Setor {idx+1}', value=sec['name']).props('dark outlined dense').classes('col')
-                            s_start = ui.number('Col Inicial', value=sec['start_col'], min=1, max=c_total).props('dark outlined dense').style('width: 90px;')
-                            s_end = ui.number('Col Final', value=sec['end_col'], min=1, max=c_total).props('dark outlined dense').style('width: 90px;')
-                            sector_inputs.append((s_name, s_start, s_end))
+            @ui.refreshable
+            def render_sectors_editor():
+                sector_inputs.clear()
+                with ui.column().classes('w-full gap-2 q-my-xs'):
+                    for idx, sec in enumerate(sectors_list):
+                        with ui.card().classes('w-full q-pa-xs px-2 bg-black/40 border border-cyan-500/20 rounded-lg'):
+                            with ui.row().classes('w-full items-center gap-2'):
+                                s_name = ui.input(f'Setor {idx+1}', value=sec['name']).props('dark outlined dense').classes('col')
+                                s_start = ui.number('Col Inicial', value=sec['start_col'], min=1, max=c_total).props('dark outlined dense').style('width: 90px;')
+                                s_end = ui.number('Col Final', value=sec['end_col'], min=1, max=c_total).props('dark outlined dense').style('width: 90px;')
+                                
+                                def remove_sector(i=idx):
+                                    if len(sectors_list) > 1:
+                                        sectors_list.pop(i)
+                                        render_sectors_editor.refresh()
+                                    else:
+                                        ui.notify('O evento precisa de pelo menos 1 setor.', color='warning')
+
+                                ui.button(icon='delete', on_click=remove_sector).props('unelevated color=danger dense flat round').classes('text-xs')
+                                sector_inputs.append((s_name, s_start, s_end))
+
+            render_sectors_editor()
 
             with ui.row().classes('w-full justify-end q-mt-md gap-2'):
                 ui.button('Cancelar', on_click=diag.close).props('unelevated color=grey-8 dense')
@@ -766,7 +811,6 @@ def render_page():
                         layout['ref_top'] = ref_top.value
                         layout['ref_bottom'] = ref_bottom.value
                         
-                        # Salva a lista de setores editados pelo Gestor
                         new_sectors = []
                         for inp_name, inp_start, inp_end in sector_inputs:
                             if inp_name.value and inp_name.value.strip():
@@ -785,7 +829,7 @@ def render_page():
                                 'layout_json': json.dumps(layout)
                             }).eq('id', event['id']).execute()
                             
-                            ui.notify('Evento e Setores atualizados com sucesso!', color='success')
+                            ui.notify('Layout e Setores atualizados com sucesso!', color='success')
                             render_content.refresh()
                             diag.close()
                         except Exception as e:
