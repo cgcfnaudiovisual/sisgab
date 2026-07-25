@@ -265,15 +265,29 @@ def render_page():
                 num_px = int(seat_w.replace('px',''))
                 min_grid_w = max(600, (display_cols_count + 1) * (num_px + 8) + 60)
 
-                # BARRA DE TÍTULOS DE SETORES (SE HOUVER SUBDIVISÃO)
+                # BARRA DE TÍTULOS DE SETORES (ALINHADOS EXATAMENTE SOBRE AS SUAS COLUNAS NO GRID)
                 if sectors and getattr(state, 'selected_sector', 'Todos') == "Todos":
-                    with ui.row().classes('w-full justify-between items-center q-mb-xs gap-2 px-8').style(f'min-width: {min_grid_w}px;'):
+                    with ui.grid(columns=display_cols_count + 1).classes('gap-2 items-center q-mb-xs').style(f'min-width: {min_grid_w}px;'):
+                        # Espaçamento para o rótulo da fileira (coluna 0)
+                        ui.label('').style('width: 40px;')
+                        
+                        last_col_rendered = 0
                         for sec in sectors:
-                            sec_cols = sec['end_col'] - sec['start_col'] + 1
-                            if sec_cols > 0:
-                                with ui.card().classes('q-pa-xs no-shadow rounded-lg text-center bg-cyan-950/60 border border-cyan-500/40 col'):
-                                    ui.label(sec['name']).classes('text-[10px] font-black text-cyan tracking-wider truncate')
-                                    ui.label(f"Colunas {sec['start_col']} a {sec['end_col']}").classes('text-[8px] text-grey-4')
+                            s_start = sec['start_col']
+                            s_end = sec['end_col']
+                            sec_span = max(1, s_end - s_start + 1)
+                            
+                            # Se houver espaço vazio (gap) entre setores, preenche
+                            gap_span = s_start - (last_col_rendered + 1)
+                            if gap_span > 0:
+                                ui.label('').style(f'grid-column: span {gap_span};')
+
+                            # Renderiza o Card do Setor cobrindo exatamente o número de colunas do setor
+                            with ui.card().classes('q-pa-xs no-shadow rounded-lg text-center bg-cyan-950/80 border border-cyan-500/50').style(f'grid-column: span {sec_span}; margin: 0;'):
+                                ui.label(sec['name']).classes('text-[11px] font-black text-cyan tracking-wider truncate')
+                                ui.label(f"Colunas {s_start} a {s_end}").classes('text-[9px] text-grey-3 font-mono font-bold')
+                            
+                            last_col_rendered = s_end
 
                 with ui.grid(columns=display_cols_count + 1).classes('gap-2 items-center').style(f'min-width: {min_grid_w}px;'):
                     ui.label('').classes('text-center font-bold text-grey-5').style('width: 40px;')
