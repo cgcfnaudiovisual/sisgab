@@ -793,11 +793,19 @@ def render_page():
                 ui.label('📍 SETORES DO AUDITÓRIO (Adicionar / Excluir)').classes('text-xs text-amber font-bold')
                 
                 def add_sector_item():
-                    next_idx = len(sectors_list) + 1
+                    num_sectors = len(sectors_list)
+                    current_max = 0
+                    for s in sectors_list:
+                        if s.get('end_col', 0) > current_max:
+                            current_max = s['end_col']
+                    
+                    start_c = current_max + 1 if current_max > 0 else 1
+                    end_c = start_c + 11 # Tamanho padrão de 12 colunas por setor novo
+
                     sectors_list.append({
-                        'name': f"NOVO SETOR {next_idx}",
-                        'start_col': 1,
-                        'end_col': c_total
+                        'name': f"NOVO SETOR {num_sectors + 1}",
+                        'start_col': start_c,
+                        'end_col': end_c
                     })
                     render_sectors_editor.refresh()
 
@@ -814,8 +822,8 @@ def render_page():
                         with ui.card().classes('w-full q-pa-xs px-2 bg-black/40 border border-cyan-500/20 rounded-lg'):
                             with ui.row().classes('w-full items-center gap-2'):
                                 s_name = ui.input(f'Setor {idx+1}', value=sec['name']).props('dark outlined dense').classes('col')
-                                s_start = ui.number('Col Inicial', value=sec['start_col'], min=1, max=c_total).props('dark outlined dense').style('width: 90px;')
-                                s_end = ui.number('Col Final', value=sec['end_col'], min=1, max=c_total).props('dark outlined dense').style('width: 90px;')
+                                s_start = ui.number('Col Inicial', value=sec['start_col'], min=1, max=100).props('dark outlined dense').style('width: 90px;')
+                                s_end = ui.number('Col Final', value=sec['end_col'], min=1, max=100).props('dark outlined dense').style('width: 90px;')
                                 
                                 def remove_sector(i=idx):
                                     if len(sectors_list) > 1:
