@@ -61,6 +61,31 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                     label='Status da Pauta'
                 ).props('dark outlined dense w-full option-dark')
 
+                # Carrega opções do efetivo para designação de militares
+                efetivo_options = {}
+                db_ef = get_service_db_connection() or get_db_connection()
+                if db_ef:
+                    try:
+                        res_ef = db_ef.table('efetivo').select('id, nome_guerra, role').execute()
+                        if res_ef.data:
+                            efetivo_options = {item['id']: f"{item['nome_guerra']} ({item['role'].upper()})" for item in res_ef.data}
+                    except Exception as e_ef:
+                        print(f"[EFETIVO LOAD ERR] {e_ef}")
+
+                ui.label('🎖️ Designação de Equipe Operacional / Criativa').classes('text-xs font-bold text-cyan q-mt-xs')
+                with ui.row().classes('w-full gap-2 no-wrap'):
+                    encarregado_select = ui.select(
+                        efetivo_options,
+                        value=demanda.get('encarregado_id'),
+                        label='👤 Encarregado da Missão'
+                    ).props('dark outlined dense option-dark').classes('w-1/2')
+
+                    designer_select = ui.select(
+                        efetivo_options,
+                        value=demanda.get('designer_id'),
+                        label='🎨 Militar Designado (Arte / Design)'
+                    ).props('dark outlined dense option-dark').classes('w-1/2')
+
                 ui.label('📸 Tipos de Serviço Requeridos').classes('text-xs font-bold text-cyan q-mt-xs')
                 
                 chk_foto = ui.checkbox('Fotografia', value='foto' in cob_list)
@@ -95,6 +120,8 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                                 'hora_evento': in_hora.value or '09:00',
                                 'autoridades': in_autoridades.value.strip(),
                                 'status': in_status.value,
+                                'encarregado_id': encarregado_select.value,
+                                'designer_id': designer_select.value,
                                 'tipo_cobertura': json.dumps(cobs)
                             }
                             db.table('demandas_comunicacao').update(update_payload).eq('id', demanda['id']).execute()
@@ -133,11 +160,18 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
         ui.label(f"Solicitante: {demanda.get('solicitante_nome','')} ({demanda.get('setor','')})").classes('text-xs text-grey-4 q-mb-md')
         
         with ui.column().classes('w-full gap-3 text-xs'):
-            encarregado_select = ui.select(
-                efetivo_options,
-                value=demanda.get('encarregado_id'),
-                label='👤 Encarregado da Missão (Líder da Equipe COMSOC)'
-            ).props('dark outlined dense w-full option-dark')
+            with ui.row().classes('w-full gap-2 no-wrap'):
+                encarregado_select = ui.select(
+                    efetivo_options,
+                    value=demanda.get('encarregado_id'),
+                    label='👤 Encarregado da Missão'
+                ).props('dark outlined dense option-dark').classes('w-1/2')
+
+                designer_select = ui.select(
+                    efetivo_options,
+                    value=demanda.get('designer_id'),
+                    label='🎨 Militar Designado (Arte / Design)'
+                ).props('dark outlined dense option-dark').classes('w-1/2')
             
             parecer_input = ui.textarea('✍️ Parecer da Chefia / Despacho', placeholder='Digite o parecer ou instruções...').props('dark outlined dense w-full rows=3')
             error_lbl = ui.label('').classes('text-xs text-red font-bold')
@@ -165,6 +199,8 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
                         update_data = {'status': novo_status}
                         if encarregado_select.value:
                             update_data['encarregado_id'] = encarregado_select.value
+                        if designer_select.value:
+                            update_data['designer_id'] = designer_select.value
                         db.table('demandas_comunicacao').update(update_data).eq('id', demanda['id']).execute()
                         demanda['status'] = novo_status
                         
