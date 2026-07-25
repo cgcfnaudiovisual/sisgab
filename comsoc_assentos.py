@@ -795,6 +795,10 @@ def render_page():
                 ref_top = ui.input('Referência Superior', value=layout.get('ref_top', 'PALCO PRINCIPAL')).props('dark outlined dense').classes('col')
                 ref_bottom = ui.input('Referência Inferior', value=layout.get('ref_bottom', 'ENTRADA / FACHADA')).props('dark outlined dense').classes('col')
             
+            with ui.row().classes('w-full gap-2 q-mt-xs'):
+                rows_input = ui.number('Fileiras Totais (Linhas)', value=layout.get('rows', 5), min=1, max=50, step=1).props('dark outlined dense').classes('col')
+                cols_input = ui.number('Colunas Totais (Largura)', value=layout.get('cols', 12), min=1, max=100, step=1).props('dark outlined dense').classes('col')
+
             ui.separator().classes('q-my-md')
             
             with ui.row().classes('w-full justify-between items-center q-mb-xs'):
@@ -845,10 +849,11 @@ def render_page():
                     if db:
                         layout['ref_top'] = ref_top.value
                         layout['ref_bottom'] = ref_bottom.value
+                        layout['rows'] = int(rows_input.value or 5)
                         
                         # Salva a lista de setores editados pelo Gestor e ajusta o total de colunas se necessário
                         new_sectors = []
-                        max_c = layout.get('cols', 12)
+                        max_c = int(cols_input.value or 12)
                         for inp_name, inp_start, inp_end in sector_inputs:
                             if inp_name.value and inp_name.value.strip():
                                 start_val = int(inp_start.value)
