@@ -1071,7 +1071,7 @@ def render_page():
         allocated_by_row = {}
         for r in range(rows_count):
             row_label = get_row_label(r)
-            allocated_by_row[row_label] = [c for c in convidados if c.get('assento_id', '').startswith(f"{row_label}-")]
+            allocated_by_row[row_label] = [c for c in convidados if (c.get('assento_id') or '').startswith(f"{row_label}-")]
 
         # Estado local de modelo de impressão
         print_config = {
