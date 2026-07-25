@@ -1072,14 +1072,14 @@ def render_page():
                 scan_input = ui.input(placeholder='Bipe o QR Code ou digite ID/Nome/Assento (ex: G-5)...').props('dark outlined dense autofocus').classes('col')
                 cam_btn = ui.button('📸 Câmera do Celular', icon='videocam').props('unelevated color=primary text-color=black dense').classes('text-xs')
 
+            # Injeta biblioteca HTML5-QRCode no head
+            ui.add_head_html('<script src="https://unpkg.com/html5-qrcode"></script>')
+
             # Container da Câmera do Celular (HTML5 QR Scanner)
             cam_container = ui.column().classes('w-full hidden q-mb-md border border-cyan-500/40 rounded-xl q-pa-sm bg-black/60')
             with cam_container:
                 ui.label('📸 Aponta a câmera para o QR Code impresso no cartão:').classes('text-xs font-bold text-cyan text-center w-full q-mb-xs')
-                ui.html('''
-                    <div id="qr-reader" style="width:100%; max-width:400px; margin:0 auto; background:#000; border-radius:8px;"></div>
-                    <script src="https://unpkg.com/html5-qrcode"></script>
-                ''').classes('w-full flex justify-center')
+                ui.html('<div id="qr-reader" style="width:100%; max-width:400px; margin:0 auto; background:#000; border-radius:8px;"></div>').classes('w-full flex justify-center')
                 ui.button('🛑 Fechar Câmera', on_click=lambda: cam_container.classes(add='hidden')).props('flat color=grey dense').classes('w-full text-xs q-mt-xs')
 
             def toggle_camera():
