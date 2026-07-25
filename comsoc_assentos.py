@@ -245,23 +245,28 @@ def render_page():
             else:
                 seat_w, seat_h, font_name, font_sub = '70px', '48px', '9px', '7px'
 
-            # Renderizador de Grid de Assentos por Setores com Rolagem Dupla
-            with ui.column().classes('w-full items-center justify-start q-py-md scroll-container').style('overflow-x: auto; overflow-y: auto; max-height: 520px;'):
+            # Renderizador de Grid de Assentos por Setores com Rolagem Dupla Completa
+            with ui.column().classes('w-full items-start justify-start q-py-md scroll-container').style('overflow-x: auto; overflow-y: auto; max-height: 580px;'):
                 ref_top = layout.get('ref_top', 'PALCO PRINCIPAL')
                 if ref_top:
                     with ui.row().classes('w-full justify-center q-mb-sm'):
                         ui.label(f"▲ {ref_top.upper()} ▲").classes('text-[10px] font-black tracking-widest text-cyan px-4 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/5')
 
+                # Cálculo de largura mínima necessária para caber TODAS as colunas sem cortar
+                num_px = int(seat_w.replace('px',''))
+                min_grid_w = max(600, (display_cols_count + 1) * (num_px + 8) + 60)
+
                 # BARRA DE TÍTULOS DE SETORES (SE HOUVER SUBDIVISÃO)
                 if sectors and getattr(state, 'selected_sector', 'Todos') == "Todos":
-                    with ui.row().classes('w-full justify-between items-center q-mb-xs gap-2 px-8').style('min-width: 650px;'):
+                    with ui.row().classes('w-full justify-between items-center q-mb-xs gap-2 px-8').style(f'min-width: {min_grid_w}px;'):
                         for sec in sectors:
                             sec_cols = sec['end_col'] - sec['start_col'] + 1
                             if sec_cols > 0:
-                                with ui.card().classes('q-pa-xs no-shadow rounded-lg text-center bg-cyan-950/40 border border-cyan-500/30 col'):
+                                with ui.card().classes('q-pa-xs no-shadow rounded-lg text-center bg-cyan-950/60 border border-cyan-500/40 col'):
                                     ui.label(sec['name']).classes('text-[10px] font-black text-cyan tracking-wider truncate')
+                                    ui.label(f"Colunas {sec['start_col']} a {sec['end_col']}").classes('text-[8px] text-grey-4')
 
-                with ui.grid(columns=display_cols_count + 1).classes('gap-2 items-center').style('min-width: 500px;'):
+                with ui.grid(columns=display_cols_count + 1).classes('gap-2 items-center').style(f'min-width: {min_grid_w}px;'):
                     ui.label('').classes('text-center font-bold text-grey-5').style('width: 40px;')
                     
                     for col in display_cols:
