@@ -139,25 +139,15 @@ def render_page():
                     else:
                         ui.label('Nenhum evento cadastrado.').classes('text-sm text-amber font-bold')
 
-                with ui.row().classes('items-center gap-2'):
-                    ui.button(
-                        'Novo Evento', 
-                        icon='add', 
-                        on_click=open_create_event_dialog
-                    ).props('unelevated color=primary text-color=black dense').classes('q-px-sm')
+                with ui.row().classes('items-center gap-2 wrap'):
+                    ui.button('Novo Evento', icon='add', on_click=open_create_event_dialog).props('unelevated color=primary text-color=black dense').classes('q-px-sm')
                     
                     if current_event:
-                        ui.button(
-                            'Editar Evento',
-                            icon='edit',
-                            on_click=lambda: open_edit_event_dialog(current_event, layout)
-                        ).props('unelevated color=accent dense outline').classes('q-px-sm')
+                        ui.button('🖨️ Imprimir Placas por Fileira', icon='print', on_click=lambda: open_print_cards_dialog(current_event, convidados, layout)).props('unelevated color=cyan text-color=black dense bold').classes('q-px-sm')
+                        ui.button('🔍 Scanner & Conferência', icon='qr_code_scanner', on_click=lambda: open_tactical_scanner_dialog(current_event, convidados)).props('unelevated color=amber text-color=black dense bold').classes('q-px-sm')
                         
-                        ui.button(
-                            'Excluir Evento', 
-                            icon='delete', 
-                            on_click=lambda: confirm_delete_event(current_event)
-                        ).props('unelevated color=danger dense outline').classes('q-px-sm')
+                        ui.button('Editar Evento', icon='edit', on_click=lambda: open_edit_event_dialog(current_event, layout)).props('unelevated color=accent dense outline').classes('q-px-sm')
+                        ui.button('Excluir Evento', icon='delete', on_click=lambda: confirm_delete_event(current_event)).props('unelevated color=danger dense outline').classes('q-px-sm')
 
         if not current_event:
             with ui.column().classes('w-full items-center justify-center q-py-xl gap-4'):
@@ -879,6 +869,142 @@ def render_page():
             with ui.row().classes('w-full justify-end q-mt-md'):
                 ui.button('Fechar', on_click=diag.close).props('unelevated color=grey-8 dense')
                 
+        diag.open()
+
+    def open_print_cards_dialog(event, convidados, layout):
+        rows_count = layout.get('rows', 5)
+        allocated_by_row = {}
+        for r in range(rows_count):
+            row_label = get_row_label(r)
+            allocated_by_row[row_label] = [c for c in convidados if c.get('assento_id', '').startswith(f"{row_label}-")]
+
+        with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 680px; max-width: 90vw; max-height: 85vh; overflow-y: auto;'):
+            ui.label(f"🖨️ IMPRESSÃO DE PLACAS JADE — {event.get('nome','')}").classes('text-md font-bold text-cyan cyber-title q-mb-xs')
+            ui.label("Separador por Fileira & Geração de Cartões Individuais").classes('text-xs text-grey-4 q-mb-md')
+            
+            with ui.column().classes('w-full gap-4'):
+                for row_label, list_c in allocated_by_row.items():
+                    with ui.card().classes('w-full q-pa-sm bg-black/40 border border-cyan-500/20 rounded-lg'):
+                        with ui.row().classes('w-full justify-between items-center'):
+                            ui.label(f"FILEIRA {row_label} ({len(list_c)} cartões/assentos)").classes('text-sm font-bold text-cyan')
+                            ui.badge(f"{len(list_c)} Placas").props('color=cyan text-color=black')
+
+                        if list_c:
+                            with ui.grid(columns='1 sm:grid-cols-2 md:grid-cols-3').classes('w-full gap-2 q-mt-sm'):
+                                for c in sorted(list_c, key=lambda x: x.get('assento_id','')):
+                                    is_acomp = bool(c.get('convidado_principal_id'))
+                                    bg_item = 'rgba(255,183,77,0.1)' if is_acomp else 'rgba(0,229,255,0.1)'
+                                    border_item = '#ffb74d' if is_acomp else '#00e5ff'
+                                    
+                                    with ui.card().classes('w-full q-pa-xs no-shadow rounded').style(f'background: {bg_item}; border: 1px solid {border_item};'):
+                                        ui.label(c['assento_id']).classes('text-[9px] font-mono text-grey-3 font-bold')
+                                        nome_c = f"{c.get('posto_graduacao') or ''} {c['nome']}".strip()
+                                        ui.label(nome_c).classes('text-xs font-bold text-white')
+                                        sub = '(Acompanhante)' if is_acomp else (c.get('cargo_funcao') or c.get('categoria'))
+                                        ui.label(sub).classes('text-[9px] text-grey-4')
+                        else:
+                            ui.label('Nenhum assento ocupado nesta fileira.').classes('text-xs text-grey-6 italic q-my-xs')
+
+            with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
+                ui.button('Fechar', on_click=diag.close).props('unelevated color=grey-8 dense')
+                ui.button('🖨️ Imprimir Todas as Placas (PDF/Print)', on_click=lambda: ui.run_javascript('window.print()')).props('unelevated color=cyan text-color=black bold dense')
+        diag.open()
+
+    def open_tactical_scanner_dialog(event, convidados):
+        scanned_history = []
+
+        with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 580px; max-width: 90vw;'):
+            ui.label('🔍 SCANNER & CONFERÊNCIA DE CARTÕES').classes('text-md font-bold text-amber cyber-title q-mb-xs')
+            ui.label('Bipe com o Leitor de Código de Barras / Digite o Nome ou Assento para Conferência Automática').classes('text-xs text-grey-4 q-mb-md')
+            
+            scan_input = ui.input(placeholder='Bipe o cartão ou digite Nome / Assento (ex: AE OLSEN ou G-5)...').props('dark outlined dense autofocus w-full').classes('q-mb-md')
+            feedback_container = ui.column().classes('w-full')
+
+            # Script de áudio para bipe sonoro
+            audio_script = """
+            function playBeep(type) {
+                try {
+                    let ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    let osc = ctx.createOscillator();
+                    let gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    if (type === 'success') {
+                        osc.frequency.value = 880;
+                        gain.gain.value = 0.1;
+                        osc.start();
+                        setTimeout(() => osc.stop(), 150);
+                    } else if (type === 'duplicate') {
+                        osc.frequency.value = 300;
+                        gain.gain.value = 0.2;
+                        osc.start();
+                        setTimeout(() => osc.stop(), 300);
+                    }
+                } catch(e) {}
+            }
+            """
+            ui.add_head_html(f"<script>{audio_script}</script>")
+
+            def process_scan(val):
+                if not val or not val.strip():
+                    return
+                query = val.strip().lower()
+                scan_input.value = ''
+                feedback_container.clear()
+                
+                # Busca convidado no evento
+                matches = [
+                    c for c in convidados
+                    if query == str(c.get('assento_id', '')).lower() or
+                    query in c['nome'].lower() or
+                    (c.get('posto_graduacao') and query in f"{c.get('posto_graduacao')} {c['nome']}".lower())
+                ]
+
+                with feedback_container:
+                    if not matches:
+                        ui.run_javascript("playBeep('duplicate')")
+                        with ui.card().classes('w-full q-pa-md bg-red-950/80 border border-red-500 rounded-xl text-center'):
+                            ui.icon('cancel', color='red', size='3rem')
+                            ui.label('❌ CARTÃO / CONVIDADO NÃO ENCONTRADO!').classes('text-sm font-bold text-red-3')
+                            ui.label(f"Nenhum assento ou convidado registrado para: '{val}'").classes('text-xs text-grey-4')
+                    else:
+                        target = matches[0]
+                        seat = target.get('assento_id', 'NÃO ALOCADO')
+                        row_name = seat.split('-')[0] if '-' in seat else 'N/A'
+                        is_duplicate = target['id'] in scanned_history
+
+                        if is_duplicate:
+                            ui.run_javascript("playBeep('duplicate')")
+                            with ui.card().classes('w-full q-pa-md bg-amber-950/80 border border-amber-500 rounded-xl text-center'):
+                                ui.icon('warning', color='amber', size='3rem')
+                                ui.label('⚠️ ATENÇÃO: CARTÃO JÁ CONFERIDO / SEPARADO!').classes('text-sm font-bold text-amber-3')
+                                ui.label(f"{target['nome']} — Assento: {seat} (Fileira {row_name})").classes('text-xs text-grey-3 font-bold')
+                                ui.label('Este cartão já passou pela triagem anteriormente.').classes('text-[11px] text-amber-4 q-mt-xs')
+                        else:
+                            scanned_history.append(target['id'])
+                            ui.run_javascript("playBeep('success')")
+                            
+                            # Busca autoridade principal se for acompanhante
+                            main_info = ""
+                            if target.get('convidado_principal_id'):
+                                p_main = next((x for x in convidados if x['id'] == target['convidado_principal_id']), None)
+                                if p_main:
+                                    main_info = f" (Acompanhante de {p_main['nome']})"
+
+                            with ui.card().classes('w-full q-pa-md bg-green-950/80 border border-green-500 rounded-xl text-center'):
+                                ui.icon('check_circle', color='green', size='3rem')
+                                ui.label('✅ CONFERIDO & SEPARADO COM SUCESSO!').classes('text-sm font-bold text-green-3')
+                                ui.label(f"{target.get('posto_graduacao') or ''} {target['nome']}{main_info}").classes('text-md font-bold text-white')
+                                
+                                with ui.row().classes('w-full justify-center items-center gap-2 q-mt-xs'):
+                                    ui.badge(f"FILEIRA {row_name}").props('color=cyan text-color=black bold').classes('text-sm q-px-sm')
+                                    ui.badge(f"ASSENTO {seat}").props('color=green text-color=white bold').classes('text-sm q-px-sm')
+
+            scan_input.on('keydown.enter', lambda: process_scan(scan_input.value))
+
+            with ui.row().classes('w-full justify-between items-center q-mt-md'):
+                ui.label(f"Total Conferidos: {len(scanned_history)} cartões").classes('text-xs text-cyan font-bold')
+                ui.button('Concluir Conferência', on_click=diag.close).props('unelevated color=grey-8 dense')
         diag.open()
 
     def download_template():
