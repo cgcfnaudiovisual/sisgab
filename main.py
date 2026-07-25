@@ -210,30 +210,35 @@ PUBLIC_ROUTES = {'/login'}
 
 sisgab_menu_categories = [
     {
-        'category': 'GABINETE & COMSOC',
+        'category': '🏛️ GABINETE & OPERAÇÕES',
         'items': [
-            {'name': 'Canal de Notícias', 'icon': 'newspaper', 'path': '/comsoc_noticias', 'subtitle': 'Feed e boletins internos'},
             {'name': 'Chamada & Presença Diária', 'icon': 'assignment_ind', 'path': '/presenca', 'subtitle': 'Chamada matutina e Pronto do CheGab'},
             {'name': 'Agenda Geral', 'icon': 'calendar_month', 'path': '/agenda_geral', 'subtitle': 'Google Calendar e Pautas'},
-            {'name': 'Nova Solicitação', 'icon': 'add_box', 'path': '/comsoc_demandas', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar'], 'subtitle': 'Formulário de pautas e coberturas'},
-            {'name': 'Homologar Pautas', 'icon': 'gavel', 'path': '/comsoc_homologar', 'roles': ['admin', 'supervisor', 'oficial_gab', 'comsoc', 'praca_gab'], 'subtitle': 'Parecer e aprovações de coberturas'},
-            {'name': 'Central de IA', 'icon': 'psychology', 'path': '/assistente_ia', 'subtitle': 'Chat, redator e triagem de demandas'},
-            {'name': 'Cautela de Material', 'icon': 'battery_charging_full', 'path': '/comsoc_cautela', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Empréstimos de equipamentos'},
+            {'name': 'Nova Solicitação / Demanda', 'icon': 'add_box', 'path': '/comsoc_demandas', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar'], 'subtitle': 'Formulário de pautas e tarefas'},
+            {'name': 'Homologar Pautas', 'icon': 'gavel', 'path': '/comsoc_homologar', 'roles': ['admin', 'supervisor', 'oficial_gab', 'comsoc', 'praca_gab'], 'subtitle': 'Parecer e aprovação de demandas'},
+            {'name': 'Placas de Assento (Jade)', 'icon': 'event_seat', 'path': '/comsoc_assentos', 'subtitle': 'Mapeamento e alocação de auditório'},
             {'name': 'Estoque de Brindes', 'icon': 'card_giftcard', 'path': '/comsoc_brindes', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Controle de brindes do RP'},
-            {'name': 'Entrega em Hot', 'icon': 'photo_library', 'path': '/comsoc_galeria', 'subtitle': 'Upload de fotos em campo'},
-            {'name': 'Arquivo e Histórico', 'icon': 'history', 'path': '/comsoc_historico', 'subtitle': 'Busca e links de coberturas passadas'},
-            {'name': 'Aniversariantes & Datas', 'icon': 'cake', 'path': '/comsoc_aniversariantes', 'subtitle': 'Mensagens com IA e impressão'},
-            {'name': 'Smart Editor IA', 'icon': 'movie_filter', 'path': '/smart_editor', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'supervisor'], 'subtitle': 'Cortes com IA, SFX e FCPXML'},
-            {'name': 'Monitor TV (COMSOC TV)', 'icon': 'tv', 'path': '/sisgab_tv', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Modo TV tático'},
-            {'name': 'Placas de Assento (Jade)', 'icon': 'event_seat', 'path': '/comsoc_assentos', 'subtitle': 'Mapeamento e alocação de assentos'},
+            {'name': 'Cautela de Material', 'icon': 'battery_charging_full', 'path': '/comsoc_cautela', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Empréstimos de equipamentos'},
         ]
     },
     {
-        'category': 'FERRAMENTAS E ADMINISTRAÇÃO',
+        'category': '📣 COMUNICAÇÃO & INTELIGÊNCIA',
+        'items': [
+            {'name': 'Canal de Notícias', 'icon': 'newspaper', 'path': '/comsoc_noticias', 'subtitle': 'Feed e boletins internos'},
+            {'name': 'Central de IA', 'icon': 'psychology', 'path': '/assistente_ia', 'subtitle': 'Chat, redator e triagem de demandas'},
+            {'name': 'Smart Editor IA', 'icon': 'movie_filter', 'path': '/smart_editor', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'supervisor'], 'subtitle': 'Cortes com IA, SFX e FCPXML'},
+            {'name': 'Entrega em Hot', 'icon': 'photo_library', 'path': '/comsoc_galeria', 'subtitle': 'Upload de fotos em campo'},
+            {'name': 'Arquivo e Histórico', 'icon': 'history', 'path': '/comsoc_historico', 'subtitle': 'Busca e links de coberturas passadas'},
+            {'name': 'Aniversariantes & Datas', 'icon': 'cake', 'path': '/comsoc_aniversariantes', 'subtitle': 'Mensagens com IA e impressão'},
+            {'name': 'Monitor TV (COMSOC TV)', 'icon': 'tv', 'path': '/sisgab_tv', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Modo TV tático'},
+        ]
+    },
+    {
+        'category': '⚙️ SISTEMA & ADMINISTRAÇÃO',
         'items': [
             {'name': 'Configurações', 'icon': 'settings', 'path': '/config', 'roles': ['admin', 'oficial_gab'], 'subtitle': 'Parâmetros do sistema'},
-            {'name': 'Usuários e Permissões', 'icon': 'admin_panel_settings', 'path': '/admin_panel', 'roles': ['admin', 'supervisor', 'oficial_gab', 'praca_gab', 'comsoc'], 'subtitle': 'Controle de acesso e aprovação de usuários'},
-            {'name': 'Ajuda / Sobre', 'icon': 'help_outline', 'path': '/ajuda_sobre', 'subtitle': 'Manuais e informações'},
+            {'name': 'Usuários e Permissões', 'icon': 'admin_panel_settings', 'path': '/admin_panel', 'roles': ['admin', 'supervisor', 'oficial_gab', 'praca_gab', 'comsoc'], 'subtitle': 'Controle de acesso e aprovação'},
+            {'name': 'Ajuda / Sobre', 'icon': 'help_outline', 'path': '/ajuda_sobre', 'subtitle': 'Manuais e suporte'},
         ]
     }
 ]
@@ -433,7 +438,7 @@ def build_layout_base():
         is_mobile = False
 
     # Define largura padrão bem ampla para acomodar confortavelmente todos os menus sem quebrar linha e sem rolagem horizontal
-    sidebar_width = 310
+    sidebar_width = 340
 
     left_drawer = ui.left_drawer(value=not is_mobile).props(f'width={sidebar_width} breakpoint=1024').classes('no-shadow').style(
         f'background: {theme.colors["bg_panel"]}; border-right: {theme.colors["border"]}; overflow-x: hidden;'
