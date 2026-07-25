@@ -878,45 +878,171 @@ def render_page():
             row_label = get_row_label(r)
             allocated_by_row[row_label] = [c for c in convidados if c.get('assento_id', '').startswith(f"{row_label}-")]
 
-        with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 680px; max-width: 90vw; max-height: 85vh; overflow-y: auto;'):
-            ui.label(f"🖨️ IMPRESSÃO DE PLACAS JADE — {event.get('nome','')}").classes('text-md font-bold text-cyan cyber-title q-mb-xs')
-            ui.label("Separador por Fileira & Geração de Cartões Individuais").classes('text-xs text-grey-4 q-mb-md')
-            
-            with ui.column().classes('w-full gap-4'):
-                for row_label, list_c in allocated_by_row.items():
-                    with ui.card().classes('w-full q-pa-sm bg-black/40 border border-cyan-500/20 rounded-lg'):
-                        with ui.row().classes('w-full justify-between items-center'):
-                            ui.label(f"FILEIRA {row_label} ({len(list_c)} cartões/assentos)").classes('text-sm font-bold text-cyan')
-                            ui.badge(f"{len(list_c)} Placas").props('color=cyan text-color=black')
+    def open_print_cards_dialog(event, convidados, layout):
+        rows_count = layout.get('rows', 5)
+        allocated_by_row = {}
+        for r in range(rows_count):
+            row_label = get_row_label(r)
+            allocated_by_row[row_label] = [c for c in convidados if c.get('assento_id', '').startswith(f"{row_label}-")]
 
-                        if list_c:
-                            with ui.grid(columns='1 sm:grid-cols-2 md:grid-cols-3').classes('w-full gap-3 q-mt-sm'):
-                                for c in sorted(list_c, key=lambda x: x.get('assento_id','')):
-                                    is_acomp = bool(c.get('convidado_principal_id'))
-                                    bg_item = 'rgba(255,183,77,0.1)' if is_acomp else 'rgba(0,229,255,0.1)'
-                                    border_item = '#ffb74d' if is_acomp else '#00e5ff'
-                                    
-                                    # Conteúdo do QR Code: ID do Convidado
-                                    qr_payload = str(c['id'])
-                                    qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={qr_payload}&color=ffffff&bgcolor=0b0f19"
+        # Estado local de modelo de impressão
+        print_config = {
+            'model': 'cadeira_a4', # 'cadeira_a4', 'mesa_a5_dobravel', 'credencial'
+            'show_logo': True,
+            'show_qr': True,
+            'show_rank': True,
+            'show_cargo': True
+        }
 
-                                    with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg border').style(f'background: {bg_item}; border-color: {border_item} !important;'):
-                                        with ui.row().classes('w-full justify-between items-center no-wrap'):
-                                            with ui.column().classes('gap-0 col'):
-                                                ui.badge(c['assento_id']).props('color=cyan text-color=black bold').classes('text-[10px] w-fit q-mb-xs')
-                                                nome_c = f"{c.get('posto_graduacao') or ''} {c['nome']}".strip()
-                                                ui.label(nome_c).classes('text-xs font-bold text-white leading-tight')
-                                                sub = '(Acompanhante)' if is_acomp else (c.get('cargo_funcao') or c.get('categoria'))
-                                                ui.label(sub).classes('text-[9px] text-grey-4 q-mt-xs')
+        # Insígnias / Indicadores visuais por Posto/Graduação
+        rank_badges = {
+            'AE': '⭐⭐⭐⭐ ALMIRANTE DE ESQUADRA',
+            'VA': '⭐⭐⭐ VICE-ALMIRANTE',
+            'CA': '⭐⭐ CONTRA-ALMIRANTE',
+            'CMG': '🦅 CAPITÃO DE MAR E GUERRA',
+            'CF': '⚓ CAPITÃO DE FRAGATA',
+            'CT': '⚓ CAPITÃO DE CORVETA',
+            'CC': '⚓ CAPITÃO-TENENTE',
+            '1DN': '🔰 MARINHA DO BRASIL',
+            'Dr.': '⚖️ AUTORIDADE CIVIL',
+            'Min.': '🏛️ MINISTRO DE ESTADO'
+        }
+
+        with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 780px; max-width: 95vw; max-height: 90vh; overflow-y: auto;'):
+            ui.label(f"🖨️ ESTÚDIO DE IMPRESSÃO DE PLACAS & CREDENCIAIS JADE").classes('text-md font-bold text-cyan cyber-title q-mb-xs')
+            ui.label("Configure os Modelos de Placas, Brasões, Insígnias de Posto/Graduação e Quebra de Páginas").classes('text-xs text-grey-4 q-mb-md')
+
+            # --- CONTROLES DO ESTÚDIO DE IMPRESSÃO ---
+            with ui.card().classes('w-full q-pa-sm bg-black/40 border border-cyan-500/30 rounded-xl q-mb-md print-hide'):
+                with ui.row().classes('w-full justify-between items-center wrap gap-2'):
+                    with ui.row().classes('items-center gap-2'):
+                        ui.label('Modelo de Impressão:').classes('text-xs text-grey-3 font-bold')
+                        model_select = ui.select(
+                            options={
+                                'cadeira_a4': '📄 Placa de Cadeira (A4 Padrão)',
+                                'mesa_a5_dobravel': '🏷️ Placa de Mesa Dobrável (A5 Display)',
+                                'credencial': '🪪 Credencial / Crachá de Peito'
+                            },
+                            value=print_config['model']
+                        ).props('dark outlined dense').style('min-width: 260px;')
+
+                    with ui.row().classes('items-center gap-3'):
+                        ui.checkbox('Brasão da MB', value=print_config['show_logo'], on_change=lambda e: preview_container.refresh()).props('dark dense').classes('text-xs text-grey-3')
+                        ui.checkbox('QR Code Tático', value=print_config['show_qr'], on_change=lambda e: preview_container.refresh()).props('dark dense').classes('text-xs text-grey-3')
+                        ui.checkbox('Insígnia de Posto', value=print_config['show_rank'], on_change=lambda e: preview_container.refresh()).props('dark dense').classes('text-xs text-grey-3')
+
+            # CSS Específico para Impressão Perfeita no Papel / PDF
+            print_css = """
+            <style>
+            @media print {
+                body * { visibility: hidden !important; background: white !important; color: black !important; }
+                .print-area, .print-area * { visibility: visible !important; }
+                .print-area { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; }
+                .print-hide { display: none !important; }
+                .page-break { page-break-after: always !important; }
+                .print-card-a4 { border: 2px solid #000 !important; margin-bottom: 20px !important; padding: 20px !important; background: #fff !important; color: #000 !important; border-radius: 8px !important; }
+                .print-card-mesa { border: 2px dashed #666 !important; padding: 15px !important; background: #fff !important; color: #000 !important; margin-bottom: 20px !important; }
+                .print-card-credencial { border: 1px solid #000 !important; width: 300px !important; height: 420px !important; padding: 15px !important; margin: 10px !important; float: left !important; }
+            }
+            </style>
+            """
+            ui.add_head_html(print_css)
+
+            @ui.refreshable
+            def preview_container():
+                current_model = model_select.value
+                with ui.column().classes('w-full gap-4 print-area'):
+                    for row_label, list_c in allocated_by_row.items():
+                        if not list_c:
+                            continue
+
+                        with ui.column().classes('w-full gap-2 page-break q-mb-md'):
+                            with ui.row().classes('w-full justify-between items-center bg-cyan-950/60 q-pa-sm rounded-lg border border-cyan-500/40 print-hide'):
+                                ui.label(f"FILEIRA {row_label} — {len(list_c)} CARTÕES").classes('text-sm font-bold text-cyan')
+                                ui.badge(f"Lote Fileira {row_label}").props('color=cyan text-color=black')
+
+                            # RENDERIZAÇÃO DOS CARTÕES CONFORME MODELO SELECIONADO
+                            if current_model == 'cadeira_a4':
+                                with ui.grid(columns='1 sm:grid-cols-2').classes('w-full gap-4'):
+                                    for c in sorted(list_c, key=lambda x: x.get('assento_id','')):
+                                        is_acomp = bool(c.get('convidado_principal_id'))
+                                        posto = c.get('posto_graduacao') or ''
+                                        insignia = rank_badges.get(posto, '⚓ MARINHA DO BRASIL') if print_config['show_rank'] else ''
+                                        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=120x120&data={c['id']}&color=000000&bgcolor=ffffff"
+
+                                        with ui.card().classes('w-full q-pa-md print-card-a4 bg-slate-900 border border-cyan-500/40 rounded-xl').style('border-left: 6px solid #00e5ff !important;'):
+                                            with ui.row().classes('w-full justify-between items-start no-wrap'):
+                                                with ui.column().classes('gap-0 col'):
+                                                    if print_config['show_logo']:
+                                                        ui.label('⚓ MARINHA DO BRASIL').classes('text-[10px] font-black text-cyan tracking-widest')
+                                                    
+                                                    ui.badge(f"ASSENTO {c['assento_id']}").props('color=cyan text-color=black bold').classes('text-xs w-fit q-my-xs')
+                                                    
+                                                    if insignia:
+                                                        ui.label(insignia).classes('text-[9px] text-amber font-bold')
+                                                        
+                                                    nome_c = f"{posto} {c['nome']}".strip()
+                                                    ui.label(nome_c).classes('text-md font-black text-white leading-tight q-mt-xs')
+                                                    
+                                                    sub = '(Acompanhante Oficial)' if is_acomp else (c.get('cargo_funcao') or c.get('categoria') or 'Convidado de Honra')
+                                                    ui.label(sub).classes('text-xs text-grey-4 font-bold q-mt-xs')
+                                                
+                                                if print_config['show_qr']:
+                                                    with ui.column().classes('items-center gap-0'):
+                                                        ui.image(qr_url).classes('w-16 h-16 rounded bg-white p-1')
+                                                        ui.label(f"ID:{c['id']}").classes('text-[8px] font-mono text-grey-5')
+
+                            elif current_model == 'mesa_a5_dobravel':
+                                with ui.grid(columns='1 sm:grid-cols-2').classes('w-full gap-4'):
+                                    for c in sorted(list_c, key=lambda x: x.get('assento_id','')):
+                                        is_acomp = bool(c.get('convidado_principal_id'))
+                                        posto = c.get('posto_graduacao') or ''
+                                        nome_c = f"{posto} {c['nome']}".strip()
+                                        sub = '(Acompanhante)' if is_acomp else (c.get('cargo_funcao') or 'Convidado')
+                                        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={c['id']}"
+
+                                        with ui.card().classes('w-full q-pa-md print-card-mesa bg-slate-900 border-2 border-dashed border-cyan-500/40 rounded-xl text-center'):
+                                            ui.label('✂️ DOBRA DE MESA (FACE FRONTAL)').classes('text-[8px] text-grey-5 tracking-widest uppercase print-hide')
+                                            ui.label(f"ASSENTO {c['assento_id']}").classes('text-sm font-black text-cyan')
+                                            ui.label(nome_c).classes('text-lg font-black text-white q-my-xs')
+                                            ui.label(sub).classes('text-xs text-grey-3 font-bold')
                                             
-                                            # QR Code impresso no cartão
-                                            ui.image(qr_url).classes('w-14 h-14 rounded bg-black/40 border border-cyan-500/30 p-1')
-                        else:
-                            ui.label('Nenhum assento ocupado nesta fileira.').classes('text-xs text-grey-6 italic q-my-xs')
+                                            ui.separator().classes('q-my-sm print-hide').style('border-color: rgba(255,255,255,0.1);')
+                                            ui.label('✂️ DOBRA DE MESA (FACE TRASEIRA)').classes('text-[8px] text-grey-5 tracking-widest uppercase print-hide')
+                                            with ui.row().classes('w-full justify-center items-center gap-2 q-mt-xs'):
+                                                if print_config['show_qr']:
+                                                    ui.image(qr_url).classes('w-12 h-12 bg-white p-1 rounded')
+                                                ui.label(f"FILEIRA {row_label} | {c['assento_id']}").classes('text-xs text-grey-4 font-mono font-bold')
 
-            with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
+                            elif current_model == 'credencial':
+                                with ui.grid(columns='1 sm:grid-cols-2 md:grid-cols-3').classes('w-full gap-3'):
+                                    for c in sorted(list_c, key=lambda x: x.get('assento_id','')):
+                                        is_acomp = bool(c.get('convidado_principal_id'))
+                                        posto = c.get('posto_graduacao') or ''
+                                        nome_c = f"{posto} {c['nome']}".strip()
+                                        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={c['id']}"
+
+                                        with ui.card().classes('w-full print-card-credencial bg-slate-900 border border-amber-500/40 rounded-2xl q-pa-md items-center text-center justify-between').style('height: 280px;'):
+                                            with ui.column().classes('items-center gap-0 w-full'):
+                                                ui.label('⚓ MARINHA DO BRASIL').classes('text-[9px] font-black text-cyan tracking-widest')
+                                                ui.label(event.get('nome','SOLENIDADE')).classes('text-[10px] font-bold text-amber truncate w-full')
+                                                ui.separator().classes('q-my-xs w-full').style('border-color: rgba(255,255,255,0.1);')
+                                            
+                                            with ui.column().classes('items-center gap-0 w-full'):
+                                                ui.badge(f"FILEIRA {row_label} - ASSENTO {c['assento_id']}").props('color=cyan text-color=black bold').classes('text-xs q-mb-xs')
+                                                ui.label(nome_c).classes('text-sm font-black text-white leading-tight')
+                                                sub = '(Acompanhante)' if is_acomp else (c.get('cargo_funcao') or c.get('categoria'))
+                                                ui.label(sub).classes('text-[10px] text-grey-4 font-bold')
+
+                                            if print_config['show_qr']:
+                                                ui.image(qr_url).classes('w-14 h-14 bg-white p-1 rounded border border-cyan-500')
+
+            model_select.on('value-change', preview_container.refresh)
+            preview_container()
+
+            with ui.row().classes('w-full justify-end gap-2 q-mt-md print-hide'):
                 ui.button('Fechar', on_click=diag.close).props('unelevated color=grey-8 dense')
-                ui.button('🖨️ Imprimir Todas as Placas (PDF/Print)', on_click=lambda: ui.run_javascript('window.print()')).props('unelevated color=cyan text-color=black bold dense')
+                ui.button('🖨️ Imprimir Placas Selecionadas (Ctrl + P)', on_click=lambda: ui.run_javascript('window.print()')).props('unelevated color=cyan text-color=black bold dense')
         diag.open()
 
     def open_tactical_scanner_dialog(event, convidados):
