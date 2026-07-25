@@ -350,24 +350,12 @@ def render_page():
                     with ui.row().classes('w-full justify-center q-mt-sm q-mb-sm'):
                         ui.label(f"▼ {ref_bottom.upper()} ▼").classes('text-[10px] font-black tracking-widest text-cyan px-4 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/5')
 
-            # Controles de Dimensão do Layout na Base (Estilizados e Funcionais)
+            # Faixa Informativa de Legenda e Dimensões do Auditório na Base
             with ui.row().classes('w-full justify-between items-center wrap-mobile gap-2 q-mt-sm bg-black/40 q-pa-xs px-3 rounded-lg border border-cyan-500/20'):
                 with ui.row().classes('items-center gap-3'):
-                    with ui.row().classes('items-center gap-1'):
-                        ui.label('Fileiras (Grid):').classes('text-xs text-grey-3 font-bold')
-                        ui.badge(f"{rows_count}").props('color=cyan text-color=black bold').classes('text-xs q-mr-xs')
-                        ui.button('-', on_click=lambda: update_grid_size(current_event, layout, -1, 0)).props('unelevated color=cyan text-color=black dense round').style('width: 24px; height: 24px; font-weight: bold;')
-                        ui.button('+', on_click=lambda: update_grid_size(current_event, layout, 1, 0)).props('unelevated color=cyan text-color=black dense round').style('width: 24px; height: 24px; font-weight: bold;')
-                    
-                    ui.separator().props('vertical').classes('q-my-none').style('height: 20px; border-color: rgba(255,255,255,0.1);')
-
-                    with ui.row().classes('items-center gap-1'):
-                        ui.label('Colunas (Grid):').classes('text-xs text-grey-3 font-bold')
-                        ui.badge(f"{cols_count}").props('color=cyan text-color=black bold').classes('text-xs q-mr-xs')
-                        ui.button('-', on_click=lambda: update_grid_size(current_event, layout, 0, -1)).props('unelevated color=cyan text-color=black dense round').style('width: 24px; height: 24px; font-weight: bold;')
-                        ui.button('+', on_click=lambda: update_grid_size(current_event, layout, 0, 1)).props('unelevated color=cyan text-color=black dense round').style('width: 24px; height: 24px; font-weight: bold;')
-                    
-                ui.label('💡 Use os botões + / - para expandir ou reduzir o auditório em tempo real.').classes('text-[11px] text-grey-4 italic')
+                    ui.label(f"🏛️ Dimensão Total: {rows_count} Fileiras × {cols_count} Colunas").classes('text-xs text-cyan font-bold')
+                    ui.separator().props('vertical').classes('q-my-none').style('height: 16px; border-color: rgba(255,255,255,0.1);')
+                    ui.label('💡 Clique nos lugares vagos para alocar convidados. A estrutura de setores é gerida no menu "Editar Evento".').classes('text-[11px] text-grey-4 italic')
 
         # =========================================================================
         # SEÇÃO 2 (ABAIXO DO GRID): LISTA DE CONVIDADOS HIERÁRQUICA E ACOMPANHANTES
