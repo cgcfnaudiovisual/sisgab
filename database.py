@@ -164,7 +164,7 @@ def authenticate_user(username: str, password: str) -> Optional[dict]:
 
     clean_user = username.strip().lower()
 
-    db = get_db_connection()
+    db = get_service_db_connection() or get_db_connection()
     if not db:
         return None
     
@@ -177,7 +177,7 @@ def authenticate_user(username: str, password: str) -> Optional[dict]:
         if not result.data:
             # Fallback: busca na tabela users
             result = db.table('users').select('*').or_(
-                f'username.ilike.{clean_user},email.ilike.{clean_user},nome.ilike.{clean_user}'
+                f'username.ilike.{clean_user},nome.ilike.{clean_user}'
             ).execute()
         
         if not result.data:
