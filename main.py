@@ -216,7 +216,7 @@ sisgab_menu_categories = [
             {'name': 'Chamada & Presença Diária', 'icon': 'assignment_ind', 'path': '/presenca', 'subtitle': 'Chamada matutina e Pronto do CheGab'},
             {'name': 'Agenda Geral', 'icon': 'calendar_month', 'path': '/agenda_geral', 'subtitle': 'Google Calendar e Pautas'},
             {'name': 'Nova Solicitação', 'icon': 'add_box', 'path': '/comsoc_demandas', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar'], 'subtitle': 'Formulário de pautas e coberturas'},
-            {'name': 'Homologar Pautas', 'icon': 'gavel', 'path': '/comsoc_homologar', 'roles': ['admin', 'oficial_gab'], 'subtitle': 'Parecer e aprovações de coberturas'},
+            {'name': 'Homologar Pautas', 'icon': 'gavel', 'path': '/comsoc_homologar', 'roles': ['admin', 'supervisor', 'oficial_gab', 'comsoc', 'praca_gab'], 'subtitle': 'Parecer e aprovações de coberturas'},
             {'name': 'Central de IA', 'icon': 'psychology', 'path': '/assistente_ia', 'subtitle': 'Chat, redator e triagem de demandas'},
             {'name': 'Cautela de Material', 'icon': 'battery_charging_full', 'path': '/comsoc_cautela', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Empréstimos de equipamentos'},
             {'name': 'Estoque de Brindes', 'icon': 'card_giftcard', 'path': '/comsoc_brindes', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Controle de brindes do RP'},
