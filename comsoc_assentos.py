@@ -805,19 +805,31 @@ def render_page():
 
                 ui.button('➕ Adicionar Setor', icon='add', on_click=add_sector_item).props('unelevated color=amber text-color=black dense').classes('text-xs')
 
-            # Renderizador dinâmico de campos de setores com botão de exclusão
+            # Renderizador dinâmico de campos de setores com botão de exclusão e cálculo de quantitativos
             sector_inputs = []
 
             @ui.refreshable
             def render_sectors_editor():
                 sector_inputs.clear()
+                total_seats_calc = 0
+                r_val = int(rows_input.value or 5)
+
                 with ui.column().classes('w-full gap-2 q-my-xs'):
                     for idx, sec in enumerate(sectors_list):
-                        with ui.card().classes('w-full q-pa-xs px-2 bg-black/40 border border-cyan-500/20 rounded-lg'):
-                            with ui.row().classes('w-full items-center gap-2'):
+                        c_val = int(sec.get('cols_count', 12))
+                        sec_seats = r_val * c_val
+                        total_seats_calc += sec_seats
+
+                        with ui.card().classes('w-full q-pa-xs px-3 bg-black/40 border border-cyan-500/20 rounded-lg'):
+                            with ui.row().classes('w-full items-center justify-between gap-2'):
                                 s_name = ui.input(f'Nome do Setor {idx+1}', value=sec['name']).props('dark outlined dense').classes('col')
-                                s_cols = ui.number('Qtd Colunas', value=sec.get('cols_count', 12), min=1, max=100).props('dark outlined dense').style('width: 130px;')
+                                s_cols = ui.number('Qtd Colunas', value=c_val, min=1, max=100).props('dark outlined dense').style('width: 110px;')
                                 
+                                # Badge com o quantitativo de assentos do setor (Fileiras x Colunas)
+                                with ui.column().classes('items-center gap-0').style('min-width: 100px;'):
+                                    ui.label(f"🪑 {sec_seats} lugares").classes('text-xs font-bold text-cyan')
+                                    ui.label(f"({r_val} fil × {c_val} col)").classes('text-[9px] text-grey-4 font-mono')
+
                                 def remove_sector(i=idx):
                                     if len(sectors_list) > 1:
                                         sectors_list.pop(i)
@@ -828,6 +840,16 @@ def render_page():
                                 ui.button(icon='delete', on_click=remove_sector).props('unelevated color=danger dense flat round').classes('text-xs')
                                 sector_inputs.append((s_name, s_cols))
 
+                    # Banner de Quantitativo Geral de Assentos do Evento
+                    with ui.card().classes('w-full q-pa-sm bg-cyan-950/40 border border-cyan-500/40 rounded-lg q-mt-xs'):
+                        with ui.row().classes('w-full justify-between items-center px-2'):
+                            with ui.row().classes('items-center gap-2'):
+                                ui.icon('event_seat', color='cyan', size='sm')
+                                ui.label('QUANTITATIVO TOTAL DO AUDITÓRIO:').classes('text-xs font-bold text-white')
+                            ui.badge(f"{total_seats_calc} ASSENTOS TOTAIS").props('color=cyan text-color=black bold').classes('text-xs q-px-sm')
+
+            # Atualiza os cálculos ao alterar fileiras ou colunas
+            rows_input.on('change', render_sectors_editor.refresh)
             render_sectors_editor()
 
             with ui.row().classes('w-full justify-end q-mt-md gap-2'):
