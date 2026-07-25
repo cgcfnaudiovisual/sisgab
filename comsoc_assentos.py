@@ -181,83 +181,83 @@ def render_page():
 
         allocated_map = {c['assento_id']: c for c in convidados if c.get('assento_id')}
 
-            # Parse dos setores / blocos de assentos
-            sectors = layout.get('sectors', [
-                {'name': 'SETOR ALPHA (ESQUERDA)', 'start_col': 1, 'end_col': max(1, cols_count // 3)},
-                {'name': 'SETOR NOBRE (CENTRO)', 'start_col': max(1, cols_count // 3) + 1, 'end_col': max(1, (cols_count * 2) // 3)},
-                {'name': 'SETOR BRAVO (DIREITA)', 'start_col': max(1, (cols_count * 2) // 3) + 1, 'end_col': cols_count}
-            ]) if cols_count >= 4 else []
+        # Parse dos setores / blocos de assentos
+        sectors = layout.get('sectors', [
+            {'name': 'SETOR ALPHA (ESQUERDA)', 'start_col': 1, 'end_col': max(1, cols_count // 3)},
+            {'name': 'SETOR NOBRE (CENTRO)', 'start_col': max(1, cols_count // 3) + 1, 'end_col': max(1, (cols_count * 2) // 3)},
+            {'name': 'SETOR BRAVO (DIREITA)', 'start_col': max(1, (cols_count * 2) // 3) + 1, 'end_col': cols_count}
+        ]) if cols_count >= 4 else []
 
-            # Determinar faixa de colunas ativas conforme filtro de setor
-            active_start_col = 1
-            active_end_col = cols_count
+        # Determinar faixa de colunas ativas conforme filtro de setor
+        active_start_col = 1
+        active_end_col = cols_count
 
-            if state.selected_sector != "Todos" and sectors:
-                target_sec = next((s for s in sectors if s['name'] == state.selected_sector), None)
-                if target_sec:
-                    active_start_col = target_sec['start_col']
-                    active_end_col = target_sec['end_col']
+        if getattr(state, 'selected_sector', 'Todos') != "Todos" and sectors:
+            target_sec = next((s for s in sectors if s['name'] == state.selected_sector), None)
+            if target_sec:
+                active_start_col = target_sec['start_col']
+                active_end_col = target_sec['end_col']
 
-            display_cols = list(range(active_start_col, active_end_col + 1))
-            display_cols_count = len(display_cols)
+        display_cols = list(range(active_start_col, active_end_col + 1))
+        display_cols_count = len(display_cols)
 
-            # --- CABEÇALHO DO MAPA DE ASSENTOS COM FILTRO DE SETOR ---
-            with ui.card().classes('w-full q-pa-md no-shadow rounded-xl q-mb-md').style(
-                f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
-            ):
-                with ui.row().classes('w-full items-center justify-between q-mb-sm wrap-mobile gap-2'):
-                    with ui.column().classes('gap-0'):
-                        ui.label('🗺️ MAPA DE ASSENTOS DA SOLENIDADE').classes('text-md font-bold text-cyan cyber-title')
-                        ui.label(f"Grid: {rows_count} fileiras × {cols_count} colunas • Exibindo: {state.selected_sector.upper()} ({display_cols_count} colunas)").classes('text-[11px] text-grey-4')
+        # --- CABEÇALHO DO MAPA DE ASSENTOS COM FILTRO DE SETOR ---
+        with ui.card().classes('w-full q-pa-md no-shadow rounded-xl q-mb-md').style(
+            f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
+        ):
+            with ui.row().classes('w-full items-center justify-between q-mb-sm wrap-mobile gap-2'):
+                with ui.column().classes('gap-0'):
+                    ui.label('🗺️ MAPA DE ASSENTOS DA SOLENIDADE').classes('text-md font-bold text-cyan cyber-title')
+                    ui.label(f"Grid: {rows_count} fileiras × {cols_count} colunas • Exibindo: {getattr(state, 'selected_sector', 'Todos').upper()} ({display_cols_count} colunas)").classes('text-[11px] text-grey-4')
+                
+                with ui.row().classes('items-center gap-2 wrap'):
+                    # SELETOR DE SETOR ATIVO NO MESMO EVENTO
+                    if sectors:
+                        sector_options = {'Todos': '🌐 Todos os Setores'}
+                        for s in sectors:
+                            sector_options[s['name']] = f"📍 {s['name']}"
+                            
+                        ui.select(
+                            options=sector_options,
+                            value=getattr(state, 'selected_sector', 'Todos'),
+                            on_change=lambda e: [setattr(state, 'selected_sector', e.value), render_content.refresh()]
+                        ).props('dark outlined dense').style('min-width: 220px;').classes('text-xs')
+
+                    # Seletor de Modo de Edição
+                    with ui.row().classes('items-center bg-black/30 rounded-lg q-pa-xs border border-white/10'):
+                        ui.button('Alocação Rápida', icon='event_seat', on_click=lambda: toggle_mode("alocacao")).props(f'dense unelevated {"color=primary text-color=black" if state.edit_mode == "alocacao" else "flat text-color=grey"}').classes('text-xs q-px-sm')
+                        ui.button('Editor de Layout / Corredores', icon='edit_road', on_click=lambda: toggle_mode("layout")).props(f'dense unelevated {"color=primary text-color=black" if state.edit_mode == "layout" else "flat text-color=grey"}').classes('text-xs q-px-sm')
+
+            # Renderizador de Grid de Assentos por Setores
+            with ui.column().classes('w-full items-center justify-start q-py-md scroll-container').style('overflow-x: auto;'):
+                ref_top = layout.get('ref_top', 'PALCO PRINCIPAL')
+                if ref_top:
+                    with ui.row().classes('w-full justify-center q-mb-sm'):
+                        ui.label(f"▲ {ref_top.upper()} ▲").classes('text-[10px] font-black tracking-widest text-cyan px-4 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/5')
+
+                # BARRA DE TÍTULOS DE SETORES (SE HOUVER SUBDIVISÃO)
+                if sectors and getattr(state, 'selected_sector', 'Todos') == "Todos":
+                    with ui.row().classes('w-full justify-between items-center q-mb-xs gap-2 px-8').style('min-width: 650px;'):
+                        for sec in sectors:
+                            sec_cols = sec['end_col'] - sec['start_col'] + 1
+                            if sec_cols > 0:
+                                with ui.card().classes('q-pa-xs no-shadow rounded-lg text-center bg-cyan-950/40 border border-cyan-500/30 col'):
+                                    ui.label(sec['name']).classes('text-[10px] font-black text-cyan tracking-wider truncate')
+
+                with ui.grid(columns=display_cols_count + 1).classes('gap-2 items-center').style('min-width: 500px;'):
+                    ui.label('').classes('text-center font-bold text-grey-5').style('width: 40px;')
                     
-                    with ui.row().classes('items-center gap-2 wrap'):
-                        # SELETOR DE SETOR ATIVO NO MESMO EVENTO
-                        if sectors:
-                            sector_options = {'Todos': '🌐 Todos os Setores'}
-                            for s in sectors:
-                                sector_options[s['name']] = f"📍 {s['name']}"
-                                
-                            ui.select(
-                                options=sector_options,
-                                value=getattr(state, 'selected_sector', 'Todos'),
-                                on_change=lambda e: [setattr(state, 'selected_sector', e.value), render_content.refresh()]
-                            ).props('dark outlined dense').style('min-width: 220px;').classes('text-xs')
-
-                        # Seletor de Modo de Edição
-                        with ui.row().classes('items-center bg-black/30 rounded-lg q-pa-xs border border-white/10'):
-                            ui.button('Alocação Rápida', icon='event_seat', on_click=lambda: toggle_mode("alocacao")).props(f'dense unelevated {"color=primary text-color=black" if state.edit_mode == "alocacao" else "flat text-color=grey"}').classes('text-xs q-px-sm')
-                            ui.button('Editor de Layout / Corredores', icon='edit_road', on_click=lambda: toggle_mode("layout")).props(f'dense unelevated {"color=primary text-color=black" if state.edit_mode == "layout" else "flat text-color=grey"}').classes('text-xs q-px-sm')
-
-                # Renderizador de Grid de Assentos por Setores
-                with ui.column().classes('w-full items-center justify-start q-py-md scroll-container').style('overflow-x: auto;'):
-                    ref_top = layout.get('ref_top', 'PALCO PRINCIPAL')
-                    if ref_top:
-                        with ui.row().classes('w-full justify-center q-mb-sm'):
-                            ui.label(f"▲ {ref_top.upper()} ▲").classes('text-[10px] font-black tracking-widest text-cyan px-4 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/5')
-
-                    # BARRA DE TÍTULOS DE SETORES (SE HOUVER SUBDIVISÃO)
-                    if sectors and state.selected_sector == "Todos":
-                        with ui.row().classes('w-full justify-between items-center q-mb-xs gap-2 px-8').style('min-width: 650px;'):
-                            for sec in sectors:
-                                sec_cols = sec['end_col'] - sec['start_col'] + 1
-                                if sec_cols > 0:
-                                    with ui.card().classes('q-pa-xs no-shadow rounded-lg text-center bg-cyan-950/40 border border-cyan-500/30 col'):
-                                        ui.label(sec['name']).classes('text-[10px] font-black text-cyan tracking-wider truncate')
-
-                    with ui.grid(columns=display_cols_count + 1).classes('gap-2 items-center').style('min-width: 500px;'):
-                        ui.label('').classes('text-center font-bold text-grey-5').style('width: 40px;')
+                    for col in display_cols:
+                        ui.label(str(col)).classes('text-center font-bold text-grey-5').style('width: 70px; font-size: 11px;')
+                        
+                    for r in range(rows_count):
+                        row_label = get_row_label(r)
+                        ui.label(row_label).classes('text-center font-bold text-grey-5 text-md').style('width: 40px;')
                         
                         for col in display_cols:
-                            ui.label(str(col)).classes('text-center font-bold text-grey-5').style('width: 70px; font-size: 11px;')
-                            
-                        for r in range(rows_count):
-                            row_label = get_row_label(r)
-                            ui.label(row_label).classes('text-center font-bold text-grey-5 text-md').style('width: 40px;')
-                            
-                            for col in display_cols:
-                                seat_id = f"{row_label}-{col}"
-                                is_blocked = seat_id in blocked_seats
-                                guest = allocated_map.get(seat_id)
+                            seat_id = f"{row_label}-{col}"
+                            is_blocked = seat_id in blocked_seats
+                            guest = allocated_map.get(seat_id)
                             
                             if is_blocked:
                                 if state.edit_mode == "layout":
