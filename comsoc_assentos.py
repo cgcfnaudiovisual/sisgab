@@ -29,12 +29,12 @@ def get_row_label(index):
     return label
 
 def sync_companions(main_guest_id, main_guest_name, max_acomp, event_id, category):
-    db = get_db_connection()
+    db = get_service_db_connection() or get_db_connection()
     if not db:
         return
     try:
         # 1. Buscar acompanhantes existentes
-        res = db.table('jade_convidados').select('*').eq('convidado_principal_id', main_guest_id).execute()
+        res = db.table('jade_convidados').select('*').eq('convidado_principal_id', main_guest_id).order('id', desc=False).execute()
         existing = res.data if res.data else []
         existing_count = len(existing)
         
@@ -51,24 +51,25 @@ def sync_companions(main_guest_id, main_guest_name, max_acomp, event_id, categor
                     'max_acompanhantes': 0,
                     'cargo_funcao': f"Acompanhante de {main_guest_name}"
                 })
-            db.table('jade_convidados').insert(new_comps).execute()
+            if new_comps:
+                db.table('jade_convidados').insert(new_comps).execute()
             
-        # 3. Se temos demais
+        # 3. Se temos demais (deleta excedentes mais novos)
         elif existing_count > max_acomp:
-            # Ordena por id decrescente e deleta os excedentes
-            sorted_existing = sorted(existing, key=lambda x: x['id'], reverse=True)
-            to_delete = sorted_existing[:existing_count - max_acomp]
+            to_delete = existing[max_acomp:]
             delete_ids = [d['id'] for d in to_delete]
-            db.table('jade_convidados').delete().in_('id', delete_ids).execute()
-            
-        # 4. Atualiza os nomes e categorias dos acompanhantes existentes
-        else:
-            for idx, comp in enumerate(existing, 1):
-                db.table('jade_convidados').update({
-                    'nome': f"ACOMP. {main_guest_name} ({idx}/{max_acomp})",
-                    'categoria': category,
-                    'cargo_funcao': f"Acompanhante de {main_guest_name}"
-                }).eq('id', comp['id']).execute()
+            if delete_ids:
+                db.table('jade_convidados').delete().in_('id', delete_ids).execute()
+
+        # 4. Atualiza obrigatoriamente nomes, categorias e índices de todos os acompanhantes remanescentes
+        res_remaining = db.table('jade_convidados').select('*').eq('convidado_principal_id', main_guest_id).order('id', desc=False).execute()
+        remaining = res_remaining.data if res_remaining.data else []
+        for idx, comp in enumerate(remaining, 1):
+            db.table('jade_convidados').update({
+                'nome': f"ACOMP. {main_guest_name} ({idx}/{max_acomp})",
+                'categoria': category,
+                'cargo_funcao': f"Acompanhante de {main_guest_name}"
+            }).eq('id', comp['id']).execute()
     except Exception as e:
         print(f"[SYNC COMPANIONS ERR] {e}")
 
@@ -512,7 +513,7 @@ def render_page():
                 ui.notify(f"Erro ao excluir evento: {e}", color='red')
 
     def save_guest(guest_id, data, event_id):
-        db = get_db_connection()
+        db = get_service_db_connection() or get_db_connection()
         if db:
             try:
                 if guest_id:
