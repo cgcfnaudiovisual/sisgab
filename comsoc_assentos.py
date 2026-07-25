@@ -328,18 +328,24 @@ def render_page():
                     with ui.row().classes('w-full justify-center q-mt-sm q-mb-sm'):
                         ui.label(f"▼ {ref_bottom.upper()} ▼").classes('text-[10px] font-black tracking-widest text-cyan px-4 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/5')
 
-            # Controles de Dimensão do Layout na Base
-            with ui.row().classes('w-full justify-between items-center wrap-mobile gap-2 q-mt-xs'):
-                with ui.row().classes('items-center gap-1'):
-                    ui.label('Fileiras:').classes('text-xs text-grey-4')
-                    ui.button(icon='remove', on_click=lambda: update_grid_size(current_event, layout, -1, 0)).props('unelevated color=grey-8 dense round flat')
-                    ui.button(icon='add', on_click=lambda: update_grid_size(current_event, layout, 1, 0)).props('unelevated color=grey-8 dense round flat')
+            # Controles de Dimensão do Layout na Base (Estilizados e Funcionais)
+            with ui.row().classes('w-full justify-between items-center wrap-mobile gap-2 q-mt-sm bg-black/40 q-pa-xs px-3 rounded-lg border border-cyan-500/20'):
+                with ui.row().classes('items-center gap-3'):
+                    with ui.row().classes('items-center gap-1'):
+                        ui.label('Fileiras (Grid):').classes('text-xs text-grey-3 font-bold')
+                        ui.badge(f"{rows_count}").props('color=cyan text-color=black bold').classes('text-xs q-mr-xs')
+                        ui.button('-', on_click=lambda: update_grid_size(current_event, layout, -1, 0)).props('unelevated color=cyan text-color=black dense round').style('width: 24px; height: 24px; font-weight: bold;')
+                        ui.button('+', on_click=lambda: update_grid_size(current_event, layout, 1, 0)).props('unelevated color=cyan text-color=black dense round').style('width: 24px; height: 24px; font-weight: bold;')
                     
-                    ui.label('Colunas:').classes('text-xs text-grey-4 q-ml-sm')
-                    ui.button(icon='remove', on_click=lambda: update_grid_size(current_event, layout, 0, -1)).props('unelevated color=grey-8 dense round flat')
-                    ui.button(icon='add', on_click=lambda: update_grid_size(current_event, layout, 0, 1)).props('unelevated color=grey-8 dense round flat')
+                    ui.separator().props('vertical').classes('q-my-none').style('height: 20px; border-color: rgba(255,255,255,0.1);')
+
+                    with ui.row().classes('items-center gap-1'):
+                        ui.label('Colunas (Grid):').classes('text-xs text-grey-3 font-bold')
+                        ui.badge(f"{cols_count}").props('color=cyan text-color=black bold').classes('text-xs q-mr-xs')
+                        ui.button('-', on_click=lambda: update_grid_size(current_event, layout, 0, -1)).props('unelevated color=cyan text-color=black dense round').style('width: 24px; height: 24px; font-weight: bold;')
+                        ui.button('+', on_click=lambda: update_grid_size(current_event, layout, 0, 1)).props('unelevated color=cyan text-color=black dense round').style('width: 24px; height: 24px; font-weight: bold;')
                     
-                ui.label('Dica: Clique nos lugares vagos para alocar convidados.').classes('text-[11px] text-grey-5 italic')
+                ui.label('💡 Use os botões + / - para expandir ou reduzir o auditório em tempo real.').classes('text-[11px] text-grey-4 italic')
 
         # =========================================================================
         # SEÇÃO 2 (ABAIXO DO GRID): LISTA DE CONVIDADOS HIERÁRQUICA E ACOMPANHANTES
@@ -678,15 +684,22 @@ def render_page():
     def update_grid_size(event, layout, row_delta, col_delta):
         db = get_service_db_connection() or get_db_connection()
         if db:
-            r = max(1, min(20, layout.get('rows', 5) + row_delta))
-            c = max(1, min(25, layout.get('cols', 8) + col_delta))
+            r = max(1, min(25, layout.get('rows', 5) + row_delta))
+            c = max(1, min(35, layout.get('cols', 8) + col_delta))
             
             layout['rows'] = r
             layout['cols'] = c
             
+            # Se colunas foram alteradas, reajusta o limite do último setor para cobrir o grid
+            sectors = layout.get('sectors', [])
+            if sectors and col_delta != 0:
+                sectors[-1]['end_col'] = max(sectors[-1]['start_col'], c)
+                layout['sectors'] = sectors
+
             new_layout_json = json.dumps(layout)
             try:
                 db.table('jade_eventos').update({'layout_json': new_layout_json}).eq('id', event['id']).execute()
+                ui.notify(f"Grid ajustado para {r} fileiras × {c} colunas.", color='success')
                 render_content.refresh()
             except Exception as e:
                 ui.notify(f"Erro ao alterar dimensões do grid: {e}", color='red')
