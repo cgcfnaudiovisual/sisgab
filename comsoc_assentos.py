@@ -274,13 +274,17 @@ def render_page():
                     {'bg': 'rgba(239, 83, 80, 0.20)', 'border': 'rgba(239, 83, 80, 0.50)', 'text': '#ef5350'}     # Setor 5: Vermelho Vibrante
                 ]
 
-                def get_seat_sector_style(col_num):
+                def get_seat_sector_info(col_num, row_num):
                     if not sectors:
-                        return {'bg': 'rgba(0, 230, 118, 0.12)', 'border': 'rgba(0, 230, 118, 0.35)', 'text': '#00e676'}
+                        return {'bg': 'rgba(0, 230, 118, 0.12)', 'border': 'rgba(0, 230, 118, 0.35)', 'text': '#00e676', 'active': True}
                     for idx, sec in enumerate(sectors):
                         if sec['start_col'] <= col_num <= sec['end_col']:
-                            return sector_colors[idx % len(sector_colors)]
-                    return {'bg': 'rgba(255, 255, 255, 0.05)', 'border': 'rgba(255, 255, 255, 0.15)', 'text': '#9e9e9e'}
+                            sec_rows = sec.get('rows_count', rows_count)
+                            is_active = row_num < sec_rows
+                            style_info = sector_colors[idx % len(sector_colors)].copy()
+                            style_info['active'] = is_active
+                            return style_info
+                    return {'bg': 'rgba(255, 255, 255, 0.05)', 'border': 'rgba(255, 255, 255, 0.15)', 'text': '#9e9e9e', 'active': True}
 
                 with ui.grid(columns=display_cols_count + 1).classes('gap-2 items-center').style(f'min-width: {min_grid_w}px;'):
                     ui.label('').classes('text-center font-bold text-grey-5').style('width: 40px;')
@@ -296,8 +300,13 @@ def render_page():
                             seat_id = f"{row_label}-{col}"
                             is_blocked = seat_id in blocked_seats
                             guest = allocated_map.get(seat_id)
-                            sec_style = get_seat_sector_style(col)
+                            sec_info = get_seat_sector_info(col, r)
                             
+                            # Se a fileira estiver fora da quantidade de fileiras deste setor específico
+                            if not sec_info['active']:
+                                ui.label('').style(f'width: {seat_w}; height: {seat_h};')
+                                continue
+
                             if is_blocked:
                                 if state.edit_mode == "layout":
                                     with ui.column().classes('items-center justify-center cursor-pointer transition-all hover:scale-105').style(
@@ -339,10 +348,10 @@ def render_page():
                                             ui.label('BLOQUEAR').classes('text-[7px] text-grey-5 font-bold')
                                     else:
                                         with ui.column().classes('items-center justify-between q-pa-xs cursor-pointer transition-all hover:scale-105 border').style(
-                                            f'width: {seat_w}; height: {seat_h}; border-radius: 4px; border-color: {sec_style["border"]} !important; background: {sec_style["bg"]}; gap: 0;'
+                                            f'width: {seat_w}; height: {seat_h}; border-radius: 4px; border-color: {sec_info["border"]} !important; background: {sec_info["bg"]}; gap: 0;'
                                         ).on('click', lambda s=seat_id: open_allocate_seat_dialog(s, convidados, current_event['id'])):
                                             ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono leading-none')
-                                            ui.label('LIVRE').classes('font-bold text-center leading-none').style(f'color: {sec_style["text"]}; font-size: {font_name};')
+                                            ui.label('LIVRE').classes('font-bold text-center leading-none').style(f'color: {sec_info["text"]}; font-size: {font_name};')
                                             ui.label('(vazio)').classes('text-grey-4 text-center leading-none').style(f'font-size: {font_sub};')
 
                 ref_bottom = layout.get('ref_bottom', 'ENTRADA / FACHADA')
@@ -787,18 +796,22 @@ def render_page():
                 rows_input = ui.number('Fileiras Totais (Linhas)', value=layout.get('rows', 5), min=1, max=50, step=1).props('dark outlined dense').classes('col')
                 cols_input = ui.number('Colunas Totais (Largura)', value=layout.get('cols', 12), min=1, max=100, step=1).props('dark outlined dense').classes('col')
 
-            # Prepara setores para edição exibindo a Quantidade de Colunas de cada um
+            # Prepara setores para edição exibindo a Quantidade de Fileiras e Colunas individuais
             for s in sectors_list:
                 width = (s.get('end_col', 1) - s.get('start_col', 1)) + 1
                 s['cols_count'] = max(1, width)
+                if 'rows_count' not in s:
+                    s['rows_count'] = layout.get('rows', 5)
 
             with ui.row().classes('w-full justify-between items-center q-mb-xs'):
-                ui.label('📍 SETORES DO AUDITÓRIO (Nome e Largura em Colunas)').classes('text-xs text-amber font-bold')
+                ui.label('📍 SETORES DO AUDITÓRIO (Fileiras e Colunas Individuais)').classes('text-xs text-amber font-bold')
                 
                 def add_sector_item():
                     num_sectors = len(sectors_list)
+                    default_r = int(rows_input.value or 5)
                     sectors_list.append({
                         'name': f"SETOR {num_sectors + 1}",
+                        'rows_count': default_r,
                         'cols_count': 12
                     })
                     render_sectors_editor.refresh()
@@ -812,10 +825,10 @@ def render_page():
             def render_sectors_editor():
                 sector_inputs.clear()
                 total_seats_calc = 0
-                r_val = int(rows_input.value or 5)
 
                 with ui.column().classes('w-full gap-2 q-my-xs'):
                     for idx, sec in enumerate(sectors_list):
+                        r_val = int(sec.get('rows_count', int(rows_input.value or 5)))
                         c_val = int(sec.get('cols_count', 12))
                         sec_seats = r_val * c_val
                         total_seats_calc += sec_seats
@@ -823,7 +836,8 @@ def render_page():
                         with ui.card().classes('w-full q-pa-xs px-3 bg-black/40 border border-cyan-500/20 rounded-lg'):
                             with ui.row().classes('w-full items-center justify-between gap-2'):
                                 s_name = ui.input(f'Nome do Setor {idx+1}', value=sec['name']).props('dark outlined dense').classes('col')
-                                s_cols = ui.number('Qtd Colunas', value=c_val, min=1, max=100).props('dark outlined dense').style('width: 110px;')
+                                s_rows = ui.number('Fileiras', value=r_val, min=1, max=50).props('dark outlined dense').style('width: 90px;')
+                                s_cols = ui.number('Colunas', value=c_val, min=1, max=100).props('dark outlined dense').style('width: 90px;')
                                 
                                 # Badge com o quantitativo de assentos do setor (Fileiras x Colunas)
                                 with ui.column().classes('items-center gap-0').style('min-width: 100px;'):
@@ -838,7 +852,7 @@ def render_page():
                                         ui.notify('O evento precisa de pelo menos 1 setor.', color='warning')
 
                                 ui.button(icon='delete', on_click=remove_sector).props('unelevated color=danger dense flat round').classes('text-xs')
-                                sector_inputs.append((s_name, s_cols))
+                                sector_inputs.append((s_name, s_rows, s_cols))
 
                     # Banner de Quantitativo Geral de Assentos do Evento
                     with ui.card().classes('w-full q-pa-sm bg-cyan-950/40 border border-cyan-500/40 rounded-lg q-mt-xs'):
@@ -848,7 +862,7 @@ def render_page():
                                 ui.label('QUANTITATIVO TOTAL DO AUDITÓRIO:').classes('text-xs font-bold text-white')
                             ui.badge(f"{total_seats_calc} ASSENTOS TOTAIS").props('color=cyan text-color=black bold').classes('text-xs q-px-sm')
 
-            # Atualiza os cálculos ao alterar fileiras ou colunas
+            # Atualiza os cálculos ao alterar fileiras gerais
             rows_input.on('change', render_sectors_editor.refresh)
             render_sectors_editor()
 
@@ -860,24 +874,32 @@ def render_page():
                     if db:
                         layout['ref_top'] = ref_top.value
                         layout['ref_bottom'] = ref_bottom.value
-                        layout['rows'] = int(rows_input.value or 5)
                         
-                        # Converte a quantidade simples de colunas de cada setor em posições sequenciais automáticas
+                        # Converte a quantidade simples de fileiras e colunas de cada setor em posições sequenciais automáticas
                         new_sectors = []
                         current_col = 1
-                        for inp_name, inp_cols in sector_inputs:
+                        max_grid_rows = 1
+
+                        for inp_name, inp_rows, inp_cols in sector_inputs:
                             if inp_name.value and inp_name.value.strip():
+                                q_rows = max(1, int(inp_rows.value or 1))
                                 q_cols = max(1, int(inp_cols.value or 1))
+                                
+                                if q_rows > max_grid_rows:
+                                    max_grid_rows = q_rows
+
                                 start_val = current_col
                                 end_val = current_col + q_cols - 1
                                 new_sectors.append({
                                     'name': inp_name.value.strip().upper(),
+                                    'rows_count': q_rows,
                                     'start_col': start_val,
                                     'end_col': end_val
                                 })
                                 current_col = end_val + 1
                                 
                         layout['sectors'] = new_sectors
+                        layout['rows'] = max_grid_rows
                         layout['cols'] = current_col - 1
 
                         try:
