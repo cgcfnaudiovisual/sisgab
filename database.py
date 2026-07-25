@@ -163,16 +163,6 @@ def authenticate_user(username: str, password: str) -> Optional[dict]:
     import bcrypt
 
     clean_user = username.strip().lower()
-    
-    # Credencial de emergência / Master Admin para evitar bloqueios no login
-    if clean_user in ('admin', 'admin@marinha.mil.br') and password.strip() in ('admin', 'admin123', '123456', '8867290420'):
-        return {
-            'id': 'admin-master-id',
-            'username': 'admin',
-            'nome_guerra': 'ADMINISTRADOR',
-            'email': 'admin@marinha.mil.br',
-            'role': 'admin'
-        }
 
     db = get_db_connection()
     if not db:
