@@ -237,10 +237,40 @@ def render_page():
                                             sub_label = c.get('cargo_funcao') or c.get('categoria') or 'Convidado'
                                             ui.label(sub_label).classes('text-[10px] text-grey-4')
                                             
-                                            # Acompanhantes
-                                            if c.get('max_acompanhantes', 0) > 0:
-                                                ui.label(f"Acompanhantes: {c['max_acompanhantes']}").classes('text-[9px] text-amber')
+                                            # Acompanhantes e controle rapido (+ / -)
+                                            max_ac = c.get('max_acompanhantes', 0)
+                                            with ui.row().classes('items-center gap-1 q-mt-xs'):
+                                                ui.label(f"Acomp: {max_ac}").classes('text-[10px] text-amber font-bold')
                                                 
+                                                # Decrementar acompanhante (-)
+                                                if max_ac > 0:
+                                                    def dec_acomp(c_ref=c):
+                                                        new_ac = max(0, c_ref.get('max_acompanhantes', 0) - 1)
+                                                        reg = {
+                                                            'nome': c_ref['nome'],
+                                                            'posto_graduacao': c_ref.get('posto_graduacao'),
+                                                            'cargo_funcao': c_ref.get('cargo_funcao'),
+                                                            'categoria': c_ref.get('categoria', 'Geral'),
+                                                            'max_acompanhantes': new_ac
+                                                        }
+                                                        save_guest(c_ref['id'], reg, current_event['id'])
+                                                    
+                                                    ui.button('-', on_click=dec_acomp).props('unelevated color=amber text-color=black dense round').style('width: 18px; height: 18px; min-height: 18px; font-size: 11px; font-weight: bold;')
+
+                                                # Incrementar acompanhante (+)
+                                                def inc_acomp(c_ref=c):
+                                                    new_ac = c_ref.get('max_acompanhantes', 0) + 1
+                                                    reg = {
+                                                        'nome': c_ref['nome'],
+                                                        'posto_graduacao': c_ref.get('posto_graduacao'),
+                                                        'cargo_funcao': c_ref.get('cargo_funcao'),
+                                                        'categoria': c_ref.get('categoria', 'Geral'),
+                                                        'max_acompanhantes': new_ac
+                                                    }
+                                                    save_guest(c_ref['id'], reg, current_event['id'])
+
+                                                ui.button('+', on_click=inc_acomp).props('unelevated color=amber text-color=black dense round').style('width: 18px; height: 18px; min-height: 18px; font-size: 11px; font-weight: bold;')
+
                                         # Status do assento
                                         with ui.row().classes('items-center gap-1'):
                                             if is_allocated:
