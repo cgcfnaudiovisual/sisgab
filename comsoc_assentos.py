@@ -265,29 +265,22 @@ def render_page():
                 num_px = int(seat_w.replace('px',''))
                 min_grid_w = max(600, (display_cols_count + 1) * (num_px + 8) + 60)
 
-                # BARRA DE TÍTULOS DE SETORES (ALINHADOS EXATAMENTE SOBRE AS SUAS COLUNAS NO GRID)
-                if sectors and getattr(state, 'selected_sector', 'Todos') == "Todos":
-                    with ui.grid(columns=display_cols_count + 1).classes('gap-2 items-center q-mb-xs').style(f'min-width: {min_grid_w}px;'):
-                        # Espaçamento para o rótulo da fileira (coluna 0)
-                        ui.label('').style('width: 40px;')
-                        
-                        last_col_rendered = 0
-                        for sec in sectors:
-                            s_start = sec['start_col']
-                            s_end = sec['end_col']
-                            sec_span = max(1, s_end - s_start + 1)
-                            
-                            # Se houver espaço vazio (gap) entre setores, preenche
-                            gap_span = s_start - (last_col_rendered + 1)
-                            if gap_span > 0:
-                                ui.label('').style(f'grid-column: span {gap_span};')
+                # Cores suaves e elegantes translúcidas para destacar cada setor no bloco de cadeiras
+                sector_colors = [
+                    'rgba(0, 229, 255, 0.04)',   # Setor 1: Cyan Suave
+                    'rgba(255, 183, 77, 0.05)',   # Setor 2: Amber/Dourado Suave
+                    'rgba(171, 71, 188, 0.05)',   # Setor 3: Purple Suave
+                    'rgba(102, 187, 106, 0.05)',  # Setor 4: Green Suave
+                    'rgba(239, 83, 80, 0.05)'     # Setor 5: Red Suave
+                ]
 
-                            # Renderiza o Card do Setor cobrindo exatamente o número de colunas do setor
-                            with ui.card().classes('q-pa-xs no-shadow rounded-lg text-center bg-cyan-950/80 border border-cyan-500/50').style(f'grid-column: span {sec_span}; margin: 0;'):
-                                ui.label(sec['name']).classes('text-[11px] font-black text-cyan tracking-wider truncate')
-                                ui.label(f"Colunas {s_start} a {s_end}").classes('text-[9px] text-grey-3 font-mono font-bold')
-                            
-                            last_col_rendered = s_end
+                def get_seat_sector_bg(col_num):
+                    if not sectors:
+                        return 'rgba(0, 230, 118, 0.05)'
+                    for idx, sec in enumerate(sectors):
+                        if sec['start_col'] <= col_num <= sec['end_col']:
+                            return sector_colors[idx % len(sector_colors)]
+                    return 'rgba(255, 255, 255, 0.02)'
 
                 with ui.grid(columns=display_cols_count + 1).classes('gap-2 items-center').style(f'min-width: {min_grid_w}px;'):
                     ui.label('').classes('text-center font-bold text-grey-5').style('width: 40px;')
@@ -303,6 +296,7 @@ def render_page():
                             seat_id = f"{row_label}-{col}"
                             is_blocked = seat_id in blocked_seats
                             guest = allocated_map.get(seat_id)
+                            sector_bg = get_seat_sector_bg(col)
                             
                             if is_blocked:
                                 if state.edit_mode == "layout":
@@ -323,7 +317,7 @@ def render_page():
                                     is_acomp = bool(guest.get('convidado_principal_id'))
                                     
                                     border_c = THEME['primary'] if is_vip else ('#ffb74d' if is_acomp else THEME['accent'])
-                                    bg_c = 'rgba(0, 229, 255, 0.15)' if is_vip else ('rgba(255, 183, 77, 0.12)' if is_acomp else 'rgba(0, 162, 255, 0.15)')
+                                    bg_c = 'rgba(0, 229, 255, 0.25)' if is_vip else ('rgba(255, 183, 77, 0.22)' if is_acomp else 'rgba(0, 162, 255, 0.25)')
                                     text_c = THEME['primary'] if is_vip else ('#ffb74d' if is_acomp else THEME['accent'])
                                     
                                     with ui.column().classes('items-center justify-between q-pa-xs cursor-pointer transition-all hover:scale-105 border').style(
@@ -345,7 +339,7 @@ def render_page():
                                             ui.label('BLOQUEAR').classes('text-[7px] text-grey-5 font-bold')
                                     else:
                                         with ui.column().classes('items-center justify-between q-pa-xs cursor-pointer transition-all hover:scale-105 border').style(
-                                            f'width: {seat_w}; height: {seat_h}; border-radius: 4px; border-color: {THEME["success"]}40 !important; background: rgba(0, 230, 118, 0.05); gap: 0;'
+                                            f'width: {seat_w}; height: {seat_h}; border-radius: 4px; border-color: rgba(255,255,255,0.1) !important; background: {sector_bg}; gap: 0;'
                                         ).on('click', lambda s=seat_id: open_allocate_seat_dialog(s, convidados, current_event['id'])):
                                             ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono leading-none')
                                             ui.label('LIVRE').classes('font-bold text-center leading-none').style(f'color: {THEME["success"]}; font-size: {font_name};')
@@ -712,8 +706,8 @@ def render_page():
     def update_grid_size(event, layout, row_delta, col_delta):
         db = get_service_db_connection() or get_db_connection()
         if db:
-            r = max(1, min(25, layout.get('rows', 5) + row_delta))
-            c = max(1, min(35, layout.get('cols', 8) + col_delta))
+            r = max(1, min(50, layout.get('rows', 5) + row_delta))
+            c = max(1, min(100, layout.get('cols', 8) + col_delta))
             
             layout['rows'] = r
             layout['cols'] = c
