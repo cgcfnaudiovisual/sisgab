@@ -869,12 +869,17 @@ def render_page():
                         layout['cols'] = max_c
 
                         try:
+                            updated_json = json.dumps(layout)
                             db.table('jade_eventos').update({
                                 'nome': nome.value.upper(),
                                 'data_evento': data.value,
                                 'local': local.value or '',
-                                'layout_json': json.dumps(layout)
+                                'layout_json': updated_json
                             }).eq('id', event['id']).execute()
+                            
+                            # Atualiza objeto local do evento e reseta seleção de setor
+                            event['layout_json'] = updated_json
+                            state.selected_sector = 'Todos'
                             
                             ui.notify('Layout e Setores atualizados com sucesso!', color='success')
                             render_content.refresh()
