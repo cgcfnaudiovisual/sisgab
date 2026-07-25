@@ -183,11 +183,20 @@ def render_page():
         allocated_map = {c['assento_id']: c for c in convidados if c.get('assento_id')}
 
         # Parse dos setores / blocos de assentos
-        sectors = layout.get('sectors', [
-            {'name': 'SETOR ALPHA (ESQUERDA)', 'start_col': 1, 'end_col': max(1, cols_count // 3)},
-            {'name': 'SETOR NOBRE (CENTRO)', 'start_col': max(1, cols_count // 3) + 1, 'end_col': max(1, (cols_count * 2) // 3)},
-            {'name': 'SETOR BRAVO (DIREITA)', 'start_col': max(1, (cols_count * 2) // 3) + 1, 'end_col': cols_count}
-        ]) if cols_count >= 4 else []
+        sectors = layout.get('sectors', [])
+        
+        # Se existirem setores, garante que o cols_count abranja até a última coluna cadastrada nos setores
+        if sectors:
+            max_sector_col = max(s.get('end_col', 1) for s in sectors)
+            if max_sector_col > cols_count:
+                cols_count = max_sector_col
+        else:
+            if cols_count >= 4:
+                sectors = [
+                    {'name': 'SETOR ALPHA (ESQUERDA)', 'start_col': 1, 'end_col': max(1, cols_count // 3)},
+                    {'name': 'SETOR NOBRE (CENTRO)', 'start_col': max(1, cols_count // 3) + 1, 'end_col': max(1, (cols_count * 2) // 3)},
+                    {'name': 'SETOR BRAVO (DIREITA)', 'start_col': max(1, (cols_count * 2) // 3) + 1, 'end_col': cols_count}
+                ]
 
         # Determinar faixa de colunas ativas conforme filtro de setor
         active_start_col = 1
@@ -829,15 +838,22 @@ def render_page():
                         layout['ref_top'] = ref_top.value
                         layout['ref_bottom'] = ref_bottom.value
                         
+                        # Salva a lista de setores editados pelo Gestor e ajusta o total de colunas se necessário
                         new_sectors = []
+                        max_c = layout.get('cols', 12)
                         for inp_name, inp_start, inp_end in sector_inputs:
                             if inp_name.value and inp_name.value.strip():
+                                start_val = int(inp_start.value)
+                                end_val = int(inp_end.value)
+                                if end_val > max_c:
+                                    max_c = end_val
                                 new_sectors.append({
                                     'name': inp_name.value.strip().upper(),
-                                    'start_col': int(inp_start.value),
-                                    'end_col': int(inp_end.value)
+                                    'start_col': start_val,
+                                    'end_col': end_val
                                 })
                         layout['sectors'] = new_sectors
+                        layout['cols'] = max_c
 
                         try:
                             db.table('jade_eventos').update({
