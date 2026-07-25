@@ -109,6 +109,12 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                     db = get_service_db_connection() or get_db_connection()
                     if db:
                         try:
+                            militar_ids = []
+                            if encarregado_select.value:
+                                militar_ids.append(encarregado_select.value)
+                            if designer_select.value:
+                                militar_ids.append(designer_select.value)
+
                             update_payload = {
                                 'titulo_evento': in_titulo.value.strip(),
                                 'solicitante_nome': in_solicitante.value.strip(),
@@ -121,7 +127,7 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                                 'autoridades': in_autoridades.value.strip(),
                                 'status': in_status.value,
                                 'encarregado_id': encarregado_select.value,
-                                'designer_id': designer_select.value,
+                                'notificar_militar_ids': json.dumps(list(set(militar_ids))),
                                 'tipo_cobertura': json.dumps(cobs)
                             }
                             db.table('demandas_comunicacao').update(update_payload).eq('id', demanda['id']).execute()
@@ -196,11 +202,19 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
                         except Exception as h_err:
                             print(f"[HIST INSERT ERR] {h_err}")
                         
-                        update_data = {'status': novo_status}
+                        militar_ids = []
+                        if encarregado_select.value:
+                            militar_ids.append(encarregado_select.value)
+                        if designer_select.value:
+                            militar_ids.append(designer_select.value)
+
+                        update_data = {
+                            'status': novo_status,
+                            'notificar_militar_ids': json.dumps(list(set(militar_ids)))
+                        }
                         if encarregado_select.value:
                             update_data['encarregado_id'] = encarregado_select.value
-                        if designer_select.value:
-                            update_data['designer_id'] = designer_select.value
+
                         db.table('demandas_comunicacao').update(update_data).eq('id', demanda['id']).execute()
                         demanda['status'] = novo_status
                         
