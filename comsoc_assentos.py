@@ -205,12 +205,28 @@ def render_page():
                         on_click=lambda: toggle_mode("layout")
                     ).props(f'dense unelevated {"color=primary text-color=black" if state.edit_mode == "layout" else "flat text-color=grey"}').classes('text-xs q-px-sm')
 
-            # Renderizador de Grid de Assentos
+            # Parse dos setores / blocos de assentos
+            sectors = layout.get('sectors', [
+                {'name': 'SETOR ALPHA (ESQUERDA)', 'start_col': 1, 'end_col': max(1, cols_count // 3)},
+                {'name': 'SETOR NOBRE (CENTRO)', 'start_col': max(1, cols_count // 3) + 1, 'end_col': max(1, (cols_count * 2) // 3)},
+                {'name': 'SETOR BRAVO (DIREITA)', 'start_col': max(1, (cols_count * 2) // 3) + 1, 'end_col': cols_count}
+            ]) if cols_count >= 6 else []
+
+            # Renderizador de Grid de Assentos por Setores
             with ui.column().classes('w-full items-center justify-start q-py-md scroll-container').style('overflow-x: auto;'):
                 ref_top = layout.get('ref_top', 'PALCO PRINCIPAL')
                 if ref_top:
                     with ui.row().classes('w-full justify-center q-mb-sm'):
                         ui.label(f"▲ {ref_top.upper()} ▲").classes('text-[10px] font-black tracking-widest text-cyan px-4 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/5')
+
+                # BARRA DE TÍTULOS DE SETORES (SE HOUVER SUBDIVISÃO DE SETORES)
+                if sectors:
+                    with ui.row().classes('w-full justify-between items-center q-mb-xs gap-2 px-8').style('min-width: 650px;'):
+                        for sec in sectors:
+                            sec_cols = sec['end_col'] - sec['start_col'] + 1
+                            if sec_cols > 0:
+                                with ui.card().classes('q-pa-xs no-shadow rounded-lg text-center bg-cyan-950/40 border border-cyan-500/30 col'):
+                                    ui.label(sec['name']).classes('text-[10px] font-black text-cyan tracking-wider truncate')
 
                 with ui.grid(columns=cols_count + 1).classes('gap-2 items-center').style('min-width: 600px;'):
                     ui.label('').classes('text-center font-bold text-grey-5').style('width: 40px;')
