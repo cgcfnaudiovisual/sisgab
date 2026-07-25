@@ -877,13 +877,18 @@ def render_page():
                                 'layout_json': updated_json
                             }).eq('id', event['id']).execute()
                             
-                            # Atualiza objeto local do evento e reseta seleção de setor
+                            # Atualiza atributos do objeto em memória
+                            event['nome'] = nome.value.upper()
+                            event['data_evento'] = data.value
+                            event['local'] = local.value or ''
                             event['layout_json'] = updated_json
+                            
+                            # Reseta o seletor de setor e recarrega
                             state.selected_sector = 'Todos'
                             
                             ui.notify('Layout e Setores atualizados com sucesso!', color='success')
-                            render_content.refresh()
                             diag.close()
+                            render_content.refresh()
                         except Exception as e:
                             ui.notify(f"Erro ao salvar: {e}", color='red')
                             
