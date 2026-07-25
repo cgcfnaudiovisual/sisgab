@@ -890,18 +890,27 @@ def render_page():
                             ui.badge(f"{len(list_c)} Placas").props('color=cyan text-color=black')
 
                         if list_c:
-                            with ui.grid(columns='1 sm:grid-cols-2 md:grid-cols-3').classes('w-full gap-2 q-mt-sm'):
+                            with ui.grid(columns='1 sm:grid-cols-2 md:grid-cols-3').classes('w-full gap-3 q-mt-sm'):
                                 for c in sorted(list_c, key=lambda x: x.get('assento_id','')):
                                     is_acomp = bool(c.get('convidado_principal_id'))
                                     bg_item = 'rgba(255,183,77,0.1)' if is_acomp else 'rgba(0,229,255,0.1)'
                                     border_item = '#ffb74d' if is_acomp else '#00e5ff'
                                     
-                                    with ui.card().classes('w-full q-pa-xs no-shadow rounded').style(f'background: {bg_item}; border: 1px solid {border_item};'):
-                                        ui.label(c['assento_id']).classes('text-[9px] font-mono text-grey-3 font-bold')
-                                        nome_c = f"{c.get('posto_graduacao') or ''} {c['nome']}".strip()
-                                        ui.label(nome_c).classes('text-xs font-bold text-white')
-                                        sub = '(Acompanhante)' if is_acomp else (c.get('cargo_funcao') or c.get('categoria'))
-                                        ui.label(sub).classes('text-[9px] text-grey-4')
+                                    # Conteúdo do QR Code: ID do Convidado
+                                    qr_payload = str(c['id'])
+                                    qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={qr_payload}&color=ffffff&bgcolor=0b0f19"
+
+                                    with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg border').style(f'background: {bg_item}; border-color: {border_item} !important;'):
+                                        with ui.row().classes('w-full justify-between items-center no-wrap'):
+                                            with ui.column().classes('gap-0 col'):
+                                                ui.badge(c['assento_id']).props('color=cyan text-color=black bold').classes('text-[10px] w-fit q-mb-xs')
+                                                nome_c = f"{c.get('posto_graduacao') or ''} {c['nome']}".strip()
+                                                ui.label(nome_c).classes('text-xs font-bold text-white leading-tight')
+                                                sub = '(Acompanhante)' if is_acomp else (c.get('cargo_funcao') or c.get('categoria'))
+                                                ui.label(sub).classes('text-[9px] text-grey-4 q-mt-xs')
+                                            
+                                            # QR Code impresso no cartão
+                                            ui.image(qr_url).classes('w-14 h-14 rounded bg-black/40 border border-cyan-500/30 p-1')
                         else:
                             ui.label('Nenhum assento ocupado nesta fileira.').classes('text-xs text-grey-6 italic q-my-xs')
 
@@ -952,10 +961,11 @@ def render_page():
                 scan_input.value = ''
                 feedback_container.clear()
                 
-                # Busca convidado no evento
+                # Busca convidado no evento por ID exato do QR Code, Assento ou Nome
                 matches = [
                     c for c in convidados
-                    if query == str(c.get('assento_id', '')).lower() or
+                    if str(c.get('id', '')) == query or
+                    query == str(c.get('assento_id', '')).lower() or
                     query in c['nome'].lower() or
                     (c.get('posto_graduacao') and query in f"{c.get('posto_graduacao')} {c['nome']}".lower())
                 ]
