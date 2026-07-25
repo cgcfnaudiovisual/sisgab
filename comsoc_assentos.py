@@ -265,22 +265,22 @@ def render_page():
                 num_px = int(seat_w.replace('px',''))
                 min_grid_w = max(600, (display_cols_count + 1) * (num_px + 8) + 60)
 
-                # Cores suaves e elegantes translúcidas para destacar cada setor no bloco de cadeiras
+                # Cores vibrantes e bem visíveis para diferenciar nitidamente os setores do auditório
                 sector_colors = [
-                    'rgba(0, 229, 255, 0.04)',   # Setor 1: Cyan Suave
-                    'rgba(255, 183, 77, 0.05)',   # Setor 2: Amber/Dourado Suave
-                    'rgba(171, 71, 188, 0.05)',   # Setor 3: Purple Suave
-                    'rgba(102, 187, 106, 0.05)',  # Setor 4: Green Suave
-                    'rgba(239, 83, 80, 0.05)'     # Setor 5: Red Suave
+                    {'bg': 'rgba(0, 229, 255, 0.18)', 'border': 'rgba(0, 229, 255, 0.45)', 'text': '#00e5ff'},   # Setor 1: Cyan Forte
+                    {'bg': 'rgba(255, 183, 77, 0.20)', 'border': 'rgba(255, 183, 77, 0.50)', 'text': '#ffb74d'},  # Setor 2: Amber/Dourado Vívido
+                    {'bg': 'rgba(171, 71, 188, 0.20)', 'border': 'rgba(171, 71, 188, 0.50)', 'text': '#ab47bc'},  # Setor 3: Roxo Marcante
+                    {'bg': 'rgba(102, 187, 106, 0.20)', 'border': 'rgba(102, 187, 106, 0.50)', 'text': '#66bb6a'}, # Setor 4: Verde Intenso
+                    {'bg': 'rgba(239, 83, 80, 0.20)', 'border': 'rgba(239, 83, 80, 0.50)', 'text': '#ef5350'}     # Setor 5: Vermelho Vibrante
                 ]
 
-                def get_seat_sector_bg(col_num):
+                def get_seat_sector_style(col_num):
                     if not sectors:
-                        return 'rgba(0, 230, 118, 0.05)'
+                        return {'bg': 'rgba(0, 230, 118, 0.12)', 'border': 'rgba(0, 230, 118, 0.35)', 'text': '#00e676'}
                     for idx, sec in enumerate(sectors):
                         if sec['start_col'] <= col_num <= sec['end_col']:
                             return sector_colors[idx % len(sector_colors)]
-                    return 'rgba(255, 255, 255, 0.02)'
+                    return {'bg': 'rgba(255, 255, 255, 0.05)', 'border': 'rgba(255, 255, 255, 0.15)', 'text': '#9e9e9e'}
 
                 with ui.grid(columns=display_cols_count + 1).classes('gap-2 items-center').style(f'min-width: {min_grid_w}px;'):
                     ui.label('').classes('text-center font-bold text-grey-5').style('width: 40px;')
@@ -296,7 +296,7 @@ def render_page():
                             seat_id = f"{row_label}-{col}"
                             is_blocked = seat_id in blocked_seats
                             guest = allocated_map.get(seat_id)
-                            sector_bg = get_seat_sector_bg(col)
+                            sec_style = get_seat_sector_style(col)
                             
                             if is_blocked:
                                 if state.edit_mode == "layout":
@@ -339,11 +339,11 @@ def render_page():
                                             ui.label('BLOQUEAR').classes('text-[7px] text-grey-5 font-bold')
                                     else:
                                         with ui.column().classes('items-center justify-between q-pa-xs cursor-pointer transition-all hover:scale-105 border').style(
-                                            f'width: {seat_w}; height: {seat_h}; border-radius: 4px; border-color: rgba(255,255,255,0.1) !important; background: {sector_bg}; gap: 0;'
+                                            f'width: {seat_w}; height: {seat_h}; border-radius: 4px; border-color: {sec_style["border"]} !important; background: {sec_style["bg"]}; gap: 0;'
                                         ).on('click', lambda s=seat_id: open_allocate_seat_dialog(s, convidados, current_event['id'])):
                                             ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono leading-none')
-                                            ui.label('LIVRE').classes('font-bold text-center leading-none').style(f'color: {THEME["success"]}; font-size: {font_name};')
-                                            ui.label('(vazio)').classes('text-grey-5 text-center leading-none').style(f'font-size: {font_sub};')
+                                            ui.label('LIVRE').classes('font-bold text-center leading-none').style(f'color: {sec_style["text"]}; font-size: {font_name};')
+                                            ui.label('(vazio)').classes('text-grey-4 text-center leading-none').style(f'font-size: {font_sub};')
 
                 ref_bottom = layout.get('ref_bottom', 'ENTRADA / FACHADA')
                 if ref_bottom:
