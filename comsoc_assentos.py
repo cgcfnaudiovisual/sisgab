@@ -787,25 +787,19 @@ def render_page():
                 rows_input = ui.number('Fileiras Totais (Linhas)', value=layout.get('rows', 5), min=1, max=50, step=1).props('dark outlined dense').classes('col')
                 cols_input = ui.number('Colunas Totais (Largura)', value=layout.get('cols', 12), min=1, max=100, step=1).props('dark outlined dense').classes('col')
 
-            ui.separator().classes('q-my-md')
-            
+            # Prepara setores para edição exibindo a Quantidade de Colunas de cada um
+            for s in sectors_list:
+                width = (s.get('end_col', 1) - s.get('start_col', 1)) + 1
+                s['cols_count'] = max(1, width)
+
             with ui.row().classes('w-full justify-between items-center q-mb-xs'):
-                ui.label('📍 SETORES DO AUDITÓRIO (Adicionar / Excluir)').classes('text-xs text-amber font-bold')
+                ui.label('📍 SETORES DO AUDITÓRIO (Nome e Largura em Colunas)').classes('text-xs text-amber font-bold')
                 
                 def add_sector_item():
                     num_sectors = len(sectors_list)
-                    current_max = 0
-                    for s in sectors_list:
-                        if s.get('end_col', 0) > current_max:
-                            current_max = s['end_col']
-                    
-                    start_c = current_max + 1 if current_max > 0 else 1
-                    end_c = start_c + 11 # Tamanho padrão de 12 colunas por setor novo
-
                     sectors_list.append({
-                        'name': f"NOVO SETOR {num_sectors + 1}",
-                        'start_col': start_c,
-                        'end_col': end_c
+                        'name': f"SETOR {num_sectors + 1}",
+                        'cols_count': 12
                     })
                     render_sectors_editor.refresh()
 
@@ -821,9 +815,8 @@ def render_page():
                     for idx, sec in enumerate(sectors_list):
                         with ui.card().classes('w-full q-pa-xs px-2 bg-black/40 border border-cyan-500/20 rounded-lg'):
                             with ui.row().classes('w-full items-center gap-2'):
-                                s_name = ui.input(f'Setor {idx+1}', value=sec['name']).props('dark outlined dense').classes('col')
-                                s_start = ui.number('Col Inicial', value=sec['start_col'], min=1, max=100).props('dark outlined dense').style('width: 90px;')
-                                s_end = ui.number('Col Final', value=sec['end_col'], min=1, max=100).props('dark outlined dense').style('width: 90px;')
+                                s_name = ui.input(f'Nome do Setor {idx+1}', value=sec['name']).props('dark outlined dense').classes('col')
+                                s_cols = ui.number('Qtd Colunas', value=sec.get('cols_count', 12), min=1, max=100).props('dark outlined dense').style('width: 130px;')
                                 
                                 def remove_sector(i=idx):
                                     if len(sectors_list) > 1:
@@ -833,7 +826,7 @@ def render_page():
                                         ui.notify('O evento precisa de pelo menos 1 setor.', color='warning')
 
                                 ui.button(icon='delete', on_click=remove_sector).props('unelevated color=danger dense flat round').classes('text-xs')
-                                sector_inputs.append((s_name, s_start, s_end))
+                                sector_inputs.append((s_name, s_cols))
 
             render_sectors_editor()
 
@@ -847,22 +840,23 @@ def render_page():
                         layout['ref_bottom'] = ref_bottom.value
                         layout['rows'] = int(rows_input.value or 5)
                         
-                        # Salva a lista de setores editados pelo Gestor e ajusta o total de colunas se necessário
+                        # Converte a quantidade simples de colunas de cada setor em posições sequenciais automáticas
                         new_sectors = []
-                        max_c = int(cols_input.value or 12)
-                        for inp_name, inp_start, inp_end in sector_inputs:
+                        current_col = 1
+                        for inp_name, inp_cols in sector_inputs:
                             if inp_name.value and inp_name.value.strip():
-                                start_val = int(inp_start.value)
-                                end_val = int(inp_end.value)
-                                if end_val > max_c:
-                                    max_c = end_val
+                                q_cols = max(1, int(inp_cols.value or 1))
+                                start_val = current_col
+                                end_val = current_col + q_cols - 1
                                 new_sectors.append({
                                     'name': inp_name.value.strip().upper(),
                                     'start_col': start_val,
                                     'end_col': end_val
                                 })
+                                current_col = end_val + 1
+                                
                         layout['sectors'] = new_sectors
-                        layout['cols'] = max_c
+                        layout['cols'] = current_col - 1
 
                         try:
                             updated_json = json.dumps(layout)
