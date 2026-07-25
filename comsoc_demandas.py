@@ -337,12 +337,31 @@ def render_page(autofill: str = None):
                         
                         ev_entrega_tipo = ui.select(
                             {
-                                'apenas_captacao_bruto': 'Apenas Captação (Entrega de material bruto)',
-                                'captacao_e_edicao': 'Captação + Edição concluída'
+                                'apenas_captacao_bruto': 'Apenas Captação / Entrega Bruta',
+                                'captacao_e_edicao': 'Produção Completa / Peça Finalizada',
+                                'impressao_fisica': 'Impressão Física / Arte Final'
                             },
                             value='captacao_e_edicao',
                             label='Formato de Entrega'
                         ).props('dark outlined dense w-full option-dark').classes('w-full')
+
+                        ui.label('🎯 Categoria & Produto Solicitado:').classes('text-xs font-bold text-amber q-mt-xs')
+                        
+                        categoria_demanda = ui.select(
+                            {
+                                'design_arte': '🎨 Design / Arte Visual (Cardápio, Paspatur, Card, Banner)',
+                                'impressos_albuns': '📕 Impressos & Encadernação (Álbum, Livro de Honra, Porta-Copo)',
+                                'brindes_lembrancas': '🎁 Brindes & Lembranças (Kits, Placas Comemorativas)',
+                                'audiovisual': '📸 Cobertura Audiovisual (Fotografia e Vídeo)',
+                                'redacao_textos': '✍️ Redação & Discursos (Ordem do Dia, Notas, Convites)',
+                                'suporte_evento': '📦 Suporte Logístico / Receptivo de Evento',
+                                'outra_tarefa': '⚡ Outra Tarefa Especial (Descreva no campo abaixo)'
+                            },
+                            value='design_arte',
+                            label='Categoria do Serviço / Demanda'
+                        ).props('dark outlined dense w-full option-dark').classes('w-full')
+
+                        produto_especifico = ui.input('Especificação da Peça (ex: Cardápio Almoço, Paspatur A4, Arte Instagram)').props('dark outlined dense w-full')
                         
                         if is_internal_staff:
                             lbl_militar = '🎯 Designar Encarregados / Equipe da Missão (Chefia & COMSOC)' if is_approver else '👤 Sugestão de Encarregado da Equipe (Opcional)'
@@ -438,6 +457,8 @@ def render_page(autofill: str = None):
                                         'setor': sol_setor.value or ('GABINETE / QUARTEL' if eh_evento_interno else 'Gabinete'),
                                         'contato': sol_contato.value or 'Interno',
                                         'titulo_evento': ev_titulo.value,
+                                        'categoria_demanda': categoria_demanda.value or 'design_arte',
+                                        'produto_especifico': produto_especifico.value or '',
                                         'data_evento': ev_data.value,
                                         'data_fim': ev_data_fim.value or ev_data.value,
                                         'hora_evento': ev_hora.value or '09:00',

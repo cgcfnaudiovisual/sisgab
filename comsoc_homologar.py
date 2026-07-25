@@ -302,6 +302,13 @@ def render_page():
                                         color = "green" if score <= 2.0 else "orange" if score <= 3.5 else "red"
                                         ui.badge(f"Esforço: {score}").props(f"color={color}").classes('text-[9px]')
 
+                                    # Exibe Categoria e Produto Especial (Cardápio, Paspatur, Design, etc)
+                                    cat_nome = d.get('categoria_demanda', 'design_arte').replace('_', ' ').title()
+                                    prod_nome = d.get('produto_especifico') or 'Demanda Geral'
+                                    with ui.row().classes('items-center gap-1 q-mt-xs'):
+                                        ui.badge(f"📌 {cat_nome}").props('color=amber-9 text-color=black bold').classes('text-[9px]')
+                                        ui.badge(f"🎨 {prod_nome}").props('color=cyan text-color=black bold').classes('text-[9px]')
+
                                     ui.separator().style('background: rgba(255,255,255,0.05); margin: 6px 0;')
                                     ui.label(f"👤 Solicitante: {d.get('solicitante_nome', 'N/I')} ({d.get('setor', 'CGCFN')})").classes('text-xs text-grey-3')
                                     ui.label(f"📅 Data: {d.get('data_evento', 'N/I')} às {d.get('hora_evento', '09:00')}").classes('text-xs text-grey-3')
