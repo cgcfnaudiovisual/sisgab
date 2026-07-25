@@ -229,17 +229,19 @@ def render_page():
             initial_tab_value = 'pendentes' if len(pendentes) > 0 else 'aprovadas'
 
             with ui.tabs().classes('w-full text-cyan flex-wrap border-b border-cyan/20') as tabs:
-                tab_pend = ui.tab(f'⏳ Pendentes ({len(pendentes)})', name='pendentes')
-                tab_aprov = ui.tab(f'🟢 Aprovadas ({len(aprovadas)})', name='aprovadas')
-                tab_ajust = ui.tab(f'⚠️ Ajustes ({len(ajustes)})', name='ajustes')
-                tab_concl = ui.tab(f'✅ Concluídas ({len(concluidas)})', name='concluidas')
-                tab_rej = ui.tab(f'❌ Rejeitadas ({len(rejeitadas)})', name='rejeitadas')
-                tab_hist = ui.tab(f'📜 Histórico Global ({len(historico_global)})', name='historico')
+                tab_pend = ui.tab(f'⏳ Pendentes ({len(pendentes)})')
+                tab_aprov = ui.tab(f'🟢 Aprovadas ({len(aprovadas)})')
+                tab_ajust = ui.tab(f'⚠️ Ajustes ({len(ajustes)})')
+                tab_concl = ui.tab(f'✅ Concluídas ({len(concluidas)})')
+                tab_rej = ui.tab(f'❌ Rejeitadas ({len(rejeitadas)})')
+                tab_hist = ui.tab(f'📜 Histórico Global ({len(historico_global)})')
 
-            with ui.tab_panels(tabs, value=initial_tab_value).classes('w-full bg-transparent no-shadow q-pa-none q-mt-md'):
+            initial_tab = tab_pend if len(pendentes) > 0 else tab_aprov
+
+            with ui.tab_panels(tabs, value=initial_tab).classes('w-full bg-transparent no-shadow q-pa-none q-mt-md'):
                 
                 # --- ABA PENDENTES ---
-                with ui.tab_panel('pendentes'):
+                with ui.tab_panel(tab_pend):
                     if pendentes:
                         with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
                             for d in pendentes:
@@ -264,7 +266,7 @@ def render_page():
                             ui.label('Nenhuma pauta pendente de homologação.').classes('text-xs')
 
                 # --- ABA APROVADAS ---
-                with ui.tab_panel('aprovadas'):
+                with ui.tab_panel(tab_aprov):
                     if aprovadas:
                         with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
                             for d in aprovadas:
@@ -296,7 +298,7 @@ def render_page():
                             ui.label('Nenhuma pauta aprovada em andamento.').classes('text-xs')
 
                 # --- ABA AJUSTES ---
-                with ui.tab_panel('ajustes'):
+                with ui.tab_panel(tab_ajust):
                     if ajustes:
                         with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
                             for d in ajustes:
@@ -315,7 +317,7 @@ def render_page():
                             ui.label('Nenhuma pauta aguardando ajustes.').classes('text-xs')
 
                 # --- ABA CONCLUÍDAS ---
-                with ui.tab_panel('concluidas'):
+                with ui.tab_panel(tab_concl):
                     if concluidas:
                         with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
                             for d in concluidas:
@@ -333,7 +335,7 @@ def render_page():
                             ui.label('Nenhuma pauta concluída registrada.').classes('text-xs')
 
                 # --- ABA REJEITADAS ---
-                with ui.tab_panel('rejeitadas'):
+                with ui.tab_panel(tab_rej):
                     if rejeitadas:
                         with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
                             for d in rejeitadas:
@@ -350,7 +352,7 @@ def render_page():
                             ui.label('Nenhuma pauta indeferida.').classes('text-xs')
 
                 # --- ABA HISTÓRICO GLOBAL ---
-                with ui.tab_panel('historico'):
+                with ui.tab_panel(tab_hist):
                     if historico_global:
                         with ui.column().classes('w-full gap-3'):
                             for h in historico_global:
