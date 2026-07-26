@@ -502,21 +502,18 @@ def render_page():
                             ui.spinner(color='cyan', size='lg').classes('q-mx-auto')
                             ui.label('Analisando e destrinchando eventos com IA...').classes('text-xs text-cyan text-center w-full font-bold tracking-widest cyber-title')
                         
-                        async def run_extraction():
-                            try:
-                                ai_helper.GEMINI_MODEL_NAME = lote_model_select.value or 'gemini-2.0-flash'
-                                res_json = await run.io_bound(ai_helper.parse_multiple_events, text)
-                                state_lote['eventos'] = json.loads(res_json)
-                                lote_review_container.clear()
-                                with lote_review_container:
-                                    render_lote_review_form()
-                            except Exception as err:
-                                lote_review_container.clear()
-                                with lote_review_container:
-                                    ui.label(f"Erro ao processar lote: {err}").classes('text-red text-xs text-center w-full')
-                                    ui.notify('Falha ao interpretar lote. Escolha outro modelo ou tente novamente.', color='warning')
-                        
-                        ui.timer(0.1, run_extraction, once=True)
+                        try:
+                            ai_helper.GEMINI_MODEL_NAME = lote_model_select.value or 'gemini-2.0-flash'
+                            res_json = await run.io_bound(ai_helper.parse_multiple_events, text)
+                            state_lote['eventos'] = json.loads(res_json)
+                            lote_review_container.clear()
+                            with lote_review_container:
+                                render_lote_review_form()
+                        except Exception as err:
+                            lote_review_container.clear()
+                            with lote_review_container:
+                                ui.label(f"Erro ao processar lote: {err}").classes('text-red text-xs text-center w-full')
+                                ui.notify('Falha ao interpretar lote. Escolha outro modelo ou tente novamente.', color='warning')
 
                     async def salvar_lote_agenda():
                         db = get_service_db_connection() or get_db_connection()
