@@ -194,6 +194,7 @@ import comsoc_aniversariantes
 import smart_editor
 import agenda_geral
 import modulo_presenca
+import comsoc_assentos
 from database import authenticate_user, get_user_by_id
 from services import data_service
 
@@ -209,29 +210,35 @@ PUBLIC_ROUTES = {'/login'}
 
 sisgab_menu_categories = [
     {
-        'category': 'GABINETE & COMSOC',
+        'category': '🏛️ GABINETE & OPERAÇÕES',
         'items': [
-            {'name': 'Canal de Notícias', 'icon': 'newspaper', 'path': '/comsoc_noticias', 'subtitle': 'Feed e boletins internos'},
             {'name': 'Chamada & Presença Diária', 'icon': 'assignment_ind', 'path': '/presenca', 'subtitle': 'Chamada matutina e Pronto do CheGab'},
             {'name': 'Agenda Geral', 'icon': 'calendar_month', 'path': '/agenda_geral', 'subtitle': 'Google Calendar e Pautas'},
-            {'name': 'Nova Solicitação', 'icon': 'add_box', 'path': '/comsoc_demandas', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar'], 'subtitle': 'Formulário de pautas e coberturas'},
-            {'name': 'Homologar Pautas', 'icon': 'gavel', 'path': '/comsoc_homologar', 'roles': ['admin', 'oficial_gab'], 'subtitle': 'Parecer e aprovações de coberturas'},
-            {'name': 'Central de IA', 'icon': 'psychology', 'path': '/assistente_ia', 'subtitle': 'Chat, redator e triagem de demandas'},
-            {'name': 'Cautela de Material', 'icon': 'battery_charging_full', 'path': '/comsoc_cautela', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Empréstimos de equipamentos'},
+            {'name': 'Nova Solicitação / Demanda', 'icon': 'add_box', 'path': '/comsoc_demandas', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar'], 'subtitle': 'Formulário de pautas e tarefas'},
+            {'name': 'Homologar Pautas', 'icon': 'gavel', 'path': '/comsoc_homologar', 'roles': ['admin', 'supervisor', 'oficial_gab', 'comsoc', 'praca_gab'], 'subtitle': 'Parecer e aprovação de demandas'},
+            {'name': 'Placas de Assento (Jade)', 'icon': 'event_seat', 'path': '/comsoc_assentos', 'subtitle': 'Mapeamento e alocação de auditório'},
             {'name': 'Estoque de Brindes', 'icon': 'card_giftcard', 'path': '/comsoc_brindes', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Controle de brindes do RP'},
+            {'name': 'Cautela de Material', 'icon': 'battery_charging_full', 'path': '/comsoc_cautela', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Empréstimos de equipamentos'},
+        ]
+    },
+    {
+        'category': '📣 COMUNICAÇÃO & INTELIGÊNCIA',
+        'items': [
+            {'name': 'Canal de Notícias', 'icon': 'newspaper', 'path': '/comsoc_noticias', 'subtitle': 'Feed e boletins internos'},
+            {'name': 'Central de IA', 'icon': 'psychology', 'path': '/assistente_ia', 'subtitle': 'Chat, redator e triagem de demandas'},
+            {'name': 'Smart Editor IA', 'icon': 'movie_filter', 'path': '/smart_editor', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'supervisor'], 'subtitle': 'Cortes com IA, SFX e FCPXML'},
             {'name': 'Entrega em Hot', 'icon': 'photo_library', 'path': '/comsoc_galeria', 'subtitle': 'Upload de fotos em campo'},
             {'name': 'Arquivo e Histórico', 'icon': 'history', 'path': '/comsoc_historico', 'subtitle': 'Busca e links de coberturas passadas'},
             {'name': 'Aniversariantes & Datas', 'icon': 'cake', 'path': '/comsoc_aniversariantes', 'subtitle': 'Mensagens com IA e impressão'},
-            {'name': 'Smart Editor IA', 'icon': 'movie_filter', 'path': '/smart_editor', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'supervisor'], 'subtitle': 'Cortes com IA, SFX e FCPXML'},
             {'name': 'Monitor TV (COMSOC TV)', 'icon': 'tv', 'path': '/sisgab_tv', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Modo TV tático'},
         ]
     },
     {
-        'category': 'FERRAMENTAS E ADMINISTRAÇÃO',
+        'category': '⚙️ SISTEMA & ADMINISTRAÇÃO',
         'items': [
             {'name': 'Configurações', 'icon': 'settings', 'path': '/config', 'roles': ['admin', 'oficial_gab'], 'subtitle': 'Parâmetros do sistema'},
-            {'name': 'Usuários e Permissões', 'icon': 'admin_panel_settings', 'path': '/admin_panel', 'roles': ['admin', 'supervisor', 'oficial_gab', 'praca_gab', 'comsoc'], 'subtitle': 'Controle de acesso e aprovação de usuários'},
-            {'name': 'Ajuda / Sobre', 'icon': 'help_outline', 'path': '/ajuda_sobre', 'subtitle': 'Manuais e informações'},
+            {'name': 'Usuários e Permissões', 'icon': 'admin_panel_settings', 'path': '/admin_panel', 'roles': ['admin', 'supervisor', 'oficial_gab', 'praca_gab', 'comsoc'], 'subtitle': 'Controle de acesso e aprovação'},
+            {'name': 'Ajuda / Sobre', 'icon': 'help_outline', 'path': '/ajuda_sobre', 'subtitle': 'Manuais e suporte'},
         ]
     }
 ]
@@ -431,7 +438,7 @@ def build_layout_base():
         is_mobile = False
 
     # Define largura padrão bem ampla para acomodar confortavelmente todos os menus sem quebrar linha e sem rolagem horizontal
-    sidebar_width = 310
+    sidebar_width = 340
 
     left_drawer = ui.left_drawer(value=not is_mobile).props(f'width={sidebar_width} breakpoint=1024').classes('no-shadow').style(
         f'background: {theme.colors["bg_panel"]}; border-right: {theme.colors["border"]}; overflow-x: hidden;'
@@ -588,25 +595,48 @@ def open_change_password_dialog(user):
                     return
                 
                 try:
-                    # 1. Atualiza no Supabase Auth
-                    db_conn.auth.update_user({"password": new_pwd.value})
+                    import bcrypt
+                    pwd_hash = bcrypt.hashpw(new_pwd.value.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
                     
-                    # 2. Atualiza a tabela efetivo se houver e-mail
-                    user_email = user.get('email')
-                    if user_email:
-                        import bcrypt
-                        pwd_hash = bcrypt.hashpw(new_pwd.value.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
-                        
-                        # Usa conexão de serviço para contornar RLS
-                        svc_conn = get_service_db_connection()
-                        if svc_conn:
-                            try:
+                    svc_conn = get_service_db_connection() or db_conn
+                    updated_in_db = False
+
+                    if svc_conn:
+                        user_email = user.get('email')
+                        nome_guerra = user.get('nome_guerra')
+                        user_id = user.get('id')
+
+                        # 1. Atualiza na tabela efetivo
+                        try:
+                            if user_email:
                                 svc_conn.table('efetivo').update({'senha_hash': pwd_hash}).eq('email', user_email).execute()
-                            except Exception as db_err:
-                                print(f"[DB ERR SYNC PASSWORD] {db_err}")
-                    
-                    ui.notify('Sua senha foi alterada com sucesso!', color='success')
-                    pwd_dialog.close()
+                                updated_in_db = True
+                            elif nome_guerra:
+                                svc_conn.table('efetivo').update({'senha_hash': pwd_hash}).eq('nome_guerra', nome_guerra.upper()).execute()
+                                updated_in_db = True
+                        except Exception as ef_err:
+                            print(f"[EFETIVO PWD UPDATE ERR] {ef_err}")
+
+                        # 2. Atualiza na tabela users se existir id
+                        try:
+                            if user_id:
+                                svc_conn.table('users').update({'senha_hash': pwd_hash}).eq('id', user_id).execute()
+                                updated_in_db = True
+                        except Exception as u_err:
+                            print(f"[USERS PWD UPDATE ERR] {u_err}")
+
+                        # 3. Tenta atualizar no Supabase Auth em segundo plano (se configurado)
+                        try:
+                            if hasattr(db_conn, 'auth') and hasattr(db_conn.auth, 'update_user'):
+                                db_conn.auth.update_user({"password": new_pwd.value})
+                        except Exception:
+                            pass
+
+                    if updated_in_db:
+                        ui.notify('Sua senha foi alterada com sucesso!', color='success')
+                        pwd_dialog.close()
+                    else:
+                        pwd_error.text = "Erro ao localizar registro do usuário para atualização."
                 except Exception as err:
                     pwd_error.text = f"Erro ao atualizar: {err}"
             
@@ -691,6 +721,12 @@ def comsoc_cautela_page():
 def comsoc_brindes_page():
     app.storage.user['current_path'] = '/comsoc_brindes'
     build_layout(comsoc_brindes.render_page)()
+
+
+@ui.page('/comsoc_assentos')
+def comsoc_assentos_page():
+    app.storage.user['current_path'] = '/comsoc_assentos'
+    build_layout(comsoc_assentos.render_page)()
 
 
 @ui.page('/comsoc_galeria')

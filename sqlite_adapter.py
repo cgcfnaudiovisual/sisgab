@@ -586,6 +586,43 @@ class LocalSQLiteClient:
                     observacao TEXT,
                     criado_em TEXT
                 )
+            ''',
+            'jade_eventos': '''
+                CREATE TABLE IF NOT EXISTS jade_eventos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nome TEXT,
+                    data_evento TEXT,
+                    local TEXT,
+                    tipo_layout TEXT,
+                    layout_json TEXT,
+                    status TEXT DEFAULT 'ativo',
+                    created_at TEXT
+                )
+            ''',
+            'jade_convidados': '''
+                CREATE TABLE IF NOT EXISTS jade_convidados (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    evento_id INTEGER,
+                    nome TEXT,
+                    posto_graduacao TEXT,
+                    cargo_funcao TEXT,
+                    categoria TEXT,
+                    convidado_principal_id INTEGER,
+                    max_acompanhantes INTEGER DEFAULT 0,
+                    assento_id TEXT,
+                    status_confirmacao TEXT DEFAULT 'confirmado',
+                    checkin_at TEXT
+                )
+            ''',
+            'jade_log': '''
+                CREATE TABLE IF NOT EXISTS jade_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    evento_id INTEGER,
+                    acao TEXT,
+                    detalhes TEXT,
+                    usuario TEXT,
+                    created_at TEXT
+                )
             '''
         }
         

@@ -182,19 +182,39 @@ def render_page():
                                     dia_semana_lbl = p_dt.strftime('%a').upper()
                                     dia_num = p_dt.strftime('%d/%m')
                                     is_pend = p['status'] == 'pendente'
-                                    border_col = "#ef4444" if is_pend else "#00e5ff"
-                                    badge_lbl = "PENDENTE" if is_pend else "APROVADA"
-                                    badge_color = "red-5" if is_pend else "cyan-9"
+                                    # Leitura de prioridade e categoria
+                                    prio = p.get('prioridade', 'normal')
+                                    cat_lbl = p.get('categoria_demanda', 'audiovisual').replace('_', ' ').title()
+                                    prod_lbl = p.get('produto_especifico') or 'Cobertura'
+
+                                    if prio == 'altissima':
+                                        border_col = "#ef4444"
+                                        prio_badge = "🔴 ALTÍSSIMA"
+                                        prio_color = "red-10"
+                                    elif prio == 'urgente':
+                                        border_col = "#f59e0b"
+                                        prio_badge = "🟡 URGENTE"
+                                        prio_color = "amber-9"
+                                    else:
+                                        border_col = "#00e5ff" if not is_pend else "#ef4444"
+                                        prio_badge = "PENDENTE" if is_pend else "APROVADA"
+                                        prio_color = "red-5" if is_pend else "cyan-9"
 
                                     with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg').style(f'background: rgba(255,255,255,0.02); border-left: 4px solid {border_col};'):
                                         with ui.row().classes('w-full justify-between items-center no-wrap'):
                                             with ui.row().classes('items-center gap-2'):
                                                 ui.label(f"[{dia_semana_lbl} {dia_num}]").classes('text-[11px] font-bold text-cyan-4')
                                                 ui.label(p['titulo_evento']).classes('text-xs font-bold text-white truncate max-w-[140px]')
-                                            ui.badge(badge_lbl).props(f"color={badge_color} dense").classes('text-[8px] q-px-sm')
+                                            
+                                            ui.badge(prio_badge).props(f"color={prio_color} dense text-color=white").classes('text-[8px] q-px-sm font-bold')
+
+                                        with ui.row().classes('w-full items-center gap-1 q-mt-xs'):
+                                            ui.badge(f"📌 {cat_lbl}").props('color=black text-color=amber border border-amber/30 dense').classes('text-[8px]')
+                                            ui.badge(f"🎨 {prod_lbl}").props('color=black text-color=cyan border border-cyan/30 dense').classes('text-[8px]')
+
                                         with ui.row().classes('w-full justify-between items-center text-[10px] text-grey-4 q-mt-xs'):
-                                            ui.label(f"🕒 {p['hora_evento']} | 📍 {p['local_evento'] or 'Gabinete'}")
-                                            ui.label(f"👤 {p['solicitante_nome']}").classes('text-[9px] truncate max-w-[100px]')
+                                            ui.label(f"🕒 {p.get('hora_evento', '09:00')} | 📍 {p.get('local_evento') or 'Gabinete'}")
+                                            ui.label(f"👤 {p.get('solicitante_nome','CGCFN')}").classes('text-[9px] truncate max-w-[100px]')
                         else:
                             with ui.column().classes('w-full h-48 items-center justify-center gap-2 text-grey-5'):
                                 ui.icon('event_busy', size='2.5rem')

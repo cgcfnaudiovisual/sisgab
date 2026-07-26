@@ -288,64 +288,131 @@ def render_page(autofill: str = None):
                         on_click=processar_texto_ia
                     ).props('unelevated color=cyan text-color=black bold').classes('q-py-md font-bold flex-shrink-0')
 
-            # SEÇÃO OPERACIONAL: FORMULÁRIO (Esquerda) E AJUSTES (Direita)
+            # ⚡ BARRA SUPERIOR DE ATALHOS RÁPIDOS EM 1 CLIQUE
+            with ui.card().classes('w-full q-pa-sm px-4 no-shadow rounded-xl bg-black/40 border border-cyan-500/30 q-mb-xs'):
+                with ui.row().classes('w-full items-center justify-between wrap gap-2'):
+                    ui.label('⚡ MODELOS DE ATALHO RÁPIDO (1 Clique):').classes('text-xs font-bold text-amber tracking-wider')
+                    with ui.row().classes('items-center gap-2 wrap'):
+                        def aplicar_template_cardapio():
+                            categoria_demanda.value = 'design_arte'
+                            produto_especifico.value = 'Cardápio de Almoço de Autoridade'
+                            ev_entrega_tipo.value = 'impressao_fisica'
+                            ev_titulo.value = 'CARDÁPIO - ALMOÇO OFICIAL'
+                            ui.notify('🍽️ Modelo Cardápio Aplicado! Preencha apenas o Prazo e Detalhes.', color='info')
+
+                        def aplicar_template_paspatur():
+                            categoria_demanda.value = 'impressos_albuns'
+                            produto_especifico.value = 'Paspatur / Moldura de Quadro A4'
+                            ev_entrega_tipo.value = 'impressao_fisica'
+                            ev_titulo.value = 'PASPATUR PARA SOLENIDADE'
+                            ui.notify('🖼️ Modelo Paspatur Aplicado!', color='info')
+
+                        def aplicar_template_redacao():
+                            categoria_demanda.value = 'redacao_textos'
+                            produto_especifico.value = 'Discurso / Ordem do Dia'
+                            ev_entrega_tipo.value = 'captacao_e_edicao'
+                            ev_titulo.value = 'DISCURSO DE POSSE / NOTA OFICIAL'
+                            ui.notify('📜 Modelo Redação Aplicado!', color='info')
+
+                        def aplicar_template_audiovisual():
+                            categoria_demanda.value = 'audiovisual'
+                            produto_especifico.value = 'Cobertura Completa (Foto + Vídeo)'
+                            ev_entrega_tipo.value = 'captacao_e_edicao'
+                            ev_titulo.value = 'COBERTURA FOTOGRÁFICA E VÍDEO'
+                            ui.notify('📸 Modelo Cobertura Audiovisual Aplicado!', color='info')
+
+                        ui.button('🍽️ Cardápio Almoço', on_click=aplicar_template_cardapio).props('unelevated color=amber text-color=black dense').classes('text-xs font-bold q-px-sm')
+                        ui.button('🖼️ Paspatur / Moldura', on_click=aplicar_template_paspatur).props('unelevated color=cyan text-color=black dense').classes('text-xs font-bold q-px-sm')
+                        ui.button('📜 Discurso / Nota', on_click=aplicar_template_redacao).props('unelevated color=purple-9 text-color=white dense').classes('text-xs font-bold q-px-sm')
+                        ui.button('📸 Foto & Vídeo', on_click=aplicar_template_audiovisual).props('unelevated color=green-9 text-color=white dense').classes('text-xs font-bold q-px-sm')
+
+            # SEÇÃO OPERACIONAL: FORMULÁRIO DINÂMICO (Esquerda) E PAINEL COMPLEMENTAR (Direita)
             with ui.row().classes('w-full gap-4 items-stretch justify-start'):
-                # 1. Detalhes do Evento (Formulário Principal)
-                with ui.column().classes('col-12 col-md-5 q-pa-none').style('min-width: 320px;'):
+                # 1. Formulário Principal Inteligente
+                with ui.column().classes('col-12 col-md-6 q-pa-none').style('min-width: 320px;'):
                     with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
                         f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]}; min-height: 520px;'
                     ):
                         nonlocal sol_nome, sol_setor, sol_contato, ev_titulo, ev_data, ev_data_fim, ev_hora, ev_local, ev_aut, ev_entrega_tipo, militar_select, uploaded_file_url, uploaded_file_name, upload_status_lbl
                         
-                        ui.label('📝 Detalhes do Evento').classes('text-md font-bold text-cyan q-mb-xs')
+                        ui.label('📝 Formulação da Demanda / Tarefa Tática').classes('text-md font-bold text-cyan q-mb-xs')
                         
-                        ui.label('🏛️ Origem da Demanda:').classes('text-xs font-bold text-cyan q-mt-xs')
+                        ui.label('🎯 Categoria & Produto Solicitado:').classes('text-xs font-bold text-amber q-mt-xs')
                         
-                        def ao_mudar_origem(e):
-                            if e.value == 'cgcfn':
-                                if not sol_nome.value:
-                                    sol_nome.value = 'CGCFN / GABINETE'
-                                sol_setor.value = 'CGCFN'
-                                sol_contato.value = '21982043314 / Ramal CGCFN'
-                                ui.notify('🏛️ Preenchido automaticamente com dados do CGCFN!', color='info')
-                            else:
-                                sol_setor.value = ''
-                                sol_contato.value = ''
-                                ui.notify('🏢 Digite a OM solicitante e o telefone de contato.', color='warning')
+                        # Container para controlar visibilidade dos campos específicos de evento audiovisual
+                        campos_audiovisual_container = None
 
-                        ui.radio(
-                            {'cgcfn': '🏛️ CGCFN (Dados Padrão)', 'outra_om': '🏢 Outra OM'},
-                            value='cgcfn',
-                            on_change=ao_mudar_origem
-                        ).props('dark inline text-color=white dense').classes('text-xs q-mb-sm')
+                        def ao_mudar_categoria(e):
+                            eh_audiovisual = e.value == 'audiovisual'
+                            if campos_audiovisual_container:
+                                if eh_audiovisual:
+                                    campos_audiovisual_container.set_visibility(True)
+                                else:
+                                    campos_audiovisual_container.set_visibility(False)
 
-                        sol_nome = ui.input('Nome do Solicitante', value='CGCFN / GABINETE').props('dark outlined dense w-full')
+                        categoria_demanda = ui.select(
+                            {
+                                'design_arte': '🎨 Design / Arte Visual (Cardápio, Paspatur, Card, Banner)',
+                                'impressos_albuns': '📕 Impressos & Encadernação (Álbum, Livro de Honra, Porta-Copo)',
+                                'brindes_lembrancas': '🎁 Brindes & Lembranças (Kits, Placas Comemorativas)',
+                                'audiovisual': '📸 Cobertura Audiovisual (Fotografia e Vídeo)',
+                                'redacao_textos': '✍️ Redação & Discursos (Ordem do Dia, Notas, Convites)',
+                                'suporte_evento': '📦 Suporte Logístico / Receptivo de Evento',
+                                'outra_tarefa': '⚡ Outra Tarefa Especial (Descreva no campo abaixo)'
+                            },
+                            value='design_arte',
+                            label='Categoria do Serviço / Demanda',
+                            on_change=ao_mudar_categoria
+                        ).props('dark outlined dense w-full option-dark').classes('w-full font-bold text-cyan')
+
+                        produto_especifico = ui.input('Especificação da Peça (ex: Cardápio Almoço, Paspatur A4, Arte Instagram)').props('dark outlined dense w-full')
                         
+                        ev_titulo = ui.input('Título Geral da Tarefa / Solenidade').props('dark outlined dense w-full')
+
+                        with ui.row().classes('w-full gap-2 no-wrap q-mt-xs'):
+                            prioridade_select = ui.select(
+                                {
+                                    'normal': '🟢 Normal (Prazo Padrão)',
+                                    'urgente': '🟡 Urgente (Prioridade do Dia)',
+                                    'altissima': '🔴 ALTÍSSIMA / GABINETE (Urgência Imediata)'
+                                },
+                                value='normal',
+                                label='Nível de Prioridade / Urgência'
+                            ).props('dark outlined dense option-dark').classes('w-1/2')
+
+                            prazo_limite = ui.input('Prazo Limite / Deadline (Término)', value=datetime.now().strftime('%Y-%m-%d')).props('type=date dark outlined dense').classes('w-1/2')
+
                         with ui.row().classes('w-full gap-3 no-wrap'):
-                            sol_setor = ui.input('Setor / Divisão', value='CGCFN').props('dark outlined dense').classes('w-1/2')
-                            sol_contato = ui.input('Telefone / Ramal', value='21982043314 / Ramal CGCFN').props('dark outlined dense').classes('w-1/2')
+                            sol_nome = ui.input('Solicitante', value='CGCFN / GABINETE').props('dark outlined dense').classes('w-1/2')
+                            sol_setor = ui.input('Setor / OM', value='CGCFN').props('dark outlined dense').classes('w-1/2')
+
+                        sol_contato = ui.input('Contato / Ramal', value='21982043314 / Ramal CGCFN').props('dark outlined dense w-full')
+
+                        # CONTAINER DE CAMPOS EXCLUSIVOS DE COBERTURA AUDIOVISUAL (Escondido se for Design/Cardápio)
+                        with ui.column().classes('w-full gap-2 p-2 bg-black/20 rounded-lg border border-cyan-500/10 q-my-xs') as campos_audiovisual_container:
+                            campos_audiovisual_container.set_visibility(False)
+                            ui.label('📸 Detalhes de Cobertura Audiovisual (Eventos Externa/Interna):').classes('text-xs font-bold text-cyan')
                             
-                        ev_titulo = ui.input('Título do Evento / Pauta').props('dark outlined dense w-full')
-                        
-                        with ui.row().classes('w-full gap-3 no-wrap'):
-                            ev_data = ui.input('Data Início').props('type=date dark outlined dense').classes('w-1/3')
-                            ev_data_fim = ui.input('Data Término').props('type=date dark outlined dense').classes('w-1/3')
-                            ev_hora = ui.input('Hora').props('type=time dark outlined dense').classes('w-1/3')
-                            
-                        ev_local = ui.input('Local do Evento').props('dark outlined dense w-full')
-                        ev_aut = ui.input('Autoridades Presentes').props('dark outlined dense w-full')
+                            with ui.row().classes('w-full gap-3 no-wrap'):
+                                ev_data = ui.input('Data Início').props('type=date dark outlined dense').classes('w-1/3')
+                                ev_data_fim = ui.input('Data Término').props('type=date dark outlined dense').classes('w-1/3')
+                                ev_hora = ui.input('Hora Início').props('type=time dark outlined dense').classes('w-1/3')
+                                
+                            ev_local = ui.input('Local Exato do Evento').props('dark outlined dense w-full')
+                            ev_aut = ui.input('Autoridades Presentes').props('dark outlined dense w-full')
                         
                         ev_entrega_tipo = ui.select(
                             {
-                                'apenas_captacao_bruto': 'Apenas Captação (Entrega de material bruto)',
-                                'captacao_e_edicao': 'Captação + Edição concluída'
+                                'apenas_captacao_bruto': 'Apenas Captação / Entrega Bruta',
+                                'captacao_e_edicao': 'Produção Completa / Peça Finalizada',
+                                'impressao_fisica': 'Impressão Física / Arte Final'
                             },
                             value='captacao_e_edicao',
-                            label='Formato de Entrega'
+                            label='Formato de Entrega Final'
                         ).props('dark outlined dense w-full option-dark').classes('w-full')
                         
                         if is_internal_staff:
-                            lbl_militar = '🎯 Designar Encarregados / Equipe da Missão (Chefia & COMSOC)' if is_approver else '👤 Sugestão de Encarregado da Equipe (Opcional)'
+                            lbl_militar = '🎯 Designar Militar Responsável / Equipe da Missão' if is_approver else '👤 Sugestão de Encarregado (Opcional)'
                             militar_select = ui.select(
                                 efetivo_options,
                                 multiple=True,
@@ -354,19 +421,19 @@ def render_page(autofill: str = None):
                         else:
                             militar_select = None
 
-                        ui.separator().style('background-color: rgba(255, 255, 255, 0.05); margin: 12px 0;')
+                        observacoes_exec = ui.textarea('📝 Observações / Notas Importantes de Produção', placeholder='Digite instruções adicionais para o designer/impressor...').props('dark outlined dense w-full rows=2')
+
+                        ui.separator().style('background-color: rgba(255, 255, 255, 0.05); margin: 8px 0;')
 
                         # Componente de anexo de arquivo
-                        ui.label('📎 Anexo (Briefing, Arte ou Produto Corrigido)').classes('text-xs font-bold text-white')
+                        ui.label('📎 Anexo (Briefing, Logotipos, Roteiro ou Arte)').classes('text-xs font-bold text-white')
                         
                         def handle_upload(e):
                             try:
                                 import os
-                                # Pasta temporária ou definitiva de anexos
                                 folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'anexos_pautas')
                                 os.makedirs(folder, exist_ok=True)
                                 
-                                # Salva arquivo localmente
                                 file_path = os.path.join(folder, e.name)
                                 with open(file_path, 'wb') as pf:
                                     pf.write(e.content.read())
@@ -379,36 +446,36 @@ def render_page(autofill: str = None):
                             except Exception as ex:
                                 ui.notify(f"Erro no upload: {ex}", color='red')
 
-                        # Uploader do NiceGUI compacto
                         ui.upload(
                             on_upload=handle_upload,
                             label='Escolher arquivo',
                             auto_upload=True
-                        ).props('dark flat bordered text-color=white dense').classes('w-full text-xs').style('max-height: 80px;')
+                        ).props('dark flat bordered text-color=white dense').classes('w-full text-xs').style('max-height: 70px;')
                         
                         upload_status_lbl = ui.label('Nenhum arquivo anexado').classes('text-[10px] text-grey-4 w-full text-center')
 
-                # 2. Checklist & Escopo (Checklist de Viabilidade)
-                with ui.column().classes('col-12 col-md-4 q-pa-none').style('min-width: 320px;'):
+                # 2. Painel de Suporte & Checklist Completo
+                with ui.column().classes('col-12 col-md-5 q-pa-none').style('min-width: 320px;'):
                     with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
                         f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]}; min-height: 520px;'
                     ):
-                        ui.label('🔍 Checklist de Viabilidade').classes('text-md font-bold text-cyan q-mb-xs')
+                        ui.label('🔍 Checklist de Suporte & Viabilidade').classes('text-md font-bold text-cyan q-mb-xs')
+                        ui.label('(Opcional para tarefas de design/impressos simples)').classes('text-[11px] text-grey-4 q-mb-xs')
                         
                         nonlocal chk_staff, chk_equip, chk_drone, chk_transp, chk_cred, chk_anteced, chk_briefing
                         nonlocal chk_foto, chk_video, chk_redes, chk_sigilo
                         
-                        chk_staff = ui.checkbox('Há pessoal de cobertura na escala?', on_change=lambda e: (form_state.update({'viabilidade_staff': e.value}), atualizar_score_ui()))
-                        chk_equip = ui.checkbox('Equipamentos reservados?', on_change=lambda e: (form_state.update({'viabilidade_equip': e.value}), atualizar_score_ui()))
-                        chk_drone = ui.checkbox('Necessita Drone (Piloto/Homologação)?', on_change=lambda e: (form_state.update({'viabilidade_drone': e.value}), atualizar_score_ui()))
-                        chk_transp = ui.checkbox('Transporte/Logística assegurado?', on_change=lambda e: (form_state.update({'viabilidade_transp': e.value}), atualizar_score_ui()))
+                        chk_staff = ui.checkbox('Pessoal escalado e disponível?', on_change=lambda e: (form_state.update({'viabilidade_staff': e.value}), atualizar_score_ui()))
+                        chk_equip = ui.checkbox('Equipamentos / Insumos de Gráfica reservados?', on_change=lambda e: (form_state.update({'viabilidade_equip': e.value}), atualizar_score_ui()))
+                        chk_drone = ui.checkbox('Necessita Drone / Homologação?', on_change=lambda e: (form_state.update({'viabilidade_drone': e.value}), atualizar_score_ui()))
+                        chk_transp = ui.checkbox('Transporte / Logística assegurado?', on_change=lambda e: (form_state.update({'viabilidade_transp': e.value}), atualizar_score_ui()))
                         chk_cred = ui.checkbox('Credenciamento de Imprensa externa?', on_change=lambda e: (form_state.update({'viabilidade_credencial': e.value}), atualizar_score_ui()))
-                        chk_anteced = ui.checkbox('Antecedência maior que 48h?', on_change=lambda e: (form_state.update({'viabilidade_anteced': e.value}), atualizar_score_ui()))
-                        chk_briefing = ui.checkbox('Briefing/Ordem de Serviço (VOGAL) concluída?', on_change=lambda e: (form_state.update({'viabilidade_briefing': e.value}), atualizar_score_ui()))
+                        chk_anteced = ui.checkbox('Antecedência suficiente?', on_change=lambda e: (form_state.update({'viabilidade_anteced': e.value}), atualizar_score_ui()))
+                        chk_briefing = ui.checkbox('Briefing / Roteiro aprovado?', on_change=lambda e: (form_state.update({'viabilidade_briefing': e.value}), atualizar_score_ui()))
                         
-                        ui.separator().style('background-color: rgba(255, 255, 255, 0.05);')
+                        ui.separator().style('background-color: rgba(255, 255, 255, 0.05); margin: 8px 0;')
                         
-                        ui.label('📸 Escopo de Cobertura').classes('text-xs font-bold text-white q-mt-xs')
+                        ui.label('📸 Escopo Adicional').classes('text-xs font-bold text-white q-mt-xs')
                         chk_foto = ui.checkbox('Fotografia', on_change=lambda e: (form_state.update({'cobertura_foto': e.value}), atualizar_score_ui()))
                         chk_video = ui.checkbox('Vídeo / Filmagem', on_change=lambda e: (form_state.update({'cobertura_video': e.value}), atualizar_score_ui()))
                         chk_redes = ui.checkbox('Redes Sociais / Texto', on_change=lambda e: (form_state.update({'cobertura_redes': e.value}), atualizar_score_ui()))
@@ -417,12 +484,12 @@ def render_page(autofill: str = None):
                         score_label = ui.label('🟢 Score: 1.0 (Baixo Esforço)').classes('text-sm font-bold text-center w-full q-py-xs bg-black/30 rounded-md q-mt-md')
                         atualizar_score_ui()
 
-                        chk_sigilo = ui.checkbox('Pauta Sigilosa / Reservada').classes('text-xs text-amber-5 q-mt-xs')
+                        chk_sigilo = ui.checkbox('Pauta Sigilosa / Reservada (Gabinete)').classes('text-xs text-amber-5 q-mt-xs')
                         
                         async def salvar_demanda(status_inicial='pendente', eh_evento_interno=False):
                             nome_sol = sol_nome.value or ('COMSOC / GABINETE' if eh_evento_interno else '')
-                            if not nome_sol or not ev_titulo.value or not ev_data.value or not ev_local.value:
-                                ui.notify('Por favor, preencha os campos obrigatórios (Título, Data e Local).', color='warning')
+                            if not nome_sol or not ev_titulo.value:
+                                ui.notify('Por favor, preencha os campos obrigatórios (Título e Solicitante).', color='warning')
                                 return
                                 
                             db = get_service_db_connection() or get_db_connection()
@@ -433,21 +500,29 @@ def render_page(autofill: str = None):
                                     if form_state['cobertura_video']: coberturas.append('video')
                                     if form_state['cobertura_redes']: coberturas.append('redes')
                                     
+                                    dt_ev = (ev_data.value if hasattr(ev_data, 'value') and ev_data.value else None) or prazo_limite.value
+                                    loc_ev = (ev_local.value if hasattr(ev_local, 'value') and ev_local.value else None) or 'Gabinete / CGCFN'
+
                                     registro = {
                                         'solicitante_nome': nome_sol,
                                         'setor': sol_setor.value or ('GABINETE / QUARTEL' if eh_evento_interno else 'Gabinete'),
                                         'contato': sol_contato.value or 'Interno',
-                                        'titulo_evento': ev_titulo.value,
-                                        'data_evento': ev_data.value,
-                                        'data_fim': ev_data_fim.value or ev_data.value,
-                                        'hora_evento': ev_hora.value or '09:00',
-                                        'local_evento': ev_local.value,
+                                        'titulo_evento': ev_titulo.value.upper(),
+                                        'categoria_demanda': categoria_demanda.value or 'design_arte',
+                                        'produto_especifico': produto_especifico.value or '',
+                                        'prioridade': prioridade_select.value or 'normal',
+                                        'prazo_limite': prazo_limite.value or '',
+                                        'observacoes_execucao': observacoes_exec.value or '',
+                                        'data_evento': dt_ev,
+                                        'data_fim': dt_ev,
+                                        'hora_evento': (ev_hora.value if hasattr(ev_hora, 'value') and ev_hora.value else None) or '09:00',
+                                        'local_evento': loc_ev,
                                         'tipo_cobertura': json.dumps(coberturas),
-                                        'autoridades': ev_aut.value or '',
+                                        'autoridades': (ev_aut.value if hasattr(ev_aut, 'value') and ev_aut.value else '') or '',
                                         'score_esforco': calcular_score(),
                                         'sigiloso': 1 if chk_sigilo.value else 0,
                                         'status': 'aprovado' if eh_evento_interno else status_inicial,
-                                        'captacao_entrega': ev_entrega_tipo.value or 'apenas_captacao_bruto',
+                                        'captacao_entrega': ev_entrega_tipo.value or 'captacao_e_edicao',
                                         'notificar_militar_ids': json.dumps(militar_select.value) if militar_select.value else '[]',
                                         'arquivo_url': uploaded_file_url,
                                         'arquivo_nome': uploaded_file_name
@@ -479,14 +554,14 @@ def render_page(autofill: str = None):
                                                     'parecer': 'Evento interno cadastrado diretamente na escala oficial do Quartel.'
                                                 }
                                                 db.table('demandas_historico_tramitacao').insert(hist).execute()
-                                            ui.notify('🎖️ Novo Evento do Quartel cadastrado e aprovado com sucesso!', color='success')
+                                            ui.notify('🎖️ Nova Tarefa / Evento cadastrado e aprovado com sucesso!', color='success')
                                         else:
                                             ui.notify('📝 Solicitação enviada com sucesso! Aguardando aprovação.', color='success')
                                     
-                                    sol_nome.value = ''
+                                    sol_nome.value = 'CGCFN / GABINETE'
                                     ev_titulo.value = ''
-                                    ev_local.value = ''
-                                    ev_aut.value = ''
+                                    produto_especifico.value = ''
+                                    observacoes_exec.value = ''
                                     militar_select.value = []
                                     render_content.refresh()
                                 except Exception as ex:
@@ -494,16 +569,16 @@ def render_page(autofill: str = None):
                          
                         with ui.row().classes('w-full gap-2 q-mt-sm justify-between'):
                             ui.button(
-                                '🎖️ Novo Evento (Interno do Quartel)', 
+                                '🎖️ Salvar & Aprovar Direto (Quartel)', 
                                 icon='stars', 
                                 on_click=lambda: salvar_demanda(status_inicial='aprovado', eh_evento_interno=True)
-                            ).props('unelevated color=emerald text-color=white bold').classes('col-12 font-bold')
-
+                            ).props('unelevated color=amber text-color=black bold').classes('col text-xs')
+                            
                             ui.button(
-                                '📝 Nova Solicitação (Externa)', 
+                                '📝 Enviar Solicitação para Avaliação', 
                                 icon='send', 
                                 on_click=lambda: salvar_demanda(status_inicial='pendente', eh_evento_interno=False)
-                            ).props('outline color=cyan text-color=white bold').classes('col-12 font-bold q-mt-xs')
+                            ).props('unelevated color=cyan text-color=black bold').classes('col text-xs')
 
                         # CARD DE INTEGRAÇÃO COM O GOOGLE CALENDAR OFICIAL
                         with ui.card().classes('w-full q-pa-sm border border-cyan-500/30 rounded-xl bg-black/40 q-mt-sm'):
