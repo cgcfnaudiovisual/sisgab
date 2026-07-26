@@ -136,6 +136,72 @@ Retorne APENAS um objeto JSON válido, sem cercas de markdown (```json), sem exp
         return "{}"
 
 
+def parse_multiple_events(raw_text: str) -> str:
+    """Usa o Gemini para ler um texto bruto de um ou múltiplos eventos e estruturá-los em um JSON (lista)."""
+    if not _get_google_api_key():
+        return "[]"
+    
+    from datetime import datetime
+    current_year = str(datetime.now().year)
+    
+    try:
+        system_prompt = f"""Você é um extrator de dados de inteligência artificial de alta precisão especializado em eventos e pautas navais.
+Sua tarefa é analisar o texto bruto fornecido pelo usuário (que pode conter um ou MÚLTIPLOS eventos descritos de forma livre), identificar cada evento ou demanda de cobertura de mídia, e estruturá-los em uma lista JSON válida.
+
+Para cada evento identificado, extraia e retorne os seguintes campos:
+- solicitante_nome: Nome do militar ou setor que solicita (ex: "SecAd", "Gabinete", "SG Silva", "Comandante"). Se não houver, use "COMSOC / GABINETE".
+- setor: Setor solicitante (ex: "Gabinete", "Comsoc", "SecAd"). Se não houver, use "Gabinete".
+- contato: Telefone ou ramal. Se não houver, use "Interno".
+- titulo_evento: Título do evento curto e objetivo em letras maiúsculas (ex: "FORMATURA MATUTINA", "REUNIÃO DE ESTADO-MAIOR", "COBERTURA FOTOGRÁFICA").
+- data_evento: Data do evento no formato AAAA-MM-DD. Deduza a data sabendo que o ano atual é {current_year}. Se a data não puder ser extraída ou estiver ausente, retorne null.
+- hora_evento: Horário do evento no formato HH:MM (ex: "09:00", "14:30"). Se ausente, use "09:00".
+- local_evento: Local onde ocorrerá o evento. Se ausente, use "Quartel / Gabinete".
+- autoridades: Autoridades militares ou civis presentes no evento. Se nenhuma, deixe em branco.
+- tipo_cobertura: Uma lista contendo os serviços necessários, podendo incluir: "foto", "video", "redes". Ex: ["foto", "video"]. Se não especificado, use ["foto"].
+- prioridade: Prioridade ("baixa", "normal", "alta"). Se não especificado, use "normal".
+- observacoes_execucao: Observações extras ou detalhes do evento.
+- status: Use "aprovado".
+- sigiloso: 1 se o texto indicar que é sigiloso, reservado, restrito ou confidencial; caso contrário, 0.
+
+Retorne APENAS um array JSON de objetos válidos, sem cercas de markdown (```json), sem explicações ou comentários adicionais. Se nenhum evento for encontrado, retorne uma lista vazia "[]".
+Exemplo de formato de saída esperado:
+[
+  {
+    "solicitante_nome": "GABINETE",
+    "setor": "Gabinete",
+    "contato": "Interno",
+    "titulo_evento": "CONSELHO DE OFICIAIS",
+    "data_evento": "2026-07-28",
+    "hora_evento": "10:30",
+    "local_evento": "Sala do Comandante",
+    "autoridades": "Comandante-Geral",
+    "tipo_cobertura": ["foto"],
+    "prioridade": "normal",
+    "observacoes_execucao": "Reunião fechada",
+    "status": "aprovado",
+    "sigiloso": 1
+  }
+]"""
+        model = genai.GenerativeModel(_get_gemini_model_name(), system_instruction=system_prompt)
+        user_content = f"Texto Bruto para Extração:\n---\n{raw_text}\n---"
+        response = model.generate_content(user_content)
+        
+        output = response.candidates[0].content.parts[0].text.strip()
+        # Remove cercas de markdown se houver
+        if output.startswith("```"):
+            lines = output.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines[-1].startswith("```"):
+                lines = lines[:-1]
+            output = "\n".join(lines).strip()
+            
+        return output
+    except Exception as e:
+        print(f"[PARSE MULTIPLE EVENTS ERR] {e}")
+        return "[]"
+
+
 def generate_image_caption(image_url: str = None, description: str = None) -> str:
     """Gera legenda para imagem usando Gemini com proteção contra injeção de prompt"""
     if not _get_google_api_key():
