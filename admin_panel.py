@@ -611,25 +611,32 @@ def render_page():
                             return
                         
                         try:
-                            from database import get_bot_db_connection
-                            admin_conn = None
-                            try:
-                                admin_conn = get_bot_db_connection()
-                            except Exception:
-                                pass
+                            # Se for um ID numérico (inteiro vindo de efetivo), deleta direto de efetivo pelo ID
+                            is_numeric_id = str(user['id']).isdigit()
                             
-                            if admin_conn and hasattr(admin_conn, 'auth') and hasattr(admin_conn.auth, 'admin'):
+                            if is_numeric_id:
+                                conn.table('efetivo').delete().eq('id', int(user['id'])).execute()
+                            else:
+                                # Se for UUID, deleta do Auth e das tabelas públicas
+                                from database import get_bot_db_connection
+                                admin_conn = None
                                 try:
-                                    admin_conn.auth.admin.delete_user(user['id'])
-                                except Exception as auth_err:
-                                    print(f"[AUTH DELETE ERROR] {auth_err}")
-                            
-                            # Remove das tabelas locais
-                            conn.table('users').delete().eq('id', user['id']).execute()
-                            try:
-                                conn.table('efetivo').delete().eq('telegram_id', user.get('telegram_id')).execute()
-                            except Exception:
-                                pass
+                                    admin_conn = get_bot_db_connection()
+                                except Exception:
+                                    pass
+                                
+                                if admin_conn and hasattr(admin_conn, 'auth') and hasattr(admin_conn.auth, 'admin'):
+                                    try:
+                                        admin_conn.auth.admin.delete_user(user['id'])
+                                    except Exception as auth_err:
+                                        print(f"[AUTH DELETE ERROR] {auth_err}")
+                                
+                                conn.table('users').delete().eq('id', user['id']).execute()
+                                try:
+                                    if user.get('nome'):
+                                        conn.table('efetivo').delete().eq('nome_guerra', user['nome'].upper()).execute()
+                                except Exception:
+                                    pass
                             
                             ui.notify(f"Operador {user['nome']} removido!", color='success')
                             data_service.clear_cache()
@@ -681,31 +688,39 @@ def render_page():
                             return
                         
                         try:
-                            from database import get_bot_db_connection
-                            admin_conn = None
-                            try:
-                                admin_conn = get_bot_db_connection()
-                            except Exception:
-                                pass
+                            # Divide em IDs numéricos (tabela efetivo) e UUIDs (users/auth)
+                            numeric_ids = [int(uid) for uid in uids if str(uid).isdigit()]
+                            uuid_ids = [str(uid) for uid in uids if not str(uid).isdigit()]
                             
-                            # Tenta remover do Auth para cada usuário
-                            for uid in uids:
-                                if admin_conn and hasattr(admin_conn, 'auth') and hasattr(admin_conn.auth, 'admin'):
-                                    try:
-                                        admin_conn.auth.admin.delete_user(uid)
-                                    except Exception as auth_err:
-                                        print(f"[AUTH BATCH DELETE ERROR] {auth_err} for uid {uid}")
-                            
-                            # Remove da tabela users
-                            conn.table('users').delete().in_('id', list(uids)).execute()
-                            
-                            # Tenta remover também da tabela efetivo
-                            for u in selected_users_objs:
-                                if u.get('telegram_id'):
-                                    try:
-                                        conn.table('efetivo').delete().eq('telegram_id', u['telegram_id']).execute()
-                                    except Exception:
-                                        pass
+                            # 1. Processa deleção de registros puramente de efetivo (IDs inteiros)
+                            if numeric_ids:
+                                conn.table('efetivo').delete().in_('id', numeric_ids).execute()
+                                
+                            # 2. Processa deleção de registros com UUID (Auth e users)
+                            if uuid_ids:
+                                from database import get_bot_db_connection
+                                admin_conn = None
+                                try:
+                                    admin_conn = get_bot_db_connection()
+                                except Exception:
+                                    pass
+                                
+                                for uid in uuid_ids:
+                                    if admin_conn and hasattr(admin_conn, 'auth') and hasattr(admin_conn.auth, 'admin'):
+                                        try:
+                                            admin_conn.auth.admin.delete_user(uid)
+                                        except Exception as auth_err:
+                                            print(f"[AUTH BATCH DELETE ERROR] {auth_err} for uid {uid}")
+                                
+                                conn.table('users').delete().in_('id', uuid_ids).execute()
+                                
+                                # Remove do efetivo associado usando os nomes de guerra
+                                for u in selected_users_objs:
+                                    if u['id'] in uuid_ids and u.get('nome'):
+                                        try:
+                                            conn.table('efetivo').delete().eq('nome_guerra', u['nome'].upper()).execute()
+                                        except Exception:
+                                            pass
                             
                             ui.notify(f"{len(uids)} operadores removidos com sucesso!", color='success')
                             uids.clear()
