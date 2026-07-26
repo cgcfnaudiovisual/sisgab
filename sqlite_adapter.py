@@ -34,6 +34,9 @@ class SQLiteQueryBuilder:
         return self
 
     def eq(self, column, value):
+        # Garante conversão de tipos para SQLite caso venham IDs em string
+        if (column == 'id' or column.endswith('_id')) and isinstance(value, str) and value.isdigit():
+            value = int(value)
         self.filters.append(f"{column} = ?")
         self.params.append(value)
         return self

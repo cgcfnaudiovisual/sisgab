@@ -61,7 +61,7 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                     label='Status da Pauta'
                 ).props('dark outlined dense w-full option-dark')
 
-                # Carrega opções do efetivo para designação de militares
+                 # Carrega opções do efetivo para designação de militares
                 efetivo_options = {}
                 db_ef = get_service_db_connection() or get_db_connection()
                 if db_ef:
@@ -71,6 +71,24 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                             efetivo_options = {item['id']: f"{item['nome_guerra']} ({item['role'].upper()})" for item in res_ef.data}
                     except Exception as e_ef:
                         print(f"[EFETIVO LOAD ERR] {e_ef}")
+
+                # Deduz designer_id a partir de notificar_militar_ids
+                mids_str = demanda.get('notificar_militar_ids') or '[]'
+                try:
+                    mids = json.loads(mids_str)
+                    if isinstance(mids, str):
+                        mids = json.loads(mids)
+                    if not isinstance(mids, list):
+                        mids = []
+                except Exception:
+                    mids = []
+                
+                enc_id = demanda.get('encarregado_id')
+                des_id = None
+                for mid in mids:
+                    if enc_id is None or str(mid) != str(enc_id):
+                        des_id = mid
+                        break
 
                 ui.label('🎖️ Designação de Equipe Operacional / Criativa').classes('text-xs font-bold text-cyan q-mt-xs')
                 with ui.row().classes('w-full gap-2 no-wrap'):
@@ -82,7 +100,7 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
 
                     designer_select = ui.select(
                         efetivo_options,
-                        value=demanda.get('designer_id'),
+                        value=des_id,
                         label='🎨 Militar Designado (Arte / Design)'
                     ).props('dark outlined dense option-dark').classes('w-1/2')
 
@@ -130,7 +148,11 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                                 'notificar_militar_ids': json.dumps(list(set(militar_ids))),
                                 'tipo_cobertura': json.dumps(cobs)
                             }
-                            db.table('demandas_comunicacao').update(update_payload).eq('id', demanda['id']).execute()
+                            dem_id = demanda['id']
+                            if isinstance(dem_id, str) and dem_id.isdigit():
+                                dem_id = int(dem_id)
+                            res = db.table('demandas_comunicacao').update(update_payload).eq('id', dem_id).execute()
+                            print(f"[EDIT PAUTA SAVE RES] ID: {dem_id}, data: {res.data if hasattr(res, 'data') else res}")
                             ui.notify('✅ Pauta editada e salva com sucesso!', color='positive')
                             edit_dialog.close()
                             if callback_refresh:
@@ -165,6 +187,24 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
         ui.label(f"⚖️ Tramitação & Parecer: {demanda.get('titulo_evento','')}").classes('text-white text-md font-bold cyber-title q-mb-xs')
         ui.label(f"Solicitante: {demanda.get('solicitante_nome','')} ({demanda.get('setor','')})").classes('text-xs text-grey-4 q-mb-md')
         
+        # Deduz designer_id a partir de notificar_militar_ids
+        mids_str = demanda.get('notificar_militar_ids') or '[]'
+        try:
+            mids = json.loads(mids_str)
+            if isinstance(mids, str):
+                mids = json.loads(mids)
+            if not isinstance(mids, list):
+                mids = []
+        except Exception:
+            mids = []
+        
+        enc_id = demanda.get('encarregado_id')
+        des_id = None
+        for mid in mids:
+            if enc_id is None or str(mid) != str(enc_id):
+                des_id = mid
+                break
+
         with ui.column().classes('w-full gap-3 text-xs'):
             with ui.row().classes('w-full gap-2 no-wrap'):
                 encarregado_select = ui.select(
@@ -175,7 +215,7 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
 
                 designer_select = ui.select(
                     efetivo_options,
-                    value=demanda.get('designer_id'),
+                    value=des_id,
                     label='🎨 Militar Designado (Arte / Design)'
                 ).props('dark outlined dense option-dark').classes('w-1/2')
             
@@ -215,7 +255,11 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
                         if encarregado_select.value:
                             update_data['encarregado_id'] = encarregado_select.value
 
-                        db.table('demandas_comunicacao').update(update_data).eq('id', demanda['id']).execute()
+                        dem_id = demanda['id']
+                        if isinstance(dem_id, str) and dem_id.isdigit():
+                            dem_id = int(dem_id)
+
+                        db.table('demandas_comunicacao').update(update_data).eq('id', dem_id).execute()
                         demanda['status'] = novo_status
                         
                         ui.notify(f"Demanda tramitada: {acao_nome}", color='success')
