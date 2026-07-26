@@ -1075,10 +1075,12 @@ def seed_efetivo_gabinete():
         import bcrypt
         pwd_hash = bcrypt.hashpw('militar123'.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
         
+        from comsoc_acentos import normalize_username_slug
+
         payloads = []
         for m in EFETIVO_PADRAO_GABINETE:
             nome_g = m['nome_guerra'].upper()
-            username_slug = nome_g.lower().replace(' ', '.').replace('á','a').replace('é','e').replace('í','i').replace('ó','o').replace('ú','u').replace('ã','a')
+            username_slug = normalize_username_slug(nome_g)
             email_fake = f"{username_slug}@marinha.mil.br"
             
             p = {
