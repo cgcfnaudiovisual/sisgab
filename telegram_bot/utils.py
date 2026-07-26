@@ -1,9 +1,9 @@
+import unicodedata
 import contextvars
 import re
 from datetime import datetime
 from database import get_bot_db_connection as get_db_connection, get_db_connection as get_user_db_connection
 from .client import chat_states
-from comsoc_acentos import remover_acentos
 
 # Caches e Contextos para permissões dinâmicas no menu do Telegram
 current_user_id = contextvars.ContextVar('current_user_id', default=None)
@@ -12,7 +12,8 @@ USER_PERMISSIONS_CACHE = {}
 def normalize_text(text: str) -> str:
     if not text:
         return ""
-    return remover_acentos(text).lower().strip()
+    nfkd = unicodedata.normalize('NFKD', text)
+    return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower().strip()
 
 def student_matches(al: dict, query_normalized: str) -> bool:
     if not query_normalized:
