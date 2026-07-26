@@ -492,6 +492,12 @@ def render_page(autofill: str = None):
                                 ui.notify('Por favor, preencha os campos obrigatórios (Título e Solicitante).', color='warning')
                                 return
                                 
+                            # Validação inteligente por categoria
+                            if categoria_demanda.value == 'audiovisual':
+                                if not ev_data.value or not ev_local.value:
+                                    ui.notify('Para Cobertura Audiovisual, a Data de Início e o Local Exato são obrigatórios!', color='warning')
+                                    return
+                                
                             db = get_service_db_connection() or get_db_connection()
                             if db:
                                 try:
