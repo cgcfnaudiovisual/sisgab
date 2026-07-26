@@ -922,8 +922,10 @@ def login_page(request: Request):
                 db_conn = get_db_connection()
                 if db_conn:
                     try:
-                        # Obter base_url da request atual de forma dinâmica para redirecionamento correto (evita localhost:3000)
-                        redirect_url = str(request.base_url)
+                        # Reconstrói a URL pública usando os cabeçalhos de proxy do Render (evita localhost e portas internas)
+                        proto = request.headers.get('x-forwarded-proto', request.url.scheme)
+                        host = request.headers.get('x-forwarded-host') or request.headers.get('host') or request.url.netloc
+                        redirect_url = f"{proto}://{host}/"
                         # 1. Envia link de recuperação pelo Supabase Auth
                         db_conn.auth.reset_password_for_email(rec_email.value, options={"redirect_to": redirect_url})
                         
