@@ -365,9 +365,28 @@ def render_page():
                                         color = "green" if score <= 2.0 else "orange" if score <= 3.5 else "red"
                                         ui.badge(f"Esforço: {score}").props(f"color={color}").classes('text-[9px]')
 
-                                    # Exibe Categoria e Produto Especial (Cardápio, Paspatur, Design, etc)
-                                    cat_nome = d.get('categoria_demanda', 'design_arte').replace('_', ' ').title()
-                                    prod_nome = d.get('produto_especifico') or 'Demanda Geral'
+                                    # Dedução inteligente de categoria e produto caso estejam vazios ou padrão
+                                    cat_val = str(d.get('categoria_demanda') or 'design_arte').strip().lower()
+                                    cob_val = d.get('tipo_cobertura') or '[]'
+                                    try:
+                                        cobs = json.loads(cob_val) if isinstance(cob_val, str) else cob_val
+                                        if not isinstance(cobs, list):
+                                            cobs = []
+                                    except Exception:
+                                        cobs = []
+                                        
+                                    if cobs and cat_val == 'design_arte':
+                                        cat_val = 'audiovisual'
+                                        
+                                    cat_nome = '📸 Cobertura Audiovisual' if cat_val == 'audiovisual' else cat_val.replace('_', ' ').title()
+                                    
+                                    prod_nome = d.get('produto_especifico') or ''
+                                    if not prod_nome:
+                                        if cat_val == 'audiovisual' and cobs:
+                                            prod_nome = ", ".join([c.title() for c in cobs]).replace('Foto', 'Fotografia').replace('Video', 'Vídeo')
+                                        else:
+                                            prod_nome = 'Demanda Geral'
+                                            
                                     with ui.row().classes('items-center gap-1 q-mt-xs'):
                                         ui.badge(f"📌 {cat_nome}").props('color=amber-9 text-color=black bold').classes('text-[9px]')
                                         ui.badge(f"🎨 {prod_nome}").props('color=cyan text-color=black bold').classes('text-[9px]')
