@@ -922,27 +922,42 @@ def login_page(request: Request):
                 db_conn = get_db_connection()
                 if db_conn:
                     try:
-                        # Reconstrói a URL pública usando os cabeçalhos de proxy do Render (evita localhost e portas internas)
-                        proto = request.headers.get('x-forwarded-proto', request.url.scheme)
-                        host = request.headers.get('x-forwarded-host') or request.headers.get('host') or request.url.netloc
-                        redirect_url = f"{proto}://{host}/"
-                        # 1. Envia link de recuperação pelo Supabase Auth
-                        db_conn.auth.reset_password_for_email(rec_email.value, options={"redirect_to": redirect_url})
+                        sent_email = False
+                        try:
+                            # Reconstrói a URL pública usando os cabeçalhos de proxy do Render (evita localhost e portas internas)
+                            proto = request.headers.get('x-forwarded-proto', request.url.scheme)
+                            host = request.headers.get('x-forwarded-host') or request.headers.get('host') or request.url.netloc
+                            redirect_url = f"{proto}://{host}/"
+                            # 1. Envia link de recuperação pelo Supabase Auth
+                            db_conn.auth.reset_password_for_email(rec_email.value, options={"redirect_to": redirect_url})
+                            sent_email = True
+                        except Exception as mail_err:
+                            err_str = str(mail_err).lower()
+                            if 'rate limit' in err_str or 'exceeded' in err_str or 'smtp' in err_str or 'over' in err_str:
+                                print(f"[RECOVERY SMTP RATE LIMIT] {mail_err}")
+                            else:
+                                raise mail_err # Relança outros erros legítimos
                         
-                        # 2. Alerta o administrador no Telegram (para contingência caso o SMTP atinja limite)
+                        # 2. Alerta o administrador no Telegram (sempre, servindo como canal oficial ou de contingência se o e-mail falhar)
                         try:
                             from notifications_manager import notify_telegram
+                            status_txt = "✅ ENVIADO POR E-MAIL" if sent_email else "⚠️ SMTP BLOQUEADO (LIMITE EXCEDIDO)"
                             alert_txt = (
                                 f"🔑 **SOLICITAÇÃO DE RECUPERAÇÃO DE SENHA**\n\n"
-                                f"📧 E-mail: {rec_email.value}\n"
-                                f"⚡ Ação: Caso o e-mail automático não chegue devido a limites de SMTP do Supabase, "
-                                f"você pode redefinir a senha deste militar no painel web em *Usuários e Permissões*."
+                                f"📧 E-mail: `{rec_email.value}`\n"
+                                f"📊 Status do E-mail: {status_txt}\n\n"
+                                f"⚡ Ação: Caso o e-mail automático tenha falhado ou atingido o limite, "
+                                f"você pode redefinir a senha deste militar manualmente no painel web em *Usuários e Permissões*."
                             )
                             notify_telegram(alert_txt, "saude", role_required="admin")
                         except Exception as e_notif:
                             print(f"[RECOVERY NOTIFY ERROR] {e_notif}")
                         
-                        ui.notify('Solicitação enviada! Verifique seu e-mail ou fale com o administrador.', color='success')
+                        if sent_email:
+                            ui.notify('Solicitação enviada! Verifique seu e-mail ou fale com o administrador.', color='success')
+                        else:
+                            ui.notify('Limite de e-mails excedido no servidor. Sua solicitação foi enviada diretamente ao Administrador via Telegram!', color='warning', duration=8)
+                        
                         rec_pwd_dialog.close()
                     except Exception as err:
                         rec_error.text = f'Erro: {err}'
