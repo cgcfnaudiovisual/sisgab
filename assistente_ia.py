@@ -375,29 +375,31 @@ def render_page():
             with ui.tab_panel(tab_lote).classes('p-0 gap-4 w-full'):
                 with ui.card().classes('w-full q-pa-md border border-gray-800').style(f'background: {THEME["bg_panel"]}'):
                     with ui.row().classes('w-full justify-between items-center border-b border-gray-800 q-pb-sm q-mb-sm'):
+                        # Lado Esquerdo: Título e Identidade
                         with ui.row().classes('items-center gap-2'):
                             ui.avatar(icon='calendar_month').style(f'background: {THEME["primary"]}; color: {THEME["bg_app"]}; width: 32px; height: 32px;')
                             with ui.column().classes('gap-0'):
                                 ui.label('📅 CADASTRO INTELIGENTE EM LOTE (IA)').classes('text-xs text-weight-bold tracking-wider text-white cyber-title')
                                 ui.label('Inserção Múltipla Dinâmica na Agenda').classes('text-[10px] text-grey-5')
                             
-                            # Seletor de Modelo Gemini dinâmico no Lote
-                            modelos_disponiveis = ai_helper.get_available_gemini_models()
-                            modelo_salvo = app.storage.user.get('preferred_gemini_model', 'gemini-2.0-flash')
-                            if modelo_salvo not in modelos_disponiveis:
-                                modelos_disponiveis[modelo_salvo] = f"{modelo_salvo} (Ativo)"
-                                
-                            lote_model_select = ui.select(
-                                modelos_disponiveis,
-                                value=modelo_salvo,
-                                on_change=lambda e: app.storage.user.update({'preferred_gemini_model': e.value})
-                            ).props('dark outlined dense options-dark').classes('w-44 text-[10px]').style('max-height: 28px;')
+                        # Lado Direito: Seletor de Modelo Gemini
+                        modelos_disponiveis = ai_helper.get_available_gemini_models()
+                        modelo_salvo = app.storage.user.get('preferred_gemini_model', 'gemini-2.0-flash')
+                        if modelo_salvo in ("gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-pro") or modelo_salvo not in modelos_disponiveis:
+                            modelo_salvo = 'gemini-2.0-flash'
+                            app.storage.user['preferred_gemini_model'] = 'gemini-2.0-flash'
+                            
+                        lote_model_select = ui.select(
+                            modelos_disponiveis,
+                            value=modelo_salvo,
+                            on_change=lambda e: app.storage.user.update({'preferred_gemini_model': e.value})
+                        ).props('dark outlined dense options-dark').classes('w-48 text-[11px]').style('max-height: 28px;')
 
                     ui.label('Cole um texto livre (pauta semanal, mensagens do WhatsApp, e-mail) contendo um ou vários eventos/pautas. A IA identificará todos os eventos e montará um formulário de revisão para você ajustar e confirmar antes de salvar tudo na agenda de uma vez.').classes('text-xs text-grey-4 q-mb-md')
                     
                     lote_input = ui.textarea(
                         placeholder='Ex: Pautas da semana:\n1. Formatura matutina dia 28/07 às 09:00h no pátio principal, uniforme 3.2, presença do Comandante-Geral.\n2. Reunião de pauta no gabinete dia 29/07 às 14:00h para planejar coberturas.'
-                    ).props('dark outlined w-full rows=6').classes('q-mb-md')
+                    ).props('dark outlined rows=6').classes('w-full q-mb-md')
                     
                     # Estado reativo dos eventos extraídos
                     state_lote = {'eventos': []}
