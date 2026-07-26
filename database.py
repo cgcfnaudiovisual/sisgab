@@ -976,60 +976,95 @@ def get_signed_url_from_supabase_storage(filename: str, bucket_name: str = "foto
 
 
 def seed_default_admin():
-    """Garante a existência do usuário administrador padrão 'admin' no Supabase."""
+    """Garante a existência do usuário administrador padrão 'admin' no Supabase e no banco local."""
     try:
         conn = get_service_db_connection() or get_db_connection()
         if not conn:
             return
         
-        # Verifica se já existe o admin na tabela users
-        res = conn.table('users').select('id').eq('username', 'admin').execute()
-        if not res.data:
-            import bcrypt
-            pwd_hash = bcrypt.hashpw('admin'.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
-            
-            # Tenta criar no Supabase Auth via service_role (sem disparar email)
-            auth_id = '00000000-0000-0000-0000-000000000001'
+        # 1. Tenta obter o ID do admin no Supabase Auth se ele já existir lá
+        auth_id = None
+        svc = get_service_db_connection()
+        if svc and hasattr(svc, 'auth') and hasattr(svc.auth, 'admin'):
             try:
-                svc = get_service_db_connection()
-                if svc and hasattr(svc, 'auth') and hasattr(svc.auth, 'admin'):
-                    auth_res = svc.auth.admin.create_user({
-                        "email": "admin@marinha.mil.br",
-                        "password": "admin",
-                        "email_confirm": True,
-                        "user_metadata": {"nome_guerra": "ADMINISTRADOR", "role": "admin"}
-                    })
-                    if auth_res and hasattr(auth_res, 'user') and auth_res.user:
-                        auth_id = str(auth_res.user.id)
-                        print(f"[DB SEED] Admin criado no Supabase Auth com ID: {auth_id}", flush=True)
+                res_list = svc.auth.admin.list_users()
+                users_list = []
+                if hasattr(res_list, 'users'):
+                    users_list = res_list.users
+                elif isinstance(res_list, list):
+                    users_list = res_list
+                elif hasattr(res_list, 'data') and isinstance(res_list.data, list):
+                    users_list = res_list.data
+                
+                for u in users_list:
+                    u_email = u.get('email') if isinstance(u, dict) else getattr(u, 'email', None)
+                    if u_email == "admin@marinha.mil.br":
+                        auth_id = str(u.get('id') if isinstance(u, dict) else getattr(u, 'id', None))
+                        break
+            except Exception as list_err:
+                print(f"[DB SEED LIST ERR] {list_err}", flush=True)
+
+        # 2. Se não existir no Auth, tenta criar
+        if not auth_id and svc and hasattr(svc, 'auth') and hasattr(svc.auth, 'admin'):
+            try:
+                auth_res = svc.auth.admin.create_user({
+                    "email": "admin@marinha.mil.br",
+                    "password": "admin",
+                    "email_confirm": True,
+                    "user_metadata": {"nome_guerra": "ADMINISTRADOR", "role": "admin"}
+                })
+                if auth_res and hasattr(auth_res, 'user') and auth_res.user:
+                    auth_id = str(auth_res.user.id)
+                    print(f"[DB SEED] Admin criado no Supabase Auth com ID: {auth_id}", flush=True)
             except Exception as auth_err:
-                err_str = str(auth_err)
-                if 'already' in err_str.lower() or 'duplicate' in err_str.lower():
-                    print(f"[DB SEED] Admin já existe no Supabase Auth.", flush=True)
-                else:
-                    print(f"[DB SEED AUTH NOTICE] {auth_err}", flush=True)
-            
+                print(f"[DB SEED AUTH CREATE ERR] {auth_err}", flush=True)
+
+        # Fallback se não conseguir criar nem listar (modo local ou offline)
+        if not auth_id:
+            # Verifica se já temos um id cadastrado localmente/publicamente
             try:
-                conn.table('users').upsert({
-                    'id': auth_id,
-                    'username': 'admin',
-                    'nome': 'ADMINISTRADOR',
-                    'role': 'admin'
-                }, on_conflict='id').execute()
-            except Exception as u_err:
-                print(f"[DB SEED users NOTICE] {u_err}", flush=True)
-            
-            try:
-                conn.table('efetivo').upsert({
-                    'nome_guerra': 'ADMIN',
-                    'email': 'admin@marinha.mil.br',
-                    'senha_hash': pwd_hash,
-                    'role': 'admin'
-                }, on_conflict='nome_guerra').execute()
-            except Exception as ef_err:
-                print(f"[DB SEED efetivo NOTICE] {ef_err}", flush=True)
-            
-            print("[DB SEED SUCCESS] Usuário 'admin' padrão gerado no Supabase com sucesso!", flush=True)
+                res_local = conn.table('users').select('id').eq('username', 'admin').execute()
+                if res_local.data:
+                    auth_id = res_local.data[0]['id']
+            except:
+                pass
+            if not auth_id:
+                auth_id = '00000000-0000-0000-0000-000000000001'
+
+        import bcrypt
+        pwd_hash = bcrypt.hashpw('admin'.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
+
+        # 3. Limpa chaves duplicadas antigas para evitar violação de constraints únicas
+        try:
+            # Busca se há um registro com ID diferente para o username 'admin'
+            res_dup = conn.table('users').select('id').eq('username', 'admin').execute()
+            if res_dup.data and res_dup.data[0]['id'] != auth_id:
+                conn.table('users').delete().eq('username', 'admin').execute()
+        except Exception as clean_err:
+            print(f"[DB SEED CLEAN ERR] {clean_err}", flush=True)
+
+        # 4. Insere/Upserta nas tabelas públicas correspondentes
+        try:
+            conn.table('users').upsert({
+                'id': auth_id,
+                'username': 'admin',
+                'nome': 'ADMINISTRADOR',
+                'role': 'admin'
+            }, on_conflict='id').execute()
+        except Exception as u_err:
+            print(f"[DB SEED users NOTICE] {u_err}", flush=True)
+
+        try:
+            conn.table('efetivo').upsert({
+                'nome_guerra': 'ADMIN',
+                'email': 'admin@marinha.mil.br',
+                'senha_hash': pwd_hash,
+                'role': 'admin'
+            }, on_conflict='nome_guerra').execute()
+        except Exception as ef_err:
+            print(f"[DB SEED efetivo NOTICE] {ef_err}", flush=True)
+
+        print(f"[DB SEED SUCCESS] Admin sincronizado com ID: {auth_id}", flush=True)
     except Exception as e:
         print(f"[DB SEED NOTICE] {e}", flush=True)
 
