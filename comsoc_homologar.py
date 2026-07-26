@@ -380,16 +380,27 @@ def render_page():
                                         
                                     cat_nome = '📸 Cobertura Audiovisual' if cat_val == 'audiovisual' else cat_val.replace('_', ' ').title()
                                     
-                                    prod_nome = d.get('produto_especifico') or ''
-                                    if not prod_nome:
-                                        if cat_val == 'audiovisual' and cobs:
-                                            prod_nome = ", ".join([c.title() for c in cobs]).replace('Foto', 'Fotografia').replace('Video', 'Vídeo')
-                                        else:
-                                            prod_nome = 'Demanda Geral'
-                                            
-                                    with ui.row().classes('items-center gap-1 q-mt-xs'):
-                                        ui.badge(f"📌 {cat_nome}").props('color=amber-9 text-color=black bold').classes('text-[9px]')
-                                        ui.badge(f"🎨 {prod_nome}").props('color=cyan text-color=black bold').classes('text-[9px]')
+                                    with ui.row().classes('items-center gap-2 q-mt-xs wrap'):
+                                        # Badge da Categoria
+                                        ui.badge(f"📌 {cat_nome}").props('color=amber-9 text-color=black bold').classes('text-xs q-py-xs q-px-sm')
+                                        
+                                        # Se houver especificação de produto manual
+                                        prod_manual = d.get('produto_especifico') or ''
+                                        if prod_manual:
+                                            ui.badge(f"🎯 {prod_manual}").props('color=blue-9 text-color=white bold').classes('text-xs q-py-xs q-px-sm')
+                                        
+                                        # Badges individuais para cada serviço/cobertura selecionada
+                                        for cob in cobs:
+                                            if cob == 'foto':
+                                                ui.badge('📸 Fotografia').props('color=cyan-9 text-color=white bold').classes('text-xs q-py-xs q-px-sm')
+                                            elif cob == 'video':
+                                                ui.badge('🎥 Vídeo / Filmagem').props('color=teal-9 text-color=white bold').classes('text-xs q-py-xs q-px-sm')
+                                            elif cob == 'grafico':
+                                                ui.badge('🎨 Design / Arte').props('color=purple-9 text-color=white bold').classes('text-xs q-py-xs q-px-sm')
+                                            elif cob == 'drone':
+                                                ui.badge('🚁 Imagens Aéreas').props('color=orange-9 text-color=white bold').classes('text-xs q-py-xs q-px-sm')
+                                            elif cob == 'redes':
+                                                ui.badge('📱 Mídias Sociais').props('color=pink-9 text-color=white bold').classes('text-xs q-py-xs q-px-sm')
 
                                     ui.separator().style('background: rgba(255,255,255,0.05); margin: 6px 0;')
                                     ui.label(f"👤 Solicitante: {d.get('solicitante_nome', 'N/I')} ({d.get('setor', 'CGCFN')})").classes('text-xs text-grey-3')
