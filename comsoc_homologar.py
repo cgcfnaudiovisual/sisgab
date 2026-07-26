@@ -33,6 +33,23 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                 in_titulo = ui.input('Título do Evento / Pauta', value=str(demanda.get('titulo_evento','') or '')).props('dark outlined dense w-full')
                 
                 with ui.row().classes('w-full gap-2 no-wrap'):
+                    in_categoria = ui.select(
+                        {
+                            'design_arte': '🎨 Design / Arte Visual',
+                            'impressos_albuns': '📕 Impressos & Encadernação',
+                            'brindes_lembrancas': '🎁 Brindes & Lembranças',
+                            'audiovisual': '📸 Cobertura Audiovisual',
+                            'redacao_textos': '✍️ Redação & Discursos',
+                            'suporte_evento': '📦 Suporte Logístico / Receptivo',
+                            'outra_tarefa': '⚡ Outra Tarefa Especial'
+                        },
+                        value=demanda.get('categoria_demanda', 'design_arte'),
+                        label='Categoria da Demanda'
+                    ).props('dark outlined dense option-dark').classes('w-1/2')
+                    
+                    in_produto = ui.input('Especificação do Produto / Peça', value=str(demanda.get('produto_especifico','') or '')).props('dark outlined dense').classes('w-1/2')
+                
+                with ui.row().classes('w-full gap-2 no-wrap'):
                     in_solicitante = ui.input('Nome do Solicitante', value=str(demanda.get('solicitante_nome','') or '')).props('dark outlined dense').classes('w-1/2')
                     in_setor = ui.input('Setor / OM', value=str(demanda.get('setor','') or '')).props('dark outlined dense').classes('w-1/2')
                     
@@ -144,6 +161,8 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                                 'hora_evento': in_hora.value or '09:00',
                                 'autoridades': in_autoridades.value.strip(),
                                 'status': in_status.value,
+                                'categoria_demanda': in_categoria.value,
+                                'produto_especifico': in_produto.value.strip(),
                                 'encarregado_id': encarregado_select.value,
                                 'notificar_militar_ids': json.dumps(list(set(militar_ids))),
                                 'tipo_cobertura': json.dumps(cobs)
