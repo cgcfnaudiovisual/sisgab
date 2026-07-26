@@ -922,8 +922,10 @@ def login_page(request: Request):
                 db_conn = get_db_connection()
                 if db_conn:
                     try:
+                        # Obter base_url da request atual de forma dinâmica para redirecionamento correto (evita localhost:3000)
+                        redirect_url = str(request.base_url)
                         # 1. Envia link de recuperação pelo Supabase Auth
-                        db_conn.auth.reset_password_for_email(rec_email.value)
+                        db_conn.auth.reset_password_for_email(rec_email.value, options={"redirect_to": redirect_url})
                         
                         # 2. Alerta o administrador no Telegram (para contingência caso o SMTP atinja limite)
                         try:
@@ -1120,6 +1122,57 @@ def login_page(request: Request):
                     with ui.row().classes('w-full justify-between items-center q-mt-xs'):
                         ui.button('📝 Solicitar acesso', on_click=reg_dialog.open).props('flat color=grey no-caps').classes('text-xs')
                         ui.button('🔑 Esqueci a senha', on_click=rec_pwd_dialog.open).props('flat color=grey no-caps').classes('text-xs')
+
+        # Hook para checar e processar redirecionamento de recuperação de senha (URL hash #access_token=...)
+        async def check_recovery():
+            try:
+                # Aguarda a conexão do WebSocket ser estabelecida
+                await ui.context.client.connected()
+                url_hash = await ui.run_javascript('window.location.hash')
+                if url_hash and 'access_token=' in url_hash:
+                    # Parseia os parâmetros da hash URL
+                    params = {}
+                    for part in url_hash.lstrip('#').split('&'):
+                        if '=' in part:
+                            k, v = part.split('=', 1)
+                            params[k] = v
+                    
+                    access_token = params.get('access_token')
+                    refresh_token = params.get('refresh_token')
+                    token_type = params.get('type')
+                    
+                    if access_token and token_type == 'recovery':
+                        # Limpa a hash da URL no navegador para evitar reprocessamentos
+                        await ui.run_javascript('window.location.hash = ""')
+                        
+                        from database import get_db_connection
+                        db_conn = get_db_connection()
+                        if db_conn:
+                            # Restabelece a sessão no Supabase usando o access_token recebido
+                            db_conn.auth.set_session(access_token, refresh_token)
+                            user_obj = db_conn.auth.get_user()
+                            if user_obj and user_obj.user:
+                                # Salva a sessão no storage para persistir o login
+                                app.storage.user['supabase_session'] = {
+                                    'access_token': access_token,
+                                    'refresh_token': refresh_token
+                                }
+                                
+                                # Busca o perfil na base de dados (efetivo ou users)
+                                res_ef = db_conn.table('efetivo').select('*').eq('email', user_obj.user.email).execute()
+                                user_profile = res_ef.data[0] if res_ef.data else None
+                                if not user_profile:
+                                    res_u = db_conn.table('users').select('*').eq('email', user_obj.user.email).execute()
+                                    user_profile = res_u.data[0] if res_u.data else {}
+                                
+                                app.storage.user['user_data'] = user_profile
+                                ui.notify('Sessão de recuperação iniciada. Redefina sua senha abaixo.', color='warning')
+                                # Abre o diálogo padrão de troca de senha
+                                open_change_password_dialog(user_profile)
+            except Exception as e:
+                print(f"[RECOVERY HASH ERR] {e}")
+
+        ui.timer(0.1, check_recovery, once=True)
 
         # Rodapé (Footer) centralizado fora do card principal
         ui.label('🚀 Desenvolvido por Sargento Calaça 🇧🇷').classes('text-amber-5 text-xs font-bold tracking-wider opacity-80')
