@@ -385,9 +385,9 @@ def render_page():
                         # Lado Direito: Seletor de Modelo Gemini
                         modelos_disponiveis = ai_helper.get_available_gemini_models()
                         modelo_salvo = app.storage.user.get('preferred_gemini_model', 'gemini-2.0-flash')
-                        if modelo_salvo in ("gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-pro") or modelo_salvo not in modelos_disponiveis:
-                            modelo_salvo = 'gemini-2.0-flash'
-                            app.storage.user['preferred_gemini_model'] = 'gemini-2.0-flash'
+                        if modelo_salvo not in modelos_disponiveis:
+                            modelo_salvo = list(modelos_disponiveis.keys())[0] if modelos_disponiveis else 'gemini-2.0-flash'
+                            app.storage.user['preferred_gemini_model'] = modelo_salvo
                             
                         lote_model_select = ui.select(
                             modelos_disponiveis,

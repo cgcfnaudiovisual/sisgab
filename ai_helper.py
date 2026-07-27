@@ -166,7 +166,7 @@ Para cada evento identificado, extraia e retorne os seguintes campos:
 Retorne APENAS um array JSON de objetos válidos, sem cercas de markdown (```json), sem explicações ou comentários adicionais. Se nenhum evento for encontrado, retorne uma lista vazia "[]".
 Exemplo de formato de saída esperado:
 [
-  {
+  {{
     "solicitante_nome": "GABINETE",
     "setor": "Gabinete",
     "contato": "Interno",
@@ -180,7 +180,7 @@ Exemplo de formato de saída esperado:
     "observacoes_execucao": "Reunião fechada",
     "status": "aprovado",
     "sigiloso": 1
-  }
+  }}
 ]"""
         model = genai.GenerativeModel(_get_gemini_model_name(), system_instruction=system_prompt)
         user_content = f"Texto Bruto para Extração:\n---\n{raw_text}\n---"
@@ -390,8 +390,10 @@ def _get_google_api_key() -> str:
 def _get_gemini_model_name() -> str:
     """Retorna o modelo de IA configurado ou o padrão 'gemini-2.0-flash'"""
     global GEMINI_MODEL_NAME
-    if not GEMINI_MODEL_NAME or GEMINI_MODEL_NAME in ("gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-pro"):
-        GEMINI_MODEL_NAME = "gemini-2.0-flash"
+    if not GEMINI_MODEL_NAME:
+        GEMINI_MODEL_NAME = get_config_value("gemini_model_name", "gemini-2.0-flash")
+        if not GEMINI_MODEL_NAME:
+            GEMINI_MODEL_NAME = "gemini-2.0-flash"
     return GEMINI_MODEL_NAME
 
 
