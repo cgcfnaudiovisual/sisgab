@@ -225,68 +225,7 @@ def render_page(autofill: str = None):
                 print(f"[EFETIVO LOCAL LOAD ERR] {loc_err}")
 
         with ui.column().classes('w-full gap-4'):
-            # SEÇÃO SUPERIOR: ASSISTENTE DE ENTRADA COM IA (100% de largura)
-            with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
-                f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
-            ):
-                with ui.row().classes('w-full justify-between items-center q-mb-xs'):
-                    with ui.row().classes('items-center gap-2'):
-                        ui.label('🤖 Assistente de Entrada de Dados com IA').classes('text-md font-bold text-cyan')
-                        
-                        # Seletor de Modelo Gemini dinâmico para evitar rate limits
-                        modelos_disponiveis = ai_helper.get_available_gemini_models()
-                        modelo_salvo = app.storage.user.get('preferred_gemini_model', 'gemini-2.0-flash')
-                        if modelo_salvo not in modelos_disponiveis:
-                            modelos_disponiveis[modelo_salvo] = f"{modelo_salvo} (Ativo)"
-                            
-                        # Carrega dropdown de modelos compacto
-                        model_select_ia = ui.select(
-                            modelos_disponiveis,
-                            value=modelo_salvo,
-                            on_change=lambda e: app.storage.user.update({'preferred_gemini_model': e.value})
-                        ).props('dark outlined dense options-dark').classes('w-44 text-[10px]').style('max-height: 28px; margin-top: -2px;')
-                    
-                    ui.button(
-                        'Copiar Questionário para WhatsApp/Telegram', 
-                        icon='content_copy', 
-                        on_click=copiar_checklist_whatsapp
-                    ).props('unelevated color=primary text-color=black bold dense').classes('text-[10px] q-px-sm')
-                
-                ui.label('Cole a mensagem bruta com as respostas do solicitante no campo abaixo. O Gemini analisará o texto e preencherá todo o formulário automaticamente.').classes('text-xs text-grey-4 q-mb-md')
-                
-                with ui.row().classes('w-full gap-4 items-center no-wrap'):
-                    raw_input = ui.textarea(
-                        placeholder='Cole a mensagem recebida com as respostas do questionário aqui...'
-                    ).props('dark outlined w-full rows=3').classes('flex-grow')
-                    
-                    async def processar_texto_ia():
-                        text = raw_input.value.strip()
-                        if not text:
-                            ui.notify('Cole o texto das respostas primeiro!', color='warning')
-                            return
-                        ui.notify('Gemini analisando questionário...', color='info')
-                        
-                        # Injeta temporariamente o modelo selecionado no cache do helper
-                        selected_model = model_select_ia.value or 'gemini-2.0-flash'
-                        ai_helper.GEMINI_MODEL_NAME = selected_model
-                        
-                        ans = await ui.run_javascript(f"Promise.resolve(true)")
-                        try:
-                            # Executa digestão usando o modelo escolhido
-                            response_json = ai_helper.digest_demand_questionnaire(text)
-                            popular_form_ia(response_json)
-                        except Exception as err:
-                            err_msg = str(err)
-                            if "429" in err_msg or "quota" in err_msg.lower():
-                                ui.notify('⚠️ Cota excedida no modelo atual! Selecione outro modelo ao lado e tente novamente.', color='warning', duration=8)
-                            else:
-                                ui.notify(f'Erro na digestão: {err}', color='danger')
-                            
-                    ui.button(
-                        'Processar e Preencher',
-                        icon='psychology',
-                        on_click=processar_texto_ia
-                    ).props('unelevated color=cyan text-color=black bold').classes('q-py-md font-bold flex-shrink-0')
+
 
             # ⚡ BARRA SUPERIOR DE ATALHOS RÁPIDOS EM 1 CLIQUE
             with ui.card().classes('w-full q-pa-sm px-4 no-shadow rounded-xl bg-black/40 border border-cyan-500/30 q-mb-xs'):
@@ -333,7 +272,7 @@ def render_page(autofill: str = None):
                     with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
                         f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]}; min-height: 520px;'
                     ):
-                        nonlocal sol_nome, sol_setor, sol_contato, ev_titulo, ev_data, ev_data_fim, ev_hora, ev_local, ev_aut, ev_entrega_tipo, militar_select, uploaded_file_url, uploaded_file_name, upload_status_lbl
+                        nonlocal sol_nome, sol_setor, sol_contato, ev_titulo, ev_data, ev_data_fim, ev_hora, ev_local, ev_aut, ev_entrega_tipo, militar_select, uploaded_file_url, uploaded_file_name, upload_status_lbl, chk_sigilo
                         
                         ui.label('📝 Formulação da Demanda / Tarefa Tática').classes('text-md font-bold text-cyan q-mb-xs')
                         
@@ -387,6 +326,7 @@ def render_page(autofill: str = None):
                             sol_setor = ui.input('Setor / OM', value='CGCFN').props('dark outlined dense').classes('w-1/2')
 
                         sol_contato = ui.input('Contato / Ramal', value='21982043314 / Ramal CGCFN').props('dark outlined dense w-full')
+                        chk_sigilo = ui.checkbox('Pauta Sigilosa / Reservada (Gabinete)').classes('text-xs text-amber-5 q-mt-xs')
 
                         # CONTAINER DE CAMPOS EXCLUSIVOS DE COBERTURA AUDIOVISUAL (Escondido se for Design/Cardápio)
                         with ui.column().classes('w-full gap-2 p-2 bg-black/20 rounded-lg border border-cyan-500/10 q-my-xs') as campos_audiovisual_container:
@@ -454,38 +394,6 @@ def render_page(autofill: str = None):
                         
                         upload_status_lbl = ui.label('Nenhum arquivo anexado').classes('text-[10px] text-grey-4 w-full text-center')
 
-                # 2. Painel de Suporte & Checklist Completo
-                with ui.column().classes('col-12 col-md-5 q-pa-none').style('min-width: 320px;'):
-                    with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
-                        f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]}; min-height: 520px;'
-                    ):
-                        ui.label('🔍 Checklist de Suporte & Viabilidade').classes('text-md font-bold text-cyan q-mb-xs')
-                        ui.label('(Opcional para tarefas de design/impressos simples)').classes('text-[11px] text-grey-4 q-mb-xs')
-                        
-                        nonlocal chk_staff, chk_equip, chk_drone, chk_transp, chk_cred, chk_anteced, chk_briefing
-                        nonlocal chk_foto, chk_video, chk_redes, chk_sigilo
-                        
-                        chk_staff = ui.checkbox('Pessoal escalado e disponível?', on_change=lambda e: (form_state.update({'viabilidade_staff': e.value}), atualizar_score_ui()))
-                        chk_equip = ui.checkbox('Equipamentos / Insumos de Gráfica reservados?', on_change=lambda e: (form_state.update({'viabilidade_equip': e.value}), atualizar_score_ui()))
-                        chk_drone = ui.checkbox('Necessita Drone / Homologação?', on_change=lambda e: (form_state.update({'viabilidade_drone': e.value}), atualizar_score_ui()))
-                        chk_transp = ui.checkbox('Transporte / Logística assegurado?', on_change=lambda e: (form_state.update({'viabilidade_transp': e.value}), atualizar_score_ui()))
-                        chk_cred = ui.checkbox('Credenciamento de Imprensa externa?', on_change=lambda e: (form_state.update({'viabilidade_credencial': e.value}), atualizar_score_ui()))
-                        chk_anteced = ui.checkbox('Antecedência suficiente?', on_change=lambda e: (form_state.update({'viabilidade_anteced': e.value}), atualizar_score_ui()))
-                        chk_briefing = ui.checkbox('Briefing / Roteiro aprovado?', on_change=lambda e: (form_state.update({'viabilidade_briefing': e.value}), atualizar_score_ui()))
-                        
-                        ui.separator().style('background-color: rgba(255, 255, 255, 0.05); margin: 8px 0;')
-                        
-                        ui.label('📸 Escopo Adicional').classes('text-xs font-bold text-white q-mt-xs')
-                        chk_foto = ui.checkbox('Fotografia', on_change=lambda e: (form_state.update({'cobertura_foto': e.value}), atualizar_score_ui()))
-                        chk_video = ui.checkbox('Vídeo / Filmagem', on_change=lambda e: (form_state.update({'cobertura_video': e.value}), atualizar_score_ui()))
-                        chk_redes = ui.checkbox('Redes Sociais / Texto', on_change=lambda e: (form_state.update({'cobertura_redes': e.value}), atualizar_score_ui()))
-                        
-                        nonlocal score_label
-                        score_label = ui.label('🟢 Score: 1.0 (Baixo Esforço)').classes('text-sm font-bold text-center w-full q-py-xs bg-black/30 rounded-md q-mt-md')
-                        atualizar_score_ui()
-
-                        chk_sigilo = ui.checkbox('Pauta Sigilosa / Reservada (Gabinete)').classes('text-xs text-amber-5 q-mt-xs')
-                        
                         async def salvar_demanda(status_inicial='pendente', eh_evento_interno=False):
                             nome_sol = sol_nome.value or ('COMSOC / GABINETE' if eh_evento_interno else '')
                             if not nome_sol or not ev_titulo.value:
@@ -600,6 +508,100 @@ def render_page(autofill: str = None):
                                     'https://calendar.google.com/calendar/u/0?cid=Y2djZm5hdWRpb3Zpc3VhbEBnbWFpbC5jb20',
                                     new_tab=True
                                 ).classes('text-[10px] font-bold text-cyan underline q-px-xs q-py-xs bg-cyan-950/60 border border-cyan-500/40 rounded-lg')
+
+                # 2. Painel de Suporte & Checklist Completo (Coluna da Direita)
+                with ui.column().classes('col-12 col-md-5 q-pa-none gap-4').style('min-width: 320px;'):
+                    
+                    # CARD 1: Assistente de Entrada com IA (Expansível / Compacto)
+                    with ui.card().classes('w-full q-pa-sm no-shadow rounded-xl').style(
+                        f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
+                    ):
+                        with ui.expansion('🤖 Assistente de Entrada com IA', icon='psychology', value=False).classes('w-full font-bold text-cyan').style('color: #00e5ff;'):
+                            with ui.column().classes('w-full q-pa-md gap-3'):
+                                ui.label('Cole a mensagem bruta com as respostas do solicitante no campo abaixo. O Gemini analisará o texto e preencherá todo o formulário automaticamente.').classes('text-xs text-grey-4')
+                                
+                                # Seletor de Modelo Gemini dinâmico
+                                with ui.row().classes('w-full items-center justify-between no-wrap'):
+                                    ui.label('Modelo IA:').classes('text-xs text-grey-4')
+                                    modelos_disponiveis = ai_helper.get_available_gemini_models()
+                                    modelo_salvo = app.storage.user.get('preferred_gemini_model', 'gemini-2.0-flash')
+                                    if modelo_salvo not in modelos_disponiveis:
+                                        modelos_disponiveis[modelo_salvo] = f"{modelo_salvo} (Ativo)"
+                                        
+                                    model_select_ia = ui.select(
+                                        modelos_disponiveis,
+                                        value=modelo_salvo,
+                                        on_change=lambda e: app.storage.user.update({'preferred_gemini_model': e.value})
+                                    ).props('dark outlined dense options-dark').classes('w-36 text-[10px]').style('max-height: 28px;')
+
+                                raw_input = ui.textarea(
+                                    placeholder='Cole a mensagem recebida com as respostas do questionário aqui...'
+                                ).props('dark outlined w-full rows=3').classes('w-full text-xs')
+                                
+                                async def processar_texto_ia():
+                                    text = raw_input.value.strip()
+                                    if not text:
+                                        ui.notify('Cole o texto das respostas primeiro!', color='warning')
+                                        return
+                                    ui.notify('Gemini analisando questionário...', color='info')
+                                    
+                                    selected_model = model_select_ia.value or 'gemini-2.0-flash'
+                                    ai_helper.GEMINI_MODEL_NAME = selected_model
+                                    
+                                    try:
+                                        response_json = ai_helper.digest_demand_questionnaire(text)
+                                        popular_form_ia(response_json)
+                                    except Exception as err:
+                                        err_msg = str(err)
+                                        if "429" in err_msg or "quota" in err_msg.lower():
+                                            ui.notify('⚠️ Cota excedida no modelo atual! Selecione outro modelo ao lado e tente novamente.', color='warning', duration=8)
+                                        else:
+                                            ui.notify(f'Erro na digestão: {err}', color='danger')
+                                            
+                                with ui.row().classes('w-full justify-between items-center q-mt-xs'):
+                                    ui.button(
+                                        'Copiar Questionário', 
+                                        icon='content_copy', 
+                                        on_click=copiar_checklist_whatsapp
+                                    ).props('unelevated color=primary text-color=black bold dense').classes('text-[10px] q-px-sm')
+                                    
+                                    ui.button(
+                                        'Processar e Preencher',
+                                        icon='psychology',
+                                        on_click=processar_texto_ia
+                                    ).props('unelevated color=cyan text-color=black bold dense').classes('text-[10px] q-px-sm')
+
+                    # CARD 2: Checklist de Suporte & Viabilidade (Surge apenas para Cobertura Audiovisual)
+                    with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
+                        f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
+                    ) as checklist_card:
+                        ui.label('🔍 Checklist de Suporte & Viabilidade').classes('text-md font-bold text-cyan q-mb-xs')
+                        ui.label('(Necessário para missões de Cobertura Audiovisual)').classes('text-[11px] text-grey-4 q-mb-xs')
+                        
+                        nonlocal chk_staff, chk_equip, chk_drone, chk_transp, chk_cred, chk_anteced, chk_briefing
+                        nonlocal chk_foto, chk_video, chk_redes
+                        
+                        chk_staff = ui.checkbox('Pessoal escalado e disponível?', on_change=lambda e: (form_state.update({'viabilidade_staff': e.value}), atualizar_score_ui()))
+                        chk_equip = ui.checkbox('Equipamentos / Insumos reservados?', on_change=lambda e: (form_state.update({'viabilidade_equip': e.value}), atualizar_score_ui()))
+                        chk_drone = ui.checkbox('Necessita Drone / Homologação?', on_change=lambda e: (form_state.update({'viabilidade_drone': e.value}), atualizar_score_ui()))
+                        chk_transp = ui.checkbox('Transporte / Logística assegurado?', on_change=lambda e: (form_state.update({'viabilidade_transp': e.value}), atualizar_score_ui()))
+                        chk_cred = ui.checkbox('Credenciamento de Imprensa externa?', on_change=lambda e: (form_state.update({'viabilidade_credencial': e.value}), atualizar_score_ui()))
+                        chk_anteced = ui.checkbox('Antecedência suficiente?', on_change=lambda e: (form_state.update({'viabilidade_anteced': e.value}), atualizar_score_ui()))
+                        chk_briefing = ui.checkbox('Briefing / Roteiro aprovado?', on_change=lambda e: (form_state.update({'viabilidade_briefing': e.value}), atualizar_score_ui()))
+                        
+                        ui.separator().style('background-color: rgba(255, 255, 255, 0.05); margin: 8px 0;')
+                        
+                        ui.label('📸 Escopo Adicional').classes('text-xs font-bold text-white q-mt-xs')
+                        chk_foto = ui.checkbox('Fotografia', on_change=lambda e: (form_state.update({'cobertura_foto': e.value}), atualizar_score_ui()))
+                        chk_video = ui.checkbox('Vídeo / Filmagem', on_change=lambda e: (form_state.update({'cobertura_video': e.value}), atualizar_score_ui()))
+                        chk_redes = ui.checkbox('Redes Sociais / Texto', on_change=lambda e: (form_state.update({'cobertura_redes': e.value}), atualizar_score_ui()))
+                        
+                        nonlocal score_label
+                        score_label = ui.label('🟢 Score: 1.0 (Baixo Esforço)').classes('text-sm font-bold text-center w-full q-py-xs bg-black/30 rounded-md q-mt-md')
+                        atualizar_score_ui()
+
+                    # Vincula a visibilidade do Checklist apenas à categoria Audiovisual
+                    checklist_card.bind_visibility_from(categoria_demanda, 'value', value='audiovisual')
 
                 # 3. Demandas em Ajustes (Direita - 1/3 da largura)
                 with ui.column().classes('col-12 col-md q-pa-none').style('min-width: 320px;'):
