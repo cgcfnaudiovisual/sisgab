@@ -1148,3 +1148,89 @@ def register_common_handlers(bot):
                 await bot.reply_to(message, f"❌ Ocorreu um erro ao salvar sua selfie: {e}", reply_markup=get_main_menu_keyboard())
             finally:
                 clear_state(chat_id)
+
+
+    @bot.message_handler(content_types=['voice', 'audio'])
+    async def handle_voice_messages(message):
+        import os, tempfile, json
+        from datetime import datetime
+        chat_id = message.chat.id
+        profile = await check_authorized_user(message.from_user.id)
+        if not profile:
+            await bot.reply_to(message, "⚠️ Acesso restrito.")
+            return
+
+        user_name = profile.get('nome_guerra') or profile.get('nome', 'Operador')
+        msg_waiting = await bot.reply_to(message, "🎙️ **Ouvindo e interpretando áudio com IA Gemini...**", parse_mode='Markdown')
+
+        try:
+            file_obj = message.voice if message.voice else message.audio
+            file_info = await bot.get_file(file_obj.file_id)
+            downloaded_file = await bot.download_file(file_info.file_path)
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.ogg') as tmp:
+                tmp.write(downloaded_file)
+                tmp_path = tmp.name
+
+            import ai_helper
+            res_json_str = ai_helper.transcribe_and_digest_audio(tmp_path, mime_type="audio/ogg")
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+            data = json.loads(res_json_str)
+            if "error" in data and not data.get("titulo_evento"):
+                await bot.edit_message_text(f"❌ Erro ao processar áudio: {data.get('error')}", chat_id=chat_id, message_id=msg_waiting.message_id)
+                return
+
+            transcricao = data.get('transcricao', 'Áudio recebido.')
+            titulo = data.get('titulo_evento') or 'Pauta via Mensagem de Voz'
+            data_ev = data.get('data_evento') or datetime.now().strftime('%Y-%m-%d')
+            hora_ev = data.get('hora_evento') or '09:00'
+            local_ev = data.get('local_evento') or 'Gabinete'
+            militares_citados = data.get('militares_citados', [])
+
+            from database import get_bot_db_connection as get_db_connection
+            db = get_db_connection()
+            d_id = 'OK'
+            if db:
+                novo_reg = {
+                    'titulo_evento': f"🎙️ {titulo}",
+                    'solicitante_nome': user_name,
+                    'setor': 'VOZ TELEGRAM',
+                    'data_evento': data_ev,
+                    'hora_evento': hora_ev,
+                    'local_evento': local_ev,
+                    'status': 'aprovada',
+                    'tipo_cobertura': '["foto", "video"]',
+                    'descricao': f"Transcrevendo de áudio: {transcricao}"
+                }
+                res_ins = db.table('demandas_comunicacao').insert(novo_reg).execute()
+                if res_ins.data:
+                    d_id = res_ins.data[0].get('id', 'OK')
+
+                from notifications_manager import notify_telegram
+                notify_telegram(
+                    f"🎙️ **NOVA DEMANDA CRIADA VIA ÁUDIO DE VOZ!**\n"
+                    f"📌 {titulo}\n"
+                    f"📅 {data_ev} às {hora_ev} | 📍 {local_ev}\n"
+                    f"👤 Enviado por: {user_name}\n"
+                    f"🗣️ Transcrição: _{transcricao}_",
+                    "system"
+                )
+
+            mil_txt = ", ".join(militares_citados) if militares_citados else "Nenhum citado"
+            await bot.edit_message_text(
+                f"✅ **ÁUDIO PROCESSADO E DEMANDA REGISTRADA!**\n\n"
+                f"📌 **Título:** {titulo} (ID #{d_id})\n"
+                f"📅 **Data/Hora:** {data_ev} às {hora_ev}\n"
+                f"📍 **Local:** {local_ev}\n"
+                f"🗣️ **Transcrição IA:** _{transcricao}_\n"
+                f"👥 **Militares Citados:** {mil_txt}",
+                chat_id=chat_id,
+                message_id=msg_waiting.message_id,
+                parse_mode='Markdown'
+            )
+        except Exception as err:
+            await bot.edit_message_text(f"❌ Falha ao interpretar áudio: {err}", chat_id=chat_id, message_id=msg_waiting.message_id)

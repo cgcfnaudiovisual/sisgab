@@ -697,7 +697,69 @@ def generate_birthday_card_message(nome: str, posto: str, setor: str, tom: str =
         return response.candidates[0].content.parts[0].text
     except Exception as e:
         print(f"[GEMINI BIRTHDAY CARD ERR] {e}")
-        return f"Prezado {posto} {nome},\n\nNesta data tão especial de seu aniversário, toda a equipe do setor {setor} e do Gabinete apresenta-lhe os mais sinceros votos de felicidade, saúde e realizações. Que continue navegando com rumo seguro e sucesso!\n\nParabéns!"
+def transcribe_and_digest_audio(audio_path: str, mime_type: str = "audio/ogg") -> str:
+    """Recebe o caminho de um arquivo de áudio (OGG, MP3, WAV), transcreve o conteúdo com Gemini
+    e extrai os dados estruturados em JSON para criação/edição de demandas."""
+    if not _get_google_api_key():
+        return json.dumps({"error": "API Key não configurada"})
+
+    try:
+        model = genai.GenerativeModel(_get_gemini_model_name())
+        
+        uploaded_file = genai.upload_file(audio_path, mime_type=mime_type)
+        
+        prompt = """Você é um assistente de IA da Marinha do Brasil encarregado de ouvir a mensagem de áudio enviada por um militar e extrair todas as informações de pauta/missão.
+Retorne um JSON VÁLIDO contendo exatamente estas chaves:
+- transcricao: Transcrição integral do áudio em texto.
+- titulo_evento: Título claro e objetivo do evento ou missão citada.
+- data_evento: Data mencionada no formato YYYY-MM-DD (assuma o ano atual 2026 se não mencionado).
+- hora_evento: Horário mencionado no formato HH:MM (ex: 09:30, 14:00).
+- local_evento: Local da missão/evento.
+- solicitante_nome: Nome do militar ou autoridade mencionada.
+- militares_citados: Lista de nomes de guerra dos militares citados no áudio para a equipe.
+- observacao: Qualquer outra instrução citada no áudio.
+
+Retorne APENAS o objeto JSON puro sem marcações de markdown adicionais."""
+
+        response = model.generate_content([uploaded_file, prompt])
+        
+        try:
+            genai.delete_file(uploaded_file.name)
+        except Exception:
+            pass
+
+        text_resp = response.candidates[0].content.parts[0].text
+        clean_json = text_resp.replace('```json', '').replace('```', '').strip()
+        return clean_json
+    except Exception as e:
+        print(f"[AUDIO AI ERR] {e}")
+        return json.dumps({"error": str(e)})
+
+
+def parse_natural_language_command(text_command: str) -> str:
+    """Interpreta comandos de áudio ou texto em linguagem natural para ajustar/criar demandas."""
+    if not _get_google_api_key():
+        return json.dumps({"error": "API Key do Gemini não configurada"})
+    
+    try:
+        system_prompt = """Você é uma IA assistente de gestão do SISGAB. Interprete o pedido do usuário e identifique o que ele deseja fazer com a demanda.
+Retorne um JSON com:
+- acao: 'criar_demanda', 'editar_demanda' ou 'concluir_demanda'
+- id_demanda: número ID da demanda mencionada (se houver)
+- titulo_evento: novo título ou título da pauta
+- data_evento: data em formato YYYY-MM-DD (se mencionada)
+- hora_evento: hora em formato HH:MM (se mencionada)
+- local_evento: local (se mencionado)
+- militares_atribuidos: lista de nomes de guerra dos militares que devem ser escalados/atribuídos
+- resumo_acao: breve resumo em texto corrido em português explicando o que a IA interpretou.
+
+Retorne APENAS o JSON puro sem formatação markdown."""
+        model = genai.GenerativeModel(_get_gemini_model_name(), system_instruction=system_prompt)
+        response = model.generate_content(f"Instrução do usuário:\n---\n{text_command}\n---")
+        text_resp = response.candidates[0].content.parts[0].text
+        return text_resp.replace('```json', '').replace('```', '').strip()
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 
 
