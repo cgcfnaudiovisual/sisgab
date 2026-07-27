@@ -387,27 +387,58 @@ def register_common_handlers(bot):
                     await bot.reply_to(message, "⚠️ Banco de dados indisponível.")
                     return
                 try:
-                    res_dem = db.table('demandas_comunicacao').select('*').in_('status', ['aprovada', 'aprovado', 'pendente', 'em_ajuste', 'ajustes']).order('data_evento', desc=False).limit(10).execute()
+                    res_dem = db.table('demandas_comunicacao').select('*').in_('status', ['aprovada', 'aprovado', 'pendente', 'em_ajuste', 'ajustes']).order('data_evento', desc=False).limit(15).execute()
                     demandas = res_dem.data if res_dem.data else []
                     if not demandas:
                         await bot.reply_to(message, "🟢 Nenhuma demanda ativa pendente de gestão no momento.", reply_markup=get_main_menu_keyboard(is_operator))
                         return
                     
                     from .keyboards import get_manage_demanda_inline_keyboard
-                    await bot.reply_to(message, f"📋 **PAUTAS ATIVAS PARA GESTÃO ({len(demandas)})**\nSelecione a ação desejada abaixo de cada demanda:")
+                    
+                    # Mapear status para emoji visual
+                    status_emoji = {
+                        'pendente': '🟡 PENDENTE',
+                        'aprovada': '🟢 APROVADO',
+                        'aprovado': '🟢 APROVADO',
+                        'em_ajuste': '🟠 EM AJUSTE',
+                        'ajustes': '🟠 EM AJUSTE'
+                    }
+                    
+                    await bot.reply_to(message, f"📋 **PAUTAS ATIVAS PARA GESTÃO ({len(demandas)})**\nSelecione uma demanda para ver ações disponíveis:")
                     for d in demandas:
                         d_id = d.get('id')
                         tit = d.get('titulo_evento', 'Sem Título')
                         dt = d.get('data_evento', 'N/I')
                         hr = d.get('hora_evento', '09:00')
-                        st = str(d.get('status', 'Pendente')).upper()
+                        raw_st = str(d.get('status', 'pendente')).lower()
+                        st_display = status_emoji.get(raw_st, f'⚪ {raw_st.upper()}')
                         loc = d.get('local_evento', 'N/I')
+                        
+                        # Buscar militares escalados
+                        resp_txt = _format_militar_responsavel(d, db)
+                        equipe_line = f"   👨‍✈️ Equipe: _{resp_txt}_\n" if resp_txt != "ASD" else "   👨‍✈️ Equipe: _ASD (A Ser Designado)_\n"
+                        
+                        # Serviços solicitados
+                        tipo_cob = d.get('tipo_cobertura', '')
+                        servicos_line = ""
+                        if tipo_cob:
+                            try:
+                                import json as _json
+                                cob_list = _json.loads(tipo_cob) if isinstance(tipo_cob, str) else tipo_cob
+                                labels = {'foto': '📸', 'video': '🎥', 'grafico': '🎨', 'drone': '🚁', 'redes': '📱'}
+                                servicos_line = f"   🔧 Serviços: {' '.join(labels.get(s, s) for s in cob_list)}\n"
+                            except Exception:
+                                servicos_line = f"   🔧 Serviços: {tipo_cob}\n"
+                        
                         msg_item = (
                             f"📌 **#{d_id} — {tit}**\n"
-                            f"   📅 {dt} às {hr} | 📍 {loc}\n"
-                            f"   ⚡ Status: *{st}*\n"
+                            f"   📅 {dt} às {hr}\n"
+                            f"   📍 {loc}\n"
+                            f"   ⚡ Status: *{st_display}*\n"
+                            f"{equipe_line}"
+                            f"{servicos_line}"
                         )
-                        await bot.send_message(chat_id, msg_item, reply_markup=get_manage_demanda_inline_keyboard(d_id), parse_mode='Markdown')
+                        await bot.send_message(chat_id, msg_item, reply_markup=get_manage_demanda_inline_keyboard(d_id, status=raw_st), parse_mode='Markdown')
                 except Exception as e_dem:
                     await bot.reply_to(message, f"❌ Erro ao listar demandas: {e_dem}")
 
@@ -559,6 +590,34 @@ def register_common_handlers(bot):
                     await bot.reply_to(message, f"✅ **Horário atualizado com sucesso!**\nDemanda #{dem_id} alterada para **{novahora}**.", reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
                 except Exception as e_ed:
                     await bot.reply_to(message, f"❌ Erro ao atualizar horário: {e_ed}")
+            return
+
+        if action == 'edit_local_demanda':
+            dem_id = state.get('demanda_id')
+            novo_local = text.strip().upper()
+            from database import get_bot_db_connection as get_db_connection
+            db = get_db_connection()
+            if db and dem_id:
+                try:
+                    db.table('demandas_comunicacao').update({'local_evento': novo_local}).eq('id', dem_id).execute()
+                    clear_state(chat_id)
+                    await bot.reply_to(message, f"✅ **Local atualizado com sucesso!**\nDemanda #{dem_id} alterada para **{novo_local}**.", reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
+                except Exception as e_ed:
+                    await bot.reply_to(message, f"❌ Erro ao atualizar local: {e_ed}")
+            return
+
+        if action == 'edit_titulo_demanda':
+            dem_id = state.get('demanda_id')
+            novo_titulo = text.strip().upper()
+            from database import get_bot_db_connection as get_db_connection
+            db = get_db_connection()
+            if db and dem_id:
+                try:
+                    db.table('demandas_comunicacao').update({'titulo_evento': novo_titulo}).eq('id', dem_id).execute()
+                    clear_state(chat_id)
+                    await bot.reply_to(message, f"✅ **Título atualizado com sucesso!**\nDemanda #{dem_id} alterada para **{novo_titulo}**.", reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
+                except Exception as e_ed:
+                    await bot.reply_to(message, f"❌ Erro ao atualizar título: {e_ed}")
             return
 
         if action == 'missao_rapida':
@@ -905,7 +964,7 @@ def register_common_handlers(bot):
                     await bot.reply_to(message, "Selecione uma das opções nos botões abaixo:", reply_markup=get_confirm_demanda_keyboard())
             return
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith(('concluir_dem:', 'rejeitar_dem:', 'equipe_dem:', 'edithora_dem:', 'sel_mil:', 'quick_mil:')))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(('concluir_dem:', 'rejeitar_dem:', 'equipe_dem:', 'edithora_dem:', 'sel_mil:', 'quick_mil:', 'detalhe_dem:', 'aprovar_dem:', 'editlocal_dem:', 'edittitulo_dem:', 'reabrir_dem:')))
     async def handle_demanda_management_callbacks(call):
         chat_id = call.message.chat.id
         data = call.data
@@ -1104,6 +1163,138 @@ def register_common_handlers(bot):
             }
             await bot.send_message(chat_id, f"✏️ **EDITAR HORÁRIO (ID #{dem_id})**\n\nDigite o novo horário no formato **HH:MM** (ex: `14:30`):", parse_mode='Markdown')
             await bot.answer_callback_query(call.id)
+
+        # --- VER DETALHES COMPLETOS DA DEMANDA ---
+        elif data.startswith('detalhe_dem:'):
+            dem_id = data.split(':')[1]
+            try:
+                res_d = db.table('demandas_comunicacao').select('*').eq('id', dem_id).execute()
+                if not res_d.data:
+                    await bot.answer_callback_query(call.id, "Demanda não encontrada.")
+                    return
+                d = res_d.data[0]
+                tit = d.get('titulo_evento', 'Sem Título')
+                dt = d.get('data_evento', 'N/I')
+                hr = d.get('hora_evento', 'N/I')
+                loc = d.get('local_evento', 'N/I')
+                st = str(d.get('status', 'pendente')).upper()
+                obs = d.get('observacoes', '') or 'Nenhuma'
+                solicitante = d.get('solicitante_nome', 'N/I')
+                setor = d.get('setor', 'N/I')
+                contato = d.get('contato', 'N/I')
+                autoridades = d.get('autoridades', '') or 'Nenhuma'
+                
+                # Buscar equipe escalada com nomes
+                resp_txt = _format_militar_responsavel(d, db)
+                
+                # Serviços formatados
+                tipo_cob = d.get('tipo_cobertura', '')
+                servicos_str = "N/I"
+                if tipo_cob:
+                    try:
+                        import json as _json
+                        cob_list = _json.loads(tipo_cob) if isinstance(tipo_cob, str) else tipo_cob
+                        labels_map = {
+                            'foto': '📸 Cobertura Fotográfica',
+                            'video': '🎥 Vídeo / Filmagem',
+                            'grafico': '🎨 Serviço Gráfico',
+                            'drone': '🚁 Imagens Aéreas / Drone',
+                            'redes': '📱 Mídias Sociais'
+                        }
+                        servicos_str = "\n".join([f"   • {labels_map.get(s, s)}" for s in cob_list])
+                    except Exception:
+                        servicos_str = str(tipo_cob)
+                
+                status_emojis = {
+                    'PENDENTE': '🟡', 'APROVADA': '🟢', 'APROVADO': '🟢',
+                    'EM_AJUSTE': '🟠', 'AJUSTES': '🟠',
+                    'CONCLUIDA': '✅', 'REJEITADO': '❌'
+                }
+                st_emoji = status_emojis.get(st, '⚪')
+                
+                detail_msg = (
+                    f"🔎 **DETALHES COMPLETOS — #{dem_id}**\n"
+                    f"━━━━━━━━━━━━━━━━━━\n\n"
+                    f"📌 **Título:** {tit}\n"
+                    f"📅 **Data:** {dt} às {hr}\n"
+                    f"📍 **Local:** {loc}\n"
+                    f"{st_emoji} **Status:** {st}\n\n"
+                    f"👤 **Solicitante:** {solicitante}\n"
+                    f"🏢 **Setor:** {setor}\n"
+                    f"📞 **Contato:** {contato}\n\n"
+                    f"👑 **Autoridades:** {autoridades}\n\n"
+                    f"🔧 **Serviços Solicitados:**\n{servicos_str}\n\n"
+                    f"👨‍✈️ **Equipe Escalada:** {resp_txt}\n\n"
+                    f"📝 **Observações:** {obs}\n"
+                    f"━━━━━━━━━━━━━━━━━━"
+                )
+                await bot.send_message(chat_id, detail_msg, parse_mode='Markdown')
+                await bot.answer_callback_query(call.id)
+            except Exception as e:
+                await bot.answer_callback_query(call.id, f"Erro: {e}")
+
+        # --- APROVAR PAUTA PENDENTE ---
+        elif data.startswith('aprovar_dem:'):
+            dem_id = data.split(':')[1]
+            try:
+                db.table('demandas_comunicacao').update({'status': 'aprovada'}).eq('id', dem_id).execute()
+                await bot.answer_callback_query(call.id, "✅ Pauta Aprovada!")
+                await bot.edit_message_text(
+                    f"✅ **PAUTA APROVADA!**\nPauta ID #{dem_id} foi homologada por {user_name}.",
+                    chat_id=chat_id,
+                    message_id=call.message.message_id,
+                    parse_mode='Markdown'
+                )
+                from notifications_manager import notify_telegram
+                notify_telegram(f"✅ **Pauta Aprovada via Telegram**\nID #{dem_id} foi homologada por {user_name}.", "system")
+            except Exception as e:
+                await bot.answer_callback_query(call.id, f"Erro: {e}")
+
+        # --- EDITAR LOCAL DA PAUTA ---
+        elif data.startswith('editlocal_dem:'):
+            dem_id = data.split(':')[1]
+            chat_states[chat_id] = {
+                'action': 'edit_local_demanda',
+                'demanda_id': dem_id,
+                'user': profile
+            }
+            await bot.send_message(
+                chat_id,
+                f"✏️ **EDITAR LOCAL (ID #{dem_id})**\n\nDigite o novo local do evento (ex: `Auditório Principal`):",
+                parse_mode='Markdown'
+            )
+            await bot.answer_callback_query(call.id)
+
+        # --- EDITAR TÍTULO DA PAUTA ---
+        elif data.startswith('edittitulo_dem:'):
+            dem_id = data.split(':')[1]
+            chat_states[chat_id] = {
+                'action': 'edit_titulo_demanda',
+                'demanda_id': dem_id,
+                'user': profile
+            }
+            await bot.send_message(
+                chat_id,
+                f"✏️ **EDITAR TÍTULO (ID #{dem_id})**\n\nDigite o novo título do evento:",
+                parse_mode='Markdown'
+            )
+            await bot.answer_callback_query(call.id)
+
+        # --- REABRIR PAUTA CONCLUÍDA ---
+        elif data.startswith('reabrir_dem:'):
+            dem_id = data.split(':')[1]
+            try:
+                db.table('demandas_comunicacao').update({'status': 'aprovada'}).eq('id', dem_id).execute()
+                await bot.answer_callback_query(call.id, "🔄 Pauta Reaberta!")
+                await bot.edit_message_text(
+                    f"🔄 **PAUTA REABERTA!**\nPauta ID #{dem_id} foi reaberta por {user_name} e voltou ao status APROVADA.",
+                    chat_id=chat_id,
+                    message_id=call.message.message_id,
+                    parse_mode='Markdown'
+                )
+            except Exception as e:
+                await bot.answer_callback_query(call.id, f"Erro: {e}")
+
 
     @bot.message_handler(content_types=['photo'])
     async def handle_photo_messages(message):

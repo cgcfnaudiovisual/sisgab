@@ -23,17 +23,57 @@ def get_main_menu_keyboard(is_operator=False):
     return markup
 
 
-def get_manage_demanda_inline_keyboard(demanda_id):
+def get_manage_demanda_inline_keyboard(demanda_id, status='aprovada'):
+    """Gera teclado inline contextual baseado no status da demanda."""
     markup = types.InlineKeyboardMarkup(row_width=2)
+    st = str(status).lower().strip()
+
+    # Botão de detalhes sempre visível
     markup.row(
-        types.InlineKeyboardButton("🎯 Concluir", callback_data=f"concluir_dem:{demanda_id}"),
-        types.InlineKeyboardButton("👤 Atribuir Equipe", callback_data=f"equipe_dem:{demanda_id}")
+        types.InlineKeyboardButton("🔎 Ver Detalhes Completos", callback_data=f"detalhe_dem:{demanda_id}")
     )
-    markup.row(
-        types.InlineKeyboardButton("✏️ Editar Horário", callback_data=f"edithora_dem:{demanda_id}"),
-        types.InlineKeyboardButton("❌ Rejeitar", callback_data=f"rejeitar_dem:{demanda_id}")
-    )
+
+    if st in ('pendente', 'em_ajuste', 'ajustes'):
+        # Pendente: pode aprovar, rejeitar, editar
+        markup.row(
+            types.InlineKeyboardButton("✅ Aprovar Pauta", callback_data=f"aprovar_dem:{demanda_id}"),
+            types.InlineKeyboardButton("❌ Rejeitar", callback_data=f"rejeitar_dem:{demanda_id}")
+        )
+        markup.row(
+            types.InlineKeyboardButton("✏️ Editar Horário", callback_data=f"edithora_dem:{demanda_id}"),
+            types.InlineKeyboardButton("✏️ Editar Local", callback_data=f"editlocal_dem:{demanda_id}")
+        )
+        markup.row(
+            types.InlineKeyboardButton("👤 Atribuir Equipe", callback_data=f"equipe_dem:{demanda_id}")
+        )
+    elif st in ('aprovada', 'aprovado'):
+        # Aprovada: pode concluir, atribuir equipe, editar, rejeitar
+        markup.row(
+            types.InlineKeyboardButton("🎯 Concluir Missão", callback_data=f"concluir_dem:{demanda_id}"),
+            types.InlineKeyboardButton("👤 Atribuir Equipe", callback_data=f"equipe_dem:{demanda_id}")
+        )
+        markup.row(
+            types.InlineKeyboardButton("✏️ Editar Horário", callback_data=f"edithora_dem:{demanda_id}"),
+            types.InlineKeyboardButton("✏️ Editar Local", callback_data=f"editlocal_dem:{demanda_id}")
+        )
+        markup.row(
+            types.InlineKeyboardButton("✏️ Editar Título", callback_data=f"edittitulo_dem:{demanda_id}"),
+            types.InlineKeyboardButton("❌ Rejeitar / Cancelar", callback_data=f"rejeitar_dem:{demanda_id}")
+        )
+    elif st in ('concluida', 'concluído', 'concluido'):
+        # Concluída: apenas ver detalhes (já adicionado acima)
+        markup.row(
+            types.InlineKeyboardButton("🔄 Reabrir Pauta", callback_data=f"reabrir_dem:{demanda_id}")
+        )
+    else:
+        # Fallback
+        markup.row(
+            types.InlineKeyboardButton("🎯 Concluir", callback_data=f"concluir_dem:{demanda_id}"),
+            types.InlineKeyboardButton("👤 Atribuir Equipe", callback_data=f"equipe_dem:{demanda_id}")
+        )
+
     return markup
+
 
 
 def get_multi_militar_inline_keyboard(efetivo_list, selected_ids=None, prefix="sel_mil"):
