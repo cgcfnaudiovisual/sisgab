@@ -9,7 +9,7 @@ THEME = theme.colors
 
 def fetch_rss_news():
     """Busca notícias externas do feed do portal Poder Naval com fallback mock."""
-    url = "https://www.naval.com.br/feed/"
+    url = "https://www.naval.com.br/blog/feed/"
     news = []
     try:
         req = urllib.request.Request(
