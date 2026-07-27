@@ -214,9 +214,11 @@ def render_page():
                         ui.label(f"👤 Solicitante: {pauta_ao_vivo.get('solicitante_nome', 'COMSOC')}")
 
             # ── GRIDS PRINCIPAIS DO MONITOR ──
-            with ui.grid(columns=1).classes('w-full gap-4 flex-grow gt-xs').style('grid-template-columns: 1.2fr 1fr 1fr; margin-top: 6px;'):
+            with ui.grid(columns=1).classes('w-full gap-4 flex-grow gt-xs').style('grid-template-columns: 1.2fr 1.1fr 1fr; margin-top: 6px;'):
                 
-                # COLUNA 1: QUADRO DE FLUXO DE PAUTAS (CALENDÁRIO DINÂMICO & KANBAN)
+                # =========================================================================
+                # COLUNA 1 (ESQUERDA): CRONOGRAMA DE PRODUÇÃO & FILTRO MULTI-PAINEL
+                # =========================================================================
                 with ui.card().classes('q-pa-md no-shadow rounded-xl border border-cyan-950/60').style('background: rgba(10,15,30,0.45);'):
                     with ui.row().classes('w-full items-center justify-between q-mb-md no-wrap'):
                         with ui.row().classes('items-center gap-2'):
@@ -231,18 +233,19 @@ def render_page():
                             {
                                 'semana': 'Esta Semana',
                                 'mes': 'Este Mês',
-                                'kanban': 'Quadro Kanban'
+                                'kanban': 'Quadro Kanban',
+                                'todas': 'Todas as Demandas'
                             }, 
                             value=view_state['active'],
                             on_change=on_view_change
-                        ).props('dark dense options-dense outlined').style('font-size: 10px; width: 110px;')
+                        ).props('dark dense options-dense outlined').style('font-size: 10px; width: 125px;')
 
                     pautas = []
                     if db:
                         try:
                             res_c = db.table('demandas_comunicacao').select('*').execute()
                             if res_c.data:
-                                pautas = [d for d in res_c.data if str(d.get('status', '')).strip().lower() in ('aprovada', 'aprovado', 'aprovadas', 'pendente', 'pendentes')]
+                                pautas = res_c.data
                         except Exception as e:
                             print(f"[TV CALENDAR DB ERR] {e}")
 
@@ -264,29 +267,18 @@ def render_page():
                                         pautas_filtradas.append((p, p_dt))
                                 except Exception:
                                     pass
-                            
                             pautas_filtradas.sort(key=lambda x: x[1])
 
                             if pautas_filtradas:
-                                with ui.column().classes('w-full gap-2'):
+                                with ui.column().classes('w-full gap-2 max-h-[420px] overflow-y-auto q-pr-xs'):
                                     for p, p_dt in pautas_filtradas:
                                         dia_semana_lbl = p_dt.strftime('%a').upper()
                                         dia_num = p_dt.strftime('%d/%m')
                                         st_val = str(p.get('status', '')).strip().lower()
                                         is_pend = st_val in ('pendente', 'pendentes')
                                         prio = p.get('prioridade', 'normal')
-                                        cat_lbl = p.get('categoria_demanda', 'audiovisual').replace('_', ' ').title()
-                                        prod_lbl = p.get('produto_especifico') or 'Cobertura'
 
-                                        if prio == 'altissima':
-                                            border_col = "#ef4444"
-                                            prio_lbl = "ALTÍSSIMA"
-                                        elif prio == 'alta':
-                                            border_col = "#f97316"
-                                            prio_lbl = "ALTA"
-                                        else:
-                                            border_col = "#00e5ff" if not is_pend else "#eab308"
-                                            prio_lbl = "NORMAL"
+                                        border_col = "#ef4444" if prio == 'altissima' else "#f97316" if prio == 'alta' else "#00e5ff" if not is_pend else "#eab308"
 
                                         with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg transition-all').style(
                                             f'background: rgba(255,255,255,0.02); border-left: 4px solid {border_col}; border-top: 1px solid rgba(255,255,255,0.05);'
@@ -294,16 +286,16 @@ def render_page():
                                             with ui.row().classes('w-full justify-between items-center no-wrap'):
                                                 with ui.row().classes('items-center gap-2 no-wrap'):
                                                     ui.label(f"{dia_semana_lbl} {dia_num}").classes('text-xs font-black text-cyan font-mono').style('min-width: 75px;')
-                                                    ui.label(p.get('titulo_evento', 'Sem Título')).classes('text-xs font-bold text-white truncate max-w-[180px]')
+                                                    ui.label(p.get('titulo_evento', 'Sem Título')).classes('text-xs font-bold text-white truncate max-w-[170px]')
                                                 
                                                 if is_pend:
-                                                    ui.badge('PENDENTE').props('color=amber text-color=black').classes('text-[9px] font-bold')
+                                                    ui.badge('PENDENTE').props('color=amber text-color=black').classes('text-[8px] font-bold')
                                                 else:
-                                                    ui.badge('APROVADA').props('color=cyan text-color=black').classes('text-[9px] font-bold')
+                                                    ui.badge('APROVADA').props('color=cyan text-color=black').classes('text-[8px] font-bold')
 
                                             with ui.row().classes('w-full justify-between items-center q-mt-xs text-[10px] text-grey-4'):
-                                                ui.label(f"🕒 {p.get('hora_evento', '09:00')} | 📍 {p.get('local_evento', 'Gabinete')}").classes('truncate max-w-[200px]')
-                                                ui.label(f"📦 {cat_lbl} ({prod_lbl})").classes('text-grey-5 text-[9px]')
+                                                ui.label(f"🕒 {p.get('hora_evento', '09:00')} | 📍 {p.get('local_evento', 'Gabinete')}").classes('truncate max-w-[190px]')
+                                                ui.label(f"👤 {p.get('solicitante_nome', 'CGCFN')}").classes('text-grey-5 text-[9px] truncate max-w-[80px]')
                             else:
                                 with ui.column().classes('w-full h-48 items-center justify-center gap-2 text-grey-5'):
                                     ui.icon('event_busy', size='2.5rem')
@@ -319,11 +311,10 @@ def render_page():
                                         pautas_filtradas.append((p, p_dt))
                                 except Exception:
                                     pass
-                            
                             pautas_filtradas.sort(key=lambda x: x[1])
 
                             if pautas_filtradas:
-                                with ui.column().classes('w-full gap-2 max-h-[300px] overflow-y-auto q-pr-xs'):
+                                with ui.column().classes('w-full gap-2 max-h-[420px] overflow-y-auto q-pr-xs'):
                                     for p, p_dt in pautas_filtradas:
                                         dia_num = p_dt.strftime('%d/%m')
                                         st_val = str(p.get('status', '')).strip().lower()
@@ -336,10 +327,9 @@ def render_page():
                                     ui.icon('calendar_today', size='2.5rem')
                                     ui.label('Sem pautas para este mês.').classes('text-xs')
 
-                        else:
-                            # Visualização Kanban
-                            col_pend = [p for p in pautas if str(p.get('status', '')).strip().lower() in ('pendente', 'pendentes')][:3]
-                            col_aprov = [p for p in pautas if str(p.get('status', '')).strip().lower() in ('aprovada', 'aprovado', 'aprovadas')][:3]
+                        elif active_view == 'kanban':
+                            col_pend = [p for p in pautas if str(p.get('status', '')).strip().lower() in ('pendente', 'pendentes')][:4]
+                            col_aprov = [p for p in pautas if str(p.get('status', '')).strip().lower() in ('aprovada', 'aprovado', 'aprovadas')][:4]
                             
                             with ui.row().classes('w-full gap-2 items-stretch'):
                                 with ui.column().classes('col gap-1').style('background: rgba(255,255,255,0.01); border-radius: 4px; padding: 4px;'):
@@ -360,43 +350,96 @@ def render_page():
                                     if not col_aprov:
                                         ui.label('Sem pautas').classes('text-[8px] text-grey-6 text-center w-full py-4')
 
-                # COLUNA 2: ESCALA DE SERVIÇO DIÁRIA & ANIVERSARIANTES
-                with ui.card().classes('q-pa-md no-shadow rounded-xl border border-cyan-950/60').style('background: rgba(10,15,30,0.45);'):
-                    with ui.row().classes('w-full items-center gap-2 q-mb-md'):
-                        ui.icon('shield', color='orange-5', size='sm')
-                        ui.label('ESCALA DE SERVIÇO E OPERAÇÕES').classes('text-sm font-bold text-white tracking-wider')
-                    
-                    escala = {}
-                    aniversariantes = []
-                    if db:
-                        try:
-                            hoje_str = datetime.now().strftime('%Y-%m-%d')
-                            res_esc = db.table('escala_diaria').select('*').eq('data', hoje_str).execute()
-                            if res_esc.data:
-                                escala = res_esc.data[0]
-                            
-                            res_ef = db.table('efetivo').select('nome_guerra', 'posto_grad', 'data_nascimento').execute()
-                            if res_ef.data:
-                                mes_atual = datetime.now().month
-                                for e in res_ef.data:
-                                    birth = e.get('data_nascimento')
-                                    if birth:
-                                        try:
-                                            b_dt = datetime.strptime(str(birth), '%Y-%m-%d')
-                                            if b_dt.month == mes_atual:
-                                                aniversariantes.append({
-                                                    'nome': f"{e.get('posto_grad') or ''} {e.get('nome_guerra', '')}".upper(),
-                                                    'dia': b_dt.day
-                                                })
-                                        except Exception:
-                                            pass
-                                aniversariantes.sort(key=lambda x: x['dia'])
-                        except Exception as e:
-                            print(f"[TV ESCALA & NIVER ERR] {e}")
+                        else:
+                            # Visão: TODAS AS DEMANDAS EXISTENTES
+                            with ui.column().classes('w-full gap-2 max-h-[420px] overflow-y-auto q-pr-xs'):
+                                for p in pautas:
+                                    st_val = str(p.get('status', '')).strip().lower()
+                                    st_badge_color = 'green' if st_val in ('aprovada', 'aprovado') else 'grey' if st_val == 'concluida' else 'amber'
+                                    data_txt = str(p.get('data_evento', 'N/I'))
+                                    try:
+                                        data_txt = datetime.strptime(data_txt[:10], '%Y-%m-%d').strftime('%d/%m')
+                                    except Exception:
+                                        pass
 
-                    with ui.column().classes('w-full gap-2 q-mb-md'):
-                        ui.label('🛡️ SERVIÇO DIÁRIO COMSOC').classes('text-[10px] text-grey-5 font-bold tracking-wider')
-                        
+                                    with ui.card().classes('w-full q-pa-xs no-shadow rounded-lg').style('background: rgba(255,255,255,0.02); border-left: 3px solid rgba(0,229,255,0.3);'):
+                                        with ui.row().classes('w-full justify-between items-center no-wrap'):
+                                            ui.label(f"{data_txt} - {p.get('titulo_evento', 'Sem Título')}").classes('text-xs font-bold text-white truncate max-w-[200px]')
+                                            ui.badge(st_val.upper()).props(f'color={st_badge_color}').classes('text-[8px]')
+
+                # =========================================================================
+                # COLUNA 2 (CENTRO): DEMANDAS DO DIA CORRENTE E DIA SEGUINTE (HOJE & AMANHÃ)
+                # =========================================================================
+                with ui.card().classes('q-pa-md no-shadow rounded-xl border border-cyan-950/60').style('background: rgba(10,15,30,0.45);'):
+                    with ui.row().classes('w-full items-center justify-between q-mb-md'):
+                        with ui.row().classes('items-center gap-2'):
+                            ui.icon('today', color='amber-5', size='sm')
+                            ui.label('PAUTAS: HOJE & AMANHÃ').classes('text-sm font-bold text-white tracking-wider')
+                        ui.badge('PRONTIDÃO 48H', color='amber-9').classes('text-[8px] font-mono')
+
+                    pautas_hoje_amanha = []
+                    hoje_obj = datetime.now().date()
+                    amanha_obj = hoje_obj + timedelta(days=1)
+
+                    if pautas:
+                        for p in pautas:
+                            try:
+                                p_dt = datetime.strptime(str(p.get('data_evento', '')), '%Y-%m-%d').date()
+                                if p_dt in (hoje_obj, amanha_obj):
+                                    pautas_hoje_amanha.append((p, p_dt))
+                            except Exception:
+                                pass
+                        pautas_hoje_amanha.sort(key=lambda x: (x[1], x[0].get('hora_evento', '')))
+
+                    if pautas_hoje_amanha:
+                        with ui.column().classes('w-full gap-2 max-h-[420px] overflow-y-auto q-pr-xs'):
+                            for p, p_dt in pautas_hoje_amanha:
+                                is_hoje = (p_dt == hoje_obj)
+                                tag_dia = "HOJE" if is_hoje else "AMANHÃ"
+                                tag_bg = "rgba(245,158,11,0.2)" if is_hoje else "rgba(0,229,255,0.15)"
+                                border_tag = "#f59e0b" if is_hoje else "#00e5ff"
+                                st_val = str(p.get('status', '')).strip().lower()
+
+                                with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg').style(
+                                    f'background: {tag_bg}; border: 1px solid {border_tag};'
+                                ):
+                                    with ui.row().classes('w-full justify-between items-center no-wrap'):
+                                        with ui.row().classes('items-center gap-2'):
+                                            ui.badge(tag_dia, color='amber-9' if is_hoje else 'cyan-9').classes('text-[9px] font-black')
+                                            ui.label(p.get('titulo_evento', 'Sem Título')).classes('text-xs font-bold text-white truncate max-w-[180px]')
+                                        
+                                        ui.badge(st_val.upper()).props('color=black text-color=white outline').classes('text-[8px]')
+
+                                    with ui.row().classes('w-full justify-between items-center q-mt-xs text-[10px] text-grey-3'):
+                                        ui.label(f"🕒 {p.get('hora_evento', '09:00')} | 📍 {p.get('local_evento', 'Gabinete')}").classes('truncate max-w-[200px]')
+                                        ui.label(f"👤 {p.get('solicitante_nome', 'CGCFN')}").classes('text-grey-4 text-[9px]')
+                    else:
+                        with ui.column().classes('w-full h-48 items-center justify-center gap-2 text-grey-5'):
+                            ui.icon('event_available', size='2.5rem')
+                            ui.label('Nenhuma pauta agendada para hoje ou amanhã.').classes('text-xs')
+
+                # =========================================================================
+                # COLUNA 3 (DIREITA): ESCALA DE SERVIÇO (TOPO) + CARROSSEL (BASE)
+                # =========================================================================
+                with ui.column().classes('w-full gap-3 flex-grow q-pa-none'):
+                    
+                    # BLOCO 1: ESCALA DE SERVIÇO E OPERAÇÕES (PAINEL SUPERIOR)
+                    with ui.card().classes('w-full q-pa-sm no-shadow rounded-xl border border-cyan-950/60').style('background: rgba(10,15,30,0.45);'):
+                        with ui.row().classes('w-full items-center justify-between q-mb-xs'):
+                            with ui.row().classes('items-center gap-2'):
+                                ui.icon('shield', color='orange-5', size='xs')
+                                ui.label('ESCALA DE SERVIÇO DIÁRIA').classes('text-xs font-bold text-white tracking-wider')
+                            ui.label(datetime.now().strftime('%d/%m')).classes('text-[10px] text-amber-5 font-mono font-bold')
+
+                        escala = {}
+                        if db:
+                            try:
+                                res_esc = db.table('escala_diaria').select('*').eq('data', hoje_str).execute()
+                                if res_esc.data:
+                                    escala = res_esc.data[0]
+                            except Exception as e:
+                                print(f"[TV ESCALA ERR] {e}")
+
                         esc_rows = [
                             ('SUPERVISOR', escala.get('supervisor_dia', '1º TEN CALAÇA')),
                             ('FOTÓGRAFO', escala.get('inspetor_dia', 'SG SILVA')),
@@ -404,109 +447,74 @@ def render_page():
                             ('MÍDIAS SOCIAIS', escala.get('auxiliar_dia', 'AL AMANDA'))
                         ]
                         
-                        for label, name in esc_rows:
-                            with ui.row().classes('w-full justify-between items-center bg-black/10 py-1 px-2 rounded border border-white/5 text-xs'):
-                                ui.label(label).classes('text-grey-4 font-semibold')
-                                ui.label(name).classes('text-white font-bold')
+                        with ui.column().classes('w-full gap-1 q-mt-xs'):
+                            for label, name in esc_rows:
+                                with ui.row().classes('w-full justify-between items-center bg-black/20 py-0.5 px-2 rounded border border-white/5 text-[11px]'):
+                                    ui.label(label).classes('text-grey-4 text-[9px] font-semibold')
+                                    ui.label(name).classes('text-white font-bold text-[10px]')
 
-                    ui.separator().style('background-color: rgba(255, 255, 255, 0.05);')
-                    
-                    with ui.column().classes('w-full gap-1 q-mt-xs'):
-                        ui.label('🎂 ANIVERSARIANTES DO SETOR').classes('text-[10px] text-grey-5 font-bold tracking-wider q-mb-xs')
-                        
-                        if aniversariantes:
-                            for n in aniversariantes[:3]:
-                                with ui.row().classes('w-full items-center justify-between text-xs'):
-                                    ui.label(n['nome']).classes('text-white font-bold truncate max-w-[190px]')
-                                    ui.label(f"Dia {n['dia']}").classes('text-amber-5 font-mono text-[10px]')
-                        else:
-                            mock_niver = [
-                                {'nome': 'SO ALMEIDA', 'dia': 18},
-                                {'nome': 'SGT CALAÇA', 'dia': 22}
-                            ]
-                            for n in mock_niver:
-                                with ui.row().classes('w-full items-center justify-between text-xs'):
-                                    ui.label(n['nome']).classes('text-white font-bold')
-                                    ui.label(f"Dia {n['dia']}").classes('text-amber-5 font-mono text-[10px]')
+                    # BLOCO 2: MODO CARROSSEL DE INFORMATIVOS & EFEMÉRIDES (PAINEL INFERIOR)
+                    slide_idx = (int(datetime.now().timestamp() // 15)) % 3
+                    slide_headers = [
+                        ('announcement', '📢 BOLETINS COMSOC'),
+                        ('anchor', '⚓ SETOR NAVAL'),
+                        ('event', '🎂 EFEMÉRIDES MB')
+                    ]
+                    icon_name, title_lbl = slide_headers[slide_idx]
 
-                # COLUNA 3: MODO CARROSSEL DE INFORMATIVOS & EFEMÉRIDES MARÍTIMAS
-                slide_idx = (int(datetime.now().timestamp() // 15)) % 3
-                slide_headers = [
-                    ('announcement', '📢 BOLETINS & AVISOS COMSOC'),
-                    ('anchor', '⚓ NOTÍCIAS DO SETOR NAVAL'),
-                    ('event', '🎂 EFEMÉRIDES MARÍTIMAS')
-                ]
-                icon_name, title_lbl = slide_headers[slide_idx]
+                    with ui.card().classes('w-full q-pa-sm no-shadow rounded-xl border border-cyan-950/60 flex-col justify-between flex-grow').style('background: rgba(10,15,30,0.45);'):
+                        with ui.column().classes('w-full gap-2'):
+                            with ui.row().classes('w-full items-center justify-between q-mb-xs'):
+                                with ui.row().classes('items-center gap-2'):
+                                    ui.icon(icon_name, color='cyan-5', size='xs')
+                                    ui.label(title_lbl).classes('text-xs font-bold text-white tracking-wider')
+                                ui.badge(f"{slide_idx+1}/3", color='cyan-9').classes('text-[8px] font-mono')
 
-                with ui.card().classes('q-pa-md no-shadow rounded-xl border border-cyan-950/60 flex-col justify-between').style('background: rgba(10,15,30,0.45);'):
-                    with ui.column().classes('w-full gap-2'):
-                        with ui.row().classes('w-full items-center justify-between q-mb-xs'):
-                            with ui.row().classes('items-center gap-2'):
-                                ui.icon(icon_name, color='cyan-5', size='sm')
-                                ui.label(title_lbl).classes('text-xs font-bold text-white tracking-wider')
-                            ui.badge(f"PAINEL {slide_idx+1}/3", color='cyan-9').classes('text-[8px] font-mono')
+                            if slide_idx == 0:
+                                boletins = []
+                                if db:
+                                    try:
+                                        res = db.table('comsoc_noticias').select('*').order('data', desc=True).limit(2).execute()
+                                        boletins = res.data if res.data else []
+                                    except Exception:
+                                        pass
+                                        
+                                if boletins:
+                                    with ui.column().classes('w-full gap-1 q-mt-xs'):
+                                        for b in boletins:
+                                            with ui.card().classes('w-full q-pa-xs no-shadow rounded-lg').style('background: rgba(255,255,255,0.02); border-left: 3px solid #00e5ff;'):
+                                                ui.label(b.get('titulo', '')).classes('text-[11px] font-bold text-cyan truncate')
+                                                ui.label(str(b.get('conteudo', ''))[:70] + "...").classes('text-[9px] text-grey-4 q-mt-xs')
+                                else:
+                                    ui.label('Nenhum boletim ativo.').classes('text-[10px] text-grey-5 py-4 text-center w-full')
 
-                        if slide_idx == 0:
-                            boletins = []
-                            if db:
+                            elif slide_idx == 1:
                                 try:
-                                    res = db.table('comsoc_noticias').select('*').order('data', desc=True).limit(3).execute()
-                                    boletins = res.data if res.data else []
-                                except Exception as e:
-                                    print(f"[TV BOLETINS ERR] {e}")
-                                    
-                            if boletins:
-                                with ui.column().classes('w-full gap-2 q-mt-xs'):
-                                    for b in boletins:
-                                        data_noticia = str(b.get('data', ''))
-                                        try:
-                                            data_noticia = datetime.strptime(data_noticia[:10], '%Y-%m-%d').strftime('%d/%m/%Y')
-                                        except Exception:
-                                            pass
-                                            
-                                        with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg').style('background: rgba(255,255,255,0.02); border-left: 3px solid #00e5ff;'):
-                                            ui.label(b.get('titulo', '')).classes('text-xs font-bold text-cyan')
-                                            ui.label(str(b.get('conteudo', ''))[:90] + "...").classes('text-[10px] text-grey-4 q-mt-xs')
-                                            with ui.row().classes('w-full justify-between items-center text-[8px] text-grey-5 q-mt-xs'):
-                                                ui.label(f"✍️ {b.get('autor', 'COMSOC')}")
-                                                ui.label(f"📅 {data_noticia}")
-                            else:
-                                with ui.column().classes('w-full h-36 items-center justify-center gap-2 text-grey-5'):
-                                    ui.icon('notifications_off', size='2rem')
-                                    ui.label('Nenhum comunicado ativo.').classes('text-xs')
+                                    from comsoc_noticias import fetch_rss_news
+                                    rss_items = fetch_rss_news()[:2]
+                                except Exception:
+                                    rss_items = []
+                                
+                                if rss_items:
+                                    with ui.column().classes('w-full gap-1 q-mt-xs'):
+                                        for item in rss_items:
+                                            with ui.card().classes('w-full q-pa-xs no-shadow rounded-lg').style('background: rgba(255,255,255,0.02); border-left: 3px solid #f59e0b;'):
+                                                ui.label(item['fonte']).classes('text-[8px] text-amber-5 font-bold')
+                                                ui.label(item['titulo']).classes('text-[10px] font-bold text-white truncate')
+                                else:
+                                    ui.label('Sem notícias navais.').classes('text-[10px] text-grey-5 py-4 text-center w-full')
 
-                        elif slide_idx == 1:
-                            try:
-                                from comsoc_noticias import fetch_rss_news
-                                rss_items = fetch_rss_news()[:3]
-                            except Exception:
-                                rss_items = []
-                            
-                            if rss_items:
-                                with ui.column().classes('w-full gap-2 q-mt-xs'):
-                                    for item in rss_items:
-                                        with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg').style('background: rgba(255,255,255,0.02); border-left: 3px solid #f59e0b;'):
-                                            ui.label(item['fonte']).classes('text-[9px] text-amber-5 font-bold')
-                                            ui.label(item['titulo']).classes('text-xs font-bold text-white leading-tight q-mt-xs')
-                                            ui.label(item['data']).classes('text-[8px] text-grey-5 q-mt-xs')
                             else:
-                                with ui.column().classes('w-full h-36 items-center justify-center gap-2 text-grey-5'):
-                                    ui.icon('rss_feed', size='2rem')
-                                    ui.label('Notícias do Setor Naval indisponíveis.').classes('text-xs')
-
-                        else:
-                            with ui.column().classes('w-full gap-2 q-mt-xs'):
-                                ui.label('⚓ DESTAQUES DA MARINHA DO BRASIL').classes('text-[9px] font-bold text-cyan-4 tracking-wider')
-                                efemerides_list = [
-                                    ('11 JUN', 'Batalha Naval do Riachuelo (Data Magna)'),
-                                    ('13 DEZ', 'Dia do Marinheiro (Patrono Tamandaré)'),
-                                    ('23 OUT', 'Dia do Aviador Naval'),
-                                    ('16 NOV', 'Dia da Amazônia Azul')
-                                ]
-                                for dia_ef, tit_ef in efemerides_list:
-                                    with ui.row().classes('w-full justify-between items-center bg-black/20 px-2 py-1 rounded text-xs border border-white/5'):
-                                        ui.label(tit_ef).classes('text-white text-[10px] font-semibold truncate max-w-[200px]')
-                                        ui.label(dia_ef).classes('text-amber-4 font-mono text-[9px] font-bold')
+                                with ui.column().classes('w-full gap-1 q-mt-xs'):
+                                    efemerides_list = [
+                                        ('11 JUN', 'Batalha Naval do Riachuelo'),
+                                        ('13 DEZ', 'Dia do Marinheiro'),
+                                        ('23 OUT', 'Dia do Aviador Naval')
+                                    ]
+                                    for dia_ef, tit_ef in efemerides_list:
+                                        with ui.row().classes('w-full justify-between items-center bg-black/20 px-2 py-0.5 rounded text-[10px] border border-white/5'):
+                                            ui.label(tit_ef).classes('text-white text-[9px] font-semibold truncate max-w-[170px]')
+                                            ui.label(dia_ef).classes('text-amber-4 font-mono text-[8px] font-bold')
 
             # ── LETREIRO DIGITAL CORRIDO (Ticker Marquee) no Rodapé ──
             bulletin_ticker_text = "⚓ MONITOR SISGAB COMSOC: Central de Operações de Comunicação Social. Acompanhe agendas de cobertura e inventário de material de forma tática.  "
