@@ -1098,62 +1098,140 @@ def render_page():
         allocated_by_row = {}
         for r in range(rows_count):
             row_label = get_row_label(r)
-            allocated_by_row[row_label] = [c for c in convidados if c.get('assento_id', '').startswith(f"{row_label}-")]
-
-    def open_print_cards_dialog(event, convidados, layout):
-        rows_count = layout.get('rows', 5)
-        allocated_by_row = {}
-        for r in range(rows_count):
-            row_label = get_row_label(r)
             allocated_by_row[row_label] = [c for c in convidados if (c.get('assento_id') or '').startswith(f"{row_label}-")]
 
-        # Estado local de modelo de impressão
+        # Estado do estúdio de impressão
         print_config = {
-            'model': 'cadeira_a4', # 'cadeira_a4', 'mesa_a5_dobravel', 'credencial'
+            'model': 'cadeira_a4',
             'show_logo': True,
             'show_qr': True,
             'show_rank': True,
-            'show_cargo': True
+            'show_cargo': True,
+            'qr_position': 'direita',
+            'brasao_position': 'esquerda',
+            'header_line1': 'MARINHA DO BRASIL',
+            'header_line2': event.get('nome', 'SOLENIDADE').upper(),
+            'template_bg_url': '',
+            'brasao_left_url': '',
+            'brasao_right_url': '',
+            'use_template_bg': False
         }
 
-        # Insígnias / Indicadores visuais por Posto/Graduação
-        rank_badges = {
-            'AE': '⭐⭐⭐⭐ ALMIRANTE DE ESQUADRA',
-            'VA': '⭐⭐⭐ VICE-ALMIRANTE',
-            'CA': '⭐⭐ CONTRA-ALMIRANTE',
-            'CMG': '🦅 CAPITÃO DE MAR E GUERRA',
-            'CF': '⚓ CAPITÃO DE FRAGATA',
-            'CT': '⚓ CAPITÃO DE CORVETA',
-            'CC': '⚓ CAPITÃO-TENENTE',
-            '1DN': '🔰 MARINHA DO BRASIL',
-            'Dr.': '⚖️ AUTORIDADE CIVIL',
-            'Min.': '🏛️ MINISTRO DE ESTADO'
+        # Insígnias oficiais por Posto/Graduação (texto rico com indicador visual)
+        RANK_INSIGNIAS = {
+            'AE':  {'stars': '★★★★', 'title': 'ALMIRANTE DE ESQUADRA',       'color': '#FFD700'},
+            'VA':  {'stars': '★★★',  'title': 'VICE-ALMIRANTE',              'color': '#FFD700'},
+            'CA':  {'stars': '★★',   'title': 'CONTRA-ALMIRANTE',            'color': '#FFD700'},
+            'CMG': {'stars': '★',    'title': 'CAPITÃO DE MAR E GUERRA',     'color': '#C0C0C0'},
+            'CF':  {'stars': '⚓',   'title': 'CAPITÃO DE FRAGATA',          'color': '#C0C0C0'},
+            'CC':  {'stars': '⚓',   'title': 'CAPITÃO DE CORVETA',          'color': '#C0C0C0'},
+            'CT':  {'stars': '⚓',   'title': 'CAPITÃO-TENENTE',             'color': '#B0B0B0'},
+            '1TEN': {'stars': '▬',   'title': '1º TENENTE',                  'color': '#B0B0B0'},
+            '2TEN': {'stars': '▬',   'title': '2º TENENTE',                  'color': '#B0B0B0'},
+            'SO':  {'stars': '◆',    'title': 'SUBOFICIAL',                  'color': '#CD7F32'},
+            '1SG': {'stars': '▲▲▲',  'title': '1º SARGENTO',                 'color': '#CD7F32'},
+            '2SG': {'stars': '▲▲',   'title': '2º SARGENTO',                 'color': '#CD7F32'},
+            '3SG': {'stars': '▲',    'title': '3º SARGENTO',                 'color': '#CD7F32'},
+            'CB':  {'stars': '∨∨',   'title': 'CABO',                        'color': '#808080'},
+            'SD':  {'stars': '∨',    'title': 'SOLDADO',                     'color': '#808080'},
+            'MN':  {'stars': '∨',    'title': 'MARINHEIRO',                  'color': '#808080'},
+            'Dr.': {'stars': '⚖️',   'title': 'AUTORIDADE CIVIL',            'color': '#4A90D9'},
+            'Min.':{'stars': '🏛️',   'title': 'MINISTRO DE ESTADO',          'color': '#9B59B6'},
+            'Dep.':{'stars': '🏛️',   'title': 'DEPUTADO',                    'color': '#27AE60'},
+            'Sen.':{'stars': '🏛️',   'title': 'SENADOR',                     'color': '#2980B9'},
+            'Gen.':{'stars': '★★★★', 'title': 'GENERAL DE EXÉRCITO',         'color': '#FFD700'},
+            'Cel.':{'stars': '★',    'title': 'CORONEL',                     'color': '#C0C0C0'},
+            'TC':  {'stars': '★',    'title': 'TENENTE-CORONEL',             'color': '#C0C0C0'},
+            'Maj': {'stars': '★',    'title': 'MAJOR',                       'color': '#C0C0C0'}
         }
 
-        with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 780px; max-width: 95vw; max-height: 90vh; overflow-y: auto;'):
+        with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 860px; max-width: 96vw; max-height: 92vh; overflow-y: auto;'):
             ui.label(f"🖨️ ESTÚDIO DE IMPRESSÃO DE PLACAS & CREDENCIAIS JADE").classes('text-md font-bold text-cyan cyber-title q-mb-xs')
-            ui.label("Configure os Modelos de Placas, Brasões, Insígnias de Posto/Graduação e Quebra de Páginas").classes('text-xs text-grey-4 q-mb-md')
+            ui.label("Personalize Modelos, Templates de Fundo, Brasões, Insígnias e Posicionamento").classes('text-xs text-grey-4 q-mb-md')
 
-            # --- CONTROLES DO ESTÚDIO DE IMPRESSÃO ---
-            with ui.card().classes('w-full q-pa-sm bg-black/40 border border-cyan-500/30 rounded-xl q-mb-md print-hide'):
-                with ui.row().classes('w-full justify-between items-center wrap gap-2'):
+            # ═══════════════════════════════════════════════════════════════
+            # PAINEL DE CONFIGURAÇÃO EXPANDIDO (print-hide)
+            # ═══════════════════════════════════════════════════════════════
+            with ui.card().classes('w-full q-pa-md bg-black/50 border border-cyan-500/30 rounded-xl q-mb-md print-hide'):
+
+                # ── Linha 1: Modelo + Toggles ──
+                with ui.row().classes('w-full items-center gap-3 wrap'):
+                    ui.label('Modelo:').classes('text-xs text-grey-3 font-bold')
+                    model_select = ui.select(
+                        options={
+                            'cadeira_a4': '📄 Placa de Cadeira (A4 Padrão)',
+                            'mesa_a5_dobravel': '🏷️ Placa de Mesa Dobrável (A5)',
+                            'credencial': '🪪 Credencial / Crachá de Peito',
+                            'template_custom': '🎨 Template Customizado (Imagem de Fundo)'
+                        },
+                        value=print_config['model']
+                    ).props('dark outlined dense').style('min-width: 280px;')
+
                     with ui.row().classes('items-center gap-2'):
-                        ui.label('Modelo de Impressão:').classes('text-xs text-grey-3 font-bold')
-                        model_select = ui.select(
+                        chk_logo = ui.checkbox('Brasão MB', value=True).props('dark dense').classes('text-xs text-grey-3')
+                        chk_qr = ui.checkbox('QR Code', value=True).props('dark dense').classes('text-xs text-grey-3')
+                        chk_rank = ui.checkbox('Insígnia de Posto', value=True).props('dark dense').classes('text-xs text-grey-3')
+
+                ui.separator().classes('q-my-sm').style('border-color: rgba(255,255,255,0.08);')
+
+                # ── Linha 2: Cabeçalho e Título Editáveis ──
+                with ui.row().classes('w-full gap-2'):
+                    with ui.column().classes('col gap-0'):
+                        ui.label('Linha 1 do Cabeçalho:').classes('text-[10px] text-grey-5')
+                        input_header1 = ui.input(value=print_config['header_line1']).props('dark outlined dense').classes('w-full')
+                    with ui.column().classes('col gap-0'):
+                        ui.label('Linha 2 (Título do Evento):').classes('text-[10px] text-grey-5')
+                        input_header2 = ui.input(value=print_config['header_line2']).props('dark outlined dense').classes('w-full')
+
+                ui.separator().classes('q-my-sm').style('border-color: rgba(255,255,255,0.08);')
+
+                # ── Linha 3: Brasões e Posicionamento ──
+                with ui.row().classes('w-full gap-3 items-end wrap'):
+                    with ui.column().classes('gap-0'):
+                        ui.label('Posição dos Brasões:').classes('text-[10px] text-grey-5')
+                        sel_brasao_pos = ui.select(
                             options={
-                                'cadeira_a4': '📄 Placa de Cadeira (A4 Padrão)',
-                                'mesa_a5_dobravel': '🏷️ Placa de Mesa Dobrável (A5 Display)',
-                                'credencial': '🪪 Credencial / Crachá de Peito'
+                                'esquerda': '◀ Brasão à Esquerda',
+                                'ambos': '◀ Esquerda + Direita ▶',
+                                'centro': '● Brasão Centralizado',
+                                'nenhum': '✕ Sem Brasão'
                             },
-                            value=print_config['model']
-                        ).props('dark outlined dense').style('min-width: 260px;')
+                            value='esquerda'
+                        ).props('dark outlined dense').style('min-width: 210px;')
 
-                    with ui.row().classes('items-center gap-3'):
-                        ui.checkbox('Brasão da MB', value=print_config['show_logo'], on_change=lambda e: preview_container.refresh()).props('dark dense').classes('text-xs text-grey-3')
-                        ui.checkbox('QR Code Tático', value=print_config['show_qr'], on_change=lambda e: preview_container.refresh()).props('dark dense').classes('text-xs text-grey-3')
-                        ui.checkbox('Insígnia de Posto', value=print_config['show_rank'], on_change=lambda e: preview_container.refresh()).props('dark dense').classes('text-xs text-grey-3')
+                    with ui.column().classes('gap-0'):
+                        ui.label('Posição QR Code:').classes('text-[10px] text-grey-5')
+                        sel_qr_pos = ui.select(
+                            options={
+                                'direita': '▶ Canto Direito',
+                                'esquerda': '◀ Canto Esquerdo',
+                                'centro_baixo': '▼ Centro Inferior'
+                            },
+                            value='direita'
+                        ).props('dark outlined dense').style('min-width: 180px;')
 
-            # CSS Específico para Impressão Perfeita no Papel / PDF
+                    with ui.column().classes('gap-0 col'):
+                        ui.label('Upload Brasão Esquerdo (PNG):').classes('text-[10px] text-grey-5')
+                        upload_brasao_left = ui.input(placeholder='URL do brasão esquerdo...').props('dark outlined dense').classes('w-full')
+                    with ui.column().classes('gap-0 col'):
+                        ui.label('Upload Brasão Direito (PNG):').classes('text-[10px] text-grey-5')
+                        upload_brasao_right = ui.input(placeholder='URL do brasão direito...').props('dark outlined dense').classes('w-full')
+
+                ui.separator().classes('q-my-sm').style('border-color: rgba(255,255,255,0.08);')
+
+                # ── Linha 4: Template de Fundo ──
+                with ui.row().classes('w-full gap-3 items-end'):
+                    with ui.column().classes('col gap-0'):
+                        ui.label('🎨 Template de Fundo (URL da Imagem PNG/JPG):').classes('text-[10px] text-amber-4 font-bold')
+                        input_template_bg = ui.input(placeholder='Cole a URL da imagem de fundo ou deixe vazio para fundo padrão...').props('dark outlined dense').classes('w-full')
+                        ui.label('As informações (Nome, Posto, Assento, QR Code) serão sobrepostas sobre a imagem.').classes('text-[9px] text-grey-6')
+
+                with ui.row().classes('w-full justify-end q-mt-sm'):
+                    ui.button('🔄 Atualizar Pré-Visualização', on_click=lambda: preview_container.refresh()).props('unelevated color=cyan text-color=black dense bold').classes('text-xs')
+
+            # ═══════════════════════════════════════════════════════════════
+            # CSS DE IMPRESSÃO
+            # ═══════════════════════════════════════════════════════════════
             print_css = """
             <style>
             @media print {
@@ -1162,17 +1240,63 @@ def render_page():
                 .print-area { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; }
                 .print-hide { display: none !important; }
                 .page-break { page-break-after: always !important; }
-                .print-card-a4 { border: 2px solid #000 !important; margin-bottom: 20px !important; padding: 20px !important; background: #fff !important; color: #000 !important; border-radius: 8px !important; }
-                .print-card-mesa { border: 2px dashed #666 !important; padding: 15px !important; background: #fff !important; color: #000 !important; margin-bottom: 20px !important; }
-                .print-card-credencial { border: 1px solid #000 !important; width: 300px !important; height: 420px !important; padding: 15px !important; margin: 10px !important; float: left !important; }
+                .jade-card { border: 2px solid #000 !important; margin-bottom: 16px !important; padding: 16px !important; background: #fff !important; color: #000 !important; border-radius: 8px !important; }
+                .jade-card-template { margin-bottom: 16px !important; page-break-inside: avoid !important; }
+                .jade-card-mesa { border: 2px dashed #666 !important; padding: 12px !important; background: #fff !important; color: #000 !important; margin-bottom: 16px !important; }
+                .jade-card-cred { border: 1px solid #000 !important; width: 300px !important; height: 420px !important; padding: 12px !important; margin: 8px !important; float: left !important; }
+            }
+            .jade-template-card {
+                position: relative;
+                width: 100%;
+                min-height: 180px;
+                background-size: cover;
+                background-position: center;
+                background-repeat: no-repeat;
+                border-radius: 12px;
+                overflow: hidden;
+            }
+            .jade-template-overlay {
+                position: relative;
+                z-index: 2;
+                padding: 16px;
+                min-height: 180px;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                background: rgba(0,0,0,0.45);
+            }
+            .jade-insignia-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 2px 8px;
+                border-radius: 4px;
+                font-size: 10px;
+                font-weight: 800;
+                letter-spacing: 1px;
             }
             </style>
             """
             ui.add_head_html(print_css)
 
+            # ═══════════════════════════════════════════════════════════════
+            # ÁREA DE PRÉ-VISUALIZAÇÃO
+            # ═══════════════════════════════════════════════════════════════
             @ui.refreshable
             def preview_container():
                 current_model = model_select.value
+                h1 = input_header1.value or 'MARINHA DO BRASIL'
+                h2 = input_header2.value or ''
+                brasao_pos = sel_brasao_pos.value
+                qr_pos = sel_qr_pos.value
+                show_logo = chk_logo.value
+                show_qr = chk_qr.value
+                show_rank = chk_rank.value
+                bg_url = input_template_bg.value.strip()
+                brasao_l_url = upload_brasao_left.value.strip()
+                brasao_r_url = upload_brasao_right.value.strip()
+                use_bg = bool(bg_url) or current_model == 'template_custom'
+
                 with ui.column().classes('w-full gap-4 print-area'):
                     for row_label, list_c in allocated_by_row.items():
                         if not list_c:
@@ -1183,83 +1307,166 @@ def render_page():
                                 ui.label(f"FILEIRA {row_label} — {len(list_c)} CARTÕES").classes('text-sm font-bold text-cyan')
                                 ui.badge(f"Lote Fileira {row_label}").props('color=cyan text-color=black')
 
-                            # RENDERIZAÇÃO DOS CARTÕES CONFORME MODELO SELECIONADO
-                            if current_model == 'cadeira_a4':
+                            # ═══ MODELO: TEMPLATE CUSTOMIZADO ═══
+                            if current_model == 'template_custom' or use_bg:
                                 with ui.grid(columns='1 sm:grid-cols-2').classes('w-full gap-4'):
-                                    for c in sorted(list_c, key=lambda x: x.get('assento_id','')):
+                                    for c in sorted(list_c, key=lambda x: x.get('assento_id', '')):
                                         is_acomp = bool(c.get('convidado_principal_id'))
                                         posto = c.get('posto_graduacao') or ''
-                                        insignia = rank_badges.get(posto, '⚓ MARINHA DO BRASIL') if print_config['show_rank'] else ''
+                                        insignia_data = RANK_INSIGNIAS.get(posto, None)
                                         qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=120x120&data={c['id']}&color=000000&bgcolor=ffffff"
 
-                                        with ui.card().classes('w-full q-pa-md print-card-a4 bg-slate-900 border border-cyan-500/40 rounded-xl').style('border-left: 6px solid #00e5ff !important;'):
+                                        bg_style = f"background-image: url('{bg_url}');" if bg_url else "background: linear-gradient(135deg, #0a1628 0%, #1a2744 50%, #0d1b2a 100%);"
+
+                                        with ui.card().classes('w-full jade-card-template jade-template-card').style(f'{bg_style} border: 2px solid rgba(0,229,255,0.3); border-radius: 12px;'):
+                                            with ui.column().classes('jade-template-overlay'):
+                                                # TOPO: Brasões + Cabeçalho
+                                                with ui.row().classes('w-full justify-between items-start'):
+                                                    if show_logo and brasao_pos in ('esquerda', 'ambos'):
+                                                        if brasao_l_url:
+                                                            ui.image(brasao_l_url).classes('w-10 h-10 rounded')
+                                                        else:
+                                                            ui.label('⚓').classes('text-2xl')
+                                                    with ui.column().classes('col items-center gap-0'):
+                                                        ui.label(h1).classes('text-[10px] font-black text-cyan tracking-[3px] text-center')
+                                                        if h2:
+                                                            ui.label(h2).classes('text-[9px] font-bold text-amber text-center')
+                                                        if show_logo and brasao_pos == 'centro':
+                                                            if brasao_l_url:
+                                                                ui.image(brasao_l_url).classes('w-8 h-8 rounded q-mt-xs')
+                                                            else:
+                                                                ui.label('⚓').classes('text-xl')
+                                                    if show_logo and brasao_pos in ('ambos',):
+                                                        if brasao_r_url:
+                                                            ui.image(brasao_r_url).classes('w-10 h-10 rounded')
+                                                        else:
+                                                            ui.label('⚓').classes('text-2xl')
+
+                                                # MEIO: Insígnia + Nome + Assento
+                                                with ui.column().classes('w-full items-center gap-1 q-my-sm'):
+                                                    if show_rank and insignia_data:
+                                                        ui.html(
+                                                            f'<span class="jade-insignia-badge" style="background:{insignia_data["color"]}22; color:{insignia_data["color"]}; border: 1px solid {insignia_data["color"]}44;">'
+                                                            f'{insignia_data["stars"]} {insignia_data["title"]}</span>'
+                                                        )
+                                                    nome_c = f"{posto} {c['nome']}".strip()
+                                                    ui.label(nome_c).classes('text-lg font-black text-white text-center leading-tight')
+                                                    sub = '(Acompanhante Oficial)' if is_acomp else (c.get('cargo_funcao') or c.get('categoria') or '')
+                                                    if sub:
+                                                        ui.label(sub).classes('text-[10px] text-grey-3 font-bold')
+                                                    ui.badge(f"ASSENTO {c['assento_id']}").props('color=cyan text-color=black bold').classes('text-xs q-mt-xs')
+
+                                                # BASE: QR Code
+                                                if show_qr:
+                                                    qr_align = 'justify-end' if qr_pos == 'direita' else ('justify-start' if qr_pos == 'esquerda' else 'justify-center')
+                                                    with ui.row().classes(f'w-full {qr_align} items-end'):
+                                                        with ui.column().classes('items-center gap-0'):
+                                                            ui.image(qr_url).classes('w-14 h-14 rounded bg-white p-1')
+                                                            ui.label(f"ID:{c['id']}").classes('text-[7px] font-mono text-grey-5')
+
+                            # ═══ MODELO: PLACA DE CADEIRA A4 ═══
+                            elif current_model == 'cadeira_a4':
+                                with ui.grid(columns='1 sm:grid-cols-2').classes('w-full gap-4'):
+                                    for c in sorted(list_c, key=lambda x: x.get('assento_id', '')):
+                                        is_acomp = bool(c.get('convidado_principal_id'))
+                                        posto = c.get('posto_graduacao') or ''
+                                        insignia_data = RANK_INSIGNIAS.get(posto, None)
+                                        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=120x120&data={c['id']}&color=000000&bgcolor=ffffff"
+
+                                        with ui.card().classes('w-full q-pa-md jade-card bg-slate-900 border border-cyan-500/40 rounded-xl').style('border-left: 6px solid #00e5ff !important;'):
                                             with ui.row().classes('w-full justify-between items-start no-wrap'):
                                                 with ui.column().classes('gap-0 col'):
-                                                    if print_config['show_logo']:
-                                                        ui.label('⚓ MARINHA DO BRASIL').classes('text-[10px] font-black text-cyan tracking-widest')
-                                                    
+                                                    # Brasão no topo
+                                                    if show_logo:
+                                                        with ui.row().classes('items-center gap-1'):
+                                                            if brasao_l_url:
+                                                                ui.image(brasao_l_url).classes('w-5 h-5')
+                                                            ui.label(h1).classes('text-[10px] font-black text-cyan tracking-widest')
+
                                                     ui.badge(f"ASSENTO {c['assento_id']}").props('color=cyan text-color=black bold').classes('text-xs w-fit q-my-xs')
-                                                    
-                                                    if insignia:
-                                                        ui.label(insignia).classes('text-[9px] text-amber font-bold')
-                                                        
+
+                                                    if show_rank and insignia_data:
+                                                        ui.html(
+                                                            f'<span class="jade-insignia-badge" style="background:{insignia_data["color"]}22; color:{insignia_data["color"]}; border: 1px solid {insignia_data["color"]}44;">'
+                                                            f'{insignia_data["stars"]} {insignia_data["title"]}</span>'
+                                                        )
+
                                                     nome_c = f"{posto} {c['nome']}".strip()
                                                     ui.label(nome_c).classes('text-md font-black text-white leading-tight q-mt-xs')
-                                                    
                                                     sub = '(Acompanhante Oficial)' if is_acomp else (c.get('cargo_funcao') or c.get('categoria') or 'Convidado de Honra')
                                                     ui.label(sub).classes('text-xs text-grey-4 font-bold q-mt-xs')
-                                                
-                                                if print_config['show_qr']:
+                                                    if h2:
+                                                        ui.label(h2).classes('text-[9px] text-amber font-bold q-mt-xs')
+
+                                                if show_qr:
                                                     with ui.column().classes('items-center gap-0'):
                                                         ui.image(qr_url).classes('w-16 h-16 rounded bg-white p-1')
                                                         ui.label(f"ID:{c['id']}").classes('text-[8px] font-mono text-grey-5')
 
+                            # ═══ MODELO: MESA DOBRÁVEL A5 ═══
                             elif current_model == 'mesa_a5_dobravel':
                                 with ui.grid(columns='1 sm:grid-cols-2').classes('w-full gap-4'):
-                                    for c in sorted(list_c, key=lambda x: x.get('assento_id','')):
+                                    for c in sorted(list_c, key=lambda x: x.get('assento_id', '')):
                                         is_acomp = bool(c.get('convidado_principal_id'))
                                         posto = c.get('posto_graduacao') or ''
                                         nome_c = f"{posto} {c['nome']}".strip()
                                         sub = '(Acompanhante)' if is_acomp else (c.get('cargo_funcao') or 'Convidado')
                                         qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={c['id']}"
 
-                                        with ui.card().classes('w-full q-pa-md print-card-mesa bg-slate-900 border-2 border-dashed border-cyan-500/40 rounded-xl text-center'):
+                                        with ui.card().classes('w-full q-pa-md jade-card-mesa bg-slate-900 border-2 border-dashed border-cyan-500/40 rounded-xl text-center'):
                                             ui.label('✂️ DOBRA DE MESA (FACE FRONTAL)').classes('text-[8px] text-grey-5 tracking-widest uppercase print-hide')
+                                            if show_logo:
+                                                ui.label(h1).classes('text-[9px] font-black text-cyan tracking-widest')
                                             ui.label(f"ASSENTO {c['assento_id']}").classes('text-sm font-black text-cyan')
                                             ui.label(nome_c).classes('text-lg font-black text-white q-my-xs')
                                             ui.label(sub).classes('text-xs text-grey-3 font-bold')
-                                            
+
                                             ui.separator().classes('q-my-sm print-hide').style('border-color: rgba(255,255,255,0.1);')
                                             ui.label('✂️ DOBRA DE MESA (FACE TRASEIRA)').classes('text-[8px] text-grey-5 tracking-widest uppercase print-hide')
                                             with ui.row().classes('w-full justify-center items-center gap-2 q-mt-xs'):
-                                                if print_config['show_qr']:
+                                                if show_qr:
                                                     ui.image(qr_url).classes('w-12 h-12 bg-white p-1 rounded')
                                                 ui.label(f"FILEIRA {row_label} | {c['assento_id']}").classes('text-xs text-grey-4 font-mono font-bold')
 
+                            # ═══ MODELO: CREDENCIAL / CRACHÁ ═══
                             elif current_model == 'credencial':
                                 with ui.grid(columns='1 sm:grid-cols-2 md:grid-cols-3').classes('w-full gap-3'):
-                                    for c in sorted(list_c, key=lambda x: x.get('assento_id','')):
+                                    for c in sorted(list_c, key=lambda x: x.get('assento_id', '')):
                                         is_acomp = bool(c.get('convidado_principal_id'))
                                         posto = c.get('posto_graduacao') or ''
                                         nome_c = f"{posto} {c['nome']}".strip()
+                                        insignia_data = RANK_INSIGNIAS.get(posto, None)
                                         qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={c['id']}"
 
-                                        with ui.card().classes('w-full print-card-credencial bg-slate-900 border border-amber-500/40 rounded-2xl q-pa-md items-center text-center justify-between').style('height: 280px;'):
+                                        with ui.card().classes('w-full jade-card-cred bg-slate-900 border border-amber-500/40 rounded-2xl q-pa-md items-center text-center justify-between').style('height: 300px;'):
                                             with ui.column().classes('items-center gap-0 w-full'):
-                                                ui.label('⚓ MARINHA DO BRASIL').classes('text-[9px] font-black text-cyan tracking-widest')
-                                                ui.label(event.get('nome','SOLENIDADE')).classes('text-[10px] font-bold text-amber truncate w-full')
+                                                if show_logo:
+                                                    with ui.row().classes('items-center gap-1'):
+                                                        if brasao_l_url:
+                                                            ui.image(brasao_l_url).classes('w-6 h-6')
+                                                        ui.label(h1).classes('text-[9px] font-black text-cyan tracking-widest')
+                                                        if brasao_r_url and brasao_pos == 'ambos':
+                                                            ui.image(brasao_r_url).classes('w-6 h-6')
+                                                if h2:
+                                                    ui.label(h2).classes('text-[10px] font-bold text-amber truncate w-full')
                                                 ui.separator().classes('q-my-xs w-full').style('border-color: rgba(255,255,255,0.1);')
-                                            
+
                                             with ui.column().classes('items-center gap-0 w-full'):
-                                                ui.badge(f"FILEIRA {row_label} - ASSENTO {c['assento_id']}").props('color=cyan text-color=black bold').classes('text-xs q-mb-xs')
+                                                ui.badge(f"FILEIRA {row_label} - {c['assento_id']}").props('color=cyan text-color=black bold').classes('text-xs q-mb-xs')
+                                                if show_rank and insignia_data:
+                                                    ui.html(
+                                                        f'<span class="jade-insignia-badge" style="background:{insignia_data["color"]}22; color:{insignia_data["color"]}; border: 1px solid {insignia_data["color"]}44; font-size:8px;">'
+                                                        f'{insignia_data["stars"]} {insignia_data["title"]}</span>'
+                                                    )
                                                 ui.label(nome_c).classes('text-sm font-black text-white leading-tight')
                                                 sub = '(Acompanhante)' if is_acomp else (c.get('cargo_funcao') or c.get('categoria'))
-                                                ui.label(sub).classes('text-[10px] text-grey-4 font-bold')
+                                                if sub:
+                                                    ui.label(sub).classes('text-[10px] text-grey-4 font-bold')
 
-                                            if print_config['show_qr']:
+                                            if show_qr:
                                                 ui.image(qr_url).classes('w-14 h-14 bg-white p-1 rounded border border-cyan-500')
 
-            model_select.on('value-change', preview_container.refresh)
+            model_select.on('update:model-value', lambda: preview_container.refresh())
             preview_container()
 
             with ui.row().classes('w-full justify-end gap-2 q-mt-md print-hide'):
