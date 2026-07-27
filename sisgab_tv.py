@@ -69,26 +69,59 @@ def render_page():
         def render_tv_dashboard():
             db = fresh_db()
 
-            # 1. CARGA DE KPIS
+            # 1. CARGA DE KPIS OPERACIONAIS E ESTRATÉGICOS
             total_pautas = 0
-            total_cautelas = 0
             demandas_pendentes = 0
-            operador_destaque = "Nenhum"
+            demandas_ajustes = 0
+            eventos_24h = 0
+            taxa_entregas_str = "100%"
+            efetivo_pronto_str = "0 / 0"
+
+            hoje = datetime.now().date()
+            amanha = hoje + timedelta(days=1)
+            hoje_str = hoje.strftime('%Y-%m-%d')
 
             if db:
                 try:
-                    res_p = db.table('demandas_comunicacao').select('id, status, solicitante_nome').execute()
+                    res_p = db.table('demandas_comunicacao').select('id, status, data_evento').execute()
                     if res_p.data:
-                        total_pautas = len([d for d in res_p.data if str(d.get('status', '')).strip().lower() in ('aprovada', 'aprovado', 'aprovadas')])
-                        demandas_pendentes = len([d for d in res_p.data if str(d.get('status', '')).strip().lower() in ('pendente', 'pendentes')])
-                        
-                        solicitantes = [d['solicitante_nome'].upper() for d in res_p.data if d.get('solicitante_nome')]
-                        if solicitantes:
-                            operador_destaque = max(set(solicitantes), key=solicitantes.count)
+                        todas = res_p.data
+                        aprovadas_cnt = 0
+                        concluidas_cnt = 0
 
-                    res_c = db.table('cautela_equipamentos').select('id').eq('status', 'retirado').execute()
-                    if res_c.data:
-                        total_cautelas = len(res_c.data)
+                        for d in todas:
+                            st = str(d.get('status', '')).strip().lower()
+                            if st in ('aprovada', 'aprovado', 'aprovadas'):
+                                aprovadas_cnt += 1
+                            elif st in ('pendente', 'pendentes'):
+                                demandas_pendentes += 1
+                            elif st in ('ajustes', 'ajuste'):
+                                demandas_ajustes += 1
+                            elif st in ('concluida', 'concluido', 'concluidas'):
+                                concluidas_cnt += 1
+
+                            dt_str = str(d.get('data_evento', ''))
+                            try:
+                                dt_ev = datetime.strptime(dt_str, '%Y-%m-%d').date()
+                                if dt_ev in (hoje, amanha):
+                                    eventos_24h += 1
+                            except Exception:
+                                pass
+
+                        total_pautas = aprovadas_cnt
+                        if (concluidas_cnt + aprovadas_cnt) > 0:
+                            pct = int((concluidas_cnt / (concluidas_cnt + aprovadas_cnt)) * 100)
+                            taxa_entregas_str = f"{pct}%"
+
+                    res_ef = db.table('efetivo').select('id').execute()
+                    tot_ef = len(res_ef.data) if res_ef.data else 0
+
+                    res_pr = db.table('presenca_diaria').select('id, status').eq('data', hoje_str).execute()
+                    if res_pr.data:
+                        prontos = len([p for p in res_pr.data if str(p.get('status', '')).upper() in ('P', 'MA', 'MT')])
+                        efetivo_pronto_str = f"{prontos}/{tot_ef}"
+                    else:
+                        efetivo_pronto_str = f"{tot_ef}/{tot_ef}"
                 except Exception as e:
                     print(f"[TV KPIs ERR] {e}")
 
@@ -104,35 +137,49 @@ def render_page():
                 )
             last_known_pendentes[0] = demandas_pendentes
 
-            # ── BLOCO 1: PAINEL DE KPIs ──
-            with ui.row().classes('w-full gap-4 justify-between items-center q-mt-sm'):
+            # ── BLOCO 1: PAINEL DE KPIs OPERACIONAIS (6 CARDS TÁTICOS) ──
+            with ui.row().classes('w-full gap-2 justify-between items-center q-mt-xs flex-wrap'):
                 # KPI 1: Pautas Aprovadas
-                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-4 justify-center').style('background: rgba(10,15,30,0.4);'):
-                    ui.icon('camera_alt', color='cyan-5', size='md')
+                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-3 justify-center').style('background: rgba(10,15,30,0.4); min-width: 140px;'):
+                    ui.icon('camera_alt', color='cyan-5', size='sm')
                     with ui.column().classes('gap-0'):
-                        ui.label('PAUTAS ATIVAS').classes('text-[10px] text-grey-5 font-bold tracking-wider')
-                        ui.label(str(total_pautas)).classes('text-xl font-black text-white')
+                        ui.label('PAUTAS ATIVAS').classes('text-[9px] text-grey-5 font-bold tracking-wider')
+                        ui.label(str(total_pautas)).classes('text-lg font-black text-white')
                 
-                # KPI 2: Materiais Cautelados
-                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-4 justify-center').style('background: rgba(10,15,30,0.4);'):
-                    ui.icon('battery_charging_full', color='orange-5', size='md')
+                # KPI 2: Pendente Análise
+                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-3 justify-center').style('background: rgba(10,15,30,0.4); min-width: 140px;'):
+                    ui.icon('hourglass_top', color='amber-5', size='sm')
                     with ui.column().classes('gap-0'):
-                        ui.label('MATERIAL FORA').classes('text-[10px] text-grey-5 font-bold tracking-wider')
-                        ui.label(str(total_cautelas)).classes('text-xl font-black text-white')
+                        ui.label('PENDENTE ANÁLISE').classes('text-[9px] text-grey-5 font-bold tracking-wider')
+                        ui.label(str(demandas_pendentes)).classes('text-lg font-black text-amber-4')
 
-                # KPI 3: Demandas Pendentes
-                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-4 justify-center').style('background: rgba(10,15,30,0.4);'):
-                    ui.icon('hourglass_empty', color='red-400', size='md')
+                # KPI 3: Em Ajuste
+                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-3 justify-center').style('background: rgba(10,15,30,0.4); min-width: 140px;'):
+                    ui.icon('build_circle', color='orange-5', size='sm')
                     with ui.column().classes('gap-0'):
-                        ui.label('PENDENTE ANÁLISE').classes('text-[10px] text-grey-5 font-bold tracking-wider')
-                        ui.label(str(demandas_pendentes)).classes('text-xl font-black text-white')
+                        ui.label('EM AJUSTE').classes('text-[9px] text-grey-5 font-bold tracking-wider')
+                        ui.label(str(demandas_ajustes)).classes('text-lg font-black text-orange-4')
 
-                # KPI 4: Operador Destaque
-                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-4 justify-center').style('background: rgba(10,15,30,0.4);'):
-                    ui.icon('person', color='green-400', size='md')
+                # KPI 4: Prontidão 24 Horas
+                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-3 justify-center').style('background: rgba(10,15,30,0.4); min-width: 140px;'):
+                    ui.icon('bolt', color='yellow-5', size='sm')
                     with ui.column().classes('gap-0'):
-                        ui.label('DESTAQUE COMSOC').classes('text-[10px] text-grey-5 font-bold tracking-wider')
-                        ui.label(operador_destaque).classes('text-sm font-black text-white truncate')
+                        ui.label('PRONTIDÃO 24H').classes('text-[9px] text-grey-5 font-bold tracking-wider')
+                        ui.label(str(eventos_24h)).classes('text-lg font-black text-yellow-4')
+
+                # KPI 5: Taxa de Entrega
+                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-3 justify-center').style('background: rgba(10,15,30,0.4); min-width: 140px;'):
+                    ui.icon('task_alt', color='green-5', size='sm')
+                    with ui.column().classes('gap-0'):
+                        ui.label('TAXA ENTREGAS').classes('text-[9px] text-grey-5 font-bold tracking-wider')
+                        ui.label(taxa_entregas_str).classes('text-lg font-black text-green-4')
+
+                # KPI 6: Efetivo no Pronto
+                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-3 justify-center').style('background: rgba(10,15,30,0.4); min-width: 140px;'):
+                    ui.icon('shield', color='teal-4', size='sm')
+                    with ui.column().classes('gap-0'):
+                        ui.label('EFETIVO NO PRONTO').classes('text-[9px] text-grey-5 font-bold tracking-wider')
+                        ui.label(efetivo_pronto_str).classes('text-lg font-black text-teal-3')
 
             # ── GRIDS PRINCIPAIS DO MONITOR ──
             with ui.grid(columns=1).classes('w-full gap-4 flex-grow gt-xs').style('grid-template-columns: 1.2fr 1fr 1fr; margin-top: 10px;'):
