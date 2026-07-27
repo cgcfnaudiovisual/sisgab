@@ -92,6 +92,30 @@ def render_page():
                 ui.timer(1.0, update_clock)
                 update_clock()
 
+        # ── POLLING AUTOMÁTICO: NOVAS DEMANDAS (a cada 60s) ──
+        last_known_pendentes = [demandas_pendentes]  # mutable container for closure
+
+        def check_new_demands():
+            try:
+                db_poll = get_db_connection()
+                if db_poll:
+                    res_poll = db_poll.table('demandas_comunicacao').select('id').eq('status', 'pendente').execute()
+                    current_count = len(res_poll.data) if res_poll.data else 0
+                    if current_count > last_known_pendentes[0]:
+                        diff = current_count - last_known_pendentes[0]
+                        ui.notify(
+                            f'🚨 {diff} NOVA(S) DEMANDA(S) PENDENTE(S)!',
+                            color='warning',
+                            position='top',
+                            timeout=15000,
+                            close_button='OK'
+                        )
+                    last_known_pendentes[0] = current_count
+            except Exception as poll_err:
+                print(f"[TV POLL ERR] {poll_err}")
+
+        ui.timer(60.0, check_new_demands)
+
         # ── BLOCO 1: PAINEL DE KPIs ──
         with ui.row().classes('w-full gap-4 justify-between items-center q-mt-sm'):
             # KPI 1: Pautas Aprovadas

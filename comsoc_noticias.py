@@ -46,7 +46,7 @@ def fetch_rss_news():
     return news
 
 def render_page():
-    ui.label('📢 CANAL DE NOTÍCIAS COMSOC').classes('text-2xl font-bold text-white cyber-title gt-xs q-mb-md q-ml-md')
+    ui.label('📊 DASHBOARD OPERACIONAL — COMSOC').classes('text-2xl font-bold text-white cyber-title gt-xs q-mb-md q-ml-md')
     
     user_data = app.storage.user.get('user_data', {})
     user_role = str(user_data.get('role', 'compel')).strip().lower()
@@ -83,27 +83,89 @@ def render_page():
                     on_click=ir_para_pendentes
                 ).props('unelevated color=amber-9 text-color=black dense bold').classes('text-xs q-px-sm')
 
-        # WIDGET DESTACADO DA AGENDA GOOGLE CALENDAR NA DASHBOARD PRINCIPAL
-        with ui.card().classes('w-full q-pa-sm border border-cyan-500/40 rounded-xl bg-black/40 q-mb-md'):
-            with ui.row().classes('w-full justify-between items-center wrap gap-2'):
-                with ui.row().classes('items-center gap-3'):
-                    ui.icon('calendar_month', color='cyan', size='1.8rem')
-                    with ui.column().classes('gap-0'):
-                        ui.label('📅 AGENDA GOOGLE CALENDAR OFICIAL DO GABINETE / COMSOC').classes('text-xs font-bold text-white cyber-title')
-                        ui.label('Sincronizada em Tempo Real • cgcfnaudiovisual@gmail.com').classes('text-[10px] text-cyan font-mono')
-                
-                with ui.row().classes('items-center gap-2'):
-                    ui.button(
-                        'Ver Agenda Completa',
-                        icon='calendar_today',
-                        on_click=lambda: ui.navigate.to('/agenda_geral')
-                    ).props('unelevated color=cyan text-color=black bold dense').classes('text-xs q-px-xs')
+        # ===== DASHBOARD KPIs OPERACIONAIS =====
+        kpi_pendentes = 0
+        kpi_aprovadas = 0
+        kpi_ajustes = 0
+        kpi_eventos_hoje = 0
+        eventos_semana = []
 
-                    ui.link(
-                        '🔗 Abrir no Google',
-                        'https://calendar.google.com/calendar/u/0?cid=Y2djZm5hdWRpb3Zpc3VhbEBnbWFpbC5jb20',
-                        new_tab=True
-                    ).classes('text-[10px] font-bold text-cyan underline q-px-xs q-py-xs bg-cyan-950/60 border border-cyan-500/40 rounded-lg')
+        db = get_db_connection()
+        if db:
+            try:
+                res_all = db.table('demandas_comunicacao').select('id, status, data_evento, hora_evento, titulo_evento, local_evento').execute()
+                todas = res_all.data if res_all.data else []
+                for d in todas:
+                    st = str(d.get('status', '')).strip().lower()
+                    if st in ('pendente', 'pendentes'):
+                        kpi_pendentes += 1
+                    elif st in ('aprovada', 'aprovado', 'aprovadas'):
+                        kpi_aprovadas += 1
+                    elif st in ('ajustes', 'ajuste'):
+                        kpi_ajustes += 1
+
+                from datetime import timedelta
+                hoje = datetime.now().date()
+                fim_semana = hoje + timedelta(days=7)
+                for d in todas:
+                    dt_str = str(d.get('data_evento', ''))
+                    try:
+                        dt_ev = datetime.strptime(dt_str, '%Y-%m-%d').date()
+                        if dt_ev == hoje:
+                            kpi_eventos_hoje += 1
+                        if hoje <= dt_ev <= fim_semana:
+                            eventos_semana.append(d)
+                    except Exception:
+                        pass
+                eventos_semana.sort(key=lambda x: (x.get('data_evento', ''), x.get('hora_evento', '')))
+            except Exception as e:
+                print(f"[DASHBOARD KPI ERR] {e}")
+
+        # KPI Cards Row
+        with ui.row().classes('w-full gap-3 q-mb-md flex-wrap'):
+            kpi_data = [
+                {'label': 'PENDENTES', 'value': kpi_pendentes, 'icon': 'hourglass_top', 'color': 'amber', 'bg': 'rgba(245,158,11,0.08)', 'border': 'rgba(245,158,11,0.3)', 'path': '/comsoc_homologar'},
+                {'label': 'APROVADAS', 'value': kpi_aprovadas, 'icon': 'check_circle', 'color': 'green', 'bg': 'rgba(34,197,94,0.08)', 'border': 'rgba(34,197,94,0.3)', 'path': '/comsoc_homologar'},
+                {'label': 'EM AJUSTE', 'value': kpi_ajustes, 'icon': 'build_circle', 'color': 'orange', 'bg': 'rgba(251,146,60,0.08)', 'border': 'rgba(251,146,60,0.3)', 'path': '/comsoc_homologar'},
+                {'label': 'EVENTOS HOJE', 'value': kpi_eventos_hoje, 'icon': 'today', 'color': 'cyan', 'bg': 'rgba(0,229,255,0.08)', 'border': 'rgba(0,229,255,0.3)', 'path': '/agenda_geral'},
+            ]
+            for kpi in kpi_data:
+                with ui.card().classes('q-pa-md no-shadow rounded-xl cursor-pointer flex-1 hover:scale-[1.02] transition-all').style(
+                    f"background: {kpi['bg']}; border: 1px solid {kpi['border']}; min-width: 160px;"
+                ).on('click', lambda p=kpi['path']: ui.navigate.to(p)):
+                    with ui.row().classes('items-center gap-3'):
+                        ui.icon(kpi['icon'], color=kpi['color'], size='1.6rem')
+                        with ui.column().classes('gap-0'):
+                            ui.label(str(kpi['value'])).classes(f"text-xl font-black text-{kpi['color']}")
+                            ui.label(kpi['label']).classes('text-[10px] font-bold text-grey-4 tracking-wider')
+
+        # Eventos da Semana (compacto)
+        with ui.card().classes('w-full q-pa-md no-shadow rounded-xl q-mb-md').style(
+            f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
+        ):
+            with ui.row().classes('w-full justify-between items-center q-mb-sm'):
+                ui.label('📅 PRÓXIMOS EVENTOS (7 DIAS)').classes('text-xs font-bold text-white tracking-wider')
+                ui.button('Ver Agenda Completa', icon='calendar_month',
+                          on_click=lambda: ui.navigate.to('/agenda_geral')
+                ).props('flat color=cyan dense').classes('text-[10px]')
+
+            if eventos_semana:
+                for ev in eventos_semana[:6]:
+                    st = str(ev.get('status', '')).strip().lower()
+                    st_icon = '🟢' if st in ('aprovado', 'aprovada', 'aprovadas') else '🟡'
+                    data_fmt = ev.get('data_evento', '')
+                    try:
+                        data_fmt = datetime.strptime(data_fmt, '%Y-%m-%d').strftime('%d/%m')
+                    except Exception:
+                        pass
+                    with ui.row().classes('w-full items-center gap-2 q-py-xs').style('border-bottom: 1px solid rgba(0,229,255,0.06);'):
+                        ui.label(st_icon).classes('text-sm')
+                        ui.label(f"{data_fmt} {ev.get('hora_evento', '')}").classes('text-xs text-cyan font-mono').style('min-width: 90px;')
+                        ui.label(f"— {ev.get('titulo_evento', 'Sem Título')}").classes('text-xs text-white font-bold flex-1')
+                        if ev.get('local_evento'):
+                            ui.label(f"📍 {ev['local_evento']}").classes('text-[10px] text-grey-5')
+            else:
+                ui.label('🟢 Nenhum evento programado para os próximos 7 dias.').classes('text-xs text-grey-4 q-py-sm')
 
         with ui.row().classes('w-full gap-4 items-stretch justify-start'):
             # Coluna 1: Canal Oficial e Interno

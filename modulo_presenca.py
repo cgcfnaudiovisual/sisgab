@@ -149,33 +149,160 @@ def render_page():
                     ui.badge(f"🛡️ Serviço (S): {contadores['S']}").props('color=teal bold').classes('q-pa-xs')
                     ui.badge(f"⏳ Pendentes: {contadores['PENDENTE']}").props('color=grey-7 bold').classes('q-pa-xs')
 
-            # TABELA DE MILITARES E STATUS
+            # BARRA DE AÇÕES EM LOTE
+            selected_ids = set()
+            checkbox_refs = {}
+
             with ui.card().classes('w-full q-pa-md no-shadow rounded-xl bg-slate-900 border border-cyan-500/20'):
                 ui.label('👥 Relação do Efetivo do Gabinete').classes('text-sm font-bold text-white q-mb-xs')
-                
-                with ui.column().classes('w-full gap-2'):
+
+                # Toolbar de Ações em Lote
+                with ui.row().classes('w-full items-center gap-3 q-mb-md q-pa-sm rounded-lg').style(
+                    'background: rgba(0,229,255,0.04); border: 1px solid rgba(0,229,255,0.15);'
+                ):
+                    def toggle_all(e):
+                        if e.value:
+                            for ef_item in efetivo_lista:
+                                selected_ids.add(ef_item.get('id', ef_item.get('nome_guerra', '')))
+                        else:
+                            selected_ids.clear()
+                        for cb_ref in checkbox_refs.values():
+                            cb_ref.value = e.value
+                        lbl_sel.text = f'{len(selected_ids)} selecionado(s)'
+
+                    chk_all = ui.checkbox('Selecionar Todos', on_change=toggle_all).classes('text-xs text-cyan font-bold')
+
+                    ui.separator().props('vertical').classes('q-mx-xs')
+
+                    lbl_sel = ui.label('0 selecionado(s)').classes('text-[10px] text-grey-4 font-mono')
+
+                    ui.separator().props('vertical').classes('q-mx-xs')
+
+                    # Botão rápido: Todos Pendentes → Presente
+                    def marcar_todos_presentes():
+                        db_w = get_service_db_connection() or get_db_connection()
+                        if not db_w:
+                            ui.notify('Erro de conexão com o banco.', color='negative')
+                            return
+                        import uuid
+                        batch = []
+                        for ef_item in efetivo_lista:
+                            nome_g = ef_item.get('nome_guerra', '').upper()
+                            pres_item = presencas_dict.get(nome_g, {})
+                            st_atual = pres_item.get('status', 'PENDENTE').upper()
+                            if st_atual == 'PENDENTE':
+                                batch.append({
+                                    'id': pres_item.get('id', str(uuid.uuid4())),
+                                    'user_id': ef_item.get('id'),
+                                    'telegram_id': ef_item.get('telegram_id'),
+                                    'nome_guerra': nome_g,
+                                    'data': dt_str,
+                                    'hora_presenca': datetime.now().strftime('%H:%M:%S'),
+                                    'status': 'P',
+                                    'observacao': '',
+                                    'criado_em': datetime.now().isoformat()
+                                })
+                        if batch:
+                            try:
+                                db_w.table('presenca_diaria').upsert(batch, on_conflict='id').execute()
+                                ui.notify(f'✅ {len(batch)} militar(es) marcado(s) como Presente!', color='positive')
+                                render_content.refresh()
+                            except Exception as e:
+                                ui.notify(f'Erro ao salvar em lote: {e}', color='negative')
+                        else:
+                            ui.notify('Nenhum militar pendente encontrado.', color='info')
+
+                    ui.button('⚡ Todos Pendentes → Presente', icon='check_circle',
+                              on_click=marcar_todos_presentes
+                    ).props('unelevated color=green text-color=white dense bold').classes('text-[11px]')
+
+                # Barra de Ação em Lote para selecionados
+                with ui.row().classes('w-full items-center gap-3 q-mb-md q-pa-sm rounded-lg').style(
+                    'background: rgba(245,158,11,0.04); border: 1px solid rgba(245,158,11,0.15);'
+                ):
+                    ui.label('Ação em Lote:').classes('text-[11px] font-bold text-amber-4')
+                    lote_status = ui.select(
+                        {k: f"({k}) {v['nome']}" for k, v in SIGLAS_MILITARES.items()},
+                        value='P', label='Status'
+                    ).props('dark outlined dense').classes('text-xs').style('min-width: 180px;')
+                    lote_obs = ui.input('Observação (opcional)').props('dark outlined dense').classes('text-xs flex-1')
+
+                    def aplicar_lote():
+                        if not selected_ids:
+                            ui.notify('Selecione pelo menos um militar.', color='warning')
+                            return
+                        db_w = get_service_db_connection() or get_db_connection()
+                        if not db_w:
+                            ui.notify('Erro de conexão.', color='negative')
+                            return
+                        import uuid
+                        batch = []
+                        for ef_item in efetivo_lista:
+                            ef_id = ef_item.get('id', ef_item.get('nome_guerra', ''))
+                            if ef_id in selected_ids:
+                                nome_g = ef_item.get('nome_guerra', '').upper()
+                                pres_item = presencas_dict.get(nome_g, {})
+                                batch.append({
+                                    'id': pres_item.get('id', str(uuid.uuid4())),
+                                    'user_id': ef_item.get('id'),
+                                    'telegram_id': ef_item.get('telegram_id'),
+                                    'nome_guerra': nome_g,
+                                    'data': dt_str,
+                                    'hora_presenca': datetime.now().strftime('%H:%M:%S'),
+                                    'status': lote_status.value,
+                                    'observacao': lote_obs.value or '',
+                                    'criado_em': datetime.now().isoformat()
+                                })
+                        if batch:
+                            try:
+                                db_w.table('presenca_diaria').upsert(batch, on_conflict='id').execute()
+                                ui.notify(f'✅ {len(batch)} lançamento(s) salvo(s) com sucesso!', color='positive')
+                                render_content.refresh()
+                            except Exception as e:
+                                ui.notify(f'Erro: {e}', color='negative')
+
+                    ui.button('✅ Aplicar em Lote', icon='playlist_add_check',
+                              on_click=aplicar_lote
+                    ).props('unelevated color=amber text-color=black dense bold').classes('text-[11px]')
+
+                # Tabela com checkboxes
+                with ui.column().classes('w-full gap-1'):
                     for ef in efetivo_lista:
                         nome_g = ef.get('nome_guerra', '').upper()
                         pres = presencas_dict.get(nome_g, {})
                         status_atual = pres.get('status', 'PENDENTE').upper()
                         obs_atual = pres.get('observacao', '')
                         hora_reg = pres.get('hora_presenca', '--:--')
-                        
+                        ef_id = ef.get('id', nome_g)
+
                         info_sigla = SIGLAS_MILITARES.get(status_atual, {'nome': 'Pendente', 'icone': '⏳', 'badge_color': 'grey-7'})
-                        
-                        with ui.row().classes('w-full justify-between items-center q-py-xs q-px-md bg-black/40 rounded-lg border border-cyan-500/10 hover:border-cyan-500/30 transition-all'):
-                            with ui.row().classes('items-center gap-3 col-12 col-md-4'):
+
+                        row_bg = 'rgba(0,0,0,0.3)' if status_atual != 'PENDENTE' else 'rgba(100,100,100,0.15)'
+
+                        with ui.row().classes('w-full justify-between items-center q-py-xs q-px-sm rounded-lg border border-cyan-500/10 hover:border-cyan-500/30 transition-all').style(f'background: {row_bg};'):
+                            # Checkbox de seleção
+                            def on_check(e, eid=ef_id):
+                                if e.value:
+                                    selected_ids.add(eid)
+                                else:
+                                    selected_ids.discard(eid)
+                                lbl_sel.text = f'{len(selected_ids)} selecionado(s)'
+
+                            cb = ui.checkbox('', on_change=on_check).classes('q-mr-xs')
+                            checkbox_refs[ef_id] = cb
+
+                            with ui.row().classes('items-center gap-2 flex-1'):
                                 ui.label(info_sigla['icone']).classes('text-md')
                                 ui.label(nome_g).classes('text-xs font-bold text-white')
-                            
-                            with ui.row().classes('items-center gap-2 col-12 col-md-5'):
+
+                            with ui.row().classes('items-center gap-2'):
                                 ui.badge(f"({status_atual}) {info_sigla['nome']}").props(f"color={info_sigla.get('badge_color', 'cyan')}").classes('text-[10px]')
                                 if hora_reg and hora_reg != '--:--':
                                     ui.label(f"⏰ {hora_reg[:5]}").classes('text-[10px] text-grey-4 font-mono')
                                 if obs_atual:
                                     ui.label(f"✍️ {obs_atual}").classes('text-[11px] text-cyan italic')
 
-                            # Ação de edição manual para o Sargenteante
+                            # Botão individual (mantido para casos específicos)
                             def alterar_status_dialog(militar=ef, st_act=status_atual, obs_act=obs_atual):
                                 with ui.dialog() as dlg, ui.card().classes('w-96 bg-slate-900 border border-cyan-500/40 q-pa-md'):
                                     ui.label(f"Lançar Presença: {militar['nome_guerra']}").classes('text-sm font-bold text-white cyber-title')
@@ -185,7 +312,7 @@ def render_page():
                                         label='Situação / Sigla'
                                     ).props('dark outlined w-full dense')
                                     obs_in = ui.input('Observação / Justificativa', value=obs_act).props('dark outlined w-full dense')
-                                    
+
                                     def salvar_lancamento():
                                         db_w = get_service_db_connection() or get_db_connection()
                                         if db_w:

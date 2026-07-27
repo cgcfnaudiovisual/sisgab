@@ -352,6 +352,23 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
                         demanda['status'] = novo_status
                         
                         ui.notify(f"Demanda tramitada: {acao_nome}", color='success')
+
+                        # Notificação Telegram (interconexão Web → Telegram)
+                        try:
+                            from notifications_manager import notify_telegram
+                            titulo_dem = demanda.get('titulo_evento', 'Sem Título')
+                            emoji_status = '✅' if novo_status == 'aprovada' else '❌' if novo_status == 'rejeitado' else '⚠️'
+                            notify_telegram(
+                                f"📋 Pauta Tramitada:\n"
+                                f"📌 {titulo_dem}\n"
+                                f"{emoji_status} Status: {acao_nome}\n"
+                                f"👨‍✈️ Tramitado por: {user_name_guerra}\n"
+                                f"💬 Parecer: {parecer_text.value[:120] if parecer_text.value else 'N/I'}",
+                                "system"
+                            )
+                        except Exception as tg_err:
+                            print(f"[TELEGRAM TRAMITAR ERR] {tg_err}")
+
                         tramitar_dialog.close()
                         if callback_refresh:
                             callback_refresh()

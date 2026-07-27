@@ -472,6 +472,27 @@ def render_page(autofill: str = None):
                                         else:
                                             ui.notify('📝 Solicitação enviada com sucesso! Aguardando aprovação.', color='success')
                                     
+                                    # Notificação Telegram para gestores (interconexão Web → Telegram)
+                                    try:
+                                        from notifications_manager import notify_telegram
+                                        titulo_ev = ev_titulo.value or 'Sem Título'
+                                        data_ev = ev_data.value or 'N/I'
+                                        hora_ev = ev_hora.value or 'N/I'
+                                        local_ev = ev_local.value or 'N/I'
+                                        nome_sol = sol_nome.value or 'N/I'
+                                        status_txt = '✅ Aprovada (Evento Interno)' if eh_evento_interno else '⏳ Pendente (Aguardando Homologação)'
+                                        notify_telegram(
+                                            f"🆕 Nova Pauta via Web:\n"
+                                            f"📌 {titulo_ev}\n"
+                                            f"📅 {data_ev} às {hora_ev}\n"
+                                            f"📍 {local_ev}\n"
+                                            f"👤 Solicitante: {nome_sol}\n"
+                                            f"📊 Status: {status_txt}",
+                                            "system"
+                                        )
+                                    except Exception as tg_err:
+                                        print(f"[TELEGRAM NOTIFY ERR] {tg_err}")
+
                                     sol_nome.value = 'CGCFN / GABINETE'
                                     ev_titulo.value = ''
                                     produto_especifico.value = ''
@@ -494,20 +515,6 @@ def render_page(autofill: str = None):
                                 on_click=lambda: salvar_demanda(status_inicial='pendente', eh_evento_interno=False)
                             ).props('unelevated color=cyan text-color=black bold').classes('col text-xs')
 
-                        # CARD DE INTEGRAÇÃO COM O GOOGLE CALENDAR OFICIAL
-                        with ui.card().classes('w-full q-pa-sm border border-cyan-500/30 rounded-xl bg-black/40 q-mt-sm'):
-                            with ui.row().classes('w-full justify-between items-center wrap gap-2'):
-                                with ui.row().classes('items-center gap-2'):
-                                    ui.icon('calendar_month', color='cyan', size='1.5rem')
-                                    with ui.column().classes('gap-0'):
-                                        ui.label('📅 AGENDA GOOGLE CALENDAR OFICIAL').classes('text-[11px] font-bold text-white')
-                                        ui.label('cgcfnaudiovisual@gmail.com').classes('text-[9px] text-cyan font-mono')
-                                
-                                ui.link(
-                                    '🔗 Abrir Google Calendar',
-                                    'https://calendar.google.com/calendar/u/0?cid=Y2djZm5hdWRpb3Zpc3VhbEBnbWFpbC5jb20',
-                                    new_tab=True
-                                ).classes('text-[10px] font-bold text-cyan underline q-px-xs q-py-xs bg-cyan-950/60 border border-cyan-500/40 rounded-lg')
 
                 # 2. Painel de Suporte & Checklist Completo (Coluna da Direita)
                 with ui.column().classes('col-12 col-md-5 q-pa-none gap-4').style('min-width: 320px;'):
@@ -603,79 +610,6 @@ def render_page(autofill: str = None):
                     # Vincula a visibilidade do Checklist apenas à categoria Audiovisual
                     checklist_card.bind_visibility_from(categoria_demanda, 'value', value='audiovisual')
 
-                # 3. Demandas em Ajustes (Direita - 1/3 da largura)
-                with ui.column().classes('col-12 col-md q-pa-none').style('min-width: 320px;'):
-                        with ui.row().classes('w-full justify-between items-center q-mb-md'):
-                            ui.label('⚠️ Aguardando Ajustes').classes('text-md font-bold text-cyan')
-                            def abrir_gerenciador_edicao():
-                                from comsoc_homologar import open_editar_pauta_dialog
-                                db_e = get_service_db_connection() or get_db_connection()
-                                if db_e:
-                                    res = db_e.table('demandas_comunicacao').select('*').order('id', desc=True).limit(30).execute()
-                                    pautas = res.data or []
-                                    with ui.dialog() as dlg_list, ui.card().classes('w-[600px] max-w-[95vw] bg-slate-900 border border-cyan-500/40 q-pa-md'):
-                                        ui.label('✏️ Selecione uma Pauta para Editar').classes('text-sm font-bold text-white cyber-title q-mb-md')
-                                        with ui.column().classes('w-full gap-2').style('max-height: 60vh; overflow-y: auto;'):
-                                            for p in pautas:
-                                                with ui.row().classes('w-full justify-between items-center bg-black/40 p-2 rounded border border-cyan-500/20'):
-                                                    with ui.column().classes('gap-0'):
-                                                        ui.label(p['titulo_evento']).classes('text-xs font-bold text-white')
-                                                        ui.label(f"{p['data_evento']} | {p['solicitante_nome']} ({p['status']})").classes('text-[10px] text-grey-4')
-                                                    ui.button('Editar', icon='edit', on_click=lambda p=p: (dlg_list.close(), open_editar_pauta_dialog(p))).props('unelevated color=cyan text-color=black dense').classes('text-xs')
-                                        ui.button('Fechar', on_click=dlg_list.close).props('flat color=grey').classes('w-full q-mt-md')
-                                    dlg_list.open()
-
-                            ui.button('✏️ Editar Pauta', icon='edit', on_click=abrir_gerenciador_edicao).props('flat color=cyan dense').classes('text-xs')
-                        
-                        minhas_demandas = []
-                        db = get_db_connection()
-                        if db:
-                            try:
-                                res = db.table('demandas_comunicacao').select('*').eq('status', 'ajustes').execute()
-                                minhas_demandas = res.data if res.data else []
-                            except Exception as e:
-                                print(f"[DB MINHAS DEMANDAS ERR] {e}")
-                                
-                        if minhas_demandas:
-                            for d in minhas_demandas:
-                                with ui.card().classes('w-full q-pa-sm q-mb-sm no-shadow rounded-lg').style(
-                                    'background: rgba(255,255,255,0.02); border: 1px solid rgba(255,160,0,0.3);'
-                                ):
-                                    with ui.row().classes('w-full justify-between items-center no-wrap'):
-                                        with ui.column().classes('gap-0'):
-                                            ui.label(d['titulo_evento']).classes('text-xs font-bold text-white')
-                                            ui.label("Retornado para correções").classes('text-[9px] text-amber-5')
-                                        
-                                        def aplicar_ajustes_no_form(dem=d):
-                                            nonlocal edit_id
-                                            edit_id = dem['id']
-                                            sol_nome.value = dem['solicitante_nome']
-                                            sol_setor.value = dem['setor']
-                                            sol_contato.value = dem['contato']
-                                            ev_titulo.value = dem['titulo_evento']
-                                            ev_data.value = dem['data_evento']
-                                            ev_data_fim.value = dem.get('data_fim', dem['data_evento'])
-                                            ev_hora.value = dem['hora_evento']
-                                            ev_local.value = dem['local_evento']
-                                            ev_aut.value = dem['autoridades']
-                                            
-                                            try:
-                                                m_ids = json.loads(dem.get('notificar_militar_ids', '[]'))
-                                                militar_select.value = m_ids
-                                            except:
-                                                militar_select.value = []
-                                                
-                                            ui.notify('Dados carregados! Faça as correções e clique em Enviar.', color='info', duration=5)
-                                            
-                                        ui.button(
-                                            'Editar',
-                                            icon='edit',
-                                            on_click=lambda dem=d: aplicar_ajustes_no_form(dem)
-                                        ).props('unelevated color=amber-5 text-color=black dense').classes('text-[9px] q-px-sm')
-                        else:
-                            with ui.column().classes('w-full items-center justify-center q-py-lg gap-2 text-grey-4'):
-                                ui.icon('verified', size='2rem', color='grey')
-                                ui.label('Nenhuma pauta sua necessita de ajustes.').classes('text-[10px]')
 
     render_content()
     
