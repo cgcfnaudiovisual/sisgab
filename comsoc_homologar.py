@@ -8,6 +8,42 @@ from database import get_service_db_connection, get_db_connection
 
 THEME = theme.colors
 
+def get_rank_seniority(rank_str):
+    if not rank_str:
+        return 99
+    rank = str(rank_str).upper().replace('.', '').replace(' ', '').strip()
+    
+    if rank in ('AE', 'ALMIRANTEDEESQUADRA'): return 1
+    if rank in ('VA', 'VICEALMIRANTE'): return 2
+    if rank in ('CA', 'CONTRAALMIRANTE'): return 3
+    if rank in ('CMG', 'CAPITAODEMAREGUERRA'): return 4
+    if rank in ('CF', 'CAPITAODEFRAGATA'): return 5
+    if rank in ('CC', 'CAPITAODECORVETA'): return 6
+    if rank in ('CT', 'CAPITAOTENENTE'): return 7
+    if any(x in rank for x in ('1TEN', '1ºTEN', '1SOTEN', '1TENENTE', '1ºTENENTE')): return 8
+    if any(x in rank for x in ('2TEN', '2ºTEN', '2SOTEN', '2TENENTE', '2ºTENENTE')): return 9
+    if rank in ('GM', 'GUARDAMARINHA'): return 10
+    if rank in ('SO', 'SUBOFICIAL', 'SUB-OFICIAL'): return 11
+    if any(x in rank for x in ('1SG', '1ºSG', '1SGT', '1ºSGT', '1ºSARGENTO', '1SARGENTO')): return 12
+    if any(x in rank for x in ('2SG', '2ºSG', '2SGT', '2ºSGT', '2ºSARGENTO', '2SARGENTO')): return 13
+    if any(x in rank for x in ('3SG', '3ºSG', '3SGT', '3ºSGT', '3ºSARGENTO', '3SARGENTO', 'SG', 'SARGENTO')): return 14
+    if rank in ('CB', 'CABO'): return 15
+    if rank in ('SD', 'SOLDADO', 'MN', 'MARINHEIRO'): return 16
+    return 98
+
+def sort_efetivo_list(ef_list):
+    def sort_key(item):
+        role = str(item.get('role', 'compel')).strip().lower()
+        is_comsoc = role in ('admin', 'supervisor', 'comsoc', 'comsoc_design', 'operador')
+        group_priority = 0 if is_comsoc else 1
+        
+        pg = item.get('posto_grad') or ''
+        seniority = get_rank_seniority(pg)
+        nome_guerra = str(item.get('nome_guerra') or '').upper()
+        return (group_priority, seniority, nome_guerra)
+        
+    return sorted(ef_list, key=sort_key)
+
 def open_editar_pauta_dialog(demanda, callback_refresh=None):
     if not demanda:
         ui.notify('Pauta inválida.', color='warning')
@@ -83,9 +119,13 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                 db_ef = get_service_db_connection() or get_db_connection()
                 if db_ef:
                     try:
-                        res_ef = db_ef.table('efetivo').select('id, nome_guerra, role').execute()
+                        res_ef = db_ef.table('efetivo').select('id, nome_guerra, role, posto_grad').execute()
                         if res_ef.data:
-                            efetivo_options = {item['id']: f"{item['nome_guerra']} ({item['role'].upper()})" for item in res_ef.data}
+                            sorted_ef = sort_efetivo_list(res_ef.data)
+                            efetivo_options = {
+                                item['id']: f"{item.get('posto_grad') or ''} {item['nome_guerra']} ({item['role'].upper()})".strip()
+                                for item in sorted_ef
+                            }
                     except Exception as e_ef:
                         print(f"[EFETIVO LOAD ERR] {e_ef}")
 
@@ -207,9 +247,13 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
     db = get_service_db_connection() or get_db_connection()
     if db:
         try:
-            res_ef = db.table('efetivo').select('id, nome_guerra, role').execute()
+            res_ef = db.table('efetivo').select('id, nome_guerra, role, posto_grad').execute()
             if res_ef.data:
-                efetivo_options = {item['id']: f"{item['nome_guerra']} ({item['role'].upper()})" for item in res_ef.data}
+                sorted_ef = sort_efetivo_list(res_ef.data)
+                efetivo_options = {
+                    item['id']: f"{item.get('posto_grad') or ''} {item['nome_guerra']} ({item['role'].upper()})".strip()
+                    for item in sorted_ef
+                }
         except Exception as e:
             print(f"[EFETIVO LOAD ERR] {e}")
 

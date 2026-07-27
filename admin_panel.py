@@ -97,7 +97,17 @@ def render_page():
                 users_data = users_res.data if users_res.data else []
                 
                 efetivo_res = db_conn.table('efetivo').select('*').execute()
+                posto_map = {}
                 if efetivo_res and efetivo_res.data:
+                    for ef in efetivo_res.data:
+                        pg = ef.get('posto_grad') or ''
+                        email = ef.get('email') or ''
+                        guerra = ef.get('nome_guerra') or ''
+                        if email:
+                            posto_map[email.lower()] = pg
+                        if guerra:
+                            posto_map[guerra.upper()] = pg
+
                     existing_user_ids = {str(u.get('id')) for u in users_data}
                     for ef in efetivo_res.data:
                         ef_id = str(ef.get('id'))
@@ -105,11 +115,70 @@ def render_page():
                             users_data.append({
                                 'id': ef_id,
                                 'username': ef.get('nome_guerra', 'militar').lower(),
-                                'nome': f"{ef.get('posto_grad', '')} {ef.get('nome_guerra', '')}".strip(),
+                                'nome': f"{ef.get('posto_grad') or ''} {ef.get('nome_guerra') or ''}".strip(),
                                 'role': ef.get('role', 'operador'),
                                 'telegram_id': ef.get('telegram_id', ''),
-                                'url_foto': ef.get('url_foto', '')
+                                'url_foto': ef.get('url_foto', ''),
+                                'posto_grad': ef.get('posto_grad') or ''
                             })
+
+                # Preenche posto_grad para os usuários da tabela users
+                for u in users_data:
+                    # Remove "NONE" do nome do usuário se houver devido a bug anterior
+                    if str(u.get('nome', '')).upper().startswith("NONE "):
+                        u['nome'] = str(u.get('nome', ''))[5:].strip()
+                        
+                    if 'posto_grad' not in u:
+                        email = str(u.get('username', '')).lower()
+                        nome = str(u.get('nome', '')).upper()
+                        pg = posto_map.get(email) or posto_map.get(nome) or ''
+                        if not pg:
+                            parts = nome.split()
+                            first_word = parts[0] if parts else ''
+                            if first_word in ('SO', 'SG', 'CB', 'SD', 'MN', 'CMG', 'CF', 'CC', 'CT', '1TEN', '2TEN', 'GM', 'SARGENTO', 'CABO', 'SOLDADO', 'SUBOFICIAL'):
+                                pg = first_word
+                        u['posto_grad'] = pg
+
+                # Determina antiguidade de postos/graduações da Marinha (1 = mais antigo, 99 = sem posto)
+                def get_rank_seniority(rank_str):
+                    if not rank_str:
+                        return 99
+                    rank = str(rank_str).upper().replace('.', '').replace(' ', '').strip()
+                    
+                    if rank in ('AE', 'ALMIRANTEDEESQUADRA'): return 1
+                    if rank in ('VA', 'VICEALMIRANTE'): return 2
+                    if rank in ('CA', 'CONTRAALMIRANTE'): return 3
+                    if rank in ('CMG', 'CAPITAODEMAREGUERRA'): return 4
+                    if rank in ('CF', 'CAPITAODEFRAGATA'): return 5
+                    if rank in ('CC', 'CAPITAODECORVETA'): return 6
+                    if rank in ('CT', 'CAPITAOTENENTE'): return 7
+                    if any(x in rank for x in ('1TEN', '1ºTEN', '1SOTEN', '1TENENTE', '1ºTENENTE')): return 8
+                    if any(x in rank for x in ('2TEN', '2ºTEN', '2SOTEN', '2TENENTE', '2ºTENENTE')): return 9
+                    if rank in ('GM', 'GUARDAMARINHA'): return 10
+                    if rank in ('SO', 'SUBOFICIAL', 'SUB-OFICIAL'): return 11
+                    if any(x in rank for x in ('1SG', '1ºSG', '1SGT', '1ºSGT', '1ºSARGENTO', '1SARGENTO')): return 12
+                    if any(x in rank for x in ('2SG', '2ºSG', '2SGT', '2ºSGT', '2ºSARGENTO', '2SARGENTO')): return 13
+                    if any(x in rank for x in ('3SG', '3ºSG', '3SGT', '3ºSGT', '3ºSARGENTO', '3SARGENTO', 'SG', 'SARGENTO')): return 14
+                    if rank in ('CB', 'CABO'): return 15
+                    if rank in ('SD', 'SOLDADO', 'MN', 'MARINHEIRO'): return 16
+                    return 98
+
+                # Ordena os operadores: COMSOC/Admin primeiro, depois por Antiguidade, depois por Nome
+                def sort_users(u):
+                    role = str(u.get('role', 'compel')).strip().lower()
+                    is_comsoc = role in ('admin', 'supervisor', 'comsoc', 'comsoc_design', 'operador')
+                    group_priority = 0 if is_comsoc else 1
+                    
+                    pg = u.get('posto_grad') or ''
+                    if not pg:
+                        parts = str(u.get('nome', '')).split()
+                        pg = parts[0] if parts else ''
+                    
+                    seniority = get_rank_seniority(pg)
+                    nome_guerra = str(u.get('nome', '')).upper()
+                    return (group_priority, seniority, nome_guerra)
+                
+                users_data = sorted(users_data, key=sort_users)
             except Exception as e:
                 print(f"[ADMIN] Erro ao carregar dados do Supabase: {e}")
 
