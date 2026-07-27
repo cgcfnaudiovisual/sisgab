@@ -162,27 +162,48 @@ def _get_weekly_events_text():
                 f"Use **➕ Criar Demanda** para adicionar uma nova pauta."
             )
         
+        DIAS_SEMANA_PT = {
+            0: 'SEGUNDA-FEIRA', 1: 'TERÇA-FEIRA', 2: 'QUARTA-FEIRA',
+            3: 'QUINTA-FEIRA', 4: 'SEXTA-FEIRA', 5: 'SÁBADO', 6: 'DOMINGO'
+        }
+
+        events_by_date = {}
+        for ev in events:
+            dt_str = str(ev.get('data_evento', ''))
+            if dt_str not in events_by_date:
+                events_by_date[dt_str] = []
+            events_by_date[dt_str].append(ev)
+
         msg = (
             f"📅 **AGENDA SEMANAL — COMSOC/CGCFN**\n"
-            f"Período: {hoje.strftime('%d/%m/%Y')} a {fim_semana.strftime('%d/%m/%Y')}\n\n"
+            f"Período: {hoje.strftime('%d/%m/%Y')} a {fim_semana.strftime('%d/%m/%Y')}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n\n"
         )
         
-        for idx, ev in enumerate(events, 1):
-            status_icon = '🟢' if ev.get('status') in ('aprovado', 'aprovada') else '🟡'
+        for dt_str in sorted(events_by_date.keys()):
+            day_events = events_by_date[dt_str]
+            day_events.sort(key=lambda x: str(x.get('hora_evento', '00:00')))
+            
             try:
-                data_br = datetime.strptime(str(ev.get('data_evento', '')), '%Y-%m-%d').strftime('%d/%m')
+                dt_obj = datetime.strptime(dt_str, '%Y-%m-%d')
+                weekday_name = DIAS_SEMANA_PT.get(dt_obj.weekday(), '')
+                date_header = f"📅 **{weekday_name} — {dt_obj.strftime('%d/%m/%Y')}**"
             except Exception:
-                data_br = str(ev.get('data_evento', 'N/I'))
-            
-            resp_txt = _format_militar_responsavel(ev, db)
-            
-            msg += (
-                f"{status_icon} **{idx}. {ev.get('titulo_evento', 'Sem Título')}**\n"
-                f"   📅 {data_br} às {ev.get('hora_evento', '09:00')}\n"
-                f"   📍 {ev.get('local_evento', 'N/I')}\n"
-                f"   👤 Solicitante: {ev.get('solicitante_nome', 'N/I')} ({ev.get('setor', 'CGCFN')})\n"
-                f"   👨‍✈️ Responsável: {resp_txt}\n\n"
-            )
+                date_header = f"📅 **DATA: {dt_str}**"
+
+            msg += f"{date_header}\n"
+            for ev in day_events:
+                st_val = str(ev.get('status', '')).strip().lower()
+                st_icon = '🟢' if st_val in ('aprovado', 'aprovada', 'aprovadas') else '🟡' if st_val in ('pendente', 'pendentes') else '🛠️'
+                hora = str(ev.get('hora_evento', '09:00'))[:5]
+                resp_txt = _format_militar_responsavel(ev, db)
+                
+                msg += (
+                    f"   {st_icon} **{hora}** — **{ev.get('titulo_evento', 'Sem Título')}**\n"
+                    f"      📍 Local: {ev.get('local_evento', 'N/I')}\n"
+                    f"      👤 Solicitante: {ev.get('solicitante_nome', 'N/I')} ({ev.get('setor', 'CGCFN')})\n"
+                    f"      👨‍✈️ Equipe: {resp_txt}\n\n"
+                )
         
         msg += f"📊 Total: **{len(events)} evento(s)** na semana.\n⚓ _SisGAB — Gestão de Gabinete_"
         return msg

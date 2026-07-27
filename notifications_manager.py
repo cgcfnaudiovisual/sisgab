@@ -111,14 +111,43 @@ async def broadcast_notification(text: str, notification_type: str, role_require
         return
         
     try:
-        query = conn.table('Users').select('*')
-        if role_required:
-            query = query.eq('role', role_required)
-        if specific_user_id:
-            query = query.eq('id', specific_user_id)
-        res = query.execute()
-        
-        if res.data:
+        # Tenta buscar chat ID do grupo nas configurações
+        group_chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+        if not group_chat_id:
+            try:
+                res_cfg = conn.table('config').select('*').eq('chave', 'telegram_chat_id').execute()
+                if res_cfg.data and res_cfg.data[0].get('valor'):
+                    group_chat_id = res_cfg.data[0]['valor'].strip()
+            except Exception:
+                pass
+
+        tasks = []
+        if group_chat_id:
+            try:
+                tasks.append(_send_msg_safe(bot, int(group_chat_id), text))
+            except Exception as e_grp:
+                print(f"[NOTIFY] Erro ao adicionar envio para chat do grupo ({group_chat_id}): {e_grp}", flush=True)
+
+        users_list = []
+        try:
+            query = conn.table('users').select('*')
+            if role_required:
+                query = query.eq('role', role_required)
+            if specific_user_id:
+                query = query.eq('id', specific_user_id)
+            res = query.execute()
+            if res.data:
+                users_list = res.data
+        except Exception as u_err:
+            print(f"[NOTIFY] Erro ao buscar em 'users': {u_err}. Tentando 'efetivo'...", flush=True)
+            try:
+                res_ef = conn.table('efetivo').select('*').execute()
+                if res_ef.data:
+                    users_list = res_ef.data
+            except Exception as ef_err:
+                print(f"[NOTIFY] Erro ao buscar em 'efetivo': {ef_err}", flush=True)
+
+        if users_list:
             markup = None
             if notification_type == "new_user" and request_id:
                 from telebot import types
@@ -128,19 +157,17 @@ async def broadcast_notification(text: str, notification_type: str, role_require
                     types.InlineKeyboardButton("❌ Rejeitar", callback_data=f"reject_req:{request_id}")
                 )
 
-            tasks = []
-            for user in res.data:
+            for user in users_list:
                 u_id = user.get('id')
                 tg_id = user.get('telegram_id')
-                if not tg_id or not str(tg_id).strip():
+                if not tg_id or not str(tg_id).strip() or str(tg_id).strip() == group_chat_id:
                     continue
                 
-                # Checa as preferências
                 if check_notification_enabled(u_id, notification_type):
                     tasks.append(_send_msg_safe(bot, int(tg_id), text, reply_markup=markup))
             
-            if tasks:
-                await asyncio.gather(*tasks)
+        if tasks:
+            await asyncio.gather(*tasks)
     except Exception as e:
         print(f"[NOTIFY] Erro ao transmitir broadcast {notification_type}: {e}", flush=True)
 
@@ -178,10 +205,20 @@ async def broadcast_photo_notification(photo_bytes: bytes, caption: str, notific
         return
         
     try:
-        res = conn.table('Users').select('*').execute()
-        if res.data:
+        users_list = []
+        try:
+            res = conn.table('users').select('*').execute()
+            if res.data: users_list = res.data
+        except Exception:
+            try:
+                res = conn.table('efetivo').select('*').execute()
+                if res.data: users_list = res.data
+            except Exception:
+                pass
+
+        if users_list:
             tasks = []
-            for user in res.data:
+            for user in users_list:
                 u_id = user.get('id')
                 tg_id = user.get('telegram_id')
                 if not tg_id or not str(tg_id).strip():
