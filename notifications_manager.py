@@ -11,10 +11,11 @@ file_lock = threading.Lock()
 DEFAULT_PREFERENCES = {
     "silence_all": False,
     "notify_new_user": True,
-    "notify_aviso": True,
-    "notify_saude": True,
+    "notify_demanda": True,
+    "notify_homologacao": True,
+    "notify_presenca": True,
     "notify_escala": True,
-    "notify_anotacao": True
+    "notify_aviso": True
 }
 
 def load_preferences() -> dict:

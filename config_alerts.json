@@ -2,48 +2,32 @@
   "bell_enabled": true,
   "tv_alert_vocativo": "Atenção!",
   "sound_mappings": {
-    "Registro de Ocorrência": [
+    "Nova Demanda": [
+      {
+        "som": "info",
+        "delay": 0.0
+      }
+    ],
+    "Demanda Aprovada": [
       {
         "som": "success",
         "delay": 0.0
       }
     ],
-    "Novo Aviso": [
+    "Ajustes Solicitados": [
+      {
+        "som": "warning",
+        "delay": 0.0
+      }
+    ],
+    "Novo Aviso Gabinete": [
       {
         "som": "info",
         "delay": 0.0
       },
       {
         "som": "success",
-        "delay": 1.0
-      },
-      {
-        "som": "siren",
-        "delay": 1.0
-      }
-    ],
-    "Aviso de Saúde": [
-      {
-        "som": "siren",
-        "delay": 1.0
-      }
-    ],
-    "Dispensa Médica": [
-      {
-        "som": "siren",
-        "delay": 0.0
-      }
-    ],
-    "Licença Médica": [
-      {
-        "som": "warning",
-        "delay": 0.0
-      }
-    ],
-    "Alta Médica": [
-      {
-        "som": "siren",
-        "delay": 0.0
+        "delay": 0.5
       }
     ],
     "Escala de Serviço": [
@@ -52,40 +36,27 @@
         "delay": 0.0
       }
     ],
-    "Escala de Serviço Atualizada": [
-      {
-        "som": "naval_horn",
-        "delay": 1.0
-      },
-      {
-        "som": "DOBRADA",
-        "delay": 1.0
-      }
-    ],
-    "Chamada Diária": [
+    "Chamada Matutina": [
       {
         "som": "info",
         "delay": 0.0
       }
     ],
-    "Atraso Registrado": [
+    "Galeria de Fotos": [
       {
-        "som": "camera shutter sound effect",
+        "som": "success",
         "delay": 0.0
       }
     ]
   },
   "message_templates": {
-    "Registro de Ocorrência": "🚨 {message}",
-    "Novo Aviso": "📢 {message}",
-    "Aviso de Saúde": "🏥 {message}",
-    "Dispensa Médica": "🩹 Dispensa: {message}",
-    "Licença Médica": "📋 Licença: {message}",
-    "Alta Médica": "✅ Alta Médica: {message}",
-    "Escala de Serviço": "📅 {message}",
-    "Escala de Serviço Atualizada": "🔄 {message}",
-    "Chamada Diária": "🔔 Chamada: {message}",
-    "Atraso Registrado": "⏰ Atraso: {message}"
+    "Nova Demanda": "📝 **Nova Solicitação de Pauta**:\n{message}",
+    "Demanda Aprovada": "✅ **Pauta Aprovada**:\n{message}",
+    "Ajustes Solicitados": "⚠️ **Ajustes Solicitados**:\n{message}",
+    "Novo Aviso Gabinete": "📢 **Aviso do Gabinete**:\n{message}",
+    "Escala de Serviço": "🛡️ **Escala do Dia**:\n{message}",
+    "Chamada Matutina": "📋 **Pronto ao CheGab**:\n{message}",
+    "Galeria de Fotos": "📷 **Galeria Atualizada**:\n{message}"
   },
   "custom_alerts": [
     {

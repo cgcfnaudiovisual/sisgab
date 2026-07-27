@@ -18,28 +18,22 @@ DEFAULT_ALERTS_CONFIG = {
     "bell_enabled": True,
     "tv_alert_vocativo": "Atenção!",
     "sound_mappings": {
-        "Registro de Ocorrência": "alert",
-        "Novo Aviso": "info",
-        "Aviso de Saúde": "warning",
-        "Dispensa Médica": "warning",
-        "Licença Médica": "warning",
-        "Alta Médica": "success",
+        "Nova Demanda": "info",
+        "Demanda Aprovada": "success",
+        "Ajustes Solicitados": "warning",
+        "Novo Aviso Gabinete": "info",
         "Escala de Serviço": "info",
-        "Escala de Serviço Atualizada": "info",
-        "Chamada Diária": "info",
-        "Atraso Registrado": "info"
+        "Chamada Matutina": "info",
+        "Galeria de Fotos": "success"
     },
     "message_templates": {
-        "Registro de Ocorrência": "🚨 {message}",
-        "Novo Aviso": "📢 {message}",
-        "Aviso de Saúde": "🏥 {message}",
-        "Dispensa Médica": "🩹 Dispensa: {message}",
-        "Licença Médica": "📋 Licença: {message}",
-        "Alta Médica": "✅ Alta Médica: {message}",
-        "Escala de Serviço": "📅 {message}",
-        "Escala de Serviço Atualizada": "🔄 {message}",
-        "Chamada Diária": "🔔 Chamada: {message}",
-        "Atraso Registrado": "⏰ Atraso: {message}"
+        "Nova Demanda": "📝 **Nova Solicitação de Pauta**:\n{message}",
+        "Demanda Aprovada": "✅ **Pauta Aprovada**:\n{message}",
+        "Ajustes Solicitados": "⚠️ **Ajustes Solicitados**:\n{message}",
+        "Novo Aviso Gabinete": "📢 **Aviso do Gabinete**:\n{message}",
+        "Escala de Serviço": "🛡️ **Escala do Dia**:\n{message}",
+        "Chamada Matutina": "📋 **Pronto ao CheGab**:\n{message}",
+        "Galeria de Fotos": "📷 **Galeria Atualizada**:\n{message}"
     },
     "custom_alerts": []
 }
@@ -330,14 +324,16 @@ class AlertsManager:
             # Envia notificação por Telegram
             tg_category = None
             title_upper = title.upper()
-            if any(x in title_upper for x in ["AVISO DE SAÚDE", "AVISO DE SAUDE", "DISPENSA", "LICENÇA", "LICENCA", "ALTA MÉDICA", "ALTA MEDICA"]):
-                tg_category = "saude"
-            elif any(x in title_upper for x in ["NOVO AVISO", "LETREIRO"]):
+            if any(x in title_upper for x in ["DEMANDA", "PAUTA", "SOLICITAÇÃO", "SOLICITACAO"]):
+                tg_category = "demanda"
+            elif any(x in title_upper for x in ["HOMOLOGAÇÃO", "HOMOLOGACAO", "APROVADA", "REJEITADA", "PARECER"]):
+                tg_category = "homologacao"
+            elif any(x in title_upper for x in ["NOVO AVISO", "AVISO GABINETE", "LETREIRO", "ORDEM"]):
                 tg_category = "aviso"
             elif any(x in title_upper for x in ["ESCALA"]):
                 tg_category = "escala"
-            elif any(x in title_upper for x in ["REGISTRO DE OCORRÊNCIA", "REGISTRO DE OCORRENCIA", "ANOTAÇÃO", "ANOTACAO", "ATRASO", "CHAMADA"]):
-                tg_category = "anotacao"
+            elif any(x in title_upper for x in ["CHAMADA", "PRESENÇA", "PRESENCA", "PRONTO"]):
+                tg_category = "presenca"
                 
             if tg_category:
                 try:
