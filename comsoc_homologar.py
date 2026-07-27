@@ -100,18 +100,31 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                 except Exception:
                     mids = []
                 
+                # Converte IDs para inteiros para evitar quebra do NiceGUI (ValueError)
                 enc_id = demanda.get('encarregado_id')
+                if enc_id is not None and str(enc_id).strip():
+                    try:
+                        enc_id = int(str(enc_id).strip())
+                    except ValueError:
+                        pass
+                else:
+                    enc_id = None
+
                 des_id = None
                 for mid in mids:
-                    if enc_id is None or str(mid) != str(enc_id):
-                        des_id = mid
+                    try:
+                        mid_int = int(str(mid).strip())
+                    except ValueError:
+                        mid_int = mid
+                    if enc_id is None or str(mid_int) != str(enc_id):
+                        des_id = mid_int
                         break
 
                 ui.label('🎖️ Designação de Equipe Operacional / Criativa').classes('text-xs font-bold text-cyan q-mt-xs')
                 with ui.row().classes('w-full gap-2 no-wrap'):
                     encarregado_select = ui.select(
                         efetivo_options,
-                        value=demanda.get('encarregado_id'),
+                        value=enc_id,
                         label='👤 Encarregado da Missão'
                     ).props('dark outlined dense option-dark').classes('w-1/2')
 
@@ -217,18 +230,31 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
         except Exception:
             mids = []
         
+        # Converte IDs para inteiros para evitar quebra do NiceGUI (ValueError)
         enc_id = demanda.get('encarregado_id')
+        if enc_id is not None and str(enc_id).strip():
+            try:
+                enc_id = int(str(enc_id).strip())
+            except ValueError:
+                pass
+        else:
+            enc_id = None
+
         des_id = None
         for mid in mids:
-            if enc_id is None or str(mid) != str(enc_id):
-                des_id = mid
+            try:
+                mid_int = int(str(mid).strip())
+            except ValueError:
+                mid_int = mid
+            if enc_id is None or str(mid_int) != str(enc_id):
+                des_id = mid_int
                 break
 
         with ui.column().classes('w-full gap-3 text-xs'):
             with ui.row().classes('w-full gap-2 no-wrap'):
                 encarregado_select = ui.select(
                     efetivo_options,
-                    value=demanda.get('encarregado_id'),
+                    value=enc_id,
                     label='👤 Encarregado da Missão'
                 ).props('dark outlined dense option-dark').classes('w-1/2')
 
