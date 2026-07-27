@@ -3,7 +3,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from nicegui import ui, app
 import theme
-from database import get_db_connection, execute_query_safe
+from database import get_db_connection, get_service_db_connection, execute_query_safe
 
 THEME = theme.colors
 
@@ -56,7 +56,7 @@ def render_page():
     def render_content():
         # Verificação de solicitações pendentes para exibir alerta inicial para supervisores
         solicitacoes_pendentes_count = 0
-        db = get_db_connection()
+        db = get_service_db_connection() or get_db_connection()
         if db and user_role in ('admin', 'supervisor'):
             try:
                 res_pendentes = db.table('demandas_comunicacao').select('id').eq('status', 'pendente').execute()
@@ -90,7 +90,7 @@ def render_page():
         kpi_eventos_hoje = 0
         eventos_semana = []
 
-        db = get_db_connection()
+        db = get_service_db_connection() or get_db_connection()
         if db:
             try:
                 res_all = db.table('demandas_comunicacao').select('id, status, data_evento, hora_evento, titulo_evento, local_evento').execute()
@@ -184,13 +184,23 @@ def render_page():
                             
                     # Carregar boletins do banco de dados
                     boletins = []
-                    db = get_db_connection()
+                    db = get_service_db_connection() or get_db_connection()
                     if db:
                         try:
                             res = db.table('comsoc_noticias').select('*').order('data', desc=True).execute()
                             boletins = res.data if res.data else []
                         except Exception as e:
                             print(f"[DB NOTICIAS ERR] {e}")
+
+                    # Fallback SQLite local se Supabase vazio/offline
+                    if not boletins:
+                        try:
+                            from sqlite_adapter import SQLiteDatabaseAdapter
+                            loc_db = SQLiteDatabaseAdapter()
+                            res_loc = loc_db.table('comsoc_noticias').select('*').order('data', desc=True).execute()
+                            boletins = res_loc.data if res_loc.data else []
+                        except Exception as loc_e:
+                            print(f"[LOCAL DB NOTICIAS ERR] {loc_e}")
                             
                     if boletins:
                         for b in boletins:
@@ -249,22 +259,38 @@ def render_page():
                     if not titulo_input.value or not conteudo_input.value:
                         error_lbl.text = "Preencha todos os campos obrigatórios."
                         return
-                    db = get_db_connection()
+
+                    registro = {
+                        'titulo': titulo_input.value,
+                        'conteudo': conteudo_input.value,
+                        'autor': user_data.get('nome_guerra', 'Operador').upper(),
+                        'data': datetime.now().strftime('%Y-%m-%d'),
+                        'tags': tags_input.value
+                    }
+
+                    salvou = False
+                    db = get_service_db_connection() or get_db_connection()
                     if db:
                         try:
-                            registro = {
-                                'titulo': titulo_input.value,
-                                'conteudo': conteudo_input.value,
-                                'autor': user_data.get('nome_guerra', 'Operador').upper(),
-                                'data': datetime.now().strftime('%Y-%m-%d'),
-                                'tags': tags_input.value
-                            }
                             db.table('comsoc_noticias').insert(registro).execute()
-                            ui.notify('Boletim registrado com sucesso!', color='success')
-                            bulletin_dialog.close()
-                            render_content.refresh()
+                            salvou = True
                         except Exception as e:
-                            error_lbl.text = f"Erro ao salvar: {e}"
+                            print(f"[SUPABASE SAVE BULLETIN ERR] {e}")
+
+                    if not salvou:
+                        try:
+                            from sqlite_adapter import SQLiteDatabaseAdapter
+                            local_db = SQLiteDatabaseAdapter()
+                            local_db.table('comsoc_noticias').insert(registro).execute()
+                            salvou = True
+                        except Exception as loc_err:
+                            print(f"[SQLITE SAVE BULLETIN ERR] {loc_err}")
+                            error_lbl.text = f"Erro ao salvar: {loc_err}"
+                            return
+
+                    ui.notify('Boletim registrado com sucesso!', color='success')
+                    bulletin_dialog.close()
+                    render_content.refresh()
 
                 with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
                     ui.button('Cancelar', on_click=bulletin_dialog.close).props('flat color=grey')
