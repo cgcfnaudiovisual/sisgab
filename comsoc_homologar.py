@@ -242,6 +242,113 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
         ui.notify(f"Erro ao abrir modal de edição: {err_dlg}", color="negative")
 
 
+def open_concluir_missao_dialog(demanda, user_name_guerra="SUPERVISOR", callback_refresh=None):
+    efetivo_options = {}
+    db = get_service_db_connection() or get_db_connection()
+    if db:
+        try:
+            res_ef = db.table('efetivo').select('id, nome_guerra, role, posto_grad').execute()
+            if res_ef.data:
+                sorted_ef = sort_efetivo_list(res_ef.data)
+                efetivo_options = {
+                    item['id']: f"{item.get('posto_grad') or ''} {item['nome_guerra']} ({item['role'].upper()})".strip()
+                    for item in sorted_ef
+                }
+        except Exception as e:
+            print(f"[EFETIVO CONCLUIR ERR] {e}")
+
+    with ui.dialog() as concluir_dialog, ui.card().classes('w-[580px] max-w-[95vw] q-pa-lg border').style(
+        f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]}; border-radius: 16px;'
+    ):
+        ui.label(f"🎯 Conclusão & Entrega de Missão: {demanda.get('titulo_evento','')}").classes('text-white text-md font-bold cyber-title q-mb-xs')
+        ui.label(f"Solicitante: {demanda.get('solicitante_nome','')} ({demanda.get('setor','')})").classes('text-xs text-grey-4 q-mb-md')
+
+        enc_id = demanda.get('encarregado_id')
+        try:
+            enc_id = int(str(enc_id).strip()) if enc_id else None
+        except ValueError:
+            enc_id = None
+
+        with ui.column().classes('w-full gap-3 text-xs'):
+            encarregado_sel = ui.select(efetivo_options, value=enc_id, label='👤 Encarregado da Missão').props('dark outlined dense option-dark w-full').classes('w-full')
+            fotografo_sel = ui.select(efetivo_options, label='📷 Fotógrafo / Cinegrafista').props('dark outlined dense option-dark w-full').classes('w-full')
+            designer_sel = ui.select(efetivo_options, label='🎨 Designer / Redator').props('dark outlined dense option-dark w-full').classes('w-full')
+            
+            drive_input = ui.input('🔗 Link da Galeria de Fotos / Drive (Opcional)', placeholder='https://drive.google.com/...').props('dark outlined dense w-full')
+            parecer_input = ui.textarea('✍️ Relatório de Entrega / Parecer Final', placeholder='Ex: Cobertura realizada. 50 fotos tratadas enviadas ao acervo.').props('dark outlined dense w-full rows=3')
+            error_lbl = ui.label('').classes('text-xs text-red font-bold')
+
+            def efetuar_conclusao():
+                db_c = get_service_db_connection() or get_db_connection()
+                if db_c:
+                    try:
+                        militar_ids = []
+                        if encarregado_sel.value: militar_ids.append(encarregado_sel.value)
+                        if fotografo_sel.value: militar_ids.append(fotografo_sel.value)
+                        if designer_sel.value: militar_ids.append(designer_sel.value)
+
+                        update_payload = {
+                            'status': 'concluida',
+                            'notificar_militar_ids': json.dumps(list(set(militar_ids)))
+                        }
+                        if encarregado_sel.value:
+                            update_payload['encarregado_id'] = encarregado_sel.value
+
+                        dem_id = demanda['id']
+                        if isinstance(dem_id, str) and dem_id.isdigit():
+                            dem_id = int(dem_id)
+
+                        db_c.table('demandas_comunicacao').update(update_payload).eq('id', dem_id).execute()
+
+                        hist = {
+                            'demanda_id': dem_id,
+                            'data_hora': datetime.now().isoformat(),
+                            'usuario': user_name_guerra,
+                            'acao': 'Missão Concluída',
+                            'parecer': parecer_input.value or 'Pauta concluída e entregue.'
+                        }
+                        try:
+                            db_c.table('demandas_historico_tramitacao').insert(hist).execute()
+                        except Exception:
+                            pass
+
+                        if drive_input.value and drive_input.value.strip():
+                            try:
+                                db_c.table('processed_photos').insert({
+                                    'event_name': demanda.get('titulo_evento', ''),
+                                    'filename': 'drive_folder_link',
+                                    'drive_link': drive_input.value.strip(),
+                                    'criado_em': datetime.now().isoformat()
+                                }).execute()
+                            except Exception:
+                                pass
+
+                        try:
+                            from notifications_manager import notify_telegram
+                            notify_telegram(
+                                f"🎯 **Missão Concluída & Entregue!**\n"
+                                f"📌 {demanda.get('titulo_evento', 'Sem Título')}\n"
+                                f"👨‍✈️ Concluído por: {user_name_guerra}\n"
+                                f"💬 Relatório: {parecer_input.value[:120] if parecer_input.value else 'Entregue'}",
+                                "system"
+                            )
+                        except Exception:
+                            pass
+
+                        ui.notify('🎯 Missão finalizada e registrada com sucesso!', color='positive')
+                        concluir_dialog.close()
+                        if callback_refresh:
+                            callback_refresh()
+                    except Exception as err:
+                        error_lbl.text = f"Erro ao concluir: {err}"
+
+            with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
+                ui.button('Cancelar', on_click=concluir_dialog.close).props('flat color=grey')
+                ui.button('🎯 Confirmar Conclusão da Missão', on_click=efetuar_conclusao).props('unelevated color=green text-color=white bold')
+
+    concluir_dialog.open()
+
+
 def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=True, callback_refresh=None):
     efetivo_options = {}
     db = get_service_db_connection() or get_db_connection()
@@ -263,7 +370,6 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
         ui.label(f"⚖️ Tramitação & Parecer: {demanda.get('titulo_evento','')}").classes('text-white text-md font-bold cyber-title q-mb-xs')
         ui.label(f"Solicitante: {demanda.get('solicitante_nome','')} ({demanda.get('setor','')})").classes('text-xs text-grey-4 q-mb-md')
         
-        # Deduz designer_id a partir de notificar_militar_ids
         mids_str = demanda.get('notificar_militar_ids') or '[]'
         try:
             mids = json.loads(mids_str)
@@ -274,7 +380,6 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
         except Exception:
             mids = []
         
-        # Converte IDs para inteiros para evitar quebra do NiceGUI (ValueError)
         enc_id = demanda.get('encarregado_id')
         if enc_id is not None and str(enc_id).strip():
             try:
@@ -353,7 +458,6 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
                         
                         ui.notify(f"Demanda tramitada: {acao_nome}", color='success')
 
-                        # Notificação Telegram (interconexão Web → Telegram)
                         try:
                             from notifications_manager import notify_telegram
                             titulo_dem = demanda.get('titulo_evento', 'Sem Título')
@@ -363,7 +467,7 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
                                 f"📌 {titulo_dem}\n"
                                 f"{emoji_status} Status: {acao_nome}\n"
                                 f"👨‍✈️ Tramitado por: {user_name_guerra}\n"
-                                f"💬 Parecer: {parecer_text.value[:120] if parecer_text.value else 'N/I'}",
+                                f"💬 Parecer: {parecer_input.value[:120] if parecer_input.value else 'N/I'}",
                                 "system"
                             )
                         except Exception as tg_err:
@@ -375,10 +479,11 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
                     except Exception as e:
                         error_lbl.text = f"Erro na gravação: {e}"
 
-            with ui.row().classes('w-full justify-between gap-3 q-mt-xs no-wrap'):
+            with ui.row().classes('w-full justify-between gap-2 q-mt-xs flex-wrap'):
                 ui.button('Rejeitar', on_click=lambda: submeter_tramitacao('rejeitado', 'Demanda Rejeitada')).props('unelevated color=red text-color=white bold').classes('col q-py-sm rounded-lg')
                 ui.button('Pedir Ajustes', on_click=lambda: submeter_tramitacao('ajustes', 'Solicitado Ajustes')).props('unelevated color=orange text-color=black bold').classes('col q-py-sm rounded-lg')
                 ui.button('Aprovar', on_click=lambda: submeter_tramitacao('aprovada', 'Demanda Aprovada')).props('unelevated color=green text-color=white bold').classes('col q-py-sm rounded-lg')
+                ui.button('🎯 Concluir Missão', on_click=lambda: (tramitar_dialog.close(), open_concluir_missao_dialog(demanda, user_name_guerra, callback_refresh))).props('unelevated color=cyan text-color=black bold').classes('col q-py-sm rounded-lg')
 
         ui.button('Fechar', on_click=tramitar_dialog.close).props('flat color=grey').classes('w-full q-mt-md text-xs bold')
     tramitar_dialog.open()
@@ -517,17 +622,9 @@ def render_page():
                                     ui.label(f"📅 Data: {d.get('data_evento', 'N/I')} às {d.get('hora_evento', '09:00')}").classes('text-xs text-grey-3')
                                     ui.label(f"📍 Local: {d.get('local_evento', 'N/I')}").classes('text-xs text-grey-3')
 
-                                    def concluir_pauta(dem_id=d.get('id')):
-                                        if dem_id:
-                                            db_c = get_service_db_connection() or get_db_connection()
-                                            if db_c:
-                                                db_c.table('demandas_comunicacao').update({'status': 'concluida'}).eq('id', dem_id).execute()
-                                                ui.notify('✅ Pauta concluída com sucesso!', color='positive')
-                                                render_content.refresh()
-
                                     with ui.row().classes('w-full justify-end items-center gap-1 q-mt-sm'):
                                         ui.button('✏️ Editar', on_click=lambda d=d: open_editar_pauta_dialog(d, render_content.refresh)).props('flat color=cyan dense icon=edit').classes('text-xs')
-                                        ui.button('Concluir', on_click=concluir_pauta).props('flat color=green dense').classes('text-xs')
+                                        ui.button('🎯 Concluir Missão', on_click=lambda d=d: open_concluir_missao_dialog(d, user_name_guerra, render_content.refresh)).props('flat color=green dense bold icon=task_alt').classes('text-xs')
                                         ui.button('Detalhes', on_click=lambda d=d: open_tramitar_dialog(d, user_name_guerra, is_approver, render_content.refresh)).props('flat color=cyan dense').classes('text-xs')
                     else:
                         with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):

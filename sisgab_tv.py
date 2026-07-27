@@ -181,8 +181,40 @@ def render_page():
                         ui.label('EFETIVO NO PRONTO').classes('text-[9px] text-grey-5 font-bold tracking-wider')
                         ui.label(efetivo_pronto_str).classes('text-lg font-black text-teal-3')
 
+            # ── SELO HIGHLIGHT: COBERTURA EM ANDAMENTO AGORA ──
+            agora_dt = datetime.now()
+            pauta_ao_vivo = None
+            if db:
+                try:
+                    res_live = db.table('demandas_comunicacao').select('*').eq('data_evento', hoje_str).execute()
+                    if res_live.data:
+                        for p_live in res_live.data:
+                            st_live = str(p_live.get('status', '')).strip().lower()
+                            if st_live in ('aprovada', 'aprovado', 'aprovadas'):
+                                hr_str = str(p_live.get('hora_evento', '09:00'))
+                                try:
+                                    hr_dt = datetime.strptime(f"{hoje_str} {hr_str[:5]}", '%Y-%m-%d %H:%M')
+                                    diff_mins = (agora_dt - hr_dt).total_seconds() / 60.0
+                                    if -30 <= diff_mins <= 120:
+                                        pauta_ao_vivo = p_live
+                                        break
+                                except Exception:
+                                    pass
+                except Exception as live_err:
+                    print(f"[TV LIVE HIGHLIGHT ERR] {live_err}")
+
+            if pauta_ao_vivo:
+                with ui.card().classes('w-full q-pa-sm no-shadow rounded-xl border border-red-500/50 flex-row items-center justify-between no-wrap animate-pulse q-mb-xs').style('background: rgba(239,68,68,0.15);'):
+                    with ui.row().classes('items-center gap-2'):
+                        ui.badge('🔴 EM COBERTURA AGORA', color='red-10').classes('text-xs font-black tracking-wider q-px-sm')
+                        ui.label(pauta_ao_vivo.get('titulo_evento', '')).classes('text-xs font-bold text-white truncate max-w-[450px]')
+                    with ui.row().classes('items-center gap-3 text-[11px] text-grey-3 font-semibold'):
+                        ui.label(f"📍 {pauta_ao_vivo.get('local_evento', 'Gabinete')}")
+                        ui.label(f"🕒 {pauta_ao_vivo.get('hora_evento', '')}")
+                        ui.label(f"👤 Solicitante: {pauta_ao_vivo.get('solicitante_nome', 'COMSOC')}")
+
             # ── GRIDS PRINCIPAIS DO MONITOR ──
-            with ui.grid(columns=1).classes('w-full gap-4 flex-grow gt-xs').style('grid-template-columns: 1.2fr 1fr 1fr; margin-top: 10px;'):
+            with ui.grid(columns=1).classes('w-full gap-4 flex-grow gt-xs').style('grid-template-columns: 1.2fr 1fr 1fr; margin-top: 6px;'):
                 
                 # COLUNA 1: QUADRO DE FLUXO DE PAUTAS (CALENDÁRIO DINÂMICO & KANBAN)
                 with ui.card().classes('q-pa-md no-shadow rounded-xl border border-cyan-950/60').style('background: rgba(10,15,30,0.45);'):
@@ -248,32 +280,30 @@ def render_page():
 
                                         if prio == 'altissima':
                                             border_col = "#ef4444"
-                                            prio_badge = "🔴 ALTÍSSIMA"
-                                            prio_color = "red-10"
-                                        elif prio == 'urgente':
-                                            border_col = "#f59e0b"
-                                            prio_badge = "🟡 URGENTE"
-                                            prio_color = "amber-9"
+                                            prio_lbl = "ALTÍSSIMA"
+                                        elif prio == 'alta':
+                                            border_col = "#f97316"
+                                            prio_lbl = "ALTA"
                                         else:
-                                            border_col = "#00e5ff" if not is_pend else "#ef4444"
-                                            prio_badge = "PENDENTE" if is_pend else "APROVADA"
-                                            prio_color = "red-5" if is_pend else "cyan-9"
+                                            border_col = "#00e5ff" if not is_pend else "#eab308"
+                                            prio_lbl = "NORMAL"
 
-                                        with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg').style(f'background: rgba(255,255,255,0.02); border-left: 4px solid {border_col};'):
+                                        with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg transition-all').style(
+                                            f'background: rgba(255,255,255,0.02); border-left: 4px solid {border_col}; border-top: 1px solid rgba(255,255,255,0.05);'
+                                        ):
                                             with ui.row().classes('w-full justify-between items-center no-wrap'):
-                                                with ui.row().classes('items-center gap-2'):
-                                                    ui.label(f"[{dia_semana_lbl} {dia_num}]").classes('text-[11px] font-bold text-cyan-4')
-                                                    ui.label(p.get('titulo_evento', 'Sem Título')).classes('text-xs font-bold text-white truncate max-w-[140px]')
+                                                with ui.row().classes('items-center gap-2 no-wrap'):
+                                                    ui.label(f"{dia_semana_lbl} {dia_num}").classes('text-xs font-black text-cyan font-mono').style('min-width: 75px;')
+                                                    ui.label(p.get('titulo_evento', 'Sem Título')).classes('text-xs font-bold text-white truncate max-w-[180px]')
                                                 
-                                                ui.badge(prio_badge).props(f"color={prio_color} dense text-color=white").classes('text-[8px] q-px-sm font-bold')
+                                                if is_pend:
+                                                    ui.badge('PENDENTE').props('color=amber text-color=black').classes('text-[9px] font-bold')
+                                                else:
+                                                    ui.badge('APROVADA').props('color=cyan text-color=black').classes('text-[9px] font-bold')
 
-                                            with ui.row().classes('w-full items-center gap-1 q-mt-xs'):
-                                                ui.badge(f"📌 {cat_lbl}").props('color=black text-color=amber border border-amber/30 dense').classes('text-[8px]')
-                                                ui.badge(f"🎨 {prod_lbl}").props('color=black text-color=cyan border border-cyan/30 dense').classes('text-[8px]')
-
-                                            with ui.row().classes('w-full justify-between items-center text-[10px] text-grey-4 q-mt-xs'):
-                                                ui.label(f"🕒 {p.get('hora_evento', '09:00')} | 📍 {p.get('local_evento') or 'Gabinete'}")
-                                                ui.label(f"👤 {p.get('solicitante_nome','CGCFN')}").classes('text-[9px] truncate max-w-[100px]')
+                                            with ui.row().classes('w-full justify-between items-center q-mt-xs text-[10px] text-grey-4'):
+                                                ui.label(f"🕒 {p.get('hora_evento', '09:00')} | 📍 {p.get('local_evento', 'Gabinete')}").classes('truncate max-w-[200px]')
+                                                ui.label(f"📦 {cat_lbl} ({prod_lbl})").classes('text-grey-5 text-[9px]')
                             else:
                                 with ui.column().classes('w-full h-48 items-center justify-center gap-2 text-grey-5'):
                                     ui.icon('event_busy', size='2.5rem')
@@ -399,43 +429,88 @@ def render_page():
                                     ui.label(n['nome']).classes('text-white font-bold')
                                     ui.label(f"Dia {n['dia']}").classes('text-amber-5 font-mono text-[10px]')
 
-                # COLUNA 3: COMUNICADOS & ÚLTIMAS NOTÍCIAS
-                with ui.card().classes('q-pa-md no-shadow rounded-xl border border-cyan-950/60').style('background: rgba(10,15,30,0.45);'):
-                    with ui.row().classes('w-full items-center gap-2 q-mb-md'):
-                        ui.icon('announcement', color='cyan-5', size='sm')
-                        ui.label('COMUNICADOS E BOLETINS').classes('text-sm font-bold text-white tracking-wider')
-                    
-                    boletins = []
-                    if db:
-                        try:
-                            res = db.table('comsoc_noticias').select('*').order('data', desc=True).limit(3).execute()
-                            boletins = res.data if res.data else []
-                        except Exception as e:
-                            print(f"[TV BOLETINS ERR] {e}")
-                            
-                    if boletins:
-                        with ui.column().classes('w-full gap-3'):
-                            for b in boletins:
-                                data_noticia = str(b.get('data', ''))
+                # COLUNA 3: MODO CARROSSEL DE INFORMATIVOS & EFEMÉRIDES MARÍTIMAS
+                slide_idx = (int(datetime.now().timestamp() // 15)) % 3
+                slide_headers = [
+                    ('announcement', '📢 BOLETINS & AVISOS COMSOC'),
+                    ('anchor', '⚓ NOTÍCIAS DO SETOR NAVAL'),
+                    ('event', '🎂 EFEMÉRIDES MARÍTIMAS')
+                ]
+                icon_name, title_lbl = slide_headers[slide_idx]
+
+                with ui.card().classes('q-pa-md no-shadow rounded-xl border border-cyan-950/60 flex-col justify-between').style('background: rgba(10,15,30,0.45);'):
+                    with ui.column().classes('w-full gap-2'):
+                        with ui.row().classes('w-full items-center justify-between q-mb-xs'):
+                            with ui.row().classes('items-center gap-2'):
+                                ui.icon(icon_name, color='cyan-5', size='sm')
+                                ui.label(title_lbl).classes('text-xs font-bold text-white tracking-wider')
+                            ui.badge(f"PAINEL {slide_idx+1}/3", color='cyan-9').classes('text-[8px] font-mono')
+
+                        if slide_idx == 0:
+                            boletins = []
+                            if db:
                                 try:
-                                    data_noticia = datetime.strptime(data_noticia[:10], '%Y-%m-%d').strftime('%d/%m/%Y')
-                                except Exception:
-                                    pass
+                                    res = db.table('comsoc_noticias').select('*').order('data', desc=True).limit(3).execute()
+                                    boletins = res.data if res.data else []
+                                except Exception as e:
+                                    print(f"[TV BOLETINS ERR] {e}")
                                     
-                                with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg').style('background: rgba(255,255,255,0.02); border-left: 4px solid #ef4444;'):
-                                    ui.label(b.get('titulo', '')).classes('text-xs font-bold text-white')
-                                    ui.label(str(b.get('conteudo', ''))[:100] + "...").classes('text-[10px] text-grey-4 q-mt-xs')
-                                    with ui.row().classes('w-full justify-between items-center text-[8px] text-grey-5 q-mt-xs'):
-                                        ui.label(f"✍️ Por: {b.get('autor', 'COMSOC')}")
-                                        ui.label(f"📅 {data_noticia}")
-                    else:
-                        with ui.column().classes('w-full h-40 items-center justify-center gap-2 text-grey-5'):
-                            ui.icon('notifications_off', size='2.5rem')
-                            ui.label('Nenhum comunicado ativo.').classes('text-xs')
+                            if boletins:
+                                with ui.column().classes('w-full gap-2 q-mt-xs'):
+                                    for b in boletins:
+                                        data_noticia = str(b.get('data', ''))
+                                        try:
+                                            data_noticia = datetime.strptime(data_noticia[:10], '%Y-%m-%d').strftime('%d/%m/%Y')
+                                        except Exception:
+                                            pass
+                                            
+                                        with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg').style('background: rgba(255,255,255,0.02); border-left: 3px solid #00e5ff;'):
+                                            ui.label(b.get('titulo', '')).classes('text-xs font-bold text-cyan')
+                                            ui.label(str(b.get('conteudo', ''))[:90] + "...").classes('text-[10px] text-grey-4 q-mt-xs')
+                                            with ui.row().classes('w-full justify-between items-center text-[8px] text-grey-5 q-mt-xs'):
+                                                ui.label(f"✍️ {b.get('autor', 'COMSOC')}")
+                                                ui.label(f"📅 {data_noticia}")
+                            else:
+                                with ui.column().classes('w-full h-36 items-center justify-center gap-2 text-grey-5'):
+                                    ui.icon('notifications_off', size='2rem')
+                                    ui.label('Nenhum comunicado ativo.').classes('text-xs')
+
+                        elif slide_idx == 1:
+                            try:
+                                from comsoc_noticias import fetch_rss_news
+                                rss_items = fetch_rss_news()[:3]
+                            except Exception:
+                                rss_items = []
+                            
+                            if rss_items:
+                                with ui.column().classes('w-full gap-2 q-mt-xs'):
+                                    for item in rss_items:
+                                        with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg').style('background: rgba(255,255,255,0.02); border-left: 3px solid #f59e0b;'):
+                                            ui.label(item['fonte']).classes('text-[9px] text-amber-5 font-bold')
+                                            ui.label(item['titulo']).classes('text-xs font-bold text-white leading-tight q-mt-xs')
+                                            ui.label(item['data']).classes('text-[8px] text-grey-5 q-mt-xs')
+                            else:
+                                with ui.column().classes('w-full h-36 items-center justify-center gap-2 text-grey-5'):
+                                    ui.icon('rss_feed', size='2rem')
+                                    ui.label('Notícias do Setor Naval indisponíveis.').classes('text-xs')
+
+                        else:
+                            with ui.column().classes('w-full gap-2 q-mt-xs'):
+                                ui.label('⚓ DESTAQUES DA MARINHA DO BRASIL').classes('text-[9px] font-bold text-cyan-4 tracking-wider')
+                                efemerides_list = [
+                                    ('11 JUN', 'Batalha Naval do Riachuelo (Data Magna)'),
+                                    ('13 DEZ', 'Dia do Marinheiro (Patrono Tamandaré)'),
+                                    ('23 OUT', 'Dia do Aviador Naval'),
+                                    ('16 NOV', 'Dia da Amazônia Azul')
+                                ]
+                                for dia_ef, tit_ef in efemerides_list:
+                                    with ui.row().classes('w-full justify-between items-center bg-black/20 px-2 py-1 rounded text-xs border border-white/5'):
+                                        ui.label(tit_ef).classes('text-white text-[10px] font-semibold truncate max-w-[200px]')
+                                        ui.label(dia_ef).classes('text-amber-4 font-mono text-[9px] font-bold')
 
             # ── LETREIRO DIGITAL CORRIDO (Ticker Marquee) no Rodapé ──
             bulletin_ticker_text = "⚓ MONITOR SISGAB COMSOC: Central de Operações de Comunicação Social. Acompanhe agendas de cobertura e inventário de material de forma tática.  "
-            if boletins:
+            if 'boletins' in locals() and boletins:
                 bulletin_ticker_text += " | ".join([f"📢 {b['titulo']}: {b['conteudo'][:120]}" for b in boletins])
 
             with ui.row().classes('w-full q-py-xs bg-black/60 border border-cyan-500/20 rounded-md q-mt-auto items-center no-wrap'):
@@ -444,5 +519,5 @@ def render_page():
                     ui.label(bulletin_ticker_text).classes('marquee-content text-xs text-white')
 
         render_tv_dashboard()
-        # Auto-refresh do painel a cada 30 segundos
-        ui.timer(30.0, render_tv_dashboard.refresh)
+        # Auto-refresh do painel a cada 15 segundos para rotação do Carrossel e atualização de pautas
+        ui.timer(15.0, render_tv_dashboard.refresh)
