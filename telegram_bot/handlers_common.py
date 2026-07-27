@@ -380,6 +380,53 @@ def register_common_handlers(bot):
                     parse_mode='Markdown'
                 )
 
+            elif text in ("📋 Gerenciar Demandas", "/demandas", "/gerenciar"):
+                from database import get_bot_db_connection as get_db_connection
+                db = get_db_connection()
+                if not db:
+                    await bot.reply_to(message, "⚠️ Banco de dados indisponível.")
+                    return
+                try:
+                    res_dem = db.table('demandas_comunicacao').select('*').in_('status', ['aprovada', 'aprovado', 'pendente', 'em_ajuste', 'ajustes']).order('data_evento', desc=False).limit(10).execute()
+                    demandas = res_dem.data if res_dem.data else []
+                    if not demandas:
+                        await bot.reply_to(message, "🟢 Nenhuma demanda ativa pendente de gestão no momento.", reply_markup=get_main_menu_keyboard(is_operator))
+                        return
+                    
+                    from .keyboards import get_manage_demanda_inline_keyboard
+                    await bot.reply_to(message, f"📋 **PAUTAS ATIVAS PARA GESTÃO ({len(demandas)})**\nSelecione a ação desejada abaixo de cada demanda:")
+                    for d in demandas:
+                        d_id = d.get('id')
+                        tit = d.get('titulo_evento', 'Sem Título')
+                        dt = d.get('data_evento', 'N/I')
+                        hr = d.get('hora_evento', '09:00')
+                        st = str(d.get('status', 'Pendente')).upper()
+                        loc = d.get('local_evento', 'N/I')
+                        msg_item = (
+                            f"📌 **#{d_id} — {tit}**\n"
+                            f"   📅 {dt} às {hr} | 📍 {loc}\n"
+                            f"   ⚡ Status: *{st}*\n"
+                        )
+                        await bot.send_message(chat_id, msg_item, reply_markup=get_manage_demanda_inline_keyboard(d_id), parse_mode='Markdown')
+                except Exception as e_dem:
+                    await bot.reply_to(message, f"❌ Erro ao listar demandas: {e_dem}")
+
+            elif text in ("⚡ Missão Rápida", "/missaorapida", "/missao_rapida"):
+                chat_states[chat_id] = {
+                    'action': 'missao_rapida',
+                    'step': 'input_titulo',
+                    'user': profile,
+                    'selected_ids': set()
+                }
+                from .keyboards import get_cancel_keyboard
+                await bot.reply_to(
+                    message,
+                    "⚡ **CRIAR MISSÃO RÁPIDA**\n\n"
+                    "Digite o **Título ou Objetivo** da missão expressa (ex: *Cobertura Fotográfica da Visita do Comandante*):",
+                    reply_markup=get_cancel_keyboard(),
+                    parse_mode='Markdown'
+                )
+
             elif text == "📋 Pautas COMSOC" or text == "📅 Agenda Semanal":
                 txt = _get_weekly_events_text()
                 await bot.reply_to(message, txt, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
@@ -498,6 +545,47 @@ def register_common_handlers(bot):
         if text in ["❌ Cancelar", "cancelar"]:
             clear_state(chat_id)
             await bot.reply_to(message, "❌ Operação cancelada.", reply_markup=get_main_menu_keyboard(is_operator) if profile else get_unauthorized_keyboard())
+            return
+
+        if action == 'edit_hora_demanda':
+            dem_id = state.get('demanda_id')
+            novahora = text.strip()
+            from database import get_bot_db_connection as get_db_connection
+            db = get_db_connection()
+            if db and dem_id:
+                try:
+                    db.table('demandas_comunicacao').update({'hora_evento': novahora}).eq('id', dem_id).execute()
+                    clear_state(chat_id)
+                    await bot.reply_to(message, f"✅ **Horário atualizado com sucesso!**\nDemanda #{dem_id} alterada para **{novahora}**.", reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
+                except Exception as e_ed:
+                    await bot.reply_to(message, f"❌ Erro ao atualizar horário: {e_ed}")
+            return
+
+        if action == 'missao_rapida':
+            step = state.get('step')
+            if step == 'input_titulo':
+                state['titulo'] = text.strip()
+                state['step'] = 'select_militares'
+                from database import get_bot_db_connection as get_db_connection
+                db = get_db_connection()
+                efetivo_list = []
+                if db:
+                    try:
+                        res_ef = db.table('efetivo').select('*').execute()
+                        efetivo_list = res_ef.data or []
+                    except Exception:
+                        pass
+                from .utils import sort_efetivo_by_rank
+                sorted_ef = sort_efetivo_by_rank(efetivo_list)
+                state['efetivo_list'] = sorted_ef
+                from .keyboards import get_multi_militar_inline_keyboard
+                await bot.reply_to(
+                    message,
+                    f"⚡ **MISSÃO RÁPIDA:** *{state['titulo']}*\n\n"
+                    f"Selecione os militares escalados (ordenados por antiguidade):",
+                    reply_markup=get_multi_militar_inline_keyboard(sorted_ef, set(), prefix="quick_mil"),
+                    parse_mode='Markdown'
+                )
             return
 
         if action == 'presenca_diaria':
@@ -817,6 +905,205 @@ def register_common_handlers(bot):
                     await bot.reply_to(message, "Selecione uma das opções nos botões abaixo:", reply_markup=get_confirm_demanda_keyboard())
             return
 
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(('concluir_dem:', 'rejeitar_dem:', 'equipe_dem:', 'edithora_dem:', 'sel_mil:', 'quick_mil:')))
+    async def handle_demanda_management_callbacks(call):
+        chat_id = call.message.chat.id
+        data = call.data
+        profile = await check_authorized_user(call.from_user.id)
+        if not profile:
+            await bot.answer_callback_query(call.id, "Acesso restrito.")
+            return
+
+        db = get_db_connection()
+        if not db:
+            await bot.answer_callback_query(call.id, "Banco de dados indisponível.")
+            return
+
+        user_name = profile.get('nome_guerra') or profile.get('nome', 'Operador')
+
+        # --- CONCLUIR PAUTA ---
+        if data.startswith('concluir_dem:'):
+            dem_id = data.split(':')[1]
+            try:
+                db.table('demandas_comunicacao').update({'status': 'concluida'}).eq('id', dem_id).execute()
+                await bot.answer_callback_query(call.id, "✅ Pauta Concluída!")
+                await bot.edit_message_text(f"🎯 **MISSÃO CONCLUÍDA!**\nPauta ID #{dem_id} foi encerrada por {user_name}.", chat_id=chat_id, message_id=call.message.message_id, parse_mode='Markdown')
+                
+                from notifications_manager import notify_telegram
+                notify_telegram(f"🎯 **Pauta Concluída via Telegram**\nID #{dem_id} foi finalizada por {user_name}.", "system")
+            except Exception as e:
+                await bot.answer_callback_query(call.id, f"Erro: {e}")
+
+        # --- REJEITAR PAUTA ---
+        elif data.startswith('rejeitar_dem:'):
+            dem_id = data.split(':')[1]
+            try:
+                db.table('demandas_comunicacao').update({'status': 'rejeitado'}).eq('id', dem_id).execute()
+                await bot.answer_callback_query(call.id, "❌ Pauta Rejeitada.")
+                await bot.edit_message_text(f"❌ **PAUTA INDEFERIDA**\nPauta ID #{dem_id} foi marcada como rejeitada.", chat_id=chat_id, message_id=call.message.message_id, parse_mode='Markdown')
+            except Exception as e:
+                await bot.answer_callback_query(call.id, f"Erro: {e}")
+
+        # --- ATRIBUIR EQUIPE (INÍCIO) ---
+        elif data.startswith('equipe_dem:'):
+            dem_id = data.split(':')[1]
+            try:
+                res_ef = db.table('efetivo').select('*').execute()
+                efetivo_list = res_ef.data if res_ef.data else []
+                from .utils import sort_efetivo_by_rank
+                efetivo_list = sort_efetivo_by_rank(efetivo_list)
+
+                chat_states[chat_id] = {
+                    'action': 'assign_equipe',
+                    'demanda_id': dem_id,
+                    'selected_ids': set(),
+                    'efetivo_list': efetivo_list
+                }
+                from .keyboards import get_multi_militar_inline_keyboard
+                await bot.edit_message_text(
+                    f"👤 **ATRIBUIR EQUIPE OPERACIONAL**\nDemanda ID #{dem_id}\n\n"
+                    f"Selecione os militares que participarão da missão (ordenados por antiguidade):",
+                    chat_id=chat_id,
+                    message_id=call.message.message_id,
+                    reply_markup=get_multi_militar_inline_keyboard(efetivo_list, set(), prefix="sel_mil"),
+                    parse_mode='Markdown'
+                )
+                await bot.answer_callback_query(call.id)
+            except Exception as e:
+                await bot.answer_callback_query(call.id, f"Erro ao carregar efetivo: {e}")
+
+        # --- TOGGLE MILITAR EM EQUIPE ---
+        elif data.startswith('sel_mil:'):
+            action_code = data.split(':')[1]
+            st = chat_states.get(chat_id, {})
+            if st.get('action') != 'assign_equipe':
+                await bot.answer_callback_query(call.id, "Sessão de seleção expirada.")
+                return
+
+            if action_code == 'done':
+                selected_ids = list(st.get('selected_ids', set()))
+                dem_id = st.get('demanda_id')
+                try:
+                    import json
+                    db.table('demandas_comunicacao').update({
+                        'notificar_militar_ids': json.dumps([int(x) for x in selected_ids if str(x).isdigit()])
+                    }).eq('id', dem_id).execute()
+
+                    # Notifica os militares selecionados
+                    for m_id in selected_ids:
+                        try:
+                            res_m = db.table('efetivo').select('telegram_id, nome_guerra').eq('id', m_id).execute()
+                            if res_m.data and res_m.data[0].get('telegram_id'):
+                                t_id = res_m.data[0]['telegram_id']
+                                from notifications_manager import send_notification_to_user
+                                send_notification_to_user(t_id, f"🎖️ **VOCÊ FOI ESCALADO PARA UMA MISSÃO!**\nPauta ID #{dem_id}\nEscalado por: {user_name}")
+                        except Exception:
+                            pass
+
+                    clear_state(chat_id)
+                    await bot.edit_message_text(
+                        f"✅ **EQUIPE ATRIBUÍDA COM SUCESSO!**\nDemanda ID #{dem_id}\nTotal de {len(selected_ids)} militar(es) escalado(s).",
+                        chat_id=chat_id,
+                        message_id=call.message.message_id,
+                        parse_mode='Markdown'
+                    )
+                    await bot.answer_callback_query(call.id, "Equipe salva!")
+                except Exception as e:
+                    await bot.answer_callback_query(call.id, f"Erro ao salvar equipe: {e}")
+            else:
+                sel = st.get('selected_ids', set())
+                if action_code in sel:
+                    sel.remove(action_code)
+                else:
+                    sel.add(action_code)
+                st['selected_ids'] = sel
+                
+                from .keyboards import get_multi_militar_inline_keyboard
+                await bot.edit_message_reply_markup(
+                    chat_id=chat_id,
+                    message_id=call.message.message_id,
+                    reply_markup=get_multi_militar_inline_keyboard(st.get('efetivo_list', []), sel, prefix="sel_mil")
+                )
+                await bot.answer_callback_query(call.id)
+
+        # --- TOGGLE MILITAR EM MISSÃO RÁPIDA ---
+        elif data.startswith('quick_mil:'):
+            action_code = data.split(':')[1]
+            st = chat_states.get(chat_id, {})
+            if st.get('action') != 'missao_rapida' or st.get('step') != 'select_militares':
+                await bot.answer_callback_query(call.id, "Sessão expirada.")
+                return
+
+            if action_code == 'done':
+                selected_ids = list(st.get('selected_ids', set()))
+                titulo_m = st.get('titulo', 'Missão Rápida')
+                try:
+                    import json
+                    from datetime import datetime
+                    now_str = datetime.now().strftime('%Y-%m-%d')
+                    novo_registro = {
+                        'titulo_evento': f"⚡ {titulo_m}",
+                        'solicitante_nome': user_name,
+                        'setor': 'COMSOC / GABINETE',
+                        'data_evento': now_str,
+                        'hora_evento': datetime.now().strftime('%H:%M'),
+                        'local_evento': 'Gabinete / COMSOC',
+                        'status': 'aprovada',
+                        'categoria_demanda': 'audiovisual',
+                        'notificar_militar_ids': json.dumps([int(x) for x in selected_ids if str(x).isdigit()])
+                    }
+                    res_ins = db.table('demandas_comunicacao').insert(novo_registro).execute()
+                    
+                    from notifications_manager import notify_telegram
+                    notify_telegram(
+                        f"⚡ **NOVA MISSÃO RÁPIDA REGISTRADA!**\n"
+                        f"📌 {titulo_m}\n"
+                        f"👨‍✈️ Criada por: {user_name}\n"
+                        f"👥 Equipe Escalada: {len(selected_ids)} militar(es)",
+                        "system"
+                    )
+
+                    clear_state(chat_id)
+                    from .keyboards import get_main_menu_keyboard
+                    is_op = profile and str(profile.get('role', '')).lower() in ('admin', 'supervisor', 'comsoc')
+                    await bot.edit_message_text(
+                        f"⚡ **MISSÃO RÁPIDA CRIADA E ENVIADA!**\n\n"
+                        f"📌 *{titulo_m}*\n"
+                        f"📅 Data: {now_str}\n"
+                        f"👥 Escalados: {len(selected_ids)} militar(es).",
+                        chat_id=chat_id,
+                        message_id=call.message.message_id,
+                        parse_mode='Markdown'
+                    )
+                    await bot.answer_callback_query(call.id, "Missão enviada!")
+                except Exception as e:
+                    await bot.answer_callback_query(call.id, f"Erro ao criar missão: {e}")
+            else:
+                sel = st.get('selected_ids', set())
+                if action_code in sel:
+                    sel.remove(action_code)
+                else:
+                    sel.add(action_code)
+                st['selected_ids'] = sel
+                
+                from .keyboards import get_multi_militar_inline_keyboard
+                await bot.edit_message_reply_markup(
+                    chat_id=chat_id,
+                    message_id=call.message.message_id,
+                    reply_markup=get_multi_militar_inline_keyboard(st.get('efetivo_list', []), sel, prefix="quick_mil")
+                )
+                await bot.answer_callback_query(call.id)
+
+        # --- EDITAR HORÁRIO DA PAUTA ---
+        elif data.startswith('edithora_dem:'):
+            dem_id = data.split(':')[1]
+            chat_states[chat_id] = {
+                'action': 'edit_hora_demanda',
+                'demanda_id': dem_id,
+                'user': profile
+            }
+            await bot.send_message(chat_id, f"✏️ **EDITAR HORÁRIO (ID #{dem_id})**\n\nDigite o novo horário no formato **HH:MM** (ex: `14:30`):", parse_mode='Markdown')
+            await bot.answer_callback_query(call.id)
 
     @bot.message_handler(content_types=['photo'])
     async def handle_photo_messages(message):
@@ -845,17 +1132,15 @@ def register_common_handlers(bot):
                     from database import get_bot_db_connection as get_db_connection
                     db = get_db_connection()
                     if db:
-                        web_path = f"/assets/selfies/{message.from_user.id}.jpg"
                         try:
-                            db.table('users').update({'url_foto': web_path}).eq('id', profile['id']).execute()
-                        except Exception:
-                            pass
-                
+                            db.table('efetivo').update({'selfie_path': local_path}).eq('id', profile['id']).execute()
+                        except Exception as sp_err:
+                            print(f"[SELFIE WARN] {sp_err}")
+
                 await bot.reply_to(
                     message,
                     "✅ **Selfie recebida com sucesso!**\n\n"
-                    "Ela já foi enviada para a fila de processamento do assistente local da COMSOC. "
-                    "Assim que for processada, você receberá um alerta automático confirmando a ativação!",
+                    "Sua foto foi gravada e habilitada para reconhecimento facial em coberturas.",
                     reply_markup=get_main_menu_keyboard(),
                     parse_mode='Markdown'
                 )

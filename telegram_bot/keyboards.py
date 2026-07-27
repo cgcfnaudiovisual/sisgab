@@ -10,14 +10,48 @@ def get_main_menu_keyboard(is_operator=False):
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     if is_operator:
         markup.row(types.KeyboardButton("🟢 Dar Presença"), types.KeyboardButton("📋 Pronto CheGab"))
-        markup.row(types.KeyboardButton("📋 Pautas COMSOC"), types.KeyboardButton("📅 Agenda Semanal"))
-        markup.row(types.KeyboardButton("➕ Criar Demanda"), types.KeyboardButton("🤖 Digerir Pauta (IA)"))
-        markup.row(types.KeyboardButton("🔌 Cautelas Ativas"), types.KeyboardButton("⚙️ Configurações"))
-        markup.row(types.KeyboardButton("ℹ️ Ajuda"), types.KeyboardButton("❌ Cancelar"))
+        markup.row(types.KeyboardButton("📋 Gerenciar Demandas"), types.KeyboardButton("⚡ Missão Rápida"))
+        markup.row(types.KeyboardButton("📅 Agenda Semanal"), types.KeyboardButton("➕ Criar Demanda"))
+        markup.row(types.KeyboardButton("🤖 Digerir Pauta (IA)"), types.KeyboardButton("🔌 Cautelas Ativas"))
+        markup.row(types.KeyboardButton("⚙️ Configurações"), types.KeyboardButton("ℹ️ Ajuda"))
+        markup.row(types.KeyboardButton("❌ Cancelar"))
     else:
         markup.row(types.KeyboardButton("🟢 Dar Presença"), types.KeyboardButton("📅 Agenda Semanal"))
-        markup.row(types.KeyboardButton("➕ Criar Demanda"), types.KeyboardButton("⚙️ Configurações"))
-        markup.row(types.KeyboardButton("ℹ️ Ajuda"), types.KeyboardButton("❌ Cancelar"))
+        markup.row(types.KeyboardButton("➕ Criar Demanda"), types.KeyboardButton("⚡ Missão Rápida"))
+        markup.row(types.KeyboardButton("⚙️ Configurações"), types.KeyboardButton("ℹ️ Ajuda"))
+        markup.row(types.KeyboardButton("❌ Cancelar"))
+    return markup
+
+
+def get_manage_demanda_inline_keyboard(demanda_id):
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.row(
+        types.InlineKeyboardButton("🎯 Concluir", callback_data=f"concluir_dem:{demanda_id}"),
+        types.InlineKeyboardButton("👤 Atribuir Equipe", callback_data=f"equipe_dem:{demanda_id}")
+    )
+    markup.row(
+        types.InlineKeyboardButton("✏️ Editar Horário", callback_data=f"edithora_dem:{demanda_id}"),
+        types.InlineKeyboardButton("❌ Rejeitar", callback_data=f"rejeitar_dem:{demanda_id}")
+    )
+    return markup
+
+
+def get_multi_militar_inline_keyboard(efetivo_list, selected_ids=None, prefix="sel_mil"):
+    if selected_ids is None:
+        selected_ids = set()
+    from .utils import sort_efetivo_by_rank
+    sorted_ef = sort_efetivo_by_rank(efetivo_list)
+    
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    for ef in sorted_ef:
+        ef_id = str(ef.get('id', ''))
+        nome = f"{ef.get('posto_grad') or ''} {ef.get('nome_guerra', '')}".strip()
+        is_sel = str(ef_id) in [str(x) for x in selected_ids]
+        icon = "✅" if is_sel else "⬜"
+        markup.add(types.InlineKeyboardButton(text=f"{icon} {nome}", callback_data=f"{prefix}:{ef_id}"))
+        
+    cnt = len(selected_ids)
+    markup.add(types.InlineKeyboardButton(text=f"➡️ CONFIRMAR ({cnt} SELECIONADOS) ➡️", callback_data=f"{prefix}:done"))
     return markup
 
 def get_efetivo_linking_keyboard(efetivo_lista):
