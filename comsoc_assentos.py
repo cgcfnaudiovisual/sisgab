@@ -2171,7 +2171,20 @@ def render_page():
             'template_bg_url': '',
             'brasao_left_url': '',
             'brasao_right_url': '',
-            'use_template_bg': False
+            'use_template_bg': False,
+            'termo_convidado': 'RESERVADO',
+            'gap_linhas_mm': 6,
+            'exibir_borda_dupla': True
+        }
+
+        # Configurações Padrão de Prisma
+        CONFIG_DEFAULT = {
+            'formato_folha': 'A4_PORTRAIT_4_SLOTS',
+            'exibir_borda_dupla': True,
+            'brasao_padrao': 'assets/brasao_cgcfn.png',
+            'gap_linhas_mm': 6,
+            'termo_convidado': 'RESERVADO',
+            'fonte_familia': 'Montserrat, sans-serif',
         }
 
         # Insígnias oficiais por Posto/Graduação (texto rico com indicador visual)
@@ -2202,6 +2215,18 @@ def render_page():
             'Maj': {'stars': '★',    'title': 'MAJOR',                       'color': '#C0C0C0'}
         }
 
+        def parse_almirantado_stars(posto_str):
+            if not posto_str:
+                return {'eh_almirante': False, 'stars': '', 'title': '', 'color': '#000000'}
+            p = str(posto_str).upper().strip()
+            if any(k in p for k in ['ESQUADRA', 'SQUADRA', 'AE', 'ALMIRANTE DE ESQUADRA']):
+                return {'eh_almirante': True, 'stars': '★ ★ ★ ★', 'title': 'ALMIRANTE DE ESQUADRA', 'color': '#000000'}
+            elif any(k in p for k in ['VICE', 'VADM', 'V-ADM', 'VA', 'VICE-ALMIRANTE']):
+                return {'eh_almirante': True, 'stars': '★ ★ ★', 'title': 'VICE-ALMIRANTE', 'color': '#000000'}
+            elif any(k in p for k in ['CONTRA', 'CALTE', 'C-ADM', 'CA', 'CONTRA-ALMIRANTE']):
+                return {'eh_almirante': True, 'stars': '★ ★', 'title': 'CONTRA-ALMIRANTE', 'color': '#000000'}
+            return {'eh_almirante': False, 'stars': '', 'title': p, 'color': '#000000'}
+
         with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 860px; max-width: 96vw; max-height: 92vh; overflow-y: auto;'):
             ui.label(f"🖨️ ESTÚDIO DE IMPRESSÃO DE PLACAS & CREDENCIAIS JADE").classes('text-md font-bold text-cyan cyber-title q-mb-xs')
             ui.label("Personalize Modelos, Templates de Fundo, Brasões, Insígnias e Posicionamento").classes('text-xs text-grey-4 q-mb-md')
@@ -2216,22 +2241,26 @@ def render_page():
                     ui.label('Modelo:').classes('text-xs text-grey-3 font-bold')
                     model_select = ui.select(
                         options={
+                            'prisma_a4_4slots': '🏛️ Prisma Institucional A4 (4 por Folha - Moldura Dupla)',
                             'jade_horizontal_a4': '📋 Placa Horizontal CGCFN (Padrão Oficial)',
                             'cadeira_a4': '📄 Placa de Cadeira (A4 Padrão)',
                             'mesa_a5_dobravel': '🏷️ Placa de Mesa Dobrável (A5)',
                             'credencial': '🪪 Credencial / Crachá de Peito',
                             'template_custom': '🎨 Template Customizado (Imagem de Fundo)'
                         },
-                        value='jade_horizontal_a4'
-                    ).props('dark outlined dense').style('min-width: 300px;')
-
-                    with ui.row().classes('items-center gap-2 q-ml-sm'):
-                        chk_only_confirmed = ui.checkbox('Só Confirmados / Fila Ativa', value=False).props('dark dense').classes('text-xs text-amber-3')
+                        value='prisma_a4_4slots'
+                    ).props('dark outlined dense').style('min-width: 320px;')
 
                     with ui.row().classes('items-center gap-2'):
+                        chk_only_confirmed = ui.checkbox('Só Confirmados / Fila Ativa', value=False).props('dark dense').classes('text-xs text-amber-3')
                         chk_logo = ui.checkbox('Brasão MB', value=True).props('dark dense').classes('text-xs text-grey-3')
                         chk_qr = ui.checkbox('QR Code', value=True).props('dark dense').classes('text-xs text-grey-3')
                         chk_rank = ui.checkbox('Insígnia de Posto', value=True).props('dark dense').classes('text-xs text-grey-3')
+                        chk_border = ui.checkbox('Borda Dupla', value=True).props('dark dense').classes('text-xs text-grey-3')
+                        chk_logo = ui.checkbox('Brasão MB', value=True).props('dark dense').classes('text-xs text-grey-3')
+                        chk_qr = ui.checkbox('QR Code', value=True).props('dark dense').classes('text-xs text-grey-3')
+                        chk_rank = ui.checkbox('Insígnia de Posto', value=True).props('dark dense').classes('text-xs text-grey-3')
+                        chk_border = ui.checkbox('Borda Dupla', value=True).props('dark dense').classes('text-xs text-grey-3')
 
                 ui.separator().classes('q-my-sm').style('border-color: rgba(255,255,255,0.08);')
 
@@ -2243,6 +2272,9 @@ def render_page():
                     with ui.column().classes('col gap-0'):
                         ui.label('Linha 2 (Título do Evento):').classes('text-[10px] text-grey-5')
                         input_header2 = ui.input(value=print_config['header_line2']).props('dark outlined dense').classes('w-full')
+                    with ui.column().classes('col-3 gap-0'):
+                        ui.label('Termo Convidado:').classes('text-[10px] text-grey-5')
+                        input_termo_conv = ui.input(value='RESERVADO').props('dark outlined dense').classes('w-full')
 
                 ui.separator().classes('q-my-sm').style('border-color: rgba(255,255,255,0.08);')
 
@@ -2383,6 +2415,85 @@ def render_page():
                 gap: 16px;
                 padding: 8px 0;
             }
+            /* Container de 1 dos 4 slots por folha A4 (210mm x 74.25mm) */
+            .prisma-card-a4-slot {
+                width: 100%;
+                max-width: 210mm;
+                height: 74.25mm;
+                box-sizing: border-box;
+                padding: 4mm 8mm;
+                position: relative;
+                background-color: #ffffff;
+                color: #000000;
+                border: 1.5pt solid #1a1a1a;
+                outline: 0.5pt solid #1a1a1a;
+                outline-offset: -2.5mm;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                page-break-inside: avoid;
+                margin-bottom: 3mm;
+            }
+            .prisma-canto-esquerdo {
+                position: absolute;
+                top: 4mm;
+                left: 6mm;
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                z-index: 10;
+            }
+            .prisma-brasao-om {
+                width: 14mm;
+                height: auto;
+                margin-bottom: 1.5mm;
+            }
+            .prisma-estrelas-esquerda {
+                font-size: 18pt;
+                font-weight: bold;
+                color: #000000;
+                letter-spacing: 2px;
+                line-height: 1;
+            }
+            .prisma-conteudo-central {
+                width: 100%;
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                text-align: center;
+                padding-left: 26mm;
+                padding-right: 26mm;
+                gap: 5mm;
+            }
+            .prisma-texto-reservado {
+                font-size: 18pt;
+                font-weight: 800;
+                text-transform: uppercase;
+                color: #000000;
+                line-height: 1;
+                margin: 0;
+                white-space: nowrap;
+            }
+            .prisma-posto-extenso {
+                font-size: 13pt;
+                font-weight: 600;
+                text-transform: uppercase;
+                color: #333333;
+                line-height: 1;
+                margin: 0;
+                white-space: nowrap;
+            }
+            .prisma-nome-autoridade {
+                font-size: 22pt;
+                font-weight: 800;
+                text-transform: uppercase;
+                color: #000000;
+                line-height: 1;
+                margin: 0;
+                white-space: nowrap;
+            }
             .jade-template-card {
                 position: relative;
                 width: 100%;
@@ -2501,12 +2612,10 @@ def render_page():
                                             nome_guerra = c['nome'].strip().upper()
                                             assento = c.get('assento_id') or ''
 
-                                            # QR enriquecido com dados completos
                                             import urllib.parse
                                             qr_data = urllib.parse.quote(f"JADE|{event.get('id','')}|{c['id']}|{posto_abrev}|{c['nome']}|{assento}")
                                             qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=80x80&data={qr_data}&color=1a1a6e&bgcolor=ffffff"
 
-                                            # HTML da placa horizontal
                                             logo_html = ''
                                             if show_logo and resolved_logo_url:
                                                 logo_html = f'<img src="{resolved_logo_url}" style="width:44px;height:44px;object-fit:contain;" />'
@@ -2515,8 +2624,6 @@ def render_page():
 
                                             stars_html = ''
                                             if stars and show_rank:
-                                                stars_parts = stars.replace('★', '<span class="jade-star">★</span>').replace('★', '<span class="jade-star">★</span>')
-                                                # Render stars vertically
                                                 star_list = [s for s in stars]
                                                 stars_html = ''.join(f'<span class="jade-star">{s}</span>' for s in star_list)
 
@@ -2545,6 +2652,41 @@ def render_page():
                                             ''')
                                     if sheet_start + 4 < len(sorted_list):
                                         ui.html('<div class="jade-cut-line print-hide" style="border-top:1px dashed #ccc;margin:8px 0;"></div>')
+
+                            # ═══ MODELO: PRISMA INSTITUCIONAL A4 (4 SLOTS POR FOLHA) ═══
+                            elif current_model == 'prisma_a4_4slots':
+                                termo_reservado = input_termo_conv.value or 'RESERVADO'
+                                show_double_border = chk_border.value
+                                with ui.column().classes('w-full gap-3'):
+                                    for c in sorted(list_c, key=lambda x: x.get('assento_id', '')):
+                                        is_acomp = bool(c.get('convidado_principal_id'))
+                                        posto = c.get('posto_graduacao') or ''
+                                        almirantado_info = parse_almirantado_stars(posto)
+                                        
+                                        border_style = 'border: 1.5pt solid #1a1a1a; outline: 0.5pt solid #1a1a1a; outline-offset: -2.5mm;' if show_double_border else 'border: 1.5pt solid #1a1a1a;'
+                                        
+                                        with ui.element('div').classes('prisma-card-a4-slot').style(border_style):
+                                            # Canto Superior Esquerdo: Brasão + Estrelas
+                                            with ui.element('div').classes('prisma-canto-esquerdo'):
+                                                if show_logo and brasao_l_url:
+                                                    ui.image(brasao_l_url).classes('prisma-brasao-om')
+                                                elif show_logo:
+                                                    ui.label('⚓').classes('text-xl text-black')
+                                                
+                                                if show_rank and almirantado_info['stars']:
+                                                    ui.label(almirantado_info['stars']).classes('prisma-estrelas-esquerda')
+
+                                            # Bloco Central - Totalmente Centralizado
+                                            with ui.element('div').classes('prisma-conteudo-central'):
+                                                if is_acomp:
+                                                    ui.label(termo_reservado).classes('prisma-texto-reservado')
+                                                    if posto:
+                                                        ui.label(posto.upper()).classes('prisma-posto-extenso')
+                                                    ui.label(c['nome'].upper()).classes('prisma-nome-autoridade')
+                                                else:
+                                                    if almirantado_info['title']:
+                                                        ui.label(almirantado_info['title']).classes('prisma-posto-extenso')
+                                                    ui.label(c['nome'].upper()).classes('prisma-nome-autoridade')
 
                             # ═══ MODELO: TEMPLATE CUSTOMIZADO ═══
                             elif current_model == 'template_custom' or use_bg:
