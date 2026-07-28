@@ -952,6 +952,31 @@ def upload_file_to_supabase_storage(file_bytes: bytes, filename: str, content_ty
     return None
 
 
+def list_supabase_storage_files(bucket_name: str = "logos") -> List[Dict[str, Any]]:
+    """
+    Lista todos os arquivos públicos em um bucket do Supabase Storage.
+    """
+    conn = get_bot_db_connection() or get_db_connection()
+    if not conn:
+        return []
+    try:
+        res = conn.storage.from_(bucket_name).list()
+        files = []
+        if res:
+            for item in res:
+                fname = item.get('name') if isinstance(item, dict) else getattr(item, 'name', None)
+                if fname and not fname.startswith('.'):
+                    pub_url = f"https://ruabgndnhgdverqlgvef.supabase.co/storage/v1/object/public/{bucket_name}/{fname}"
+                    files.append({
+                        'name': fname,
+                        'url': pub_url
+                    })
+        return files
+    except Exception as e:
+        print(f"[STORAGE LIST ERR] bucket={bucket_name}: {e}")
+        return []
+
+
 def get_signed_url_from_supabase_storage(filename: str, bucket_name: str = "fotos-alunos", expires_in: int = 3600) -> Optional[str]:
     """
     Gera uma URL assinada temporária para acessar arquivos em buckets privados (ex: 'fotos-alunos').

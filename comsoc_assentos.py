@@ -2298,6 +2298,62 @@ def render_page():
 
                 ui.separator().classes('q-my-sm').style('border-color: rgba(255,255,255,0.08);')
 
+                # ── Funções de Integração com Supabase Storage Bucket 'logos' ──
+                from database import list_supabase_storage_files, upload_file_to_supabase_storage
+
+                def get_dynamic_logo_options():
+                    opts = {
+                        'cfn': '⚓ CFN (Fuzileiros Navais)',
+                        'mb':  '⚓ Marinha do Brasil'
+                    }
+                    try:
+                        storage_files = list_supabase_storage_files('logos')
+                        for f in storage_files:
+                            fname = f.get('name', '')
+                            furl = f.get('url', '')
+                            if fname and furl:
+                                opts[furl] = f"☁️ {fname}"
+                    except Exception as err:
+                        print(f"[LOGOS BUCKET FETCH ERR] {err}")
+                    opts['custom'] = '🔗 URL Customizada'
+                    return opts
+
+                def refresh_logo_options():
+                    new_opts = get_dynamic_logo_options()
+                    sel_logo_preset.options = new_opts
+                    sel_logo_preset.update()
+
+                def open_logo_upload_dialog():
+                    with ui.dialog() as upload_diag, ui.card().classes('q-pa-md').style('min-width: 480px; background: #0c1829; border: 1px solid #00e5ff; border-radius: 12px;'):
+                        ui.label('📤 UPLOAD DE NOVO LOGO / BRASÃO').classes('text-sm font-bold text-cyan cyber-title q-mb-xs')
+                        ui.label('Envie um arquivo PNG/JPG para o Supabase Storage Bucket (logos)').classes('text-xs text-grey-4 q-mb-sm')
+
+                        async def handle_logo_upload(e):
+                            try:
+                                content = e.content.read() if hasattr(e.content, 'read') else e.content
+                                fname = e.name
+                                content_type = getattr(e, 'type', 'image/png') or 'image/png'
+                                
+                                public_url = upload_file_to_supabase_storage(content, fname, content_type=content_type, bucket_name='logos')
+                                if public_url:
+                                    ui.notify(f'✅ Logo "{fname}" enviado para o Supabase!', color='positive')
+                                    refresh_logo_options()
+                                    sel_logo_preset.value = public_url
+                                    upload_diag.close()
+                                    preview_container.refresh()
+                                else:
+                                    ui.notify(f'❌ Falha ao enviar logo para o Supabase.', color='negative')
+                            except Exception as u_err:
+                                print(f"[LOGO UPLOAD ERR] {u_err}")
+                                ui.notify(f'❌ Erro no upload: {u_err}', color='negative')
+
+                        ui.upload(on_upload=handle_logo_upload, auto_upload=True, max_files=1).props('accept=.png,.jpg,.jpeg,.svg dark dense').classes('w-full q-my-sm')
+
+                        with ui.row().classes('w-full justify-end q-mt-sm'):
+                            ui.button('Cancelar', on_click=upload_diag.close).props('unelevated color=grey-8 dense').classes('text-xs')
+
+                    upload_diag.open()
+
                 # ── Linha 3: Brasões e Posicionamento ──
                 with ui.row().classes('w-full gap-3 items-end wrap'):
                     with ui.column().classes('gap-0'):
@@ -2313,16 +2369,15 @@ def render_page():
                         ).props('dark outlined dense').style('min-width: 210px;')
 
                     with ui.column().classes('gap-0'):
-                        ui.label('Logo Pré-definido:').classes('text-[10px] text-grey-5')
-                        LOGO_PRESETS = {
-                            'cfn': 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/21/Distintivo_do_Corpo_de_Fuzileiros_Navais_do_Brasil.svg/240px-Distintivo_do_Corpo_de_Fuzileiros_Navais_do_Brasil.svg.png',
-                            'mb':  'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/Brasão_Marinha_do_Brasil.svg/220px-Brasão_Marinha_do_Brasil.svg.png',
-                            'custom': ''
-                        }
-                        sel_logo_preset = ui.select(
-                            options={'cfn': '⚓ CFN (Fuzileiros Navais)', 'mb': '⚓ Marinha do Brasil', 'custom': '🔗 URL Customizada'},
-                            value='cfn'
-                        ).props('dark outlined dense').style('min-width: 200px;')
+                        ui.label('Logo do Bucket Supabase:').classes('text-[10px] text-grey-5')
+                        with ui.row().classes('items-center gap-1'):
+                            sel_logo_preset = ui.select(
+                                options=get_dynamic_logo_options(),
+                                value='cfn'
+                            ).props('dark outlined dense').style('min-width: 210px;')
+                            
+                            ui.button(icon='refresh', on_click=refresh_logo_options).props('flat round dense color=cyan text-color=white').classes('text-xs').tooltip('Recarregar logos do Supabase')
+                            ui.button('➕ Novo Logo', icon='cloud_upload', on_click=open_logo_upload_dialog).props('unelevated color=cyan text-color=black dense bold').classes('text-xs')
 
                     with ui.column().classes('gap-0'):
                         ui.label('Posição QR Code:').classes('text-[10px] text-grey-5')
