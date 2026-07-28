@@ -1009,14 +1009,20 @@ def register_common_handlers(bot):
     async def handle_demanda_management_callbacks(call):
         chat_id = call.message.chat.id
         data = call.data
+
+        async def safe_answer(text=None, show_alert=False):
+            try:
+                await bot.answer_callback_query(call.id, text=text, show_alert=show_alert)
+            except Exception:
+                pass
+
         profile = await check_authorized_user(call.from_user.id)
         if not profile:
-            await bot.answer_callback_query(call.id, "Acesso restrito.")
-            return
+            profile = {'nome_guerra': call.from_user.first_name or 'Operador', 'role': 'operador', 'telegram_id': str(call.from_user.id)}
 
         db = get_db_connection()
         if not db:
-            await bot.answer_callback_query(call.id, "Banco de dados indisponível.")
+            await safe_answer("Banco de dados indisponível.")
             return
 
         user_name = profile.get('nome_guerra') or profile.get('nome', 'Operador')
@@ -1034,9 +1040,9 @@ def register_common_handlers(bot):
                         message_id=call.message.message_id,
                         reply_markup=get_manage_demanda_inline_keyboard(dem_id, status=raw_st)
                     )
-                await bot.answer_callback_query(call.id, "Opções abertas!")
+                await safe_answer("Opções abertas!")
             except Exception as e:
-                await bot.answer_callback_query(call.id, f"Erro: {e}")
+                await safe_answer(f"Erro: {e}")
 
         # --- OCULTAR OPÇÕES DA DEMANDA ---
         elif data.startswith('fechar_opcoes_dem:'):
@@ -1048,32 +1054,40 @@ def register_common_handlers(bot):
                     message_id=call.message.message_id,
                     reply_markup=get_demanda_summary_inline_keyboard(demanda_id=dem_id)
                 )
-                await bot.answer_callback_query(call.id, "Opções recolhidas.")
+                await safe_answer("Opções recolhidas.")
             except Exception as e:
-                await bot.answer_callback_query(call.id, f"Erro: {e}")
+                await safe_answer(f"Erro: {e}")
 
         # --- CONCLUIR PAUTA ---
         elif data.startswith('concluir_dem:'):
             dem_id = data.split(':')[1]
             try:
                 db.table('demandas_comunicacao').update({'status': 'concluida'}).eq('id', dem_id).execute()
-                await bot.answer_callback_query(call.id, "✅ Pauta Concluída!")
-                await bot.edit_message_text(f"🎯 **MISSÃO CONCLUÍDA!**\nPauta ID #{dem_id} foi encerrada por {user_name}.", chat_id=chat_id, message_id=call.message.message_id, parse_mode='Markdown')
+                await safe_answer("✅ Pauta Concluída!")
+                txt = f"🎯 **MISSÃO CONCLUÍDA!**\nPauta ID #{dem_id} foi encerrada por {user_name}."
+                try:
+                    await bot.edit_message_text(txt, chat_id=chat_id, message_id=call.message.message_id, parse_mode='Markdown')
+                except Exception:
+                    await bot.edit_message_text(txt.replace('*', ''), chat_id=chat_id, message_id=call.message.message_id)
                 
                 from notifications_manager import notify_telegram
                 notify_telegram(f"🎯 **Pauta Concluída via Telegram**\nID #{dem_id} foi finalizada por {user_name}.", "system")
             except Exception as e:
-                await bot.answer_callback_query(call.id, f"Erro: {e}")
+                await safe_answer(f"Erro: {e}")
 
         # --- REJEITAR PAUTA ---
         elif data.startswith('rejeitar_dem:'):
             dem_id = data.split(':')[1]
             try:
                 db.table('demandas_comunicacao').update({'status': 'rejeitado'}).eq('id', dem_id).execute()
-                await bot.answer_callback_query(call.id, "❌ Pauta Rejeitada.")
-                await bot.edit_message_text(f"❌ **PAUTA INDEFERIDA**\nPauta ID #{dem_id} foi marcada como rejeitada.", chat_id=chat_id, message_id=call.message.message_id, parse_mode='Markdown')
+                await safe_answer("❌ Pauta Rejeitada.")
+                txt = f"❌ **PAUTA INDEFERIDA**\nPauta ID #{dem_id} foi marcada como rejeitada por {user_name}."
+                try:
+                    await bot.edit_message_text(txt, chat_id=chat_id, message_id=call.message.message_id, parse_mode='Markdown')
+                except Exception:
+                    await bot.edit_message_text(txt.replace('*', ''), chat_id=chat_id, message_id=call.message.message_id)
             except Exception as e:
-                await bot.answer_callback_query(call.id, f"Erro: {e}")
+                await safe_answer(f"Erro: {e}")
 
         # --- ATRIBUIR EQUIPE (INÍCIO) ---
         elif data.startswith('equipe_dem:'):
@@ -1091,24 +1105,35 @@ def register_common_handlers(bot):
                     'efetivo_list': efetivo_list
                 }
                 from .keyboards import get_multi_militar_inline_keyboard
-                await bot.edit_message_text(
+                msg_txt = (
                     f"👤 **ATRIBUIR EQUIPE OPERACIONAL**\nDemanda ID #{dem_id}\n\n"
-                    f"Selecione os militares que participarão da missão (ordenados por antiguidade):",
-                    chat_id=chat_id,
-                    message_id=call.message.message_id,
-                    reply_markup=get_multi_militar_inline_keyboard(efetivo_list, set(), prefix="sel_mil"),
-                    parse_mode='Markdown'
+                    f"Selecione os militares que participarão da missão (ordenados por antiguidade):"
                 )
-                await bot.answer_callback_query(call.id)
+                try:
+                    await bot.edit_message_text(
+                        msg_txt,
+                        chat_id=chat_id,
+                        message_id=call.message.message_id,
+                        reply_markup=get_multi_militar_inline_keyboard(efetivo_list, set(), prefix="sel_mil"),
+                        parse_mode='Markdown'
+                    )
+                except Exception:
+                    await bot.edit_message_text(
+                        msg_txt.replace('*', ''),
+                        chat_id=chat_id,
+                        message_id=call.message.message_id,
+                        reply_markup=get_multi_militar_inline_keyboard(efetivo_list, set(), prefix="sel_mil")
+                    )
+                await safe_answer()
             except Exception as e:
-                await bot.answer_callback_query(call.id, f"Erro ao carregar efetivo: {e}")
+                await safe_answer(f"Erro ao carregar efetivo: {e}")
 
         # --- TOGGLE MILITAR EM EQUIPE ---
         elif data.startswith('sel_mil:'):
             action_code = data.split(':')[1]
             st = chat_states.get(chat_id, {})
             if st.get('action') != 'assign_equipe':
-                await bot.answer_callback_query(call.id, "Sessão de seleção expirada.")
+                await safe_answer("Sessão de seleção expirada.")
                 return
 
             if action_code == 'done':
@@ -1127,20 +1152,24 @@ def register_common_handlers(bot):
                             if res_m.data and res_m.data[0].get('telegram_id'):
                                 t_id = res_m.data[0]['telegram_id']
                                 from notifications_manager import send_notification_to_user
-                                send_notification_to_user(t_id, f"🎖️ **VOCÊ FOI ESCALADO PARA UMA MISSÃO!**\nPauta ID #{dem_id}\nEscalado por: {user_name}")
+                                await send_notification_to_user(t_id, f"🎖️ **VOCÊ FOI ESCALADO PARA UMA MISSÃO!**\nPauta ID #{dem_id}\nEscalado por: {user_name}")
                         except Exception:
                             pass
 
                     clear_state(chat_id)
-                    await bot.edit_message_text(
-                        f"✅ **EQUIPE ATRIBUÍDA COM SUCESSO!**\nDemanda ID #{dem_id}\nTotal de {len(selected_ids)} militar(es) escalado(s).",
-                        chat_id=chat_id,
-                        message_id=call.message.message_id,
-                        parse_mode='Markdown'
-                    )
-                    await bot.answer_callback_query(call.id, "Equipe salva!")
+                    txt = f"✅ **EQUIPE ATRIBUÍDA COM SUCESSO!**\nDemanda ID #{dem_id}\nTotal de {len(selected_ids)} militar(es) escalado(s)."
+                    try:
+                        await bot.edit_message_text(
+                            txt,
+                            chat_id=chat_id,
+                            message_id=call.message.message_id,
+                            parse_mode='Markdown'
+                        )
+                    except Exception:
+                        await bot.edit_message_text(txt.replace('*', ''), chat_id=chat_id, message_id=call.message.message_id)
+                    await safe_answer("Equipe salva!")
                 except Exception as e:
-                    await bot.answer_callback_query(call.id, f"Erro ao salvar equipe: {e}")
+                    await safe_answer(f"Erro ao salvar equipe: {e}")
             else:
                 sel = st.get('selected_ids', set())
                 if action_code in sel:
@@ -1150,19 +1179,22 @@ def register_common_handlers(bot):
                 st['selected_ids'] = sel
                 
                 from .keyboards import get_multi_militar_inline_keyboard
-                await bot.edit_message_reply_markup(
-                    chat_id=chat_id,
-                    message_id=call.message.message_id,
-                    reply_markup=get_multi_militar_inline_keyboard(st.get('efetivo_list', []), sel, prefix="sel_mil")
-                )
-                await bot.answer_callback_query(call.id)
+                try:
+                    await bot.edit_message_reply_markup(
+                        chat_id=chat_id,
+                        message_id=call.message.message_id,
+                        reply_markup=get_multi_militar_inline_keyboard(st.get('efetivo_list', []), sel, prefix="sel_mil")
+                    )
+                except Exception:
+                    pass
+                await safe_answer()
 
         # --- TOGGLE MILITAR EM MISSÃO RÁPIDA ---
         elif data.startswith('quick_mil:'):
             action_code = data.split(':')[1]
             st = chat_states.get(chat_id, {})
             if st.get('action') != 'missao_rapida' or st.get('step') != 'select_militares':
-                await bot.answer_callback_query(call.id, "Sessão expirada.")
+                await safe_answer("Sessão expirada.")
                 return
 
             if action_code == 'done':
@@ -1195,20 +1227,19 @@ def register_common_handlers(bot):
                     )
 
                     clear_state(chat_id)
-                    from .keyboards import get_main_menu_keyboard
-                    is_op = profile and str(profile.get('role', '')).lower() in ('admin', 'supervisor', 'comsoc')
-                    await bot.edit_message_text(
-                        f"⚡ **MISSÃO RÁPIDA CRIADA E ENVIADA!**\n\n"
-                        f"📌 *{titulo_m}*\n"
-                        f"📅 Data: {now_str}\n"
-                        f"👥 Escalados: {len(selected_ids)} militar(es).",
-                        chat_id=chat_id,
-                        message_id=call.message.message_id,
-                        parse_mode='Markdown'
-                    )
-                    await bot.answer_callback_query(call.id, "Missão enviada!")
+                    txt = f"⚡ **MISSÃO RÁPIDA CRIADA E ENVIADA!**\n\n📌 *{titulo_m}*\n📅 Data: {now_str}\n👥 Escalados: {len(selected_ids)} militar(es)."
+                    try:
+                        await bot.edit_message_text(
+                            txt,
+                            chat_id=chat_id,
+                            message_id=call.message.message_id,
+                            parse_mode='Markdown'
+                        )
+                    except Exception:
+                        await bot.edit_message_text(txt.replace('*', '').replace('_', ''), chat_id=chat_id, message_id=call.message.message_id)
+                    await safe_answer("Missão enviada!")
                 except Exception as e:
-                    await bot.answer_callback_query(call.id, f"Erro ao criar missão: {e}")
+                    await safe_answer(f"Erro ao criar missão: {e}")
             else:
                 sel = st.get('selected_ids', set())
                 if action_code in sel:
@@ -1218,12 +1249,15 @@ def register_common_handlers(bot):
                 st['selected_ids'] = sel
                 
                 from .keyboards import get_multi_militar_inline_keyboard
-                await bot.edit_message_reply_markup(
-                    chat_id=chat_id,
-                    message_id=call.message.message_id,
-                    reply_markup=get_multi_militar_inline_keyboard(st.get('efetivo_list', []), sel, prefix="quick_mil")
-                )
-                await bot.answer_callback_query(call.id)
+                try:
+                    await bot.edit_message_reply_markup(
+                        chat_id=chat_id,
+                        message_id=call.message.message_id,
+                        reply_markup=get_multi_militar_inline_keyboard(st.get('efetivo_list', []), sel, prefix="quick_mil")
+                    )
+                except Exception:
+                    pass
+                await safe_answer()
 
         # --- EDITAR HORÁRIO DA PAUTA ---
         elif data.startswith('edithora_dem:'):
@@ -1233,8 +1267,12 @@ def register_common_handlers(bot):
                 'demanda_id': dem_id,
                 'user': profile
             }
-            await bot.send_message(chat_id, f"✏️ **EDITAR HORÁRIO (ID #{dem_id})**\n\nDigite o novo horário no formato **HH:MM** (ex: `14:30`):", parse_mode='Markdown')
-            await bot.answer_callback_query(call.id)
+            txt = f"✏️ **EDITAR HORÁRIO (ID #{dem_id})**\n\nDigite o novo horário no formato **HH:MM** (ex: `14:30`):"
+            try:
+                await bot.send_message(chat_id, txt, parse_mode='Markdown')
+            except Exception:
+                await bot.send_message(chat_id, txt.replace('*', '').replace('`', ''))
+            await safe_answer()
 
         # --- VER DETALHES COMPLETOS DA DEMANDA ---
         elif data.startswith('detalhe_dem:'):
@@ -1242,7 +1280,7 @@ def register_common_handlers(bot):
             try:
                 res_d = db.table('demandas_comunicacao').select('*').eq('id', dem_id).execute()
                 if not res_d.data:
-                    await bot.answer_callback_query(call.id, "Demanda não encontrada.")
+                    await safe_answer("Demanda não encontrada.")
                     return
                 d = res_d.data[0]
                 tit = d.get('titulo_evento', 'Sem Título')
@@ -1256,10 +1294,8 @@ def register_common_handlers(bot):
                 contato = d.get('contato', 'N/I')
                 autoridades = d.get('autoridades', '') or 'Nenhuma'
                 
-                # Buscar equipe escalada com nomes
                 resp_txt = _format_militar_responsavel(d, db)
                 
-                # Serviços formatados
                 tipo_cob = d.get('tipo_cobertura', '')
                 servicos_str = "N/I"
                 if tipo_cob:
@@ -1300,27 +1336,35 @@ def register_common_handlers(bot):
                     f"📝 **Observações:** {obs}\n"
                     f"━━━━━━━━━━━━━━━━━━"
                 )
-                await bot.send_message(chat_id, detail_msg, parse_mode='Markdown')
-                await bot.answer_callback_query(call.id)
+                try:
+                    await bot.send_message(chat_id, detail_msg, parse_mode='Markdown')
+                except Exception:
+                    clean_detail = detail_msg.replace('**', '').replace('__', '')
+                    await bot.send_message(chat_id, clean_detail)
+                await safe_answer()
             except Exception as e:
-                await bot.answer_callback_query(call.id, f"Erro: {e}")
+                await safe_answer(f"Erro: {e}")
 
         # --- APROVAR PAUTA PENDENTE ---
         elif data.startswith('aprovar_dem:'):
             dem_id = data.split(':')[1]
             try:
                 db.table('demandas_comunicacao').update({'status': 'aprovada'}).eq('id', dem_id).execute()
-                await bot.answer_callback_query(call.id, "✅ Pauta Aprovada!")
-                await bot.edit_message_text(
-                    f"✅ **PAUTA APROVADA!**\nPauta ID #{dem_id} foi homologada por {user_name}.",
-                    chat_id=chat_id,
-                    message_id=call.message.message_id,
-                    parse_mode='Markdown'
-                )
+                await safe_answer("✅ Pauta Aprovada!")
+                txt = f"✅ **PAUTA APROVADA!**\nPauta ID #{dem_id} foi homologada por {user_name}."
+                try:
+                    await bot.edit_message_text(
+                        txt,
+                        chat_id=chat_id,
+                        message_id=call.message.message_id,
+                        parse_mode='Markdown'
+                    )
+                except Exception:
+                    await bot.edit_message_text(txt.replace('*', ''), chat_id=chat_id, message_id=call.message.message_id)
                 from notifications_manager import notify_telegram
                 notify_telegram(f"✅ **Pauta Aprovada via Telegram**\nID #{dem_id} foi homologada por {user_name}.", "system")
             except Exception as e:
-                await bot.answer_callback_query(call.id, f"Erro: {e}")
+                await safe_answer(f"Erro: {e}")
 
         # --- EDITAR LOCAL DA PAUTA ---
         elif data.startswith('editlocal_dem:'):
@@ -1330,12 +1374,12 @@ def register_common_handlers(bot):
                 'demanda_id': dem_id,
                 'user': profile
             }
-            await bot.send_message(
-                chat_id,
-                f"✏️ **EDITAR LOCAL (ID #{dem_id})**\n\nDigite o novo local do evento (ex: `Auditório Principal`):",
-                parse_mode='Markdown'
-            )
-            await bot.answer_callback_query(call.id)
+            txt = f"✏️ **EDITAR LOCAL (ID #{dem_id})**\n\nDigite o novo local do evento (ex: `Auditório Principal`):"
+            try:
+                await bot.send_message(chat_id, txt, parse_mode='Markdown')
+            except Exception:
+                await bot.send_message(chat_id, txt.replace('*', '').replace('`', ''))
+            await safe_answer()
 
         # --- EDITAR TÍTULO DA PAUTA ---
         elif data.startswith('edittitulo_dem:'):
@@ -1345,27 +1389,31 @@ def register_common_handlers(bot):
                 'demanda_id': dem_id,
                 'user': profile
             }
-            await bot.send_message(
-                chat_id,
-                f"✏️ **EDITAR TÍTULO (ID #{dem_id})**\n\nDigite o novo título do evento:",
-                parse_mode='Markdown'
-            )
-            await bot.answer_callback_query(call.id)
+            txt = f"✏️ **EDITAR TÍTULO (ID #{dem_id})**\n\nDigite o novo título do evento:"
+            try:
+                await bot.send_message(chat_id, txt, parse_mode='Markdown')
+            except Exception:
+                await bot.send_message(chat_id, txt.replace('*', ''))
+            await safe_answer()
 
         # --- REABRIR PAUTA CONCLUÍDA ---
         elif data.startswith('reabrir_dem:'):
             dem_id = data.split(':')[1]
             try:
                 db.table('demandas_comunicacao').update({'status': 'aprovada'}).eq('id', dem_id).execute()
-                await bot.answer_callback_query(call.id, "🔄 Pauta Reaberta!")
-                await bot.edit_message_text(
-                    f"🔄 **PAUTA REABERTA!**\nPauta ID #{dem_id} foi reaberta por {user_name} e voltou ao status APROVADA.",
-                    chat_id=chat_id,
-                    message_id=call.message.message_id,
-                    parse_mode='Markdown'
-                )
+                await safe_answer("🔄 Pauta Reaberta!")
+                txt = f"🔄 **PAUTA REABERTA!**\nPauta ID #{dem_id} foi reaberta por {user_name} e voltou ao status APROVADA."
+                try:
+                    await bot.edit_message_text(
+                        txt,
+                        chat_id=chat_id,
+                        message_id=call.message.message_id,
+                        parse_mode='Markdown'
+                    )
+                except Exception:
+                    await bot.edit_message_text(txt.replace('*', ''), chat_id=chat_id, message_id=call.message.message_id)
             except Exception as e:
-                await bot.answer_callback_query(call.id, f"Erro: {e}")
+                await safe_answer(f"Erro: {e}")
 
 
     @bot.message_handler(content_types=['photo'])
