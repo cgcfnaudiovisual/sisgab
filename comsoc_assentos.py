@@ -3238,8 +3238,8 @@ def render_page():
                                                 elif show_logo:
                                                     ui.label('⚓').style(f'font-size: {logo_w}px; color: #000;')
                                                 
-                                                # Insígnia/Estrelas aparecem APENAS para o titular militar (NÃO para o acompanhante)
-                                                if show_rank and not is_acomp:
+                                                # Insígnia/Estrelas impressas tanto para o titular quanto para os acompanhantes
+                                                if show_rank:
                                                     if almirantado_info['png_asset']:
                                                         ui.image(almirantado_info['png_asset']).style(f'width: {logo_w}mm; height: auto; margin-top: 1mm;')
                                                     elif almirantado_info['stars']:
