@@ -391,7 +391,16 @@ def render_page():
 
                     # Limpa o prefixo 'None ' se existir
                     clean_nome_val = str(user.get('nome', '') or '').replace('None ', '').replace('None', '').strip()
-                    e_nome = ui.input('Nome de Guerra', value=clean_nome_val).props('dark outlined dense w-full')
+                    
+                    user_pg_val = str(user.get('posto_grad') or user.get('posto') or '').strip().upper()
+                    ranks_options = ['AE', 'VA', 'CA', 'CMG', 'CF', 'CC', 'CT', '1ºTEN', '2ºTEN', 'GM', 'SO', '1ºSG', '2ºSG', '3ºSG', 'CB', 'SD/MN']
+                    if user_pg_val not in ranks_options:
+                        user_pg_val = 'SO' if 'SO' in clean_nome_val else ('SG' if 'SG' in clean_nome_val else ('CB' if 'CB' in clean_nome_val else 'SO'))
+
+                    with ui.row().classes('w-full gap-2 no-wrap'):
+                        e_posto = ui.select(ranks_options, label='Posto / Graduação', value=user_pg_val).props('dark outlined dense').classes('w-1/3')
+                        e_nome = ui.input('Nome de Guerra', value=clean_nome_val).props('dark outlined dense').classes('w-2/3')
+
                     e_email = ui.input('E-mail (Login)', value=user_email).props('dark outlined dense w-full')
                     e_unm = ui.input('Username (Login)', value=user.get('username', '')).props('dark outlined dense w-full')
                     e_tg = ui.input('Telegram ID', value=user.get('telegram_id', '') or '').props('dark outlined dense w-full')
@@ -513,6 +522,7 @@ def render_page():
                             # 2. Atualiza a tabela users de forma segura
                             user_payload = {
                                 'nome': nome_final,
+                                'posto': e_posto.value,
                                 'username': e_unm.value,
                                 'telegram_id': e_tg.value or None,
                                 'url_foto': e_foto.value or None,
@@ -529,7 +539,6 @@ def render_page():
                                         user_payload.pop('email')
                                         conn.table('users').update(user_payload).eq('id', uid_str).execute()
                             else:
-                                # Se o id não for UUID (ex: id de efetivo "16"), atualiza users por username ou email
                                 try:
                                     if user_email:
                                         conn.table('users').update(user_payload).eq('email', user_email).execute()
@@ -542,6 +551,8 @@ def render_page():
                             try:
                                 update_fields = {
                                     'nome_guerra': nome_final,
+                                    'posto': e_posto.value,
+                                    'posto_grad': e_posto.value,
                                     'telegram_id': e_tg.value or None,
                                     'role': e_role.value,
                                     'email': e_email.value or None,
