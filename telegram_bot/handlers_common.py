@@ -880,14 +880,83 @@ def register_common_handlers(bot):
                 from .utils import sort_efetivo_by_rank
                 sorted_ef = sort_efetivo_by_rank(efetivo_list)
                 state['efetivo_list'] = sorted_ef
-                from .keyboards import get_multi_militar_inline_keyboard
+                from .keyboards import get_efetivo_linking_keyboard
                 await bot.reply_to(
                     message,
                     f"⚡ **MISSÃO RÁPIDA:** *{state['titulo']}*\n\n"
-                    f"Selecione os militares escalados (ordenados por antiguidade):",
-                    reply_markup=get_multi_militar_inline_keyboard(sorted_ef, set(), prefix="quick_mil"),
+                    f"Selecione o militar escalado no teclado de resposta rápida no rodapé:",
+                    reply_markup=get_efetivo_linking_keyboard(sorted_ef),
                     parse_mode='Markdown'
                 )
+            elif step == 'select_militares':
+                titulo_m = state.get('titulo', 'Missão Rápida')
+                efetivo_list = state.get('efetivo_list', [])
+                nome_digitado = text.replace('🎖️', '').strip().upper()
+
+                militar_encontrado = None
+                for ef in efetivo_list:
+                    guerra = (ef.get('nome_guerra') or '').strip().upper()
+                    posto = (ef.get('posto_grad') or '').strip().upper()
+                    nome_completo = f"{posto} {guerra}".strip().upper()
+                    if guerra == nome_digitado or nome_completo == nome_digitado or guerra in nome_digitado or (guerra and guerra in nome_digitado):
+                        militar_encontrado = ef
+                        break
+
+                from database import get_bot_db_connection as get_db_connection
+                db = get_db_connection()
+
+                if militar_encontrado and db:
+                    m_id = militar_encontrado.get('id')
+                    m_nome = f"{militar_encontrado.get('posto_grad') or ''} {militar_encontrado.get('nome_guerra', '')}".strip()
+                    try:
+                        import json
+                        from datetime import datetime
+                        now_str = datetime.now().strftime('%Y-%m-%d')
+                        novo_registro = {
+                            'titulo_evento': f"⚡ {titulo_m}",
+                            'solicitante_nome': user_name,
+                            'setor': 'COMSOC / GABINETE',
+                            'data_evento': now_str,
+                            'hora_evento': datetime.now().strftime('%H:%M'),
+                            'local_evento': 'Gabinete / COMSOC',
+                            'status': 'aprovada',
+                            'categoria_demanda': 'audiovisual',
+                            'notificar_militar_ids': json.dumps([int(m_id)] if str(m_id).isdigit() else [])
+                        }
+                        db.table('demandas_comunicacao').insert(novo_registro).execute()
+                        
+                        from notifications_manager import notify_telegram
+                        notify_telegram(
+                            f"⚡ **NOVA MISSÃO RÁPIDA REGISTRADA!**\n"
+                            f"📌 {titulo_m}\n"
+                            f"👨‍✈️ Criada por: {user_name}\n"
+                            f"👥 Escalado: {m_nome}",
+                            "system"
+                        )
+
+                        t_id = militar_encontrado.get('telegram_id')
+                        if t_id:
+                            notify_telegram(f"⚡ **VOCÊ FOI ESCALADO PARA UMA MISSÃO RÁPIDA!**\n📌 {titulo_m}\nEscalado por: {user_name}", "system", custom_chat_id=t_id)
+
+                        clear_state(chat_id)
+                        await bot.reply_to(
+                            message,
+                            f"⚡ **MISSÃO RÁPIDA CRIADA E ENVIADA!**\n\n"
+                            f"📌 *{titulo_m}*\n"
+                            f"📅 Data: {now_str}\n"
+                            f"👨‍✈️ Militar Escalado: **{m_nome}**.",
+                            reply_markup=get_main_menu_keyboard(is_operator),
+                            parse_mode='Markdown'
+                        )
+                    except Exception as e:
+                        await bot.reply_to(message, f"❌ Erro ao criar missão rápida: {e}")
+                else:
+                    from .keyboards import get_efetivo_linking_keyboard
+                    await bot.reply_to(
+                        message,
+                        f"⚠️ Militar **'{text}'** não encontrado.\nPor favor, escolha um militar no teclado no rodapé:",
+                        reply_markup=get_efetivo_linking_keyboard(efetivo_list)
+                    )
             return
 
         if action == 'presenca_diaria':
