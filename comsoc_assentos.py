@@ -3553,12 +3553,26 @@ def render_page():
             ui.notify(f'Erro ao gerar modelo: {ex}', color='negative')
             print(f'[TEMPLATE ERR] {ex}')
 
-    def handle_import_list(e, event_id):
+    async def handle_import_list(e, event_id):
         try:
-            file = e.files[0]
-            content = file.content.read()
+            import inspect
+            file_obj = getattr(e, 'file', None)
+            if not file_obj and hasattr(e, 'files') and e.files:
+                file_obj = e.files[0]
             
-            if file.name.endswith('.csv'):
+            if not file_obj:
+                ui.notify('❌ Nenhum arquivo de planilha detectado.', color='negative')
+                return
+
+            content = file_obj.read() if hasattr(file_obj, 'read') else getattr(file_obj, 'content', None)
+            if inspect.isawaitable(content):
+                content = await content
+            elif hasattr(content, 'read'):
+                content = content.read()
+
+            file_name = getattr(file_obj, 'name', 'planilha.xlsx')
+            
+            if file_name.endswith('.csv'):
                 df = pd.read_csv(io.BytesIO(content))
             else:
                 df = pd.read_excel(io.BytesIO(content))
