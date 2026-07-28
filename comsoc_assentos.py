@@ -165,6 +165,7 @@ def render_page():
                         ui.button('🏛️ Cadastro Mestre', icon='account_balance', on_click=lambda: open_master_authorities_dialog(current_event)).props('unelevated color=indigo text-color=white dense bold').classes('q-px-sm')
                         ui.button('🖨️ Imprimir Placas', icon='print', on_click=lambda: open_print_cards_dialog(current_event, convidados, layout)).props('unelevated color=cyan text-color=black dense bold').classes('q-px-sm')
                         ui.button('🔍 Scanner & Conferência', icon='qr_code_scanner', on_click=lambda: open_tactical_scanner_dialog(current_event, convidados)).props('unelevated color=amber text-color=black dense bold').classes('q-px-sm')
+                        ui.button('🎖️ Precedência / Antiguidade', icon='verified', on_click=lambda: open_seniority_checklist_dialog(current_event, convidados)).props('unelevated color=teal text-color=white dense bold').classes('q-px-sm')
                         
                         ui.button('Editar Evento', icon='edit', on_click=lambda: open_edit_event_dialog(current_event, layout)).props('unelevated color=accent dense outline').classes('q-px-sm')
                         ui.button('Excluir Evento', icon='delete', on_click=lambda: confirm_delete_event(current_event)).props('unelevated color=danger dense outline').classes('q-px-sm')
@@ -805,6 +806,145 @@ def render_page():
                 render_content.refresh()
             except Exception as e:
                 ui.notify(f"Erro ao alterar dimensões do grid: {e}", color='red')
+
+    def open_seniority_checklist_dialog(event, convidados):
+        # 1. Carrega dados do layout
+        layout = {}
+        try:
+            layout = json.loads(event['layout_json']) if event.get('layout_json') else {}
+        except:
+            pass
+        layout_rows = layout.get('rows', 5)
+        layout_cols = layout.get('cols', 8)
+
+        # 2. Peso de antiguidade de posto/graduação
+        def get_rank_weight(rank_str):
+            if not rank_str:
+                return 999
+            rank = str(rank_str).upper().replace('.', '').replace(' ', '').strip()
+            if rank in ('AE', 'ALMIRANTEDEESQUADRA'): return 1
+            if rank in ('VA', 'VICEALMIRANTE'): return 2
+            if rank in ('CA', 'CONTRAALMIRANTE'): return 3
+            if rank in ('CMG', 'CAPITAODEMAREGUERRA'): return 4
+            if rank in ('CF', 'CAPITAODEFRAGATA'): return 5
+            if rank in ('CC', 'CAPITAODECORVETA'): return 6
+            if rank in ('CT', 'CAPITAOTENENTE'): return 7
+            if any(x in rank for x in ('1TEN', '1ºTEN', '1SOTEN', '1TENENTE', '1ºTENENTE')): return 8
+            if any(x in rank for x in ('2TEN', '2ºTEN', '2SOTEN', '2TENENTE', '2ºTENENTE')): return 9
+            if rank in ('GM', 'GUARDAMARINHA'): return 10
+            if rank in ('SO', 'SUBOFICIAL', 'SUB-OFICIAL'): return 11
+            if any(x in rank for x in ('1SG', '1ºSG', '1SGT', '1ºSGT', '1ºSARGENTO', '1SARGENTO')): return 12
+            if any(x in rank for x in ('2SG', '2ºSG', '2SGT', '2ºSGT', '2ºSARGENTO', '2SARGENTO')): return 13
+            if any(x in rank for x in ('3SG', '3ºSG', '3SGT', '3ºSGT', '3ºSARGENTO', '3SARGENTO', 'SG', 'SARGENTO')): return 14
+            if rank in ('CB', 'CABO'): return 15
+            if rank in ('SD', 'SOLDADO', 'MN', 'MARINHEIRO'): return 16
+            return 90
+
+        # Filtra e ordena convidados principais (exclui acompanhantes diretos na listagem principal)
+        main_guests = [c for c in convidados if not c.get('convidado_principal_id')]
+        sorted_by_seniority = sorted(
+            main_guests,
+            key=lambda x: (get_rank_weight(x.get('posto_graduacao')), x['nome'].strip().upper())
+        )
+
+        # Análise de quebra de precedência
+        def get_seat_prestige(seat_id):
+            if not seat_id:
+                return 0
+            try:
+                r_lbl, c_str = seat_id.split('-')
+                r_idx = 0
+                for r in range(100):
+                    if get_row_label(r) == r_lbl:
+                        r_idx = r
+                        break
+                c_idx = int(c_str)
+                row_score = (50 - r_idx) * 100
+                col_score = 50 - abs(c_idx - (layout_cols + 1) / 2.0) * 10
+                return row_score + col_score
+            except:
+                return 0
+
+        # Atribui prestígio temporário
+        for c in sorted_by_seniority:
+            c['_prestige'] = get_seat_prestige(c.get('assento_id'))
+
+        warnings = []
+        for i in range(len(sorted_by_seniority)):
+            c_senior = sorted_by_seniority[i]
+            if get_rank_weight(c_senior.get('posto_graduacao')) >= 90:
+                continue
+            for j in range(i + 1, len(sorted_by_seniority)):
+                c_junior = sorted_by_seniority[j]
+                if get_rank_weight(c_junior.get('posto_graduacao')) >= 90:
+                    continue
+                if c_junior['_prestige'] > c_senior['_prestige']:
+                    senior_seat = c_senior.get('assento_id') or 'Não Alocado'
+                    junior_seat = c_junior.get('assento_id')
+                    warnings.append({
+                        'senior': f"{c_senior.get('posto_graduacao') or ''} {c_senior['nome']}".strip().upper(),
+                        'senior_seat': senior_seat,
+                        'junior': f"{c_junior.get('posto_graduacao') or ''} {c_junior['nome']}".strip().upper(),
+                        'junior_seat': junior_seat
+                    })
+
+        with ui.dialog() as diag, ui.card().classes('q-pa-lg bg-slate-900 border border-cyan-500/40 rounded-xl').style('min-width: 650px; max-width: 95vw; max-height: 90vh; overflow-y: auto;'):
+            with ui.row().classes('w-full justify-between items-center q-mb-md no-wrap'):
+                with ui.row().classes('items-center gap-2'):
+                    ui.icon('verified', color='cyan-5', size='md')
+                    with ui.column().classes('gap-0'):
+                        ui.label('CHECKLIST DE ANTIGUIDADE & PRECEDÊNCIA').classes('text-md font-bold text-white cyber-title')
+                        ui.label('Validação automática de alocação por ordem de precedência militar').classes('text-[10px] text-grey-4')
+                ui.button(icon='close', on_click=diag.close).props('flat round dense color=grey-4')
+
+            # ── QUADRO DE ANÁLISE DE PRECEDÊNCIA ──
+            with ui.card().classes('w-full q-pa-sm q-mb-md no-shadow border border-white/5').style('background: rgba(255,255,255,0.02);'):
+                if warnings:
+                    with ui.column().classes('w-full gap-1'):
+                        ui.label('⚠️ ANOMALIAS DETECTADAS NA PRECEDÊNCIA:').classes('text-xs font-black text-amber-5 tracking-wider')
+                        ui.label('Militar mais moderno alocado em cadeira de maior prestígio ou mais antigo sem assento:').classes('text-[10px] text-grey-4 q-mb-xs')
+                        with ui.column().classes('w-full gap-1 max-h-36 overflow-y-auto'):
+                            for w in warnings:
+                                with ui.row().classes('w-full items-center justify-between no-wrap gap-2 text-[10px] py-1 border-b border-white/5'):
+                                    ui.label(w['senior']).classes('text-white font-bold truncate col')
+                                    ui.badge(w['senior_seat'], color='grey-7').classes('text-[8px] font-bold')
+                                    ui.icon('arrow_forward', color='amber', size='xs')
+                                    ui.label(w['junior']).classes('text-amber-3 truncate col')
+                                    ui.badge(w['junior_seat'], color='cyan-9').classes('text-[8px] font-bold')
+                else:
+                    with ui.row().classes('w-full items-center gap-2 py-2 justify-center text-green-4'):
+                        ui.icon('check_circle', size='sm')
+                        ui.label('ORDEM DE PRECEDÊNCIA OK! Nenhum militar mais moderno está em assento superior.').classes('text-xs font-bold')
+
+            # ── LISTA GERAL DE PRECEDÊNCIA ──
+            ui.label('LISTA GERAL DE CONVIDADOS (ORDENADOS POR ANTIGUIDADE)').classes('text-[10px] font-bold text-cyan tracking-wider q-mb-xs')
+            
+            with ui.column().classes('w-full gap-1.5 scroll-container max-h-[380px] overflow-y-auto q-pr-xs'):
+                for idx, c in enumerate(sorted_by_seniority, 1):
+                    rank_w = get_rank_weight(c.get('posto_graduacao'))
+                    is_mil = (rank_w < 90)
+                    bg_color = 'rgba(0, 229, 255, 0.03)' if is_mil else 'rgba(255, 255, 255, 0.01)'
+                    border_style = 'border-left: 3px solid #00e5ff;' if is_mil else 'border-left: 3px solid #6b7280;'
+                    
+                    with ui.row().classes('w-full items-center justify-between no-wrap q-pa-sm rounded-lg').style(
+                        f'background: {bg_color}; {border_style}; border-top: 1px solid rgba(255,255,255,0.03);'
+                    ):
+                        with ui.row().classes('items-center gap-2 col-grow no-wrap'):
+                            ui.label(f"{idx:02d}").classes('text-[10px] font-mono text-grey-5 shrink-0')
+                            with ui.column().classes('gap-0 truncate'):
+                                name_lbl = f"{c.get('posto_graduacao') or ''} {c['nome']}".strip().upper()
+                                ui.label(name_lbl).classes('text-xs font-bold text-white truncate')
+                                ui.label(c.get('cargo_funcao') or c.get('categoria') or 'Convidado').classes('text-[9px] text-grey-4 truncate')
+                                
+                        seat_val = c.get('assento_id')
+                        if seat_val:
+                            ui.badge(f"ASSENTO {seat_val}", color='green-9').classes('text-[9px] font-black tracking-wider')
+                        else:
+                            ui.badge("NÃO ALOCADO", color='amber-9').classes('text-[9px] font-black tracking-wider')
+            
+            with ui.row().classes('w-full justify-end q-mt-md'):
+                ui.button('Fechar', on_click=diag.close).props('unelevated color=grey-8 dense')
+        diag.open()
 
     # --- MODAIS E DIÁLOGOS DE GERENCIAMENTO DE SETORES E EVENTOS ---
     def open_create_event_dialog():
