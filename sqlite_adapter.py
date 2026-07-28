@@ -76,19 +76,35 @@ class SQLiteQueryBuilder:
         return self
 
     def or_(self, filter_str):
-        # Parses simple or conditions like 'id.eq.1,id.eq.2'
+        # Parses simple or conditions like 'id.eq.1,id.eq.2' or 'name.ilike.val'
         parts = filter_str.split(',')
         sub_filters = []
         for p in parts:
             p = p.strip()
             if '.eq.' in p:
-                col, val = p.split('.eq.')
-                sub_filters.append(f"{col} = ?")
-                self.params.append(val)
+                parts_p = p.split('.eq.', 1)
+                if len(parts_p) == 2:
+                    col, val = parts_p
+                    sub_filters.append(f"{col} = ?")
+                    self.params.append(val)
             elif '.neq.' in p:
-                col, val = p.split('.neq.')
-                sub_filters.append(f"{col} != ?")
-                self.params.append(val)
+                parts_p = p.split('.neq.', 1)
+                if len(parts_p) == 2:
+                    col, val = parts_p
+                    sub_filters.append(f"{col} != ?")
+                    self.params.append(val)
+            elif '.ilike.' in p:
+                parts_p = p.split('.ilike.', 1)
+                if len(parts_p) == 2:
+                    col, val = parts_p
+                    sub_filters.append(f"{col} LIKE ?")
+                    self.params.append(val)
+            elif '.like.' in p:
+                parts_p = p.split('.like.', 1)
+                if len(parts_p) == 2:
+                    col, val = parts_p
+                    sub_filters.append(f"{col} LIKE ?")
+                    self.params.append(val)
         if sub_filters:
             self.filters.append("(" + " OR ".join(sub_filters) + ")")
         return self
