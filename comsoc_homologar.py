@@ -551,11 +551,28 @@ def render_page():
                 except Exception as e:
                     print(f"[LOAD HISTORICO ERR] {e}")
 
-            pendentes  = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() in ('pendente', 'pendentes')]
-            aprovadas  = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() in ('aprovada', 'aprovado', 'aprovadas')]
-            ajustes    = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() in ('ajustes', 'ajuste')]
-            concluidas = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() in ('concluida', 'concluída', 'concluido', 'concluído')]
-            rejeitadas = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() in ('rejeitado', 'rejeitada', 'indeferida', 'indeferido')]
+            def sort_by_date_time(demand_list, desc=False):
+                def get_sort_key(d):
+                    d_date = str(d.get('data_evento') or '9999-12-31').strip()
+                    d_time = str(d.get('hora_evento') or '23:59').strip()
+                    if not d_date or d_date == 'None':
+                        d_date = '9999-12-31'
+                    if not d_time or d_time == 'None':
+                        d_time = '23:59'
+                    return (d_date, d_time)
+                return sorted(demand_list, key=get_sort_key, reverse=desc)
+
+            raw_pendentes  = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() in ('pendente', 'pendentes')]
+            raw_aprovadas  = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() in ('aprovada', 'aprovado', 'aprovadas')]
+            raw_ajustes    = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() in ('ajustes', 'ajuste')]
+            raw_concluidas = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() in ('concluida', 'concluída', 'concluido', 'concluído')]
+            raw_rejeitadas = [d for d in todas_demandas if str(d.get('status', '')).strip().lower() in ('rejeitado', 'rejeitada', 'indeferida', 'indeferido')]
+
+            pendentes  = sort_by_date_time(raw_pendentes, desc=False)
+            aprovadas  = sort_by_date_time(raw_aprovadas, desc=False)
+            ajustes    = sort_by_date_time(raw_ajustes, desc=False)
+            concluidas = sort_by_date_time(raw_concluidas, desc=True)
+            rejeitadas = sort_by_date_time(raw_rejeitadas, desc=True)
 
             # Seleciona a aba inicial inteligente: se não tiver pendente, abre Aprovadas diretamente
             initial_tab_value = 'pendentes' if len(pendentes) > 0 else 'aprovadas'
