@@ -281,10 +281,10 @@ def render_page():
                 tot_pendentes_geral = 0
 
                 for militar in efetivo:
-                    nome_g = militar.get('nome_guerra', '').upper()
+                    nome_g = str(militar.get('nome_guerra') or '').replace('None', '').strip().upper()
                     militar_id_str = str(militar.get('id', ''))
-                    posto_grad = militar.get('posto_grad', '')
-                    cargo = militar.get('cargo_funcao', 'Operador COMSOC')
+                    posto_grad = str(militar.get('posto_grad') or militar.get('posto') or '').replace('None', '').strip().upper()
+                    cargo = str(militar.get('cargo_funcao') or militar.get('role') or 'Operador COMSOC').replace('None', '').strip()
 
                     pautas_militar = []
                     pendentes_militar = []
@@ -292,14 +292,21 @@ def render_page():
 
                     for dem in demandas:
                         enc_id = str(dem.get('encarregado_id', ''))
-                        militar_ids_str = str(dem.get('notificar_militar_ids', ''))
-                        solicitante = str(dem.get('solicitante_nome', '')).upper()
+                        
+                        target_ids = set()
+                        raw_ids = dem.get('notificar_militar_ids')
+                        if raw_ids:
+                            try:
+                                parsed = json.loads(raw_ids) if isinstance(raw_ids, str) else raw_ids
+                                if isinstance(parsed, list):
+                                    target_ids = {str(x) for x in parsed if str(x).isdigit()}
+                            except Exception:
+                                pass
 
-                        # Verifica se o militar está vinculado à demanda
+                        # Verifica se o militar está individualmente vinculado à demanda
                         eh_responsavel = (
-                            enc_id == militar_id_str or
-                            militar_id_str in militar_ids_str or
-                            nome_g in solicitante
+                            (militar_id_str and enc_id == militar_id_str) or
+                            (militar_id_str and militar_id_str in target_ids)
                         )
 
                         if eh_responsavel:
@@ -391,7 +398,9 @@ def render_page():
                                         ui.icon('person', size='2rem', color='cyan-5')
                                         with ui.column().classes('gap-0'):
                                             with ui.row().classes('items-center gap-2'):
-                                                ui.label(f"{r['posto_grad']} {r['nome_guerra']}").classes('text-sm font-bold text-white')
+                                                clean_pg = str(r['posto_grad'] or '').replace('None', '').strip()
+                                                clean_title = f"{clean_pg} {r['nome_guerra']}".strip()
+                                                ui.label(clean_title).classes('text-sm font-bold text-white')
                                                 ui.badge(r['nivel_carga']).props(f"color={r['cor_carga']} bold").classes('text-[9px]')
                                             ui.label(r['cargo']).classes('text-xs text-grey-4')
 
