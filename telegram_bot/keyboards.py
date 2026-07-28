@@ -23,6 +23,17 @@ def get_main_menu_keyboard(is_operator=False):
     return markup
 
 
+def get_gabarito_postos_keyboard():
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True, row_width=2)
+    markup.row(types.KeyboardButton("⚓ AE - Almirante de Esquadra"), types.KeyboardButton("⚓ VA - Vice-Almirante"))
+    markup.row(types.KeyboardButton("⚓ CA - Contra-Almirante"), types.KeyboardButton("🎖️ CMG - Capitão de Mar e Guerra"))
+    markup.row(types.KeyboardButton("🎖️ CF - Capitão de Fragata"), types.KeyboardButton("🎖️ CC - Capitão de Corveta"))
+    markup.row(types.KeyboardButton("🎖️ CT - Capitão-Tenente"), types.KeyboardButton("🏛️ Desembargador(a)"))
+    markup.row(types.KeyboardButton("🏛️ Senador(a) / Deputado(a)"), types.KeyboardButton("🏛️ Juiz(a) de Direito"))
+    markup.row(types.KeyboardButton("👤 Senhor / Senhora"), types.KeyboardButton("❌ Cancelar"))
+    return markup
+
+
 def get_demanda_summary_inline_keyboard(demanda_id):
     """Gera teclado inline resumido (apenas 1 botão para abrir o menu da demanda)."""
     markup = types.InlineKeyboardMarkup()

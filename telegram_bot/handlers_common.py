@@ -671,6 +671,22 @@ def register_common_handlers(bot):
                     parse_mode='Markdown'
                 )
 
+            elif text in ("🪑 Solicitar Assento JADE", "/solicitar_assento", "/novo_assento"):
+                chat_states[chat_id] = {
+                    'action': 'solicitar_assento_jade',
+                    'step': 'select_posto',
+                    'user': profile,
+                    'data': {}
+                }
+                from .keyboards import get_gabarito_postos_keyboard
+                await bot.reply_to(
+                    message,
+                    "🏛️ **JADE — SOLICITAÇÃO EXPRESSA DE ASSENTO DE ÚLTIMA HORA**\n\n"
+                    "Escolha abaixo o **Posto, Graduação ou Título Civil** no Gabarito Oficial:",
+                    reply_markup=get_gabarito_postos_keyboard(),
+                    parse_mode='Markdown'
+                )
+
             elif text == "📋 Pautas COMSOC" or text == "📅 Agenda Semanal":
                 txt = _get_weekly_events_text()
                 await bot.reply_to(message, txt, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
@@ -886,6 +902,89 @@ def register_common_handlers(bot):
                     reply_markup=get_efetivo_linking_keyboard(efetivo_list)
                 )
             return
+
+        if action == 'solicitar_assento_jade':
+            step = state.get('step')
+            if step == 'select_posto':
+                posto_sel = text.replace('⚓', '').replace('🎖️', '').replace('🏛️', '').replace('👤', '').strip()
+                state['data']['posto'] = posto_sel
+                state['step'] = 'input_nome'
+                from .keyboards import get_cancel_keyboard
+                await bot.reply_to(
+                    message,
+                    f"✅ **Posto/Cargo selecionado:** *{posto_sel}*\n\n"
+                    "Digite agora o **Nome Completo ou Nome de Guerra da Autoridade**:",
+                    reply_markup=get_cancel_keyboard(),
+                    parse_mode='Markdown'
+                )
+                return
+            elif step == 'input_nome':
+                state['data']['nome'] = text.strip().upper()
+                state['step'] = 'select_acomp'
+                from telebot import types
+                markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+                markup.row(types.KeyboardButton("0 (Sem Acompanhantes)"), types.KeyboardButton("1 Acompanhante"))
+                markup.row(types.KeyboardButton("2 Acompanhantes"), types.KeyboardButton("3 Acompanhantes"))
+                markup.row(types.KeyboardButton("❌ Cancelar"))
+                await bot.reply_to(
+                    message,
+                    f"👤 **Autoridade:** *{state['data']['nome']}*\n\n"
+                    "Selecione a **Quantidade de Acompanhantes / Placas Reservadas** desejada:",
+                    reply_markup=markup,
+                    parse_mode='Markdown'
+                )
+                return
+            elif step == 'select_acomp':
+                num_acomp = 0
+                if "1" in text: num_acomp = 1
+                elif "2" in text: num_acomp = 2
+                elif "3" in text: num_acomp = 3
+                
+                posto_val = state['data'].get('posto', '')
+                nome_val = state['data'].get('nome', '')
+                
+                from database import get_bot_db_connection as get_db_connection
+                db = get_db_connection()
+                if db:
+                    try:
+                        res_ev = db.table('eventos_assentos').select('*').limit(1).execute()
+                        event_id = res_ev.data[0]['id'] if res_ev.data else 'e1'
+                        
+                        main_ins = db.table('convidados').insert({
+                            'evento_id': event_id,
+                            'nome': nome_val,
+                            'posto_graduacao': posto_val,
+                            'status_placa': 'pendente',
+                            'presenca_confirmada': True
+                        }).execute()
+
+                        main_id = main_ins.data[0]['id'] if (main_ins and main_ins.data) else None
+                        
+                        for i in range(num_acomp):
+                            db.table('convidados').insert({
+                                'evento_id': event_id,
+                                'nome': f"ACOMP. {nome_val} ({i+1}/{num_acomp})",
+                                'posto_graduacao': posto_val,
+                                'convidado_principal_id': main_id,
+                                'status_placa': 'pendente',
+                                'presenca_confirmada': True
+                            }).execute()
+                    except Exception as db_e:
+                        print(f"[JADE SOLICITAR ASSENTO ERR] {db_e}")
+
+                del chat_states[chat_id]
+                from .keyboards import get_main_menu_keyboard
+                await bot.reply_to(
+                    message,
+                    f"🎉 **SOLICITAÇÃO DE ASSENTO REGISTRADA COM SUCESSO!**\n\n"
+                    f"📌 **Autoridade:** {posto_val} {nome_val}\n"
+                    f"👥 **Acompanhantes:** {num_acomp}\n"
+                    f" STATUS: *PENDENTE DE CONFECÇÃO NA FILA JADE*\n\n"
+                    f"O militar responsável no Estúdio de Impressão foi notificado para revisão e confecção.",
+                    reply_markup=get_main_menu_keyboard(is_operator),
+                    parse_mode='Markdown'
+                )
+                return
 
         if action == 'missao_rapida':
             step = state.get('step')
