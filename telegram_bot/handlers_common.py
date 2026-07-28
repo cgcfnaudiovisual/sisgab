@@ -368,6 +368,13 @@ def register_common_handlers(bot):
             allowed = USER_PERMISSIONS_CACHE.get(message.from_user.id, set())
             is_operator = str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design')
 
+            # Se o usuário clicar em qualquer botão do Telegram enquanto estava em um prompt de edição, cancela a edição pendente!
+            button_prefixes = ('❌ ', '✅ ', '🎯 ', '🔄 ', '✏️ ', '👤 ', '⚙️ ', '🔎 ', '📋 ', '⚡ ', '🟢 ', '🪑 ', '➕ ')
+            if chat_id in chat_states:
+                st_act = chat_states[chat_id].get('action')
+                if st_act in ('edit_titulo_demanda', 'edit_local_demanda', 'edit_hora_demanda', 'assign_equipe') and text.startswith(button_prefixes):
+                    clear_state(chat_id)
+
             from .keyboards import get_settings_keyboard
             if text == "⚙️ Configurações":
                 chat_states[chat_id] = {
@@ -520,6 +527,7 @@ def register_common_handlers(bot):
                     await bot.reply_to(message, f"❌ Erro ao concluir pauta: {e}")
 
             elif text.startswith("✅ Aprovar #"):
+                clear_state(chat_id)
                 try:
                     dem_id = text.split('#')[1].strip()
                     from database import get_bot_db_connection as get_db_connection
@@ -532,6 +540,7 @@ def register_common_handlers(bot):
                     await bot.reply_to(message, f"❌ Erro ao aprovar pauta: {e}")
 
             elif text.startswith("❌ Rejeitar #"):
+                clear_state(chat_id)
                 try:
                     dem_id = text.split('#')[1].strip()
                     from database import get_bot_db_connection as get_db_connection
