@@ -469,7 +469,7 @@ def render_page():
                         on_upload=lambda e: handle_import_list(e, current_event['id']),
                         multiple=False,
                         auto_upload=True
-                    ).props('accept=.xlsx,.csv flat color=primary text-color=black dense label="Importar Lista" icon=upload').classes('text-xs')
+                    ).props('accept=.xlsx,.xls,.xlsm,.csv,.tsv,.txt,.ods flat color=primary text-color=black dense label="Importar Lista" icon=upload').classes('text-xs')
 
                     ui.button('➕ Adicionar Convidado Principal', icon='person_add', on_click=lambda: open_edit_guest_dialog(None, current_event['id'])).props('unelevated color=primary text-color=black dense').classes('text-xs')
 
@@ -3836,7 +3836,7 @@ def render_page():
 
     async def handle_import_list(e, event_id):
         try:
-            import inspect
+            import inspect, io
             file_obj = getattr(e, 'file', None)
             if not file_obj and hasattr(e, 'files') and e.files:
                 file_obj = e.files[0]
@@ -3845,62 +3845,266 @@ def render_page():
                 ui.notify('❌ Nenhum arquivo de planilha detectado.', color='negative')
                 return
 
-            content = file_obj.read() if hasattr(file_obj, 'read') else getattr(file_obj, 'content', None)
-            if inspect.isawaitable(content):
-                content = await content
-            elif hasattr(content, 'read'):
-                content = content.read()
+            file_bytes = file_obj.read() if hasattr(file_obj, 'read') else getattr(file_obj, 'content', None)
+            if inspect.isawaitable(file_bytes):
+                file_bytes = await file_bytes
+            elif hasattr(file_bytes, 'read'):
+                file_bytes = file_bytes.read()
 
-            file_name = getattr(file_obj, 'name', 'planilha.xlsx')
-            
-            if file_name.endswith('.csv'):
-                df = pd.read_csv(io.BytesIO(content))
-            else:
-                df = pd.read_excel(io.BytesIO(content))
-                
-            required_cols = ['Nome']
-            for col in required_cols:
-                if col not in df.columns:
-                    ui.notify(f"Coluna obrigatória '{col}' não encontrada na planilha.", color='red')
-                    return
-                    
+            if not file_bytes:
+                ui.notify('❌ Arquivo de planilha vazio.', color='negative')
+                return
+
+            file_name = getattr(file_obj, 'name', 'planilha.xlsx').lower()
+
             db = get_service_db_connection() or get_db_connection()
             if not db:
+                ui.notify('❌ Banco de dados indisponível.', color='negative')
                 return
-                
-            count = 0
-            for _, row in df.iterrows():
-                nome = str(row['Nome']).strip().upper()
-                if not nome or nome == 'NAN':
-                    continue
-                    
-                posto = str(row.get('Posto/Graduacao', '')).strip() if pd.notna(row.get('Posto/Graduacao')) else None
-                cargo = str(row.get('Cargo/Função', '')).strip() if pd.notna(row.get('Cargo/Função')) else None
-                cat = str(row.get('Categoria', 'Geral')).strip() if pd.notna(row.get('Categoria')) else 'Geral'
-                
+            
+            res_exist = db.table('jade_convidados').select('*').eq('evento_id', event_id).execute()
+            existing_list = res_exist.data if res_exist.data else []
+            
+            existing_map = {}
+            for item in existing_list:
+                if not item.get('convidado_principal_id'):
+                    key = f"{(item.get('nome') or '').strip().upper()}|{(item.get('posto_graduacao') or '').strip().upper()}"
+                    existing_map[key] = item
+
+            count_inserted = 0
+            count_updated = 0
+
+            wb = None
+            if file_name.endswith('.xlsx') or file_name.endswith('.xlsm'):
                 try:
-                    acomp = int(row.get('Max Acompanhantes', 0)) if pd.notna(row.get('Max Acompanhantes')) else 0
-                except ValueError:
-                    acomp = 0
+                    import openpyxl
+                    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+                except Exception:
+                    wb = None
+
+            if wb:
+                sheet = wb.active
+                current_category = "Geral"
+                for r in range(1, sheet.max_row + 1):
+                    row_cells = [sheet.cell(row=r, column=c) for c in range(1, sheet.max_column + 1)]
+                    row_vals = [c.value for c in row_cells]
+
+                    if not any(v is not None for v in row_vals):
+                        continue
+
+                    c0 = str(row_vals[0]).strip() if len(row_vals) > 0 and row_vals[0] is not None else ""
+                    c1 = str(row_vals[1]).strip() if len(row_vals) > 1 and row_vals[1] is not None else ""
+                    c2 = str(row_vals[2]).strip() if len(row_vals) > 2 and row_vals[2] is not None else ""
+
+                    if c0.upper() in ('QTD', 'QUANTIDADE', 'QTD / BLOCO') or c1.upper() in ('POSTO', 'GRAU', 'POSTO / GRAD'):
+                        continue
+
+                    if str(row_vals[0]).startswith('CONVIDADOS') or str(row_vals[0]).startswith('💡 INSTRUÇÕES'):
+                        continue
+
+                    if c0 and not c0.isdigit() and c0.upper() not in ('QTD', 'QUANTIDADE', 'QTD / BLOCO'):
+                        current_category = c0
+                        continue
+
+                    nome = c2
+                    if not nome or nome.upper() in ('NOME', 'CONVITE', 'NONE', 'NAN'):
+                        continue
+
+                    posto = c1
+                    cargo = str(row_vals[3]).strip() if len(row_vals) > 3 and row_vals[3] is not None else ""
+                    conf_val = row_vals[5] if len(row_vals) > 5 else None
+                    conjuge_val = row_vals[6] if len(row_vals) > 6 else None
+                    ant_val = row_vals[9] if len(row_vals) > 9 else None
+                    try:
+                        numero_antiguidade = int(float(str(ant_val))) if ant_val not in (None, '', 'None') else None
+                    except (ValueError, TypeError):
+                        numero_antiguidade = None
+
+                    conf_fill = ""
+                    if len(row_cells) > 5 and row_cells[5].fill and row_cells[5].fill.start_color:
+                        conf_fill = str(row_cells[5].fill.start_color.rgb or "")
+
+                    status_conf = "pendente"
+                    status_placa = "nao_necessaria"
+
+                    if any(g in conf_fill for g in ('00B050', '92D050', '00FF00')):
+                        status_conf = "confirmado"
+                        status_placa = "pendente"
+                    elif any(rc in conf_fill for rc in ('FF0000', 'FA1717', 'C00000', 'FF5555')):
+                        status_conf = "recusado"
+                        status_placa = "nao_necessaria"
+                    else:
+                        if conf_val in (1, 2, '1', '2', 'SIM', 'Sim', 'sim', 'CONFIRMADO', 'conf', 'CONF'):
+                            status_conf = "confirmado"
+                            status_placa = "pendente"
+
+                    max_acomp = 0
+                    if isinstance(conf_val, int) and conf_val > 1:
+                        max_acomp = conf_val - 1
+                    elif str(conf_val).strip().isdigit() and int(str(conf_val).strip()) > 1:
+                        max_acomp = int(str(conf_val).strip()) - 1
+                    elif conjuge_val in ('E', '1', 1) or (isinstance(conjuge_val, str) and len(conjuge_val) > 2):
+                        max_acomp = 1
+
+                    key = f"{nome.strip().upper()}|{posto.strip().upper()}"
                     
-                guest_data = {
-                    'evento_id': event_id,
-                    'nome': nome,
-                    'posto_graduacao': posto,
-                    'cargo_funcao': cargo,
-                    'categoria': cat,
-                    'max_acompanhantes': acomp
-                }
-                
-                res = db.table('jade_convidados').insert(guest_data).execute()
-                if res.data:
-                    new_id = res.data[0]['id']
-                    sync_companions(new_id, nome, acomp, event_id, cat)
-                count += 1
-                
-            ui.notify(f"Importados {count} convidados com sucesso!", color='success')
+                    conv_data = {
+                        'evento_id': event_id,
+                        'nome': nome,
+                        'posto_graduacao': posto,
+                        'cargo_funcao': cargo,
+                        'categoria': current_category,
+                        'status_confirmacao': status_conf,
+                        'max_acompanhantes': max_acomp,
+                    }
+                    if numero_antiguidade is not None:
+                        conv_data['numero_antiguidade'] = numero_antiguidade
+                    
+                    conv_data_with_placa = dict(conv_data)
+                    conv_data_with_placa['status_placa'] = status_placa
+
+                    if key in existing_map:
+                        existing_id = existing_map[key]['id']
+                        try:
+                            db.table('jade_convidados').update(conv_data_with_placa).eq('id', existing_id).execute()
+                        except Exception:
+                            safe = {k: v for k, v in conv_data.items() if k != 'numero_antiguidade'}
+                            db.table('jade_convidados').update(safe).eq('id', existing_id).execute()
+                        
+                        sync_companions(existing_id, nome, max_acomp, event_id, current_category)
+                        count_updated += 1
+                    else:
+                        res_ins = None
+                        try:
+                            res_ins = db.table('jade_convidados').insert(conv_data_with_placa).execute()
+                        except Exception:
+                            safe = {k: v for k, v in conv_data.items() if k != 'numero_antiguidade'}
+                            safe['status_placa'] = status_placa
+                            res_ins = db.table('jade_convidados').insert(safe).execute()
+                        
+                        if res_ins and res_ins.data:
+                            new_id = res_ins.data[0]['id']
+                            sync_companions(new_id, nome, max_acomp, event_id, current_category)
+                        count_inserted += 1
+
+            else:
+                # Leitor Pandas Universal (.csv, .tsv, .txt, .ods, .xls)
+                bio_p = io.BytesIO(file_bytes)
+                df_p = None
+                if file_name.endswith('.csv') or file_name.endswith('.tsv') or file_name.endswith('.txt'):
+                    for sep in [';', ',', '\t', '|']:
+                        try:
+                            bio_p.seek(0)
+                            df_test = pd.read_csv(bio_p, sep=sep, encoding='utf-8-sig', dtype=str)
+                            if len(df_test.columns) > 1:
+                                df_p = df_test
+                                break
+                        except Exception:
+                            pass
+                    if df_p is None:
+                        bio_p.seek(0)
+                        df_p = pd.read_csv(bio_p, encoding='utf-8-sig', dtype=str)
+                elif file_name.endswith('.xls'):
+                    try:
+                        df_p = pd.read_excel(bio_p, engine='xlrd', dtype=str)
+                    except Exception:
+                        df_p = pd.read_excel(bio_p, dtype=str)
+                elif file_name.endswith('.ods'):
+                    try:
+                        df_p = pd.read_excel(bio_p, engine='odf', dtype=str)
+                    except Exception:
+                        df_p = pd.read_excel(bio_p, dtype=str)
+                else:
+                    df_p = pd.read_excel(bio_p, dtype=str)
+
+                if df_p is not None:
+                    if 'Nome' not in df_p.columns and 'NOME' not in [str(c).upper() for c in df_p.columns]:
+                        for r_idx in range(min(5, len(df_p))):
+                            row_str = [str(val).upper() for val in df_p.iloc[r_idx].values]
+                            if any(k in row_str for k in ('NOME', 'AUTORIDADE', 'CONVIDADO')):
+                                df_p.columns = df_p.iloc[r_idx]
+                                df_p = df_p.iloc[r_idx + 1:]
+                                break
+
+                    col_map = {}
+                    for col in df_p.columns:
+                        c_clean = str(col).strip().upper()
+                        if c_clean in ('NOME', 'NOME COMPLETO', 'AUTORIDADE', 'NOME DA AUTORIDADE', 'NOME DO CONVIDADO', 'CONVIDADO'):
+                            col_map[col] = 'Nome'
+                        elif c_clean in ('POSTO', 'POSTO/GRADUAÇÃO', 'POSTO/GRADUACAO', 'POSTO / GRADUAÇÃO', 'POSTO / GRAD', 'GRADUAÇÃO', 'GRADUACAO', 'POSTO_GRADUACAO'):
+                            col_map[col] = 'Posto/Graduacao'
+                        elif c_clean in ('CARGO', 'CARGO/FUNÇÃO', 'CARGO/FUNCAO', 'CARGO / FUNÇÃO', 'FUNÇÃO', 'FUNCAO', 'TÍTULO', 'TITULO', 'CARGO_FUNCAO'):
+                            col_map[col] = 'Cargo/Função'
+                        elif c_clean in ('CATEGORIA', 'SETOR', 'BLOCO', 'GRUPO', 'QTD / BLOCO'):
+                            col_map[col] = 'Categoria'
+                        elif c_clean in ('MAX ACOMPANHANTES', 'ACOMPANHANTES', 'ACOMP', 'CÔNJUGE', 'CÔNJUGE\n(E = sim)', 'N_ACOMPANHANTES', 'QTD ACOMPANHANTES', 'QTD_ACOMP'):
+                            col_map[col] = 'Max Acompanhantes'
+                        elif c_clean in ('ANTIGUIDADE', 'Nº ANTIGUIDADE', 'NUMERO_ANTIGUIDADE'):
+                            col_map[col] = 'Antiguidade'
+                    
+                    df_p = df_p.rename(columns=col_map)
+                    
+                    if 'Nome' not in df_p.columns and len(df_p.columns) > 0:
+                        df_p = df_p.rename(columns={df_p.columns[0]: 'Nome'})
+
+                    for _, row in df_p.iterrows():
+                        nome_p = str(row.get('Nome', '')).strip().upper()
+                        if not nome_p or nome_p in ('NAN', 'NONE', 'NOME', 'NOME COMPLETO'):
+                            continue
+                        posto_p = str(row.get('Posto/Graduacao', '')).strip() if pd.notna(row.get('Posto/Graduacao')) and str(row.get('Posto/Graduacao')) != 'nan' else ''
+                        cargo_p = str(row.get('Cargo/Função', '')).strip() if pd.notna(row.get('Cargo/Função')) and str(row.get('Cargo/Função')) != 'nan' else ''
+                        cat_p = str(row.get('Categoria', 'Geral')).strip() if pd.notna(row.get('Categoria')) and str(row.get('Categoria')) != 'nan' else 'Geral'
+                        try:
+                            acomp_p = int(row.get('Max Acompanhantes', 0)) if pd.notna(row.get('Max Acompanhantes')) else 0
+                        except Exception:
+                            acomp_p = 0
+
+                        ant_p = None
+                        try:
+                            if pd.notna(row.get('Antiguidade')):
+                                ant_p = int(float(str(row.get('Antiguidade'))))
+                        except Exception:
+                            ant_p = None
+
+                        key_p = f"{nome_p}|{posto_p}"
+                        guest_data = {
+                            'evento_id': event_id,
+                            'nome': nome_p,
+                            'posto_graduacao': posto_p,
+                            'cargo_funcao': cargo_p,
+                            'categoria': cat_p,
+                            'status_confirmacao': 'confirmado',
+                            'status_placa': 'pendente',
+                            'max_acompanhantes': acomp_p
+                        }
+                        if ant_p is not None:
+                            guest_data['numero_antiguidade'] = ant_p
+
+                        if key_p in existing_map:
+                            e_id = existing_map[key_p]['id']
+                            try:
+                                db.table('jade_convidados').update(guest_data).eq('id', e_id).execute()
+                            except Exception:
+                                safe = {k: v for k, v in guest_data.items() if k != 'numero_antiguidade'}
+                                db.table('jade_convidados').update(safe).eq('id', e_id).execute()
+                            sync_companions(e_id, nome_p, acomp_p, event_id, cat_p)
+                            count_updated += 1
+                        else:
+                            res_p = None
+                            try:
+                                res_p = db.table('jade_convidados').insert(guest_data).execute()
+                            except Exception:
+                                safe = {k: v for k, v in guest_data.items() if k != 'numero_antiguidade'}
+                                res_p = db.table('jade_convidados').insert(safe).execute()
+                            if res_p and res_p.data:
+                                new_id = res_p.data[0]['id']
+                                sync_companions(new_id, nome_p, acomp_p, event_id, cat_p)
+                            count_inserted += 1
+
+            ui.notify(f"✅ Importados {count_inserted} novos convidados ({count_updated} atualizados) com sucesso!", color='positive')
             render_content.refresh()
         except Exception as ex:
+            print(f"[HANDLE IMPORT ERR] {ex}")
             ui.notify(f"Erro ao importar planilha: {ex}", color='red')
 
     render_content()
