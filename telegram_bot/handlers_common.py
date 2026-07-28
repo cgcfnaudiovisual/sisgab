@@ -809,6 +809,60 @@ def register_common_handlers(bot):
                     await bot.reply_to(message, f"❌ Erro ao atualizar título: {e_ed}")
             return
 
+        if action == 'assign_equipe':
+            dem_id = state.get('demanda_id')
+            efetivo_list = state.get('efetivo_list', [])
+            selected_ids = state.get('selected_ids', set())
+
+            nome_digitado = text.replace('🎖️', '').strip().upper()
+
+            militar_encontrado = None
+            for ef in efetivo_list:
+                guerra = (ef.get('nome_guerra') or '').strip().upper()
+                posto = (ef.get('posto_grad') or '').strip().upper()
+                nome_completo = f"{posto} {guerra}".strip().upper()
+                if guerra == nome_digitado or nome_completo == nome_digitado or guerra in nome_digitado or (guerra and guerra in nome_digitado):
+                    militar_encontrado = ef
+                    break
+
+            from database import get_bot_db_connection as get_db_connection
+            db = get_bot_db_connection()
+
+            if militar_encontrado and db and dem_id:
+                m_id = militar_encontrado.get('id')
+                m_nome = f"{militar_encontrado.get('posto_grad') or ''} {militar_encontrado.get('nome_guerra', '')}".strip()
+                selected_ids.add(m_id)
+                
+                try:
+                    import json
+                    db.table('demandas_comunicacao').update({
+                        'notificar_militar_ids': json.dumps([int(x) for x in selected_ids if str(x).isdigit()])
+                    }).eq('id', dem_id).execute()
+
+                    t_id = militar_encontrado.get('telegram_id')
+                    if t_id:
+                        from notifications_manager import notify_telegram
+                        notify_telegram(f"🎖️ **VOCÊ FOI ESCALADO PARA UMA MISSÃO!**\nPauta ID #{dem_id}\nEscalado por: {user_name}", "system", custom_chat_id=t_id)
+
+                    clear_state(chat_id)
+                    await bot.reply_to(
+                        message,
+                        f"✅ **MILITAR ESCALADO COM SUCESSO!**\n\n"
+                        f"👨‍✈️ **{m_nome}** foi vinculado(a) à Pauta ID **#{dem_id}**.",
+                        reply_markup=get_main_menu_keyboard(is_operator),
+                        parse_mode='Markdown'
+                    )
+                except Exception as e_eq:
+                    await bot.reply_to(message, f"❌ Erro ao atribuir equipe: {e_eq}")
+            else:
+                from .keyboards import get_efetivo_linking_keyboard
+                await bot.reply_to(
+                    message,
+                    f"⚠️ Militar **'{text}'** não encontrado.\nPor favor, escolha um militar no teclado abaixo:",
+                    reply_markup=get_efetivo_linking_keyboard(efetivo_list)
+                )
+            return
+
         if action == 'missao_rapida':
             step = state.get('step')
             if step == 'input_titulo':
