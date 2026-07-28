@@ -1007,7 +1007,8 @@ def register_common_handlers(bot):
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith(('opcoes_dem:', 'fechar_opcoes_dem:', 'concluir_dem:', 'rejeitar_dem:', 'equipe_dem:', 'edithora_dem:', 'sel_mil:', 'quick_mil:', 'detalhe_dem:', 'aprovar_dem:', 'editlocal_dem:', 'edittitulo_dem:', 'reabrir_dem:')))
     async def handle_demanda_management_callbacks(call):
-        chat_id = call.message.chat.id
+        chat_id = call.message.chat.id if call.message else call.from_user.id
+        message_id = call.message.message_id if call.message else None
         data = call.data
 
         async def safe_answer(text=None, show_alert=False):
@@ -1016,13 +1017,15 @@ def register_common_handlers(bot):
             except Exception:
                 pass
 
+        # Responde imediatamente ao Telegram para parar o brilho/spinner no botão!
+        await safe_answer()
+
         profile = await check_authorized_user(call.from_user.id)
         if not profile:
             profile = {'nome_guerra': call.from_user.first_name or 'Operador', 'role': 'operador', 'telegram_id': str(call.from_user.id)}
 
         db = get_db_connection()
         if not db:
-            await safe_answer("Banco de dados indisponível.")
             return
 
         user_name = profile.get('nome_guerra') or profile.get('nome', 'Operador')
@@ -1031,18 +1034,22 @@ def register_common_handlers(bot):
         if data.startswith('opcoes_dem:'):
             dem_id = data.split(':')[1]
             try:
-                res_d = db.table('demandas_comunicacao').select('*').eq('id', dem_id).execute()
-                if res_d.data:
-                    raw_st = str(res_d.data[0].get('status', 'pendente')).lower()
-                    from .keyboards import get_manage_demanda_inline_keyboard
-                    await bot.edit_message_reply_markup(
-                        chat_id=chat_id,
-                        message_id=call.message.message_id,
-                        reply_markup=get_manage_demanda_inline_keyboard(dem_id, status=raw_st)
-                    )
-                await safe_answer("Opções abertas!")
+                raw_st = 'aprovada'
+                try:
+                    res_d = db.table('demandas_comunicacao').select('status').eq('id', dem_id).execute()
+                    if res_d and res_d.data:
+                        raw_st = str(res_d.data[0].get('status', 'aprovada')).lower()
+                except Exception:
+                    pass
+
+                from .keyboards import get_manage_demanda_inline_keyboard
+                await bot.edit_message_reply_markup(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    reply_markup=get_manage_demanda_inline_keyboard(dem_id, status=raw_st)
+                )
             except Exception as e:
-                await safe_answer(f"Erro: {e}")
+                print(f"[OPCOES_DEM ERR] {e}")
 
         # --- OCULTAR OPÇÕES DA DEMANDA ---
         elif data.startswith('fechar_opcoes_dem:'):
@@ -1051,12 +1058,11 @@ def register_common_handlers(bot):
                 from .keyboards import get_demanda_summary_inline_keyboard
                 await bot.edit_message_reply_markup(
                     chat_id=chat_id,
-                    message_id=call.message.message_id,
+                    message_id=message_id,
                     reply_markup=get_demanda_summary_inline_keyboard(demanda_id=dem_id)
                 )
-                await safe_answer("Opções recolhidas.")
             except Exception as e:
-                await safe_answer(f"Erro: {e}")
+                print(f"[FECHAR_OPCOES ERR] {e}")
 
         # --- CONCLUIR PAUTA ---
         elif data.startswith('concluir_dem:'):
