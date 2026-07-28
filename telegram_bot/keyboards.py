@@ -12,8 +12,8 @@ def get_main_menu_keyboard(is_operator=False):
         markup.row(types.KeyboardButton("🟢 Dar Presença"), types.KeyboardButton("📋 Pronto CheGab"))
         markup.row(types.KeyboardButton("📋 Gerenciar Demandas"), types.KeyboardButton("⚡ Missão Rápida"))
         markup.row(types.KeyboardButton("📅 Agenda Semanal"), types.KeyboardButton("➕ Criar Demanda"))
-        markup.row(types.KeyboardButton("🤖 Digerir Pauta (IA)"), types.KeyboardButton("🔌 Cautelas Ativas"))
-        markup.row(types.KeyboardButton("⚙️ Configurações"), types.KeyboardButton("ℹ️ Ajuda"))
+        markup.row(types.KeyboardButton("🤖 Digerir Pauta (IA)"), types.KeyboardButton("🪑 Placas JADE"))
+        markup.row(types.KeyboardButton("🔌 Cautelas Ativas"), types.KeyboardButton("⚙️ Configurações"))
         markup.row(types.KeyboardButton("❌ Cancelar"))
     else:
         markup.row(types.KeyboardButton("🟢 Dar Presença"), types.KeyboardButton("📅 Agenda Semanal"))

@@ -253,3 +253,16 @@ def notify_telegram_photo(photo_bytes: bytes, caption: str, notification_type: s
             print(f"[NOTIFY] Falha ao despachar notificação de foto: {e}", flush=True)
 
 
+def notify_jade_production(event_name: str, count_new: int, count_total_pending: int):
+    """Envia notificação via Telegram sobre novas placas na fila de produção JADE."""
+    msg = (
+        f"🪑 **NOVAS PLACAS JADE NA FILA DE PRODUÇÃO!**\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"📌 **Solenidade:** {event_name}\n"
+        f"🆕 **+ {count_new}** nova(s) placa(s) adicionada(s)\n"
+        f"⏳ **Total Pendentes na Fila:** {count_total_pending} placa(s)\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"💡 _Acesse o Módulo JADE no SISGAB para confeccionar._"
+    )
+    notify_telegram(msg, "system")
+

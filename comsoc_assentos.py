@@ -1371,6 +1371,15 @@ def render_page():
                         
                         status_labels = {'confirmado': 'CONFIRMADOS', 'recusado': 'RECUSADOS', 'provavel': 'PROVÁVEIS', 'pendente': 'PENDENTES'}
                         ui.notify(f'✅ {count_updated} convidados marcados como {status_labels.get(new_status, new_status)}!', color='positive')
+                        
+                        # Notificar via Telegram se gerou novas placas pendentes
+                        if new_status in ('confirmado', 'provavel') and count_updated > 0:
+                            try:
+                                from notifications_manager import notify_jade_production
+                                notify_jade_production(event.get('nome', 'Solenidade'), count_updated, count_updated)
+                            except Exception as n_err:
+                                print(f"[JADE NOTIFY ERR] {n_err}")
+                                
                         selected_ids.clear()
                         diag.close()
                         render_content.refresh()
@@ -1534,6 +1543,14 @@ def render_page():
                             count_inserted += 1
 
                     ui.notify(f'✅ Importação concluída! {count_inserted} novos, {count_updated} atualizados.', color='positive')
+                    
+                    if count_conf > 0:
+                        try:
+                            from notifications_manager import notify_jade_production
+                            notify_jade_production(event.get('nome', 'Solenidade'), count_conf, count_conf)
+                        except Exception as n_err:
+                            print(f"[JADE NOTIFY ERR] {n_err}")
+
                     log_container.clear()
                     with log_container:
                         with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg').style('background: rgba(0,255,150,0.1); border: 1px solid rgba(0,255,150,0.3);'):

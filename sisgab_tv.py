@@ -453,6 +453,22 @@ def render_page():
                                     ui.label(label).classes('text-grey-4 text-[9px] font-semibold')
                                     ui.label(name).classes('text-white font-bold text-[10px]')
 
+                    # BLOCO 1.5: ALERTA TÁTICO DE PLACAS JADE PENDENTES
+                    count_jade_pending = 0
+                    if db:
+                        try:
+                            res_j = db.table('jade_convidados').select('*').eq('status_placa', 'pendente').execute()
+                            count_jade_pending = len(res_j.data) if res_j.data else 0
+                        except Exception:
+                            pass
+                            
+                    if count_jade_pending > 0:
+                        with ui.card().classes('w-full q-pa-xs no-shadow rounded-xl border border-amber-500/50 flex-row items-center justify-between no-wrap animate-pulse').style('background: rgba(245,158,11,0.15);'):
+                            with ui.row().classes('items-center gap-1.5'):
+                                ui.icon('print', color='amber-4', size='xs')
+                                ui.label('PLACAS JADE PENDENTES:').classes('text-[10px] font-black text-amber-4 tracking-wider')
+                            ui.badge(f'{count_jade_pending} PLACAS', color='amber-10').classes('text-[10px] font-black')
+
                     # BLOCO 2: MODO CARROSSEL DE INFORMATIVOS & EFEMÉRIDES (PAINEL INFERIOR)
                     slide_idx = (int(datetime.now().timestamp() // 15)) % 3
                     slide_headers = [

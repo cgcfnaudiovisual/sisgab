@@ -442,6 +442,47 @@ def register_common_handlers(bot):
                 except Exception as e_dem:
                     await bot.reply_to(message, f"❌ Erro ao listar demandas: {e_dem}")
 
+            elif text in ("🪑 Placas JADE", "/jade", "/placas"):
+                from database import get_bot_db_connection as get_db_connection
+                db = get_db_connection()
+                if not db:
+                    await bot.reply_to(message, "⚠️ Banco de dados indisponível.")
+                    return
+                try:
+                    res_j = db.table('jade_convidados').select('*').eq('status_placa', 'pendente').execute()
+                    pendentes = res_j.data if res_j.data else []
+                    
+                    res_prod = db.table('jade_convidados').select('*').eq('status_placa', 'em_producao').execute()
+                    em_producao = res_prod.data if res_prod.data else []
+
+                    res_imp = db.table('jade_convidados').select('*').eq('status_placa', 'impressa').execute()
+                    impressas = res_imp.data if res_imp.data else []
+
+                    msg_jade = (
+                        f"🪑 **FILA DE PRODUÇÃO DE PLACAS JADE**\n"
+                        f"━━━━━━━━━━━━━━━━━━\n\n"
+                        f"🟡 **Pendentes:** {len(pendentes)} placa(s)\n"
+                        f"🔵 **Em Produção:** {len(em_producao)} placa(s)\n"
+                        f"🟢 **Já Impressas:** {len(impressas)} placa(s)\n\n"
+                    )
+                    
+                    if pendentes:
+                        msg_jade += "📌 **PRÓXIMAS PLACAS A CONFECCIONAR:**\n"
+                        for idx, p in enumerate(pendentes[:10], 1):
+                            nome_p = p.get('nome', 'N/I')
+                            posto_p = p.get('posto_graduacao', '') or ''
+                            cargo_p = p.get('cargo_funcao', '') or ''
+                            msg_jade += f"{idx}. *{posto_p} {nome_p}* — _{cargo_p}_\n"
+                        if len(pendentes) > 10:
+                            msg_jade += f"\n_...e mais {len(pendentes) - 10} placa(s)._\n"
+                    else:
+                        msg_jade += "🎉 *Nenhuma placa pendente no momento!*\n"
+
+                    msg_jade += "\n━━━━━━━━━━━━━━━━━━"
+                    await bot.reply_to(message, msg_jade, parse_mode='Markdown')
+                except Exception as e_j:
+                    await bot.reply_to(message, f"❌ Erro ao consultar placas JADE: {e_j}")
+
             elif text in ("⚡ Missão Rápida", "/missaorapida", "/missao_rapida"):
                 chat_states[chat_id] = {
                     'action': 'missao_rapida',
