@@ -972,9 +972,30 @@ def render_page():
                             elif sp == 'entregue':
                                 ui.label('✅ POSICIONADA').classes('text-[9px] text-teal-4 font-black shrink-0')
                             
-                            # Reimpressão
-                            if sp in ('impressa', 'entregue'):
-                                ui.button('🔄', on_click=make_status_btn(c['id'], 'reimpressao', '🔴 Solicitada reimpressão', 'red')).props('flat round dense color=red-4 size=xs').classes('shrink-0')
+                            # Reimpressão para qualquer placa
+                            ui.button('🔁 Reimprimir', on_click=make_status_btn(c['id'], 'reimpressao', '🔴 Solicitada reimpressão', 'red')).props('unelevated color=deep-orange dense').classes('text-[9px] shrink-0').tooltip('Solicitar nova impressão desta placa')
+
+                            # Aumentar Quantidade / Criar Acompanhante
+                            if not is_acomp:
+                                async def add_companion_plate(principal_id, main_nome, main_posto):
+                                    db = get_service_db_connection() or get_db_connection()
+                                    if db:
+                                        res_ac = db.table('jade_convidados').select('*').eq('convidado_principal_id', principal_id).execute()
+                                        ac_list = res_ac.data or []
+                                        count_ac = len(ac_list) + 1
+                                        db.table('jade_convidados').insert({
+                                            'evento_id': event['id'],
+                                            'nome': f"ACOMP. {main_nome} ({count_ac})",
+                                            'posto_graduacao': main_posto,
+                                            'convidado_principal_id': principal_id,
+                                            'status_placa': 'pendente',
+                                            'presenca_confirmada': True
+                                        }).execute()
+                                        ui.notify(f'➕ Nova placa de acompanhante registrada para {main_nome}!', color='positive')
+                                        render_content.refresh()
+                                        render_list.refresh()
+
+                                ui.button('➕ Placa Extra', on_click=lambda p_id=c['id'], m_n=c['nome'], m_p=c.get('posto_graduacao',''): add_companion_plate(p_id, m_n, m_p)).props('unelevated color=cyan text-color=black dense bold').classes('text-[9px] shrink-0').tooltip('Aumentar quantidade de placas reservadas')
 
             render_list()
             with ui.row().classes('w-full justify-end q-mt-md'):
