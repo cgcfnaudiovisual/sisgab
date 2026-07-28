@@ -767,7 +767,9 @@ def smart_editor_page():
 @ui.page('/sisgab_tv')
 def sisgab_tv_page():
     """Modo TV/Monitor do SisGAB — sem barra lateral, tela cheia."""
-    check_auth()
+    if not is_authenticated():
+        ui.navigate.to('/login')
+        return
     app.storage.user['current_path'] = '/sisgab_tv'
     app.storage.user['tv_lock_active'] = True
     theme.apply_global_styles()
