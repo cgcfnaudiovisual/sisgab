@@ -310,6 +310,7 @@ CREATE TABLE IF NOT EXISTS jade_convidados (
     max_acompanhantes INTEGER NOT NULL DEFAULT 0,
     assento_id VARCHAR(50) NULL,
     status_confirmacao VARCHAR(50) NOT NULL DEFAULT 'confirmado',
+    status_placa VARCHAR(50) NOT NULL DEFAULT 'nao_necessaria',
     checkin_at TIMESTAMP WITH TIME ZONE NULL
 );
 

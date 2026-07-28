@@ -145,11 +145,92 @@ def render_page():
                     ui.button('Novo Evento', icon='add', on_click=open_create_event_dialog).props('unelevated color=primary text-color=black dense').classes('q-px-sm')
                     
                     if current_event:
+                        ui.button('✅ Confirmar Presenças', icon='how_to_reg', on_click=lambda: open_mass_confirmation_dialog(current_event, convidados)).props('unelevated color=green text-color=white dense bold').classes('q-px-sm')
                         ui.button('🖨️ Imprimir Placas por Fileira', icon='print', on_click=lambda: open_print_cards_dialog(current_event, convidados, layout)).props('unelevated color=cyan text-color=black dense bold').classes('q-px-sm')
                         ui.button('🔍 Scanner & Conferência', icon='qr_code_scanner', on_click=lambda: open_tactical_scanner_dialog(current_event, convidados)).props('unelevated color=amber text-color=black dense bold').classes('q-px-sm')
                         
                         ui.button('Editar Evento', icon='edit', on_click=lambda: open_edit_event_dialog(current_event, layout)).props('unelevated color=accent dense outline').classes('q-px-sm')
                         ui.button('Excluir Evento', icon='delete', on_click=lambda: confirm_delete_event(current_event)).props('unelevated color=danger dense outline').classes('q-px-sm')
+
+        # ═══════════════════════════════════════════════════════════════
+        # FASE 1: PAINEL DE FILA DE PRODUÇÃO DE PLACAS JADE
+        # ═══════════════════════════════════════════════════════════════
+        if current_event and convidados:
+            # Contadores de status de placa
+            count_pending = sum(1 for c in convidados if c.get('status_placa') == 'pendente')
+            count_producing = sum(1 for c in convidados if c.get('status_placa') == 'em_producao')
+            count_printed = sum(1 for c in convidados if c.get('status_placa') == 'impressa')
+            count_reprint = sum(1 for c in convidados if c.get('status_placa') == 'reimpressao')
+            count_delivered = sum(1 for c in convidados if c.get('status_placa') == 'entregue')
+            count_not_needed = sum(1 for c in convidados if c.get('status_placa', 'nao_necessaria') == 'nao_necessaria')
+            
+            # Contadores de confirmação
+            count_confirmed = sum(1 for c in convidados if c.get('status_confirmacao') == 'confirmado')
+            count_refused = sum(1 for c in convidados if c.get('status_confirmacao') == 'recusado')
+            count_probable = sum(1 for c in convidados if c.get('status_confirmacao') == 'provavel')
+            count_conf_pending = len(convidados) - count_confirmed - count_refused - count_probable
+            
+            total_plates_active = count_pending + count_producing + count_reprint
+
+            if total_plates_active > 0 or count_printed > 0 or count_confirmed > 0:
+                with ui.card().classes('w-full q-pa-sm no-shadow rounded-xl q-mb-md').style(
+                    f'background: linear-gradient(135deg, rgba(0,20,40,0.9) 0%, rgba(0,40,60,0.8) 100%); border: 1px solid rgba(0,229,255,0.3);'
+                ):
+                    with ui.row().classes('w-full items-center justify-between wrap gap-2'):
+                        with ui.row().classes('items-center gap-1'):
+                            ui.icon('print', color='cyan').classes('text-lg')
+                            ui.label('FILA DE PRODUÇÃO JADE').classes('text-xs font-bold text-cyan tracking-widest')
+                        
+                        with ui.row().classes('items-center gap-2 wrap'):
+                            # Badges de status com cores
+                            if count_pending > 0:
+                                with ui.badge(f'🟡 {count_pending} Pendentes').props('color=amber text-color=black').classes('text-xs cursor-pointer'):
+                                    pass
+                            if count_producing > 0:
+                                with ui.badge(f'🔵 {count_producing} Em Produção').props('color=blue text-color=white').classes('text-xs'):
+                                    pass
+                            if count_printed > 0:
+                                with ui.badge(f'🟢 {count_printed} Impressas').props('color=green text-color=white').classes('text-xs'):
+                                    pass
+                            if count_reprint > 0:
+                                with ui.badge(f'🔴 {count_reprint} Reimpressão').props('color=red text-color=white').classes('text-xs'):
+                                    pass
+                            if count_delivered > 0:
+                                with ui.badge(f'✅ {count_delivered} Entregues').props('color=teal text-color=white').classes('text-xs'):
+                                    pass
+                        
+                        with ui.row().classes('items-center gap-1'):
+                            ui.label(f'👥 {count_confirmed} conf. | {count_conf_pending} pend. | {count_refused} rec.').classes('text-[10px] text-grey-4')
+                            
+                            # Botões de ação rápida
+                            async def mark_pending_as_producing():
+                                _db = get_service_db_connection() or get_db_connection()
+                                if _db:
+                                    for c in convidados:
+                                        if c.get('status_placa') == 'pendente':
+                                            try:
+                                                _db.table('jade_convidados').update({'status_placa': 'em_producao'}).eq('id', c['id']).execute()
+                                            except Exception:
+                                                pass
+                                    ui.notify(f'🔵 {count_pending} placas movidas para "Em Produção"', color='info')
+                                    render_content.refresh()
+                            
+                            async def mark_producing_as_printed():
+                                _db = get_service_db_connection() or get_db_connection()
+                                if _db:
+                                    for c in convidados:
+                                        if c.get('status_placa') == 'em_producao':
+                                            try:
+                                                _db.table('jade_convidados').update({'status_placa': 'impressa'}).eq('id', c['id']).execute()
+                                            except Exception:
+                                                pass
+                                    ui.notify(f'🟢 {count_producing} placas marcadas como "Impressas"', color='success')
+                                    render_content.refresh()
+                            
+                            if count_pending > 0:
+                                ui.button('▶ Iniciar Produção', on_click=mark_pending_as_producing).props('unelevated color=blue-8 text-color=white dense').classes('text-[10px] q-px-xs')
+                            if count_producing > 0:
+                                ui.button('✅ Marcar Impressas', on_click=mark_producing_as_printed).props('unelevated color=green-8 text-color=white dense').classes('text-[10px] q-px-xs')
 
         if not current_event:
             with ui.column().classes('w-full items-center justify-center q-py-xl gap-4'):
@@ -1091,6 +1172,215 @@ def render_page():
             with ui.row().classes('w-full justify-end q-mt-md'):
                 ui.button('Fechar', on_click=diag.close).props('unelevated color=grey-8 dense')
                 
+        diag.open()
+
+    # ═══════════════════════════════════════════════════════════════
+    # FASE 2: DIALOG DE CONFIRMAÇÃO DE PRESENÇAS EM MASSA
+    # ═══════════════════════════════════════════════════════════════
+    def open_mass_confirmation_dialog(event, convidados):
+        """Dialog para confirmar/recusar presenças em massa, com checkboxes por categoria."""
+        
+        # Estado local do dialog
+        selected_ids = set()
+        filter_status = {'value': 'todos'}
+        
+        with ui.dialog().classes('q-dialog--maximized') as diag, ui.card().classes('w-full').style(
+            f'background: {THEME["bg_panel"]}; max-width: 1200px; max-height: 95vh;'
+        ):
+            # Cabeçalho
+            with ui.row().classes('w-full items-center justify-between q-mb-sm'):
+                with ui.column().classes('gap-0'):
+                    ui.label('✅ CONFIRMAÇÃO DE PRESENÇAS EM MASSA').classes('text-lg font-bold text-cyan')
+                    ui.label(f'Evento: {event.get("nome", "N/I")} — {event.get("data_evento", "")}').classes('text-xs text-grey-4')
+                ui.button(icon='close', on_click=diag.close).props('flat round dense text-color=grey')
+
+            # Agrupar convidados por categoria (excluir acompanhantes — eles seguem o principal)
+            main_guests = [c for c in convidados if not c.get('convidado_principal_id')]
+            categories = {}
+            for c in main_guests:
+                cat = c.get('categoria', 'Sem Categoria') or 'Sem Categoria'
+                if cat not in categories:
+                    categories[cat] = []
+                categories[cat].append(c)
+
+            # Contadores resumo
+            total = len(main_guests)
+            count_conf = sum(1 for c in main_guests if c.get('status_confirmacao') == 'confirmado')
+            count_ref = sum(1 for c in main_guests if c.get('status_confirmacao') == 'recusado')
+            count_prov = sum(1 for c in main_guests if c.get('status_confirmacao') == 'provavel')
+            count_pend = total - count_conf - count_ref - count_prov
+
+            # Barra de resumo
+            with ui.card().classes('w-full q-pa-xs no-shadow rounded-lg q-mb-sm').style('background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);'):
+                with ui.row().classes('w-full items-center justify-between wrap gap-2'):
+                    with ui.row().classes('gap-2 wrap'):
+                        ui.badge(f'📋 Total: {total}').props('color=grey-7 text-color=white').classes('text-xs')
+                        ui.badge(f'✅ Confirmados: {count_conf}').props('color=green text-color=white').classes('text-xs')
+                        ui.badge(f'🟡 Prováveis: {count_prov}').props('color=amber text-color=black').classes('text-xs')
+                        ui.badge(f'❓ Pendentes: {count_pend}').props('color=blue-grey text-color=white').classes('text-xs')
+                        ui.badge(f'❌ Recusados: {count_ref}').props('color=red text-color=white').classes('text-xs')
+
+            # Filtro de status
+            @ui.refreshable
+            def render_filter_bar():
+                with ui.row().classes('w-full items-center gap-2 q-mb-sm wrap'):
+                    ui.label('Filtrar:').classes('text-xs text-grey-4 font-bold')
+                    filter_options = [
+                        ('todos', '🌐 Todos', 'grey-7'),
+                        ('confirmado', '✅ Confirmados', 'green'),
+                        ('pendente', '❓ Pendentes', 'blue-grey'),
+                        ('provavel', '🟡 Prováveis', 'amber'),
+                        ('recusado', '❌ Recusados', 'red'),
+                    ]
+                    for fval, flabel, fcol in filter_options:
+                        is_active = filter_status['value'] == fval
+                        def make_filter_click(v=fval):
+                            def _click():
+                                filter_status['value'] = v
+                                render_filter_bar.refresh()
+                                render_guest_list.refresh()
+                            return _click
+                        ui.button(flabel, on_click=make_filter_click()).props(
+                            f'dense {"unelevated" if is_active else "outline"} color={fcol} {"text-color=white" if is_active else ""}'
+                        ).classes('text-[10px] q-px-xs')
+                    
+                    ui.separator().props('vertical').classes('q-mx-xs')
+                    ui.label(f'🔲 {len(selected_ids)} selecionados').classes('text-[10px] text-grey-5 font-bold')
+
+            render_filter_bar()
+
+            # Lista de convidados agrupados por categoria
+            @ui.refreshable
+            def render_guest_list():
+                with ui.scroll_area().classes('w-full').style('max-height: 55vh;'):
+                    for cat_name, cat_guests in sorted(categories.items()):
+                        # Filtrar conforme o filtro ativo
+                        fval = filter_status['value']
+                        if fval == 'todos':
+                            filtered = cat_guests
+                        elif fval == 'pendente':
+                            filtered = [c for c in cat_guests if c.get('status_confirmacao', 'pendente') not in ('confirmado', 'recusado', 'provavel')]
+                        else:
+                            filtered = [c for c in cat_guests if c.get('status_confirmacao') == fval]
+                        
+                        if not filtered:
+                            continue
+
+                        with ui.expansion(
+                            f'📁 {cat_name} ({len(filtered)} convidados)',
+                            value=True
+                        ).classes('w-full q-mb-xs text-white font-bold').style(
+                            'background: rgba(0,60,80,0.3); border-radius: 8px;'
+                        ):
+                            # Botão selecionar todo o bloco
+                            with ui.row().classes('w-full items-center justify-between q-mb-xs q-px-sm'):
+                                def make_select_all(guests=filtered):
+                                    def _click():
+                                        all_ids = {str(g['id']) for g in guests}
+                                        if all_ids.issubset(selected_ids):
+                                            selected_ids.difference_update(all_ids)
+                                        else:
+                                            selected_ids.update(all_ids)
+                                        render_guest_list.refresh()
+                                        render_filter_bar.refresh()
+                                    return _click
+                                
+                                all_selected = all(str(g['id']) in selected_ids for g in filtered)
+                                ui.button(
+                                    f'{"☑ Desmarcar" if all_selected else "☐ Selecionar"} Todo o Bloco',
+                                    on_click=make_select_all()
+                                ).props(f'dense flat text-color={"cyan" if not all_selected else "amber"}').classes('text-[10px]')
+
+                            for g in filtered:
+                                g_id = str(g['id'])
+                                nome = g.get('nome', 'N/I')
+                                posto = g.get('posto_graduacao', '') or ''
+                                cargo = g.get('cargo_funcao', '') or ''
+                                st = g.get('status_confirmacao', 'pendente') or 'pendente'
+                                max_ac = g.get('max_acompanhantes', 0) or 0
+                                
+                                st_emoji = {'confirmado': '✅', 'recusado': '❌', 'provavel': '🟡', 'pendente': '❓'}.get(st, '❓')
+                                st_color = {'confirmado': 'rgba(0,200,80,0.15)', 'recusado': 'rgba(200,0,0,0.15)', 'provavel': 'rgba(255,200,0,0.15)'}.get(st, 'rgba(255,255,255,0.03)')
+                                
+                                is_checked = g_id in selected_ids
+
+                                with ui.row().classes('w-full items-center q-py-xs q-px-sm rounded-lg gap-2').style(
+                                    f'background: {st_color}; border-bottom: 1px solid rgba(255,255,255,0.05);'
+                                ):
+                                    def make_toggle(gid=g_id):
+                                        def _toggle(e):
+                                            if e.value:
+                                                selected_ids.add(gid)
+                                            else:
+                                                selected_ids.discard(gid)
+                                            render_filter_bar.refresh()
+                                        return _toggle
+
+                                    ui.checkbox('', value=is_checked, on_change=make_toggle()).props('dense dark')
+                                    ui.label(f'{st_emoji}').classes('text-sm')
+                                    ui.label(f'{posto}').classes('text-[10px] text-amber font-bold').style('min-width: 60px;')
+                                    ui.label(f'{nome}').classes('text-xs text-white font-bold flex-grow')
+                                    if cargo:
+                                        ui.label(f'{cargo[:40]}').classes('text-[9px] text-grey-5 truncate').style('max-width: 200px;')
+                                    if max_ac > 0:
+                                        ui.badge(f'+{max_ac} acomp.').props('color=blue-grey text-color=white').classes('text-[9px]')
+
+            render_guest_list()
+
+            # Barra de ações
+            ui.separator().classes('q-my-sm')
+            with ui.row().classes('w-full items-center justify-between wrap gap-2'):
+                with ui.row().classes('gap-2 wrap'):
+                    async def batch_update_status(new_status):
+                        if not selected_ids:
+                            ui.notify('⚠️ Nenhum convidado selecionado.', color='warning')
+                            return
+                        _db = get_service_db_connection() or get_db_connection()
+                        if not _db:
+                            ui.notify('❌ Banco indisponível.', color='negative')
+                            return
+                        
+                        # Determinar status_placa com base no status de confirmação
+                        if new_status == 'confirmado':
+                            new_placa = 'pendente'  # Placa precisa ser impressa
+                        elif new_status == 'provavel':
+                            new_placa = 'pendente'  # Tier 2 — preventivo
+                        elif new_status == 'recusado':
+                            new_placa = 'nao_necessaria'
+                        else:
+                            new_placa = 'nao_necessaria'
+                        
+                        count_updated = 0
+                        for gid in list(selected_ids):
+                            try:
+                                _db.table('jade_convidados').update({
+                                    'status_confirmacao': new_status,
+                                    'status_placa': new_placa
+                                }).eq('id', int(gid)).execute()
+                                count_updated += 1
+                            except Exception:
+                                # Fallback: coluna status_placa pode não existir ainda
+                                try:
+                                    _db.table('jade_convidados').update({
+                                        'status_confirmacao': new_status
+                                    }).eq('id', int(gid)).execute()
+                                    count_updated += 1
+                                except Exception as e2:
+                                    print(f"[BATCH UPDATE ERR] {e2}")
+                        
+                        status_labels = {'confirmado': 'CONFIRMADOS', 'recusado': 'RECUSADOS', 'provavel': 'PROVÁVEIS', 'pendente': 'PENDENTES'}
+                        ui.notify(f'✅ {count_updated} convidados marcados como {status_labels.get(new_status, new_status)}!', color='positive')
+                        selected_ids.clear()
+                        diag.close()
+                        render_content.refresh()
+
+                    ui.button('✅ Confirmar Selecionados', icon='check_circle', on_click=lambda: batch_update_status('confirmado')).props('unelevated color=green text-color=white dense').classes('text-xs q-px-sm')
+                    ui.button('🟡 Marcar Prováveis (Tier 2)', icon='trending_up', on_click=lambda: batch_update_status('provavel')).props('unelevated color=amber text-color=black dense').classes('text-xs q-px-sm')
+                    ui.button('❌ Recusar Selecionados', icon='cancel', on_click=lambda: batch_update_status('recusado')).props('unelevated color=red text-color=white dense').classes('text-xs q-px-sm')
+                    ui.button('❓ Voltar a Pendente', icon='pending', on_click=lambda: batch_update_status('pendente')).props('outline color=grey dense').classes('text-xs q-px-sm')
+
+                ui.button('Fechar', icon='close', on_click=diag.close).props('unelevated color=grey-8 dense').classes('text-xs')
+
         diag.open()
 
     def open_print_cards_dialog(event, convidados, layout):
