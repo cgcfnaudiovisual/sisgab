@@ -145,9 +145,11 @@ def render_page():
                     ui.button('Novo Evento', icon='add', on_click=open_create_event_dialog).props('unelevated color=primary text-color=black dense').classes('q-px-sm')
                     
                     if current_event:
+                        ui.button('⚡ Placa Express', icon='bolt', on_click=lambda: open_express_plate_dialog(current_event, convidados, layout)).props('unelevated color=deep-orange text-color=white dense bold').classes('q-px-sm')
                         ui.button('✅ Confirmar Presenças', icon='how_to_reg', on_click=lambda: open_mass_confirmation_dialog(current_event, convidados)).props('unelevated color=green text-color=white dense bold').classes('q-px-sm')
                         ui.button('📥 Importar Excel', icon='file_upload', on_click=lambda: open_smart_excel_import_dialog(current_event)).props('unelevated color=deep-purple text-color=white dense bold').classes('q-px-sm')
-                        ui.button('🖨️ Imprimir Placas por Fileira', icon='print', on_click=lambda: open_print_cards_dialog(current_event, convidados, layout)).props('unelevated color=cyan text-color=black dense bold').classes('q-px-sm')
+                        ui.button('🏛️ Cadastro Mestre', icon='account_balance', on_click=lambda: open_master_authorities_dialog(current_event)).props('unelevated color=indigo text-color=white dense bold').classes('q-px-sm')
+                        ui.button('🖨️ Imprimir Placas', icon='print', on_click=lambda: open_print_cards_dialog(current_event, convidados, layout)).props('unelevated color=cyan text-color=black dense bold').classes('q-px-sm')
                         ui.button('🔍 Scanner & Conferência', icon='qr_code_scanner', on_click=lambda: open_tactical_scanner_dialog(current_event, convidados)).props('unelevated color=amber text-color=black dense bold').classes('q-px-sm')
                         
                         ui.button('Editar Evento', icon='edit', on_click=lambda: open_edit_event_dialog(current_event, layout)).props('unelevated color=accent dense outline').classes('q-px-sm')
@@ -1570,6 +1572,253 @@ def render_page():
 
             ui.upload(on_upload=handle_upload, auto_upload=True).props('accept=.xlsx dark').classes('w-full q-my-sm')
             
+            with ui.row().classes('w-full justify-end q-mt-sm'):
+                ui.button('Fechar', icon='close', on_click=diag.close).props('unelevated color=grey-8 dense').classes('text-xs')
+
+        diag.open()
+
+    # ═══════════════════════════════════════════════════════════════
+    # FASE 5: CADASTRO MESTRE DE AUTORIDADES (REUTILIZÁVEL)
+    # ═══════════════════════════════════════════════════════════════
+    def open_master_authorities_dialog(event):
+        """Dialog para gerenciar e importar autoridades da base mestre permanente."""
+        with ui.dialog().classes('q-dialog--maximized') as diag, ui.card().classes('w-full').style(
+            f'background: {THEME["bg_panel"]}; max-width: 1100px; max-height: 90vh;'
+        ):
+            with ui.row().classes('w-full items-center justify-between q-mb-sm'):
+                with ui.column().classes('gap-0'):
+                    ui.label('🏛️ CADASTRO MESTRE DE AUTORIDADES').classes('text-lg font-bold text-indigo')
+                    ui.label(f'Base permanente de convidados | Solenidade Ativa: {event.get("nome", "N/I")}').classes('text-xs text-grey-4')
+                ui.button(icon='close', on_click=diag.close).props('flat round dense text-color=grey')
+
+            db = get_service_db_connection() or get_db_connection()
+            master_list = []
+            if db:
+                try:
+                    res_m = db.table('jade_autoridades_base').select('*').order('categoria', desc=False).execute()
+                    master_list = res_m.data if res_m.data else []
+                except Exception as e_m:
+                    print(f"[MASTER FETCH ERR] {e_m}")
+
+            # Se a base mestre estiver vazia, sugerir sincronizar os convidados do evento ativo
+            with ui.row().classes('w-full items-center justify-between bg-black/30 q-pa-sm rounded-lg border border-white/10 q-mb-md wrap gap-2'):
+                ui.label(f'📊 {len(master_list)} autoridades cadastradas na Base Mestre').classes('text-xs font-bold text-white')
+                
+                with ui.row().classes('gap-2 wrap'):
+                    async def save_current_to_master():
+                        if not db:
+                            return
+                        res_c = db.table('jade_convidados').select('*').eq('evento_id', event['id']).execute()
+                        convs = res_c.data if res_c.data else []
+                        if not convs:
+                            ui.notify('⚠️ Nenhum convidado no evento ativo para exportar.', color='warning')
+                            return
+                        
+                        count_added = 0
+                        for c in convs:
+                            if c.get('convidado_principal_id'):
+                                continue
+                            nome = (c.get('nome') or '').strip()
+                            posto = (c.get('posto_graduacao') or '').strip()
+                            cat = c.get('categoria', 'Geral')
+                            cargo = c.get('cargo_funcao', '')
+                            
+                            res_chk = db.table('jade_autoridades_base').select('id').eq('nome', nome).eq('posto_graduacao', posto).execute()
+                            if not res_chk.data:
+                                try:
+                                    db.table('jade_autoridades_base').insert({
+                                        'nome': nome,
+                                        'posto_graduacao': posto,
+                                        'cargo_funcao': cargo,
+                                        'categoria': cat,
+                                        'max_acompanhantes': c.get('max_acompanhantes', 0)
+                                    }).execute()
+                                    count_added += 1
+                                except Exception as err_m:
+                                    print(f"[SAVE MASTER ERR] {err_m}")
+                        
+                        ui.notify(f'✅ {count_added} novas autoridades salvas no Cadastro Mestre!', color='positive')
+                        diag.close()
+                        render_content.refresh()
+
+                    ui.button('💾 Salvar Convidados Deste Evento no Mestre', icon='save', on_click=save_current_to_master).props('unelevated color=indigo dense').classes('text-xs')
+
+            categories = {}
+            for m in master_list:
+                cat = m.get('categoria', 'Geral') or 'Geral'
+                if cat not in categories:
+                    categories[cat] = []
+                categories[cat].append(m)
+
+            selected_master_ids = set()
+
+            with ui.scroll_area().classes('w-full').style('max-height: 55vh;'):
+                if not master_list:
+                    with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
+                        ui.icon('account_balance', size='3rem', color='indigo')
+                        ui.label('O Cadastro Mestre está vazio. Clique no botão acima para exportar os convidados do evento atual para a Base Mestre.').classes('text-xs text-center max-w-md')
+                else:
+                    for cat_name, items in sorted(categories.items()):
+                        with ui.expansion(f'📁 {cat_name} ({len(items)} autoridades)', value=True).classes('w-full q-mb-xs text-white font-bold').style('background: rgba(63,81,181,0.15); border-radius: 8px;'):
+                            for item in items:
+                                m_id = str(item['id'])
+                                is_sel = m_id in selected_master_ids
+                                
+                                def make_master_toggle(mid=m_id):
+                                    def _toggle(e):
+                                        if e.value:
+                                            selected_master_ids.add(mid)
+                                        else:
+                                            selected_master_ids.discard(mid)
+                                    return _toggle
+
+                                with ui.row().classes('w-full items-center q-py-xs q-px-sm rounded-lg gap-2 border-b border-white/5'):
+                                    ui.checkbox('', value=is_sel, on_change=make_master_toggle()).props('dense dark')
+                                    ui.label(f"{item.get('posto_graduacao', '') or ''}").classes('text-[10px] text-amber font-bold').style('min-width: 60px;')
+                                    ui.label(f"{item.get('nome', '')}").classes('text-xs text-white font-bold flex-grow')
+                                    if item.get('cargo_funcao'):
+                                        ui.label(f"{item['cargo_funcao'][:40]}").classes('text-[9px] text-grey-4 truncate').style('max-width: 200px;')
+
+            ui.separator().classes('q-my-sm')
+            with ui.row().classes('w-full justify-between items-center'):
+                async def import_selected_from_master():
+                    if not selected_master_ids:
+                        ui.notify('⚠️ Nenhuma autoridade selecionada.', color='warning')
+                        return
+                    if not db:
+                        return
+                    
+                    event_id = event['id']
+                    count_imported = 0
+                    for mid in list(selected_master_ids):
+                        m_item = next((x for x in master_list if str(x['id']) == mid), None)
+                        if m_item:
+                            nome = m_item['nome']
+                            posto = m_item.get('posto_graduacao', '')
+                            cargo = m_item.get('cargo_funcao', '')
+                            cat = m_item.get('categoria', 'Geral')
+                            max_ac = m_item.get('max_acompanhantes', 0)
+                            
+                            res_chk = db.table('jade_convidados').select('id').eq('evento_id', event_id).eq('nome', nome).eq('posto_graduacao', posto).execute()
+                            if not res_chk.data:
+                                try:
+                                    res_ins = db.table('jade_convidados').insert({
+                                        'evento_id': event_id,
+                                        'nome': nome,
+                                        'posto_graduacao': posto,
+                                        'cargo_funcao': cargo,
+                                        'categoria': cat,
+                                        'max_acompanhantes': max_ac,
+                                        'status_confirmacao': 'pendente',
+                                        'status_placa': 'nao_necessaria'
+                                    }).execute()
+                                    if res_ins.data:
+                                        sync_companions(res_ins.data[0]['id'], nome, max_ac, event_id, cat)
+                                    count_imported += 1
+                                except Exception as err_imp:
+                                    print(f"[IMPORT FROM MASTER ERR] {err_imp}")
+                    
+                    ui.notify(f'✅ {count_imported} autoridades importadas do Cadastro Mestre para o evento!', color='positive')
+                    selected_master_ids.clear()
+                    diag.close()
+                    render_content.refresh()
+
+                ui.button('📥 Puxar Selecionadas para Este Evento', icon='download', on_click=import_selected_from_master).props('unelevated color=indigo text-color=white dense').classes('text-xs')
+                ui.button('Fechar', icon='close', on_click=diag.close).props('unelevated color=grey-8 dense').classes('text-xs')
+
+        diag.open()
+
+
+    # ═══════════════════════════════════════════════════════════════
+    # FASE 6: PLACA EXPRESS (GERAÇÃO E IMPRESSÃO EM 1 CLIQUE)
+    # ═══════════════════════════════════════════════════════════════
+    def open_express_plate_dialog(event, convidados, layout):
+        """Dialog de busca tática ultra-rápida para impressão individual de placas no ato."""
+        search_input = {'text': ''}
+        
+        with ui.dialog() as diag, ui.card().classes('w-full').style(
+            f'background: {THEME["bg_panel"]}; max-width: 650px;'
+        ):
+            with ui.row().classes('w-full items-center justify-between q-mb-xs'):
+                with ui.column().classes('gap-0'):
+                    ui.label('⚡ PLACA EXPRESS (1 CLIQUE)').classes('text-md font-bold text-deep-orange')
+                    ui.label('Busca rápida para confeccionar placa no ato do evento').classes('text-[11px] text-grey-4')
+                ui.button(icon='close', on_click=diag.close).props('flat round dense text-color=grey')
+
+            ui.input(
+                placeholder='🔍 Digite o nome ou posto da autoridade...',
+                on_change=lambda e: [search_input.update({'text': e.value}), results_container.refresh()]
+            ).props('dark outlined dense autofocus').classes('w-full q-mb-sm text-xs')
+
+            @ui.refreshable
+            def results_container():
+                query = search_input['text'].strip().lower()
+                if not query:
+                    ui.label('💡 Digite acima para buscar entre os convidados cadastrados.').classes('text-xs text-grey-5 q-py-md text-center w-full')
+                    return
+
+                matches = [
+                    c for c in convidados
+                    if query in (c.get('nome') or '').lower()
+                    or query in (c.get('posto_graduacao') or '').lower()
+                    or query in (c.get('cargo_funcao') or '').lower()
+                ]
+
+                if not matches:
+                    with ui.column().classes('w-full items-center justify-center q-py-md gap-1'):
+                        ui.label(f'Nenhuma autoridade encontrada para "{query}".').classes('text-xs text-amber font-bold')
+                        
+                        async def quick_add_express():
+                            _db = get_service_db_connection() or get_db_connection()
+                            if _db:
+                                try:
+                                    res = _db.table('jade_convidados').insert({
+                                        'evento_id': event['id'],
+                                        'nome': query.upper(),
+                                        'posto_graduacao': 'AUTORIDADE',
+                                        'cargo_funcao': 'Convidado de Honra',
+                                        'categoria': 'Express',
+                                        'status_confirmacao': 'confirmado',
+                                        'status_placa': 'impressa'
+                                    }).execute()
+                                    ui.notify(f'⚡ {query.upper()} adicionado e marcado para impressão!', color='positive')
+                                    diag.close()
+                                    render_content.refresh()
+                                    if res.data:
+                                        open_print_cards_dialog(event, [res.data[0]], layout)
+                                except Exception as err_q:
+                                    ui.notify(f'Erro: {err_q}', color='negative')
+
+                        ui.button('➕ Adicionar e Imprimir Agora', icon='add', on_click=quick_add_express).props('unelevated color=deep-orange dense').classes('text-xs q-mt-xs')
+                    return
+
+                with ui.column().classes('w-full gap-1 max-h-[350px] overflow-y-auto q-pr-xs'):
+                    for m in matches[:15]:
+                        g_nome = m.get('nome', 'N/I')
+                        g_posto = m.get('posto_graduacao', '') or ''
+                        g_cargo = m.get('cargo_funcao', '') or ''
+                        g_assento = m.get('assento_id', '') or 'Sem Assento'
+                        
+                        with ui.card().classes('w-full q-pa-xs no-shadow rounded-lg border border-white/10').style('background: rgba(255,255,255,0.03);'):
+                            with ui.row().classes('w-full items-center justify-between wrap gap-1'):
+                                with ui.column().classes('gap-0 flex-grow'):
+                                    ui.label(f"{g_posto} {g_nome}").classes('text-xs font-bold text-white')
+                                    ui.label(f"{g_cargo} • 🪑 Assento: {g_assento}").classes('text-[10px] text-cyan')
+
+                                async def make_print_express(guest=m):
+                                    _db = get_service_db_connection() or get_db_connection()
+                                    if _db:
+                                        try:
+                                            _db.table('jade_convidados').update({'status_placa': 'impressa'}).eq('id', guest['id']).execute()
+                                        except Exception:
+                                            pass
+                                    diag.close()
+                                    open_print_cards_dialog(event, [guest], layout)
+
+                                ui.button('🖨️ IMPRIMIR AGORA', icon='print', on_click=make_print_express).props('unelevated color=deep-orange text-color=white dense bold').classes('text-[10px] q-px-xs')
+
+            results_container()
+
             with ui.row().classes('w-full justify-end q-mt-sm'):
                 ui.button('Fechar', icon='close', on_click=diag.close).props('unelevated color=grey-8 dense').classes('text-xs')
 
