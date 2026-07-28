@@ -462,14 +462,14 @@ def render_page():
                 
                 with ui.row().classes('items-center gap-2'):
                     ui.button('Modelo Excel', icon='download', on_click=download_template).props('unelevated color=cyan dense outline').classes('text-xs')
-                    
-                    with ui.button('Importar Lista', icon='upload').props('unelevated color=primary text-color=black dense').classes('text-xs'):
-                        ui.upload(
-                            on_upload=lambda e: handle_import_list(e, current_event['id']),
-                            multiple=False,
-                            auto_upload=True
-                        ).props('dark accept=.xlsx,.csv').classes('hidden')
-                        
+
+                    # ui.upload com aparência de botão
+                    ui.upload(
+                        on_upload=lambda e: handle_import_list(e, current_event['id']),
+                        multiple=False,
+                        auto_upload=True
+                    ).props('accept=.xlsx,.csv flat color=primary text-color=black dense label="Importar Lista" icon=upload').classes('text-xs')
+
                     ui.button('➕ Adicionar Convidado Principal', icon='person_add', on_click=lambda: open_edit_guest_dialog(None, current_event['id'])).props('unelevated color=primary text-color=black dense').classes('text-xs')
 
             # Estado de colapsar tudo / expandir tudo se desejado
@@ -2226,7 +2226,7 @@ def render_page():
                     ).props('dark outlined dense').style('min-width: 300px;')
 
                     with ui.row().classes('items-center gap-2 q-ml-sm'):
-                        chk_only_confirmed = ui.checkbox('Só Confirmados / Fila Ativa', value=True).props('dark dense').classes('text-xs text-amber-3')
+                        chk_only_confirmed = ui.checkbox('Só Confirmados / Fila Ativa', value=False).props('dark dense').classes('text-xs text-amber-3')
 
                     with ui.row().classes('items-center gap-2'):
                         chk_logo = ui.checkbox('Brasão MB', value=True).props('dark dense').classes('text-xs text-grey-3')
@@ -2431,9 +2431,21 @@ def render_page():
                 show_qr = chk_qr.value
                 show_rank = chk_rank.value
                 only_confirmed = chk_only_confirmed.value
-                bg_url = input_template_bg.value.strip() if hasattr(input_template_bg, 'value') else ''
-                brasao_l_url = upload_brasao_left.value.strip() if upload_brasao_left.value else ''
-                brasao_r_url = upload_brasao_right.value.strip() if upload_brasao_right.value else ''
+                bg_url = ''
+                try:
+                    bg_url = input_template_bg.value.strip() if hasattr(input_template_bg, 'value') else ''
+                except Exception:
+                    bg_url = ''
+                brasao_l_url = ''
+                try:
+                    brasao_l_url = upload_brasao_left.value.strip() if upload_brasao_left.value else ''
+                except Exception:
+                    brasao_l_url = ''
+                brasao_r_url = ''
+                try:
+                    brasao_r_url = upload_brasao_right.value.strip() if upload_brasao_right.value else ''
+                except Exception:
+                    brasao_r_url = ''
                 use_bg = bool(bg_url) or current_model == 'template_custom'
 
                 # Resolve logo: preset ou custom URL
@@ -2451,6 +2463,18 @@ def render_page():
                     return True
 
                 with ui.column().classes('w-full gap-4 print-area'):
+                    # Verifica se há algum convidado com assento alocado para exibir
+                    total_com_assento = sum(
+                        len([c for c in list_c_raw if c.get('assento_id')])
+                        for list_c_raw in allocated_by_row.values()
+                    )
+                    if total_com_assento == 0:
+                        with ui.column().classes('w-full items-center justify-center q-py-xl gap-3'):
+                            ui.icon('chair_alt', size='3rem', color='cyan-3')
+                            ui.label('Nenhum convidado alocado no mapa de assentos ainda.').classes('text-sm text-grey-4 text-center')
+                            ui.label('Acesse o mapa de assentos acima, clique em um assento e vincule um convidado para que as placas apareçam aqui.').classes('text-xs text-grey-6 text-center')
+                        return
+
                     for row_label, list_c_raw in allocated_by_row.items():
                         list_c = [c for c in list_c_raw if should_print(c)]
                         if not list_c:
