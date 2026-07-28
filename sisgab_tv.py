@@ -403,11 +403,14 @@ def render_page():
                                         pautas_filtradas.append((p, p_dt))
                                 except Exception:
                                     pass
-                            pautas_filtradas.sort(key=lambda x: x[1])
+                            pautas_filtradas.sort(key=lambda x: x[1] if isinstance(x, (tuple, list)) and len(x) > 1 else datetime.min)
 
                             if pautas_filtradas:
                                 with ui.column().classes('w-full gap-2 max-h-[420px] overflow-y-auto q-pr-xs'):
-                                    for p, p_dt in pautas_filtradas:
+                                    for item in pautas_filtradas:
+                                        if not (isinstance(item, (tuple, list)) and len(item) == 2):
+                                            continue
+                                        p, p_dt = item[0], item[1]
                                         dia_semana_lbl = p_dt.strftime('%a').upper()
                                         dia_num = p_dt.strftime('%d/%m')
                                         st_val = str(p.get('status', '')).strip().lower()
@@ -458,11 +461,14 @@ def render_page():
                                         pautas_filtradas.append((p, p_dt))
                                 except Exception:
                                     pass
-                            pautas_filtradas.sort(key=lambda x: x[1])
+                            pautas_filtradas.sort(key=lambda x: x[1] if isinstance(x, (tuple, list)) and len(x) > 1 else datetime.min)
 
                             if pautas_filtradas:
                                 with ui.column().classes('w-full gap-2 max-h-[420px] overflow-y-auto q-pr-xs'):
-                                    for p, p_dt in pautas_filtradas:
+                                    for item in pautas_filtradas:
+                                        if not (isinstance(item, (tuple, list)) and len(item) == 2):
+                                            continue
+                                        p, p_dt = item[0], item[1]
                                         dia_num = p_dt.strftime('%d/%m')
                                         st_val = str(p.get('status', '')).strip().lower()
                                         status_color = 'text-red' if st_val in ('pendente', 'pendentes') else 'text-cyan'
@@ -536,11 +542,14 @@ def render_page():
                                     pautas_hoje_amanha.append((p, p_dt))
                             except Exception:
                                 pass
-                        pautas_hoje_amanha.sort(key=lambda x: (x[1], x[0].get('hora_evento', '')))
+                        pautas_hoje_amanha.sort(key=lambda x: (x[1] if isinstance(x, (tuple, list)) and len(x) > 1 else '', x[0].get('hora_evento', '') if isinstance(x, (tuple, list)) and len(x) > 0 and isinstance(x[0], dict) else ''))
 
                     if pautas_hoje_amanha:
                         with ui.column().classes('w-full gap-2 max-h-[420px] overflow-y-auto q-pr-xs'):
-                            for p, p_dt in pautas_hoje_amanha:
+                            for item in pautas_hoje_amanha:
+                                if not (isinstance(item, (tuple, list)) and len(item) == 2):
+                                    continue
+                                p, p_dt = item[0], item[1]
                                 is_hoje = (p_dt == hoje_obj)
                                 tag_dia = "HOJE" if is_hoje else "AMANHÃ"
                                 tag_bg = "rgba(245,158,11,0.2)" if is_hoje else "rgba(0,229,255,0.15)"
@@ -609,7 +618,8 @@ def render_page():
                         ('anchor', '⚓ SETOR NAVAL'),
                         ('event', '🎂 EFEMÉRIDES MB')
                     ]
-                    icon_name, title_lbl = slide_headers[slide_idx]
+                    header_item = slide_headers[slide_idx] if 0 <= slide_idx < len(slide_headers) else ('announcement', '📢 BOLETINS COMSOC')
+                    icon_name, title_lbl = header_item[0], header_item[1]
 
                     with ui.card().classes('w-full q-pa-sm no-shadow rounded-xl border border-cyan-950/60 flex-col justify-between flex-grow').style('background: rgba(10,15,30,0.45);'):
                         with ui.column().classes('w-full gap-2'):
@@ -660,7 +670,10 @@ def render_page():
                                         ('13 DEZ', 'Dia do Marinheiro'),
                                         ('23 OUT', 'Dia do Aviador Naval')
                                     ]
-                                    for dia_ef, tit_ef in efemerides_list:
+                                    for item_ef in efemerides_list:
+                                        if not (isinstance(item_ef, (tuple, list)) and len(item_ef) == 2):
+                                            continue
+                                        dia_ef, tit_ef = item_ef[0], item_ef[1]
                                         with ui.row().classes('w-full justify-between items-center bg-black/20 px-2 py-0.5 rounded text-[10px] border border-white/5'):
                                             ui.label(tit_ef).classes('text-white text-[9px] font-semibold truncate max-w-[170px]')
                                             ui.label(dia_ef).classes('text-amber-4 font-mono text-[8px] font-bold')
