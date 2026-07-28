@@ -2567,22 +2567,35 @@ def render_page():
                     bg_url = input_template_bg.value.strip() if hasattr(input_template_bg, 'value') else ''
                 except Exception:
                     bg_url = ''
+                SUPABASE_LOGOS_BUCKET_URL = "https://ruabgndnhgdverqlgvef.supabase.co/storage/v1/object/public/logos"
+
+                def resolve_logo_url(inp_val):
+                    if not inp_val:
+                        return ""
+                    val = str(inp_val).strip()
+                    if val.startswith('http://') or val.startswith('https://'):
+                        return val
+                    return f"{SUPABASE_LOGOS_BUCKET_URL}/{val.lstrip('/')}"
+
                 brasao_l_url = ''
                 try:
-                    brasao_l_url = upload_brasao_left.value.strip() if upload_brasao_left.value else ''
+                    raw_l = upload_brasao_left.value.strip() if upload_brasao_left.value else ''
+                    brasao_l_url = resolve_logo_url(raw_l)
                 except Exception:
                     brasao_l_url = ''
                 brasao_r_url = ''
                 try:
-                    brasao_r_url = upload_brasao_right.value.strip() if upload_brasao_right.value else ''
+                    raw_r = upload_brasao_right.value.strip() if upload_brasao_right.value else ''
+                    brasao_r_url = resolve_logo_url(raw_r)
                 except Exception:
                     brasao_r_url = ''
                 use_bg = bool(bg_url) or current_model == 'template_custom'
 
-                # Resolve logo: preset ou custom URL
+                # Resolve logo: preset ou custom URL do Supabase Storage
                 LOGO_URLS = {
-                    'cfn': 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/21/Distintivo_do_Corpo_de_Fuzileiros_Navais_do_Brasil.svg/240px-Distintivo_do_Corpo_de_Fuzileiros_Navais_do_Brasil.svg.png',
-                    'mb':  'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/Bras%C3%A3o_Marinha_do_Brasil.svg/220px-Bras%C3%A3o_Marinha_do_Brasil.svg.png',
+                    'cgcfn': f"{SUPABASE_LOGOS_BUCKET_URL}/brasao_cgcfn.png",
+                    'mb':    f"{SUPABASE_LOGOS_BUCKET_URL}/brasao_marinha.png",
+                    'cfn':   'https://upload.wikimedia.org/wikipedia/commons/thumb/2/21/Distintivo_do_Corpo_de_Fuzileiros_Navais_do_Brasil.svg/240px-Distintivo_do_Corpo_de_Fuzileiros_Navais_do_Brasil.svg.png',
                 }
                 logo_preset_val = sel_logo_preset.value if hasattr(sel_logo_preset, 'value') else 'cfn'
                 resolved_logo_url = brasao_l_url if logo_preset_val == 'custom' and brasao_l_url else LOGO_URLS.get(logo_preset_val, '')
