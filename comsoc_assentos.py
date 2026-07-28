@@ -2197,16 +2197,59 @@ def render_page():
     # FASE 6: PLACA EXPRESS (GERAÇÃO E IMPRESSÃO EM 1 CLIQUE)
     # ═══════════════════════════════════════════════════════════════
     def open_direct_print_preview_dialog(event, guest_list):
-        """Abre diretamente a janela de impressão do navegador (1 clique) sem abrir o menu de configuração."""
+        """Abre diretamente a janela de impressão limpa do navegador (1 clique) sem abrir o menu de configuração."""
+        js_print_code = """
+        (function() {
+            var area = document.querySelector('.print-area');
+            if (!area) { window.print(); return; }
+            var win = window.open('', '_blank', 'width=1050,height=800');
+            if (!win) { window.print(); return; }
+            
+            var cssStyles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+                                 .map(s => s.outerHTML).join('\\n');
+                                 
+            win.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>JADE - Impressão de Placas</title>
+                    ${cssStyles}
+                    <style>
+                        @page { size: A4 portrait; margin: 5mm; }
+                        body { margin: 0 !important; padding: 0 !important; background: #ffffff !important; color: #000000 !important; font-family: Arial, sans-serif !important; }
+                        .print-hide, .q-header, .q-drawer, .q-footer { display: none !important; }
+                        .print-area { display: block !important; position: static !important; width: 100% !important; visibility: visible !important; }
+                        .prisma-card-a4-slot { border: 1.5pt solid #1a1a1a !important; outline: 0.5pt solid #1a1a1a !important; outline-offset: -2.5mm !important; margin-bottom: 8mm !important; page-break-inside: avoid !important; background: #ffffff !important; color: #000000 !important; }
+                        .prisma-conteudo-central { display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; text-align: center !important; width: 100% !important; }
+                        .prisma-texto-reservado { font-weight: bold !important; letter-spacing: 2px !important; text-transform: uppercase !important; color: #1f4e79 !important; font-size: 14pt !important; }
+                        .prisma-posto-extenso { font-weight: bold !important; text-transform: uppercase !important; letter-spacing: 1px !important; font-size: 14pt !important; }
+                        .prisma-nome-autoridade { font-weight: 900 !important; text-transform: uppercase !important; font-size: 22pt !important; line-height: 1.1 !important; }
+                    </style>
+                </head>
+                <body>
+                    <div class="print-area">
+                        ${area.innerHTML}
+                    </div>
+                    <script>
+                        window.onload = function() {
+                            setTimeout(function() { window.print(); window.close(); }, 400);
+                        };
+                    <\\/script>
+                </body>
+                </html>
+            `);
+            win.document.close();
+        })();
+        """
         with ui.dialog() as print_diag, ui.card().classes('q-pa-md').style('min-width: 800px; max-width: 95vw; max-height: 90vh; overflow-y: auto; background: #fff; color: #000;'):
             with ui.row().classes('w-full justify-between items-center q-mb-md print-hide'):
                 ui.label('⚡ IMPRESSÃO DIRETA DE EMERGÊNCIA (1 CLIQUE)').classes('text-md font-bold text-deep-orange')
                 with ui.row().classes('items-center gap-2'):
-                    ui.button('🖨️ DISPARAR IMPRESSORA AGORA', icon='print', on_click=lambda: ui.run_javascript('window.print()')).props('unelevated color=deep-orange text-color=white bold').classes('text-xs')
+                    ui.button('🖨️ DISPARAR IMPRESSORA AGORA', icon='print', on_click=lambda: ui.run_javascript(js_print_code)).props('unelevated color=deep-orange text-color=white bold').classes('text-xs')
                     ui.button('Fechar', on_click=print_diag.close).props('unelevated color=grey-8 dense').classes('text-xs')
 
-            # Auto-dispara impressão do navegador após 300ms
-            ui.timer(0.3, lambda: ui.run_javascript('window.print()'), once=True)
+            # Auto-dispara janela de impressão isolada limpa após 300ms
+            ui.timer(0.4, lambda: ui.run_javascript(js_print_code), once=True)
 
             with ui.column().classes('w-full print-area gap-4'):
                 for c in guest_list:
@@ -3204,6 +3247,12 @@ def render_page():
                                             with ui.element('div').classes('prisma-conteudo-central'):
                                                 if is_acomp:
                                                     ui.label(termo_reservado).classes('prisma-texto-reservado').style(f'font-size: {f_reservado}pt;')
+                                                    if almirantado_info['title']:
+                                                        ui.label(almirantado_info['title']).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
+                                                    elif posto:
+                                                        ui.label(posto.upper()).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
+                                                    ui.label(nome_limpo).classes('prisma-nome-autoridade').style(f'font-size: {f_nome}pt;')
+                                                else:
                                                     if almirantado_info['title']:
                                                         ui.label(almirantado_info['title']).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
                                                     elif posto:
