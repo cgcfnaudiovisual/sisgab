@@ -23,8 +23,17 @@ def get_main_menu_keyboard(is_operator=False):
     return markup
 
 
+def get_demanda_summary_inline_keyboard(demanda_id):
+    """Gera teclado inline resumido (apenas 1 botão para abrir o menu da demanda)."""
+    markup = types.InlineKeyboardMarkup()
+    markup.row(
+        types.InlineKeyboardButton("⚙️ Gerenciar / Opções da Demanda", callback_data=f"opcoes_dem:{demanda_id}")
+    )
+    return markup
+
+
 def get_manage_demanda_inline_keyboard(demanda_id, status='aprovada'):
-    """Gera teclado inline contextual baseado no status da demanda."""
+    """Gera teclado inline contextual completo baseado no status da demanda."""
     markup = types.InlineKeyboardMarkup(row_width=2)
     st = str(status).lower().strip()
 
@@ -61,7 +70,7 @@ def get_manage_demanda_inline_keyboard(demanda_id, status='aprovada'):
             types.InlineKeyboardButton("❌ Rejeitar / Cancelar", callback_data=f"rejeitar_dem:{demanda_id}")
         )
     elif st in ('concluida', 'concluído', 'concluido'):
-        # Concluída: apenas ver detalhes (já adicionado acima)
+        # Concluída
         markup.row(
             types.InlineKeyboardButton("🔄 Reabrir Pauta", callback_data=f"reabrir_dem:{demanda_id}")
         )
@@ -71,6 +80,11 @@ def get_manage_demanda_inline_keyboard(demanda_id, status='aprovada'):
             types.InlineKeyboardButton("🎯 Concluir", callback_data=f"concluir_dem:{demanda_id}"),
             types.InlineKeyboardButton("👤 Atribuir Equipe", callback_data=f"equipe_dem:{demanda_id}")
         )
+
+    # Botão para recolher o menu de opções
+    markup.row(
+        types.InlineKeyboardButton("⬅️ Ocultar Opções", callback_data=f"fechar_opcoes_dem:{demanda_id}")
+    )
 
     return markup
 

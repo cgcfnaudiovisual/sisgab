@@ -393,7 +393,7 @@ def register_common_handlers(bot):
                         await bot.reply_to(message, "🟢 Nenhuma demanda ativa pendente de gestão no momento.", reply_markup=get_main_menu_keyboard(is_operator))
                         return
                     
-                    from .keyboards import get_manage_demanda_inline_keyboard
+                    from .keyboards import get_demanda_summary_inline_keyboard
                     
                     # Mapear status para emoji visual
                     status_emoji = {
@@ -404,7 +404,7 @@ def register_common_handlers(bot):
                         'ajustes': '🟠 EM AJUSTE'
                     }
                     
-                    await bot.reply_to(message, f"📋 **PAUTAS ATIVAS PARA GESTÃO ({len(demandas)})**\nSelecione uma demanda para ver ações disponíveis:")
+                    await bot.reply_to(message, f"📋 **PAUTAS ATIVAS PARA GESTÃO ({len(demandas)})**\nClique em **⚙️ Gerenciar** na demanda desejada para abrir as opções:")
                     for d in demandas:
                         d_id = d.get('id')
                         tit = d.get('titulo_evento', 'Sem Título')
@@ -438,7 +438,7 @@ def register_common_handlers(bot):
                             f"{equipe_line}"
                             f"{servicos_line}"
                         )
-                        await bot.send_message(chat_id, msg_item, reply_markup=get_manage_demanda_inline_keyboard(d_id, status=raw_st), parse_mode='Markdown')
+                        await bot.send_message(chat_id, msg_item, reply_markup=get_demanda_summary_inline_keyboard(d_id), parse_mode='Markdown')
                 except Exception as e_dem:
                     await bot.reply_to(message, f"❌ Erro ao listar demandas: {e_dem}")
 
@@ -1005,7 +1005,7 @@ def register_common_handlers(bot):
                     await bot.reply_to(message, "Selecione uma das opções nos botões abaixo:", reply_markup=get_confirm_demanda_keyboard())
             return
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith(('concluir_dem:', 'rejeitar_dem:', 'equipe_dem:', 'edithora_dem:', 'sel_mil:', 'quick_mil:', 'detalhe_dem:', 'aprovar_dem:', 'editlocal_dem:', 'edittitulo_dem:', 'reabrir_dem:')))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(('opcoes_dem:', 'fechar_opcoes_dem:', 'concluir_dem:', 'rejeitar_dem:', 'equipe_dem:', 'edithora_dem:', 'sel_mil:', 'quick_mil:', 'detalhe_dem:', 'aprovar_dem:', 'editlocal_dem:', 'edittitulo_dem:', 'reabrir_dem:')))
     async def handle_demanda_management_callbacks(call):
         chat_id = call.message.chat.id
         data = call.data
@@ -1021,8 +1021,39 @@ def register_common_handlers(bot):
 
         user_name = profile.get('nome_guerra') or profile.get('nome', 'Operador')
 
+        # --- EXPANDIR OPÇÕES DA DEMANDA ---
+        if data.startswith('opcoes_dem:'):
+            dem_id = data.split(':')[1]
+            try:
+                res_d = db.table('demandas_comunicacao').select('*').eq('id', dem_id).execute()
+                if res_d.data:
+                    raw_st = str(res_d.data[0].get('status', 'pendente')).lower()
+                    from .keyboards import get_manage_demanda_inline_keyboard
+                    await bot.edit_message_reply_markup(
+                        chat_id=chat_id,
+                        message_id=call.message.message_id,
+                        reply_markup=get_manage_demanda_inline_keyboard(dem_id, status=raw_st)
+                    )
+                await bot.answer_callback_query(call.id, "Opções abertas!")
+            except Exception as e:
+                await bot.answer_callback_query(call.id, f"Erro: {e}")
+
+        # --- OCULTAR OPÇÕES DA DEMANDA ---
+        elif data.startswith('fechar_opcoes_dem:'):
+            dem_id = data.split(':')[1]
+            try:
+                from .keyboards import get_demanda_summary_inline_keyboard
+                await bot.edit_message_reply_markup(
+                    chat_id=chat_id,
+                    message_id=call.message.message_id,
+                    reply_markup=get_demanda_summary_inline_keyboard(demanda_id=dem_id)
+                )
+                await bot.answer_callback_query(call.id, "Opções recolhidas.")
+            except Exception as e:
+                await bot.answer_callback_query(call.id, f"Erro: {e}")
+
         # --- CONCLUIR PAUTA ---
-        if data.startswith('concluir_dem:'):
+        elif data.startswith('concluir_dem:'):
             dem_id = data.split(':')[1]
             try:
                 db.table('demandas_comunicacao').update({'status': 'concluida'}).eq('id', dem_id).execute()
