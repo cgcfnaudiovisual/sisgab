@@ -2429,6 +2429,41 @@ def render_page():
                         input_template_bg = ui.input(placeholder='Cole a URL da imagem de fundo ou deixe vazio para fundo padrão...').props('dark outlined dense').classes('w-full')
                         ui.label('As informações (Nome, Posto, Assento, QR Code) serão sobrepostas sobre a imagem.').classes('text-[9px] text-grey-6')
 
+                ui.separator().classes('q-my-sm').style('border-color: rgba(255,255,255,0.08);')
+
+                # ── Linha 5: Ajustes Finais de Escala, Tamanho e Posicionamento X/Y ──
+                with ui.expansion('📐 Ajustes Finais de Escala, Tamanho (mm/pt) e Posicionamento Fino (X/Y)', icon='tune').classes('w-full bg-cyan-950/40 border border-cyan-500/20 rounded-lg text-cyan text-xs q-mb-sm'):
+                    with ui.row().classes('w-full gap-3 q-pa-sm wrap items-end'):
+                        with ui.column().classes('gap-0'):
+                            ui.label('Largura Logo (mm):').classes('text-[10px] text-grey-4')
+                            input_logo_width = ui.number(value=16, min=5, max=60, step=1).props('dark outlined dense').style('width: 110px;')
+                        with ui.column().classes('gap-0'):
+                            ui.label('Posição Logo X (mm):').classes('text-[10px] text-grey-4')
+                            input_logo_pos_x = ui.number(value=6, min=0, max=60, step=1).props('dark outlined dense').style('width: 110px;')
+                        with ui.column().classes('gap-0'):
+                            ui.label('Posição Logo Y (mm):').classes('text-[10px] text-grey-4')
+                            input_logo_pos_y = ui.number(value=4, min=0, max=40, step=1).props('dark outlined dense').style('width: 110px;')
+
+                        with ui.column().classes('gap-0'):
+                            ui.label('Tamanho QR Code (mm):').classes('text-[10px] text-grey-4')
+                            input_qr_size = ui.number(value=13, min=5, max=40, step=1).props('dark outlined dense').style('width: 120px;')
+                        with ui.column().classes('gap-0'):
+                            ui.label('Posição QR Code X (mm):').classes('text-[10px] text-grey-4')
+                            input_qr_pos_x = ui.number(value=5, min=0, max=60, step=1).props('dark outlined dense').style('width: 120px;')
+                        with ui.column().classes('gap-0'):
+                            ui.label('Posição QR Code Y (mm):').classes('text-[10px] text-grey-4')
+                            input_qr_pos_y = ui.number(value=3, min=0, max=40, step=1).props('dark outlined dense').style('width: 120px;')
+
+                        with ui.column().classes('gap-0'):
+                            ui.label('Fonte Nome (pt):').classes('text-[10px] text-grey-4')
+                            input_font_nome = ui.number(value=22, min=10, max=40, step=1).props('dark outlined dense').style('width: 100px;')
+                        with ui.column().classes('gap-0'):
+                            ui.label('Fonte Posto (pt):').classes('text-[10px] text-grey-4')
+                            input_font_posto = ui.number(value=13, min=8, max=30, step=1).props('dark outlined dense').style('width: 100px;')
+                        with ui.column().classes('gap-0'):
+                            ui.label('Fonte Reservado (pt):').classes('text-[10px] text-grey-4')
+                            input_font_reservado = ui.number(value=18, min=10, max=36, step=1).props('dark outlined dense').style('width: 110px;')
+
                 with ui.row().classes('w-full justify-end q-mt-sm'):
                     ui.button('🔄 Atualizar Pré-Visualização', on_click=lambda: preview_container.refresh()).props('unelevated color=cyan text-color=black dense bold').classes('text-xs')
 
@@ -2669,14 +2704,35 @@ def render_page():
                     brasao_r_url = ''
                 use_bg = bool(bg_url) or current_model == 'template_custom'
 
-                # Resolve logo: preset ou custom URL do Supabase Storage
+                # Resolve logo: preset, URL do Supabase Storage ou custom URL
                 LOGO_URLS = {
                     'cgcfn': f"{SUPABASE_LOGOS_BUCKET_URL}/brasao_cgcfn.png",
                     'mb':    f"{SUPABASE_LOGOS_BUCKET_URL}/brasao_marinha.png",
                     'cfn':   'https://upload.wikimedia.org/wikipedia/commons/thumb/2/21/Distintivo_do_Corpo_de_Fuzileiros_Navais_do_Brasil.svg/240px-Distintivo_do_Corpo_de_Fuzileiros_Navais_do_Brasil.svg.png',
                 }
                 logo_preset_val = sel_logo_preset.value if hasattr(sel_logo_preset, 'value') else 'cfn'
-                resolved_logo_url = brasao_l_url if logo_preset_val == 'custom' and brasao_l_url else LOGO_URLS.get(logo_preset_val, '')
+                
+                if logo_preset_val in LOGO_URLS:
+                    resolved_logo_url = LOGO_URLS[logo_preset_val]
+                elif logo_preset_val and (logo_preset_val.startswith('http://') or logo_preset_val.startswith('https://')):
+                    resolved_logo_url = logo_preset_val
+                elif logo_preset_val == 'custom' and brasao_l_url:
+                    resolved_logo_url = brasao_l_url
+                else:
+                    resolved_logo_url = brasao_l_url or LOGO_URLS.get('cfn', '')
+
+                # Escala e Posicionamento Fino
+                logo_w = float(input_logo_width.value or 16)
+                logo_x = float(input_logo_pos_x.value or 6)
+                logo_y = float(input_logo_pos_y.value or 4)
+
+                qr_size = float(input_qr_size.value or 13)
+                qr_x = float(input_qr_pos_x.value or 5)
+                qr_y = float(input_qr_pos_y.value or 3)
+
+                f_nome = float(input_font_nome.value or 22)
+                f_posto = float(input_font_posto.value or 13)
+                f_reservado = float(input_font_reservado.value or 18)
 
                 # Filtro de impressão: só confirmados ou todos com placa
                 def should_print(c):
@@ -2729,9 +2785,9 @@ def render_page():
 
                                             logo_html = ''
                                             if show_logo and resolved_logo_url:
-                                                logo_html = f'<img src="{resolved_logo_url}" style="width:44px;height:44px;object-fit:contain;" />'
+                                                logo_html = f'<img src="{resolved_logo_url}" style="width:{logo_w}mm;height:auto;object-fit:contain;" />'
                                             else:
-                                                logo_html = '<span style="font-size:26px;">⚓</span>'
+                                                logo_html = f'<span style="font-size:{logo_w}px;">⚓</span>'
 
                                             stars_html = ''
                                             if stars and show_rank:
@@ -2740,7 +2796,7 @@ def render_page():
 
                                             reservado_html = '<div class="jade-reservado">RESERVADO</div>' if is_acomp else ''
                                             assento_html = f'<div class="jade-assento-badge">ASSENTO {assento}</div>' if assento else ''
-                                            qr_html = f'<img src="{qr_url}" style="width:54px;height:54px;background:#fff;border-radius:3px;border:1px solid #ccc;" /><div style="font-size:7px;color:#888;font-family:monospace;">{assento}</div>' if show_qr else ''
+                                            qr_html = f'<img src="{qr_url}" style="width:{qr_size}mm;height:{qr_size}mm;background:#fff;border-radius:3px;border:1px solid #ccc;" /><div style="font-size:7px;color:#888;font-family:monospace;">{assento}</div>' if show_qr else ''
 
                                             ui.html(f'''
                                             <div class="jade-placa-horiz">
@@ -2752,8 +2808,8 @@ def render_page():
                                                 </div>
                                                 <div class="jade-placa-center">
                                                     {reservado_html}
-                                                    <div class="jade-posto-ext">{posto_ext}</div>
-                                                    <div class="jade-nome-guerra">{nome_guerra}</div>
+                                                    <div class="jade-posto-ext" style="font-size:{f_posto}pt;">{posto_ext}</div>
+                                                    <div class="jade-nome-guerra" style="font-size:{f_nome}pt;">{nome_guerra}</div>
                                                     {assento_html}
                                                 </div>
                                                 <div class="jade-placa-right">
@@ -2774,46 +2830,47 @@ def render_page():
                                         posto = c.get('posto_graduacao') or ''
                                         almirantado_info = parse_almirantado_stars(posto)
                                         nome_limpo = clean_authority_name(c['nome'])
+                                        target_logo = resolved_logo_url or brasao_l_url
                                         
                                         border_style = 'border: 1.5pt solid #1a1a1a; outline: 0.5pt solid #1a1a1a; outline-offset: -2.5mm;' if show_double_border else 'border: 1.5pt solid #1a1a1a;'
                                         
                                         with ui.element('div').classes('prisma-card-a4-slot').style(border_style):
-                                            # Canto Superior Esquerdo: Brasão + Estrelas / PNG Insígnias
-                                            with ui.element('div').classes('prisma-canto-esquerdo'):
-                                                if show_logo and brasao_l_url:
-                                                    ui.image(brasao_l_url).classes('prisma-brasao-om')
+                                            # Canto Superior Esquerdo: Brasão + Estrelas / PNG Insígnias com Posição X/Y e Escala
+                                            with ui.element('div').style(f'position: absolute; top: {logo_y}mm; left: {logo_x}mm; z-index: 10; display: flex; flex-direction: column; align-items: flex-start;'):
+                                                if show_logo and target_logo:
+                                                    ui.image(target_logo).style(f'width: {logo_w}mm; height: auto; object-fit: contain;')
                                                 elif show_logo:
-                                                    ui.label('⚓').classes('text-xl text-black')
+                                                    ui.label('⚓').style(f'font-size: {logo_w}px; color: #000;')
                                                 
                                                 if show_rank:
                                                     if almirantado_info['png_asset']:
-                                                        ui.image(almirantado_info['png_asset']).classes('w-8 h-auto q-mt-xs')
+                                                        ui.image(almirantado_info['png_asset']).style(f'width: {logo_w}mm; height: auto; margin-top: 1mm;')
                                                     elif almirantado_info['stars']:
                                                         ui.label(almirantado_info['stars']).classes('prisma-estrelas-esquerda')
 
-                                            # Canto Superior Direito: QR Code Opcional
+                                            # Canto Superior Direito: QR Code com Posição X/Y e Escala
                                             if show_qr:
-                                                qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=70x70&data={c['id']}&color=000000&bgcolor=ffffff"
-                                                with ui.element('div').style('position: absolute; top: 3mm; right: 5mm; z-index: 10; font-size: 7px; text-align: center;'):
-                                                    ui.image(qr_url).style('width: 13mm; height: 13mm;')
+                                                qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={c['id']}&color=000000&bgcolor=ffffff"
+                                                with ui.element('div').style(f'position: absolute; top: {qr_y}mm; right: {qr_x}mm; z-index: 10; font-size: 7px; text-align: center;'):
+                                                    ui.image(qr_url).style(f'width: {qr_size}mm; height: {qr_size}mm;')
                                                     if c.get('assento_id'):
                                                         ui.label(f"{c.get('assento_id', '')}").classes('text-[7px] font-mono text-black font-bold')
 
-                                            # Bloco Central - Totalmente Centralizado (Nome limpo da autoridade, sem ACOMP. ou indicativo numérico)
+                                            # Bloco Central - Totalmente Centralizado com Fontes Dinâmicas
                                             with ui.element('div').classes('prisma-conteudo-central'):
                                                 if is_acomp:
-                                                    ui.label(termo_reservado).classes('prisma-texto-reservado')
+                                                    ui.label(termo_reservado).classes('prisma-texto-reservado').style(f'font-size: {f_reservado}pt;')
                                                     if almirantado_info['title']:
-                                                        ui.label(almirantado_info['title']).classes('prisma-posto-extenso')
+                                                        ui.label(almirantado_info['title']).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
                                                     elif posto:
-                                                        ui.label(posto.upper()).classes('prisma-posto-extenso')
-                                                    ui.label(nome_limpo).classes('prisma-nome-autoridade')
+                                                        ui.label(posto.upper()).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
+                                                    ui.label(nome_limpo).classes('prisma-nome-autoridade').style(f'font-size: {f_nome}pt;')
                                                 else:
                                                     if almirantado_info['title']:
-                                                        ui.label(almirantado_info['title']).classes('prisma-posto-extenso')
+                                                        ui.label(almirantado_info['title']).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
                                                     elif posto:
-                                                        ui.label(posto.upper()).classes('prisma-posto-extenso')
-                                                    ui.label(nome_limpo).classes('prisma-nome-autoridade')
+                                                        ui.label(posto.upper()).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
+                                                    ui.label(nome_limpo).classes('prisma-nome-autoridade').style(f'font-size: {f_nome}pt;')
 
                             # ═══ MODELO: TEMPLATE CUSTOMIZADO ═══
                             elif current_model == 'template_custom' or use_bg:
