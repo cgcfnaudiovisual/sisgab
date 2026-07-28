@@ -283,19 +283,19 @@ def render_page():
                                         with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg transition-all').style(
                                             f'background: rgba(255,255,255,0.02); border-left: 4px solid {border_col}; border-top: 1px solid rgba(255,255,255,0.05);'
                                         ):
-                                            with ui.row().classes('w-full justify-between items-center no-wrap'):
-                                                with ui.row().classes('items-center gap-2 no-wrap'):
-                                                    ui.label(f"{dia_semana_lbl} {dia_num}").classes('text-xs font-black text-cyan font-mono').style('min-width: 75px;')
-                                                    ui.label(p.get('titulo_evento', 'Sem Título')).classes('text-xs font-bold text-white truncate max-w-[170px]')
+                                            with ui.row().classes('w-full justify-between items-start no-wrap gap-2'):
+                                                with ui.row().classes('items-start gap-2 col-grow'):
+                                                    ui.label(f"{dia_semana_lbl} {dia_num}").classes('text-xs font-black text-cyan font-mono shrink-0 q-mt-xs').style('min-width: 75px;')
+                                                    ui.label(p.get('titulo_evento', 'Sem Título')).classes('text-xs font-bold text-white leading-tight break-words col-grow')
                                                 
                                                 if is_pend:
-                                                    ui.badge('PENDENTE').props('color=amber text-color=black').classes('text-[8px] font-bold')
+                                                    ui.badge('PENDENTE').props('color=amber text-color=black').classes('text-[8px] font-bold shrink-0 q-mt-xs')
                                                 else:
-                                                    ui.badge('APROVADA').props('color=cyan text-color=black').classes('text-[8px] font-bold')
+                                                    ui.badge('APROVADA').props('color=cyan text-color=black').classes('text-[8px] font-bold shrink-0 q-mt-xs')
 
                                             with ui.row().classes('w-full justify-between items-center q-mt-xs text-[10px] text-grey-4'):
-                                                ui.label(f"🕒 {p.get('hora_evento', '09:00')} | 📍 {p.get('local_evento', 'Gabinete')}").classes('truncate max-w-[190px]')
-                                                ui.label(f"👤 {p.get('solicitante_nome', 'CGCFN')}").classes('text-grey-5 text-[9px] truncate max-w-[80px]')
+                                                ui.label(f"🕒 {p.get('hora_evento', '09:00')} | 📍 {p.get('local_evento', 'Gabinete')}").classes('break-words col-grow')
+                                                ui.label(f"👤 {p.get('solicitante_nome', 'CGCFN')}").classes('text-grey-5 text-[9px] shrink-0')
                             else:
                                 with ui.column().classes('w-full h-48 items-center justify-center gap-2 text-grey-5'):
                                     ui.icon('event_busy', size='2.5rem')
@@ -403,16 +403,16 @@ def render_page():
                                 with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg').style(
                                     f'background: {tag_bg}; border: 1px solid {border_tag};'
                                 ):
-                                    with ui.row().classes('w-full justify-between items-center no-wrap'):
-                                        with ui.row().classes('items-center gap-2'):
-                                            ui.badge(tag_dia, color='amber-9' if is_hoje else 'cyan-9').classes('text-[9px] font-black')
-                                            ui.label(p.get('titulo_evento', 'Sem Título')).classes('text-xs font-bold text-white truncate max-w-[180px]')
+                                    with ui.row().classes('w-full justify-between items-start no-wrap gap-2'):
+                                        with ui.row().classes('items-start gap-2 col-grow'):
+                                            ui.badge(tag_dia, color='amber-9' if is_hoje else 'cyan-9').classes('text-[9px] font-black shrink-0 q-mt-xs')
+                                            ui.label(p.get('titulo_evento', 'Sem Título')).classes('text-xs font-bold text-white leading-tight break-words col-grow')
                                         
-                                        ui.badge(st_val.upper()).props('color=black text-color=white outline').classes('text-[8px]')
+                                        ui.badge(st_val.upper()).props('color=black text-color=white outline').classes('text-[8px] shrink-0 q-mt-xs')
 
                                     with ui.row().classes('w-full justify-between items-center q-mt-xs text-[10px] text-grey-3'):
-                                        ui.label(f"🕒 {p.get('hora_evento', '09:00')} | 📍 {p.get('local_evento', 'Gabinete')}").classes('truncate max-w-[200px]')
-                                        ui.label(f"👤 {p.get('solicitante_nome', 'CGCFN')}").classes('text-grey-4 text-[9px]')
+                                        ui.label(f"🕒 {p.get('hora_evento', '09:00')} | 📍 {p.get('local_evento', 'Gabinete')}").classes('break-words col-grow')
+                                        ui.label(f"👤 {p.get('solicitante_nome', 'CGCFN')}").classes('text-grey-4 text-[9px] shrink-0')
                     else:
                         with ui.column().classes('w-full h-48 items-center justify-center gap-2 text-grey-5'):
                             ui.icon('event_available', size='2.5rem')
