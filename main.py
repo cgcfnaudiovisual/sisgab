@@ -229,7 +229,7 @@ sisgab_menu_categories = [
             {'name': 'Entrega em Hot', 'icon': 'photo_library', 'path': '/comsoc_galeria', 'subtitle': 'Upload de fotos em campo'},
             {'name': 'Arquivo e Histórico', 'icon': 'history', 'path': '/comsoc_historico', 'subtitle': 'Busca e links de coberturas passadas'},
             {'name': 'Aniversariantes & Datas', 'icon': 'cake', 'path': '/comsoc_aniversariantes', 'subtitle': 'Mensagens com IA e impressão'},
-            {'name': 'Monitor TV (COMSOC TV)', 'icon': 'tv', 'path': '/sisgab_tv', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Modo TV tático'},
+            {'name': 'Monitor TV (COMSOC TV)', 'icon': 'tv', 'path': '/sisgab_tv', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Modo TV tático', 'new_tab': True},
         ]
     },
     {
@@ -516,12 +516,12 @@ def build_layout_base():
                                         print(f"[MENU BADGE ERR] {e}")
                                 
                             # Função para registrar clique e redirecionar
-                            def make_click_handler(target_path=item['path']):
+                            def make_click_handler(target_path=item['path'], new_tab=item.get('new_tab', False)):
                                 def on_click():
                                     current_clicks = app.storage.user.setdefault('menu_clicks', {})
                                     current_clicks[target_path] = current_clicks.get(target_path, 0) + 1
                                     app.storage.user['menu_clicks'] = current_clicks
-                                    ui.navigate.to(target_path)
+                                    ui.navigate.to(target_path, new_tab=new_tab)
                                 return on_click
                                 
                             with ui.button(on_click=make_click_handler()).props('flat no-caps').classes('w-full q-pa-none q-ma-none text-left').style('margin-bottom: 2px;'):

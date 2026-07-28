@@ -93,6 +93,7 @@ def render_page():
 
                 ui.button('⚡ Missão Rápida', on_click=open_tv_missao_rapida_dialog).props('unelevated color=deep-orange-9 text-color=white dense bold icon=flash_on').classes('text-xs q-px-sm')
                 ui.button('🪪 Placas JADE', on_click=lambda: app.navigate.to('/comsoc_assentos')).props('outline color=indigo-4 text-color=white dense bold icon=badge').classes('text-xs q-px-sm')
+                ui.button('🏠 Dashboard', on_click=lambda: app.navigate.to('/')).props('outline color=cyan text-color=white dense bold icon=dashboard').classes('text-xs q-px-sm')
                 
                 def toggle_alerts(val):
                     app.storage.user['tv_alerts_enabled'] = val
