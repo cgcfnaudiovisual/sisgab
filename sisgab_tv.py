@@ -118,6 +118,28 @@ def render_page():
         @ui.refreshable
         def render_tv_dashboard():
             db = fresh_db()
+            efetivo_nomes = {}
+
+            def get_militar_nome(m_id):
+                if m_id is None:
+                    return None
+                try:
+                    return efetivo_nomes.get(int(m_id)) or efetivo_nomes.get(str(m_id))
+                except:
+                    return efetivo_nomes.get(str(m_id))
+
+            def translate_day(day_lbl):
+                day_lbl = str(day_lbl).upper().strip()
+                mapping = {
+                    'MON': 'SEG',
+                    'TUE': 'TER',
+                    'WED': 'QUA',
+                    'THU': 'QUI',
+                    'FRI': 'SEX',
+                    'SAT': 'SAB',
+                    'SUN': 'DOM'
+                }
+                return mapping.get(day_lbl, day_lbl)
 
             # 1. CARGA DE KPIS OPERACIONAIS E ESTRATÉGICOS
             total_pautas = 0
@@ -167,8 +189,13 @@ def render_page():
                             pct = int((concluidas_cnt / (concluidas_cnt + aprovadas_cnt)) * 100)
                             taxa_entregas_str = f"{pct}%"
 
-                    res_ef = db.table('efetivo').select('id').execute()
+                    res_ef = db.table('efetivo').select('id, nome_guerra, posto_grad').execute()
                     tot_ef = len(res_ef.data) if res_ef.data else 0
+                    if res_ef.data:
+                        for m in res_ef.data:
+                            pg = m.get('posto_grad') or ''
+                            ng = m.get('nome_guerra') or 'Militar'
+                            efetivo_nomes[m['id']] = f"{pg} {ng}".strip()
 
                     res_pr = db.table('presenca_diaria').select('id, status').eq('data', hoje_str).execute()
                     if res_pr.data:
@@ -306,14 +333,20 @@ def render_page():
                 card_style = 'background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.5);' if is_live else 'background: rgba(0,229,255,0.1); border: 1px solid rgba(0,229,255,0.3);'
                 badge_color = 'red-10' if is_live else 'cyan-9'
                 
+                hr_txt = str(pauta_alerta.get('hora_evento', '09:00'))[:5]
+                enc_id = pauta_alerta.get('encarregado_id')
+                enc_nome = get_militar_nome(enc_id)
+
                 with ui.card().classes('w-full q-pa-sm no-shadow rounded-xl flex-row items-center justify-between no-wrap q-mb-xs').style(f'{card_style} {"animate-pulse" if is_live else ""};'):
-                    with ui.row().classes('items-center gap-2'):
+                    with ui.row().classes('items-center gap-2 col-grow truncate'):
                         ui.badge(badge_text, color=badge_color).classes('text-xs font-black tracking-wider q-px-sm')
-                        ui.label(pauta_alerta.get('titulo_evento', '')).classes('text-xs font-bold text-white truncate max-w-[450px]')
-                    with ui.row().classes('items-center gap-3 text-[11px] text-grey-3 font-semibold'):
-                        ui.label(f"📍 {pauta_alerta.get('local_evento', 'Gabinete')}")
-                        ui.label(f"🕒 {pauta_alerta.get('hora_evento', '')}")
-                        ui.label(f"👤 Solicitante: {pauta_alerta.get('solicitante_nome', 'COMSOC')}")
+                        ui.label(pauta_alerta.get('titulo_evento', 'Sem Título').upper()).classes('text-xs font-bold text-white truncate max-w-[450px]')
+                    with ui.row().classes('items-center gap-3 text-[11px] text-slate-200 font-bold shrink-0'):
+                        ui.label(f"🕒 {hr_txt}").classes('text-amber-4')
+                        ui.label(f"📍 {pauta_alerta.get('local_evento', 'Gabinete').upper()}").classes('text-cyan-4')
+                        if enc_nome:
+                            ui.badge(f"🎖️ {enc_nome.upper()}", color='green-9').classes('text-[9px] font-bold')
+                        ui.label(f"👤 {pauta_alerta.get('solicitante_nome', 'COMSOC').upper()}").classes('text-grey-4 text-[10px]')
 
             # ── GRIDS PRINCIPAIS DO MONITOR ──
             with ui.grid(columns=1).classes('w-full gap-4 flex-grow gt-xs').style('grid-template-columns: 1.2fr 1.1fr 1fr; margin-top: 6px;'):
@@ -385,19 +418,30 @@ def render_page():
                                         with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg transition-all').style(
                                             f'background: rgba(255,255,255,0.02); border-left: 4px solid {border_col}; border-top: 1px solid rgba(255,255,255,0.05);'
                                         ):
+                                            dia_semana_trad = translate_day(dia_semana_lbl)
+                                            hr_txt = str(p.get('hora_evento', '09:00'))[:5]
+                                            enc_id = p.get('encarregado_id')
+                                            enc_nome = get_militar_nome(enc_id)
+
                                             with ui.row().classes('w-full justify-between items-start no-wrap gap-2'):
                                                 with ui.row().classes('items-start gap-2 col-grow'):
-                                                    ui.label(f"{dia_semana_lbl} {dia_num}").classes('text-xs font-black text-cyan font-mono shrink-0 q-mt-xs').style('min-width: 75px;')
-                                                    ui.label(p.get('titulo_evento', 'Sem Título')).classes('text-xs font-bold text-white leading-tight break-words col-grow')
+                                                    ui.label(f"{dia_semana_trad} {dia_num}").classes('text-xs font-black text-cyan font-mono shrink-0 q-mt-xs').style('min-width: 75px;')
+                                                    ui.label(p.get('titulo_evento', 'Sem Título').upper()).classes('text-xs font-bold text-white leading-tight break-words col-grow')
                                                 
                                                 if is_pend:
-                                                    ui.badge('PENDENTE').props('color=amber text-color=black').classes('text-[8px] font-bold shrink-0 q-mt-xs')
+                                                    ui.badge('PENDENTE', color='amber-9').classes('text-[8px] font-bold shrink-0 q-mt-xs')
                                                 else:
-                                                    ui.badge('APROVADA').props('color=cyan text-color=black').classes('text-[8px] font-bold shrink-0 q-mt-xs')
+                                                    ui.badge('APROVADA', color='green-9').classes('text-[8px] font-bold shrink-0 q-mt-xs')
 
-                                            with ui.row().classes('w-full justify-between items-center q-mt-xs text-[10px] text-grey-4'):
-                                                ui.label(f"🕒 {p.get('hora_evento', '09:00')} | 📍 {p.get('local_evento', 'Gabinete')}").classes('break-words col-grow')
-                                                ui.label(f"👤 {p.get('solicitante_nome', 'CGCFN')}").classes('text-grey-5 text-[9px] shrink-0')
+                                            with ui.row().classes('w-full justify-between items-center q-mt-xs text-[10px] text-slate-300'):
+                                                with ui.row().classes('items-center gap-2 wrap col-grow'):
+                                                    ui.label(f"🕒 {hr_txt}").classes('text-amber-4 font-bold')
+                                                    ui.label('|').classes('text-white/20')
+                                                    ui.label(f"📍 {p.get('local_evento', 'Gabinete').upper()}").classes('text-cyan-4 font-bold')
+                                                    if enc_nome:
+                                                        ui.label('|').classes('text-white/20')
+                                                        ui.label(f"🎖️ {enc_nome.upper()}").classes('text-green-4 font-black')
+                                                ui.label(f"👤 {p.get('solicitante_nome', 'CGCFN').upper()}").classes('text-grey-4 text-[9px] shrink-0 font-semibold')
                             else:
                                 with ui.column().classes('w-full h-48 items-center justify-center gap-2 text-grey-5'):
                                     ui.icon('event_busy', size='2.5rem')
@@ -422,7 +466,7 @@ def render_page():
                                         st_val = str(p.get('status', '')).strip().lower()
                                         status_color = 'text-red' if st_val in ('pendente', 'pendentes') else 'text-cyan'
                                         with ui.row().classes('w-full items-center justify-between border-b border-white/5 py-1 text-xs'):
-                                            ui.label(f"📅 {dia_num} - {p.get('titulo_evento', 'Sem Título')}").classes('text-white font-bold truncate max-w-[210px]')
+                                            ui.label(f"📅 {dia_num} - {p.get('titulo_evento', 'Sem Título').upper()}").classes('text-white font-bold truncate max-w-[210px]')
                                             ui.label(st_val.upper()).classes(f'text-[8px] font-bold shrink-0 {status_color}')
                             else:
                                 with ui.column().classes('w-full h-48 items-center justify-center gap-2 text-grey-5'):
@@ -438,7 +482,7 @@ def render_page():
                                     ui.label('🔴 ANÁLISE').classes('text-[9px] font-black text-red-4 text-center w-full tracking-wider q-mb-xs')
                                     for p in col_pend:
                                         with ui.card().classes('w-full q-pa-xs no-shadow rounded-sm').style('background: rgba(255,0,0,0.05); border: 1px solid rgba(255,0,0,0.15);'):
-                                            ui.label(p.get('titulo_evento', 'Sem Título')).classes('text-[9.5px] font-bold text-white truncate')
+                                            ui.label(p.get('titulo_evento', 'Sem Título').upper()).classes('text-[9.5px] font-bold text-white truncate')
                                             ui.label(str(p.get('data_evento', ''))[5:]).classes('text-[8px] text-grey-4')
                                     if not col_pend:
                                         ui.label('Fila Limpa').classes('text-[8px] text-grey-6 text-center w-full py-4')
@@ -447,7 +491,7 @@ def render_page():
                                     ui.label('🟢 APROVADO').classes('text-[9px] font-black text-cyan-4 text-center w-full tracking-wider q-mb-xs')
                                     for p in col_aprov:
                                         with ui.card().classes('w-full q-pa-xs no-shadow rounded-sm').style('background: rgba(0,229,255,0.05); border: 1px solid rgba(0,229,255,0.15);'):
-                                            ui.label(p.get('titulo_evento', 'Sem Título')).classes('text-[9.5px] font-bold text-white truncate')
+                                            ui.label(p.get('titulo_evento', 'Sem Título').upper()).classes('text-[9.5px] font-bold text-white truncate')
                                             ui.label(str(p.get('data_evento', ''))[5:]).classes('text-[8px] text-grey-4')
                                     if not col_aprov:
                                         ui.label('Sem pautas').classes('text-[8px] text-grey-6 text-center w-full py-4')
@@ -466,7 +510,7 @@ def render_page():
 
                                     with ui.card().classes('w-full q-pa-xs no-shadow rounded-lg').style('background: rgba(255,255,255,0.02); border-left: 3px solid rgba(0,229,255,0.3);'):
                                         with ui.row().classes('w-full justify-between items-center no-wrap'):
-                                            ui.label(f"{data_txt} - {p.get('titulo_evento', 'Sem Título')}").classes('text-xs font-bold text-white truncate max-w-[200px]')
+                                            ui.label(f"{data_txt} - {p.get('titulo_evento', 'Sem Título').upper()}").classes('text-xs font-bold text-white truncate max-w-[200px]')
                                             ui.badge(st_val.upper()).props(f'color={st_badge_color}').classes('text-[8px]')
 
                 # =========================================================================
@@ -505,16 +549,30 @@ def render_page():
                                 with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg').style(
                                     f'background: {tag_bg}; border: 1px solid {border_tag};'
                                 ):
+                                    hr_txt = str(p.get('hora_evento', '09:00'))[:5]
+                                    enc_id = p.get('encarregado_id')
+                                    enc_nome = get_militar_nome(enc_id)
+
                                     with ui.row().classes('w-full justify-between items-start no-wrap gap-2'):
                                         with ui.row().classes('items-start gap-2 col-grow'):
                                             ui.badge(tag_dia, color='amber-9' if is_hoje else 'cyan-9').classes('text-[9px] font-black shrink-0 q-mt-xs')
-                                            ui.label(p.get('titulo_evento', 'Sem Título')).classes('text-xs font-bold text-white leading-tight break-words col-grow')
+                                            ui.label(p.get('titulo_evento', 'Sem Título').upper()).classes('text-xs font-bold text-white leading-tight break-words col-grow')
                                         
-                                        ui.badge(st_val.upper()).props('color=black text-color=white outline').classes('text-[8px] shrink-0 q-mt-xs')
+                                        # Badges uniformes
+                                        if st_val in ('pendente', 'pendentes'):
+                                            ui.badge('PENDENTE', color='amber-9').classes('text-[8px] font-bold shrink-0 q-mt-xs')
+                                        else:
+                                            ui.badge('APROVADA', color='green-9').classes('text-[8px] font-bold shrink-0 q-mt-xs')
 
-                                    with ui.row().classes('w-full justify-between items-center q-mt-xs text-[10px] text-grey-3'):
-                                        ui.label(f"🕒 {p.get('hora_evento', '09:00')} | 📍 {p.get('local_evento', 'Gabinete')}").classes('break-words col-grow')
-                                        ui.label(f"👤 {p.get('solicitante_nome', 'CGCFN')}").classes('text-grey-4 text-[9px] shrink-0')
+                                    with ui.row().classes('w-full justify-between items-center q-mt-xs text-[10px] text-slate-300'):
+                                        with ui.row().classes('items-center gap-2 wrap col-grow'):
+                                            ui.label(f"🕒 {hr_txt}").classes('text-amber-4 font-bold')
+                                            ui.label('|').classes('text-white/20')
+                                            ui.label(f"📍 {p.get('local_evento', 'Gabinete').upper()}").classes('text-cyan-4 font-bold')
+                                            if enc_nome:
+                                                ui.label('|').classes('text-white/20')
+                                                ui.label(f"🎖️ {enc_nome.upper()}").classes('text-green-4 font-black')
+                                        ui.label(f"👤 {p.get('solicitante_nome', 'CGCFN').upper()}").classes('text-grey-4 text-[9px] shrink-0 font-semibold')
                     else:
                         with ui.column().classes('w-full h-48 items-center justify-center gap-2 text-grey-5'):
                             ui.icon('event_available', size='2.5rem')
