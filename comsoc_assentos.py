@@ -2196,92 +2196,257 @@ def render_page():
     # ═══════════════════════════════════════════════════════════════
     # FASE 6: PLACA EXPRESS (GERAÇÃO E IMPRESSÃO EM 1 CLIQUE)
     # ═══════════════════════════════════════════════════════════════
+    def open_direct_print_preview_dialog(event, guest_list):
+        """Abre diretamente a janela de impressão do navegador (1 clique) sem abrir o menu de configuração."""
+        with ui.dialog() as print_diag, ui.card().classes('q-pa-md').style('min-width: 800px; max-width: 95vw; max-height: 90vh; overflow-y: auto; background: #fff; color: #000;'):
+            with ui.row().classes('w-full justify-between items-center q-mb-md print-hide'):
+                ui.label('⚡ IMPRESSÃO DIRETA DE EMERGÊNCIA (1 CLIQUE)').classes('text-md font-bold text-deep-orange')
+                with ui.row().classes('items-center gap-2'):
+                    ui.button('🖨️ DISPARAR IMPRESSORA AGORA', icon='print', on_click=lambda: ui.run_javascript('window.print()')).props('unelevated color=deep-orange text-color=white bold').classes('text-xs')
+                    ui.button('Fechar', on_click=print_diag.close).props('unelevated color=grey-8 dense').classes('text-xs')
+
+            # Auto-dispara impressão do navegador após 300ms
+            ui.timer(0.3, lambda: ui.run_javascript('window.print()'), once=True)
+
+            with ui.column().classes('w-full print-area gap-4'):
+                for c in guest_list:
+                    is_acomp = bool(c.get('convidado_principal_id'))
+                    posto = c.get('posto_graduacao') or ''
+                    almirantado_info = parse_almirantado_stars(posto)
+                    nome_limpo = clean_authority_name(c['nome'])
+                    assento = c.get('assento_id', '')
+
+                    # Geração local offline de QR Code
+                    import qrcode, io, base64
+                    qr_b64 = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={c['id']}"
+                    try:
+                        qr_obj = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=4, border=1)
+                        qr_obj.add_data(f"JADE|{event.get('id','')}|{c['id']}|{assento}")
+                        qr_obj.make(fit=True)
+                        img_q = qr_obj.make_image(fill_color="black", back_color="white")
+                        buf_q = io.BytesIO()
+                        img_q.save(buf_q, format="PNG")
+                        qr_b64 = f"data:image/png;base64,{base64.b64encode(buf_q.getvalue()).decode('utf-8')}"
+                    except Exception:
+                        pass
+
+                    with ui.element('div').classes('prisma-card-a4-slot').style('border: 1.5pt solid #1a1a1a; outline: 0.5pt solid #1a1a1a; outline-offset: -2.5mm; position: relative; margin-bottom: 12px; font-family: Arial, sans-serif;'):
+                        # Canto Esquerdo: Brasão / Estrelas
+                        with ui.element('div').style('position: absolute; top: 4mm; left: 6mm; z-index: 10; display: flex; flex-direction: column; align-items: flex-start;'):
+                            ui.image('https://upload.wikimedia.org/wikipedia/commons/thumb/2/21/Distintivo_do_Corpo_de_Fuzileiros_Navais_do_Brasil.svg/240px-Distintivo_do_Corpo_de_Fuzileiros_Navais_do_Brasil.svg.png').style('width: 16mm; height: auto;')
+                            if almirantado_info['png_asset']:
+                                ui.image(almirantado_info['png_asset']).style('width: 16mm; height: auto; margin-top: 1mm;')
+                            elif almirantado_info['stars']:
+                                ui.label(almirantado_info['stars']).classes('prisma-estrelas-esquerda')
+
+                        # Canto Direito: QR Code
+                        with ui.element('div').style('position: absolute; top: 3mm; right: 5mm; z-index: 10; font-size: 7px; text-align: center;'):
+                            ui.image(qr_b64).style('width: 13mm; height: 13mm;')
+                            if assento:
+                                ui.label(assento).classes('text-[7px] font-mono text-black font-bold')
+
+                        # Centro: Reservado + Posto + Nome
+                        with ui.element('div').classes('prisma-conteudo-central'):
+                            if is_acomp:
+                                ui.label('RESERVADO').classes('prisma-texto-reservado')
+                                if almirantado_info['title']:
+                                    ui.label(almirantado_info['title']).classes('prisma-posto-extenso')
+                                elif posto:
+                                    ui.label(posto.upper()).classes('prisma-posto-extenso')
+                                ui.label(nome_limpo).classes('prisma-nome-autoridade')
+                            else:
+                                if almirantado_info['title']:
+                                    ui.label(almirantado_info['title']).classes('prisma-posto-extenso')
+                                elif posto:
+                                    ui.label(posto.upper()).classes('prisma-posto-extenso')
+                                ui.label(nome_limpo).classes('prisma-nome-autoridade')
+
+        print_diag.open()
+
     def open_express_plate_dialog(event, convidados, layout):
-        """Dialog de busca tática ultra-rápida para impressão individual de placas no ato."""
+        """Dialog de busca tática ultra-rápida e confecção de placas expressas avulsas de última hora."""
         search_input = {'text': ''}
         
-        with ui.dialog() as diag, ui.card().classes('w-full').style(
-            f'background: {THEME["bg_panel"]}; max-width: 650px;'
-        ):
+        with ui.dialog() as diag, ui.card().classes('w-full').style(f'background: {THEME["bg_panel"]}; max-width: 720px;'):
             with ui.row().classes('w-full items-center justify-between q-mb-xs'):
                 with ui.column().classes('gap-0'):
-                    ui.label('⚡ PLACA EXPRESS (1 CLIQUE)').classes('text-md font-bold text-deep-orange')
-                    ui.label('Busca rápida para confeccionar placa no ato do evento').classes('text-[11px] text-grey-4')
+                    ui.label('⚡ PLACA EXPRESS (CONFECÇÃO E IMPRESSÃO DE 1 CLIQUE)').classes('text-md font-bold text-deep-orange cyber-title')
+                    ui.label('Busca rápida ou criação avulsa para confecção e disparo imediato de impressora').classes('text-[11px] text-grey-4')
                 ui.button(icon='close', on_click=diag.close).props('flat round dense text-color=grey')
 
-            ui.input(
-                placeholder='🔍 Digite o nome ou posto da autoridade...',
-                on_change=lambda e: [search_input.update({'text': e.value}), results_container.refresh()]
-            ).props('dark outlined dense autofocus').classes('w-full q-mb-sm text-xs')
+            with ui.tabs().classes('w-full text-cyan') as express_tabs:
+                tab_search = ui.tab('🔍 Buscar e Imprimir Direto')
+                tab_create = ui.tab('➕ Nova Placa Avulsa de Emergência')
 
-            @ui.refreshable
-            def results_container():
-                query = search_input['text'].strip().lower()
-                if not query:
-                    ui.label('💡 Digite acima para buscar entre os convidados cadastrados.').classes('text-xs text-grey-5 q-py-md text-center w-full')
-                    return
+            with ui.tab_panels(express_tabs, value=tab_search).classes('w-full bg-transparent'):
+                # TAB 1: BUSCAR E IMPRIMIR DIRETO
+                with ui.tab_panel(tab_search):
+                    ui.input(
+                        placeholder='🔍 Digite o nome ou posto da autoridade...',
+                        on_change=lambda e: [search_input.update({'text': e.value}), results_container.refresh()]
+                    ).props('dark outlined dense autofocus').classes('w-full q-mb-sm text-xs')
 
-                matches = [
-                    c for c in convidados
-                    if query in (c.get('nome') or '').lower()
-                    or query in (c.get('posto_graduacao') or '').lower()
-                    or query in (c.get('cargo_funcao') or '').lower()
-                ]
+                    @ui.refreshable
+                    def results_container():
+                        query = search_input['text'].strip().lower()
+                        if not query:
+                            ui.label('💡 Digite acima para buscar entre as autoridades já cadastradas.').classes('text-xs text-grey-5 q-py-md text-center w-full')
+                            return
 
-                if not matches:
-                    with ui.column().classes('w-full items-center justify-center q-py-md gap-1'):
-                        ui.label(f'Nenhuma autoridade encontrada para "{query}".').classes('text-xs text-amber font-bold')
-                        
-                        async def quick_add_express():
+                        matches = [
+                            c for c in convidados
+                            if query in (c.get('nome') or '').lower()
+                            or query in (c.get('posto_graduacao') or '').lower()
+                            or query in (c.get('cargo_funcao') or '').lower()
+                        ]
+
+                        if not matches:
+                            ui.label(f'Nenhum cadastro encontrado para "{query}". Utilize a aba "➕ Nova Placa Avulsa" acima para criar na hora!').classes('text-xs text-amber font-bold text-center w-full q-py-md')
+                            return
+
+                        with ui.column().classes('w-full gap-1 max-h-[350px] overflow-y-auto q-pr-xs'):
+                            for m in matches[:15]:
+                                g_id = m['id']
+                                g_nome = m.get('nome', 'N/I')
+                                g_posto = m.get('posto_graduacao', '') or ''
+                                g_cargo = m.get('cargo_funcao', '') or ''
+                                g_assento = m.get('assento_id', '') or 'Sem Assento'
+                                is_acomp = bool(m.get('convidado_principal_id'))
+                                
+                                with ui.card().classes('w-full q-pa-xs no-shadow rounded-lg border border-white/10').style('background: rgba(255,255,255,0.03);'):
+                                    with ui.row().classes('w-full items-center justify-between wrap gap-1'):
+                                        with ui.column().classes('gap-0 flex-grow'):
+                                            with ui.row().classes('items-center gap-1'):
+                                                if is_acomp:
+                                                    ui.badge('RESERVADO').props('color=amber-9 text-color=white').classes('text-[9px]')
+                                                ui.label(f"{g_posto} {g_nome}").classes('text-xs font-bold text-white')
+                                            ui.label(f"{g_cargo} • 🪑 Assento: {g_assento}").classes('text-[10px] text-cyan')
+
+                                        with ui.row().classes('items-center gap-1'):
+                                            # Botão ➕ Placa Extra (Adicionar Acompanhante)
+                                            if not is_acomp:
+                                                async def add_extra_companion(principal_id, main_nome, main_posto):
+                                                    _db = get_service_db_connection() or get_db_connection()
+                                                    if _db:
+                                                        res_ac = _db.table('jade_convidados').select('*').eq('convidado_principal_id', principal_id).execute()
+                                                        count_ac = len(res_ac.data or []) + 1
+                                                        ins_res = _db.table('jade_convidados').insert({
+                                                            'evento_id': event['id'],
+                                                            'nome': f"ACOMP. {main_nome} ({count_ac})",
+                                                            'posto_graduacao': main_posto,
+                                                            'convidado_principal_id': principal_id,
+                                                            'status_placa': 'impressa',
+                                                            'presenca_confirmada': True
+                                                        }).execute()
+                                                        ui.notify(f'➕ Placa extra criada para {main_nome}!', color='positive')
+                                                        render_content.refresh()
+                                                        if ins_res and ins_res.data:
+                                                            open_direct_print_preview_dialog(event, [ins_res.data[0]])
+
+                                                ui.button('➕ Extra', on_click=lambda p_id=g_id, m_n=g_nome, m_p=g_posto: add_extra_companion(p_id, m_n, m_p)).props('unelevated color=cyan text-color=black dense bold').classes('text-[10px] q-px-xs').tooltip('Criar e imprimir placa de acompanhante extra na hora')
+
+                                            # Botão 🖨️ IMPRIMIR DIRETO (1 CLIQUE)
+                                            async def make_print_express_direct(guest=m):
+                                                _db = get_service_db_connection() or get_db_connection()
+                                                if _db:
+                                                    try:
+                                                        _db.table('jade_convidados').update({'status_placa': 'impressa'}).eq('id', guest['id']).execute()
+                                                    except Exception:
+                                                        pass
+                                                open_direct_print_preview_dialog(event, [guest])
+
+                                            ui.button('🖨️ IMPRIMIR AGORA', icon='print', on_click=make_print_express_direct).props('unelevated color=deep-orange text-color=white dense bold').classes('text-[10px] q-px-xs').tooltip('Disparar impressora imediatamente (1 clique)')
+                                            
+                                            # Opção opcional de abrir o estúdio completo
+                                            ui.button('⚙️', on_click=lambda guest=m: open_print_cards_dialog(event, [guest], layout)).props('flat round dense color=grey-4 size=xs').tooltip('Abrir configurações avançadas de estúdio')
+
+                    results_container()
+
+                # TAB 2: NOVA IMPRESSÃO AVULSA DE EMERGÊNCIA
+                with ui.tab_panel(tab_create):
+                    with ui.column().classes('w-full gap-2 q-pa-xs'):
+                        ui.label('Cadastre uma nova autoridade avulsa para confecção e disparo imediato:').classes('text-xs text-grey-4')
+
+                        with ui.row().classes('w-full gap-2 wrap'):
+                            sel_posto_express = ui.select(
+                                options={
+                                    'AE - Almirante de Esquadra': '⚓ AE - Almirante de Esquadra',
+                                    'VA - Vice-Almirante': '⚓ VA - Vice-Almirante',
+                                    'CA - Contra-Almirante': '⚓ CA - Contra-Almirante',
+                                    'CMG - Capitão de Mar e Guerra': '🎖️ CMG - Capitão de Mar e Guerra',
+                                    'CF - Capitão de Fragata': '🎖️ CF - Capitão de Fragata',
+                                    'CC - Capitão de Corveta': '🎖️ CC - Capitão de Corveta',
+                                    'CT - Capitão-Tenente': '🎖️ CT - Capitão-Tenente',
+                                    'Desembargador(a)': '🏛️ Desembargador(a)',
+                                    'Senador(a) / Deputado(a)': '🏛️ Senador(a) / Deputado(a)',
+                                    'Juiz(a) de Direito': '🏛️ Juiz(a) de Direito',
+                                    'Senhor / Senhora': '👤 Senhor / Senhora',
+                                    'AUTORIDADE': '🎖️ Outra Autoridade'
+                                },
+                                value='AE - Almirante de Esquadra'
+                            ).props('dark outlined dense').classes('col')
+
+                            input_nome_express = ui.input(placeholder='Nome Completo da Autoridade...').props('dark outlined dense').classes('col')
+
+                        with ui.row().classes('w-full gap-2 wrap items-center'):
+                            input_assento_express = ui.input(placeholder='Assento (opcional, ex: A-1)...').props('dark outlined dense').style('width: 180px;')
+                            sel_acomp_express = ui.select(
+                                options={0: '0 Acompanhantes', 1: '1 Acompanhante Extra', 2: '2 Acompanhantes Extras', 3: '3 Acompanhantes Extras'},
+                                value=0
+                            ).props('dark outlined dense').classes('col')
+
+                        async def create_and_print_avulso():
+                            nome_val = input_nome_express.value.strip().upper()
+                            if not nome_val:
+                                ui.notify('⚠️ Digite o Nome da Autoridade!', color='warning')
+                                return
+                            posto_val = sel_posto_express.value
+                            assento_val = input_assento_express.value.strip().upper()
+                            num_acomp = int(sel_acomp_express.value or 0)
+
                             _db = get_service_db_connection() or get_db_connection()
-                            if _db:
-                                try:
-                                    res = _db.table('jade_convidados').insert({
-                                        'evento_id': event['id'],
-                                        'nome': query.upper(),
-                                        'posto_graduacao': 'AUTORIDADE',
-                                        'cargo_funcao': 'Convidado de Honra',
-                                        'categoria': 'Express',
-                                        'status_confirmacao': 'confirmado',
-                                        'status_placa': 'impressa'
-                                    }).execute()
-                                    ui.notify(f'⚡ {query.upper()} adicionado e marcado para impressão!', color='positive')
-                                    diag.close()
-                                    render_content.refresh()
-                                    if res.data:
-                                        open_print_cards_dialog(event, [res.data[0]], layout)
-                                except Exception as err_q:
-                                    ui.notify(f'Erro: {err_q}', color='negative')
+                            if not _db:
+                                ui.notify('❌ Banco de dados indisponível.', color='negative')
+                                return
 
-                        ui.button('➕ Adicionar e Imprimir Agora', icon='add', on_click=quick_add_express).props('unelevated color=deep-orange dense').classes('text-xs q-mt-xs')
-                    return
+                            try:
+                                main_ins = _db.table('jade_convidados').insert({
+                                    'evento_id': event['id'],
+                                    'nome': nome_val,
+                                    'posto_graduacao': posto_val,
+                                    'assento_id': assento_val if assento_val else None,
+                                    'status_confirmacao': 'confirmado',
+                                    'status_placa': 'impressa',
+                                    'max_acompanhantes': num_acomp
+                                }).execute()
 
-                with ui.column().classes('w-full gap-1 max-h-[350px] overflow-y-auto q-pr-xs'):
-                    for m in matches[:15]:
-                        g_nome = m.get('nome', 'N/I')
-                        g_posto = m.get('posto_graduacao', '') or ''
-                        g_cargo = m.get('cargo_funcao', '') or ''
-                        g_assento = m.get('assento_id', '') or 'Sem Assento'
-                        
-                        with ui.card().classes('w-full q-pa-xs no-shadow rounded-lg border border-white/10').style('background: rgba(255,255,255,0.03);'):
-                            with ui.row().classes('w-full items-center justify-between wrap gap-1'):
-                                with ui.column().classes('gap-0 flex-grow'):
-                                    ui.label(f"{g_posto} {g_nome}").classes('text-xs font-bold text-white')
-                                    ui.label(f"{g_cargo} • 🪑 Assento: {g_assento}").classes('text-[10px] text-cyan')
+                                print_list = []
+                                if main_ins and main_ins.data:
+                                    main_obj = main_ins.data[0]
+                                    print_list.append(main_obj)
+                                    main_id = main_obj['id']
 
-                                async def make_print_express(guest=m):
-                                    _db = get_service_db_connection() or get_db_connection()
-                                    if _db:
-                                        try:
-                                            _db.table('jade_convidados').update({'status_placa': 'impressa'}).eq('id', guest['id']).execute()
-                                        except Exception:
-                                            pass
-                                    diag.close()
-                                    open_print_cards_dialog(event, [guest], layout)
+                                    # Cria acompanhantes
+                                    for i in range(num_acomp):
+                                        ac_ins = _db.table('jade_convidados').insert({
+                                            'evento_id': event['id'],
+                                            'nome': f"ACOMP. {nome_val} ({i+1}/{num_acomp})",
+                                            'posto_graduacao': posto_val,
+                                            'convidado_principal_id': main_id,
+                                            'status_confirmacao': 'confirmado',
+                                            'status_placa': 'impressa'
+                                        }).execute()
+                                        if ac_ins and ac_ins.data:
+                                            print_list.append(ac_ins.data[0])
 
-                                ui.button('🖨️ IMPRIMIR AGORA', icon='print', on_click=make_print_express).props('unelevated color=deep-orange text-color=white dense bold').classes('text-[10px] q-px-xs')
+                                ui.notify(f'⚡ {nome_val} cadastrado com sucesso!', color='positive')
+                                render_content.refresh()
+                                diag.close()
+                                open_direct_print_preview_dialog(event, print_list)
+                            except Exception as ex_av:
+                                ui.notify(f'Erro ao cadastrar: {ex_av}', color='negative')
 
-            results_container()
+                        ui.button('🖨️ GERAR E IMPRIMIR PLACA EXPRESSA AGORA (1 CLIQUE)', icon='flash_on', on_click=create_and_print_avulso).props('unelevated color=deep-orange text-color=white bold').classes('w-full q-mt-sm')
 
             with ui.row().classes('w-full justify-end q-mt-sm'):
                 ui.button('Fechar', icon='close', on_click=diag.close).props('unelevated color=grey-8 dense').classes('text-xs')
