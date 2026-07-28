@@ -146,6 +146,7 @@ def render_page():
                     
                     if current_event:
                         ui.button('✅ Confirmar Presenças', icon='how_to_reg', on_click=lambda: open_mass_confirmation_dialog(current_event, convidados)).props('unelevated color=green text-color=white dense bold').classes('q-px-sm')
+                        ui.button('📥 Importar Excel', icon='file_upload', on_click=lambda: open_smart_excel_import_dialog(current_event)).props('unelevated color=deep-purple text-color=white dense bold').classes('q-px-sm')
                         ui.button('🖨️ Imprimir Placas por Fileira', icon='print', on_click=lambda: open_print_cards_dialog(current_event, convidados, layout)).props('unelevated color=cyan text-color=black dense bold').classes('q-px-sm')
                         ui.button('🔍 Scanner & Conferência', icon='qr_code_scanner', on_click=lambda: open_tactical_scanner_dialog(current_event, convidados)).props('unelevated color=amber text-color=black dense bold').classes('q-px-sm')
                         
@@ -1379,6 +1380,180 @@ def render_page():
                     ui.button('❌ Recusar Selecionados', icon='cancel', on_click=lambda: batch_update_status('recusado')).props('unelevated color=red text-color=white dense').classes('text-xs q-px-sm')
                     ui.button('❓ Voltar a Pendente', icon='pending', on_click=lambda: batch_update_status('pendente')).props('outline color=grey dense').classes('text-xs q-px-sm')
 
+                ui.button('Fechar', icon='close', on_click=diag.close).props('unelevated color=grey-8 dense').classes('text-xs')
+
+        diag.open()
+
+    # ═══════════════════════════════════════════════════════════════
+    # FASE 3: IMPORTADOR INTELIGENTE DE EXCEL COM LEITURA DE CORES
+    # ═══════════════════════════════════════════════════════════════
+    def open_smart_excel_import_dialog(event):
+        """Dialog com upload de arquivo .xlsx para importação inteligente de convidados com leitura de cores."""
+        with ui.dialog() as diag, ui.card().classes('w-full').style(
+            f'background: {THEME["bg_panel"]}; max-width: 650px;'
+        ):
+            ui.label('📥 IMPORTADOR INTELIGENTE JADE (EXCEL COM CORES)').classes('text-md font-bold text-cyan')
+            ui.label(f'Solenidade Destino: {event.get("nome", "N/I")}').classes('text-xs text-grey-4 q-mb-sm')
+            
+            ui.markdown(
+                "**Como funciona a importação inteligente:**\n"
+                "• **Suporta o modelo oficial:** Planilhas `.xlsx` com blocos (ex: `LISTA DE CONVITE.xlsx`).\n"
+                "• **Leitura de Cores:** Células **Verdes** na coluna *Confirmado* viram **CONFIRMADO** (placa na fila de produção). Células **Vermelhas** viram **RECUSADO**.\n"
+                "• **Anti-duplicação:** Se a autoridade já existir na solenidade (mesmo Nome + Posto), os dados e acompanhantes são **atualizados sem duplicar**.\n"
+                "• **Categorias:** Os blocos (Almirantado, CMGs FN, Civis, etc.) são identificados automaticamente."
+            ).classes('text-xs text-grey-3 bg-black/30 q-pa-sm rounded-lg border border-white/10')
+            
+            log_container = ui.column().classes('w-full q-my-sm')
+
+            async def handle_upload(e):
+                file_bytes = e.content.read()
+                if not file_bytes:
+                    ui.notify('❌ Arquivo vazio.', color='negative')
+                    return
+                
+                try:
+                    import io
+                    import openpyxl
+                    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+                    sheet = wb.active
+                    
+                    db = get_service_db_connection() or get_db_connection()
+                    if not db:
+                        ui.notify('❌ Banco de dados indisponível.', color='negative')
+                        return
+                    
+                    event_id = event['id']
+                    res_exist = db.table('jade_convidados').select('*').eq('evento_id', event_id).execute()
+                    existing_list = res_exist.data if res_exist.data else []
+                    
+                    existing_map = {}
+                    for item in existing_list:
+                        if not item.get('convidado_principal_id'):
+                            key = f"{(item.get('nome') or '').strip().upper()}|{(item.get('posto_graduacao') or '').strip().upper()}"
+                            existing_map[key] = item
+
+                    current_category = "Geral"
+                    count_inserted = 0
+                    count_updated = 0
+                    count_conf = 0
+                    count_rec = 0
+                    count_pend = 0
+
+                    for r in range(1, sheet.max_row + 1):
+                        row_cells = [sheet.cell(row=r, column=c) for c in range(1, sheet.max_column + 1)]
+                        row_vals = [c.value for c in row_cells]
+
+                        if not any(v is not None for v in row_vals):
+                            continue
+
+                        c0 = str(row_vals[0]).strip() if len(row_vals) > 0 and row_vals[0] is not None else ""
+                        c1 = str(row_vals[1]).strip() if len(row_vals) > 1 and row_vals[1] is not None else ""
+                        c2 = str(row_vals[2]).strip() if len(row_vals) > 2 and row_vals[2] is not None else ""
+
+                        if c0.upper() in ('QTD', 'QUANTIDADE') or c1.upper() in ('POSTO', 'GRAU'):
+                            continue
+
+                        if c0 and not c0.isdigit() and c0.upper() not in ('QTD', 'QUANTIDADE'):
+                            current_category = c0
+                            continue
+
+                        nome = c2
+                        if not nome or nome.upper() in ('NOME', 'CONVITE'):
+                            continue
+
+                        posto = c1
+                        cargo = str(row_vals[3]).strip() if len(row_vals) > 3 and row_vals[3] is not None else ""
+                        conf_val = row_vals[5] if len(row_vals) > 5 else None
+                        conjuge_val = row_vals[6] if len(row_vals) > 6 else None
+
+                        conf_fill = ""
+                        if len(row_cells) > 5 and row_cells[5].fill and row_cells[5].fill.start_color:
+                            conf_fill = str(row_cells[5].fill.start_color.rgb or "")
+
+                        status_conf = "pendente"
+                        status_placa = "nao_necessaria"
+
+                        if any(g in conf_fill for g in ('00B050', '92D050', '00FF00')):
+                            status_conf = "confirmado"
+                            status_placa = "pendente"
+                            count_conf += 1
+                        elif any(rc in conf_fill for rc in ('FF0000', 'FA1717', 'C00000', 'FF5555')):
+                            status_conf = "recusado"
+                            status_placa = "nao_necessaria"
+                            count_rec += 1
+                        else:
+                            if conf_val in (1, 2, '1', '2', 'SIM', 'Sim', 'sim', 'CONFIRMADO'):
+                                status_conf = "confirmado"
+                                status_placa = "pendente"
+                                count_conf += 1
+                            else:
+                                count_pend += 1
+
+                        max_acomp = 0
+                        if isinstance(conf_val, int) and conf_val > 1:
+                            max_acomp = conf_val - 1
+                        elif str(conf_val).strip().isdigit() and int(str(conf_val).strip()) > 1:
+                            max_acomp = int(str(conf_val).strip()) - 1
+                        elif conjuge_val in ('E', '1', 1) or (isinstance(conjuge_val, str) and len(conjuge_val) > 2):
+                            max_acomp = 1
+
+                        key = f"{nome.strip().upper()}|{posto.strip().upper()}"
+                        
+                        conv_data = {
+                            'evento_id': event_id,
+                            'nome': nome,
+                            'posto_graduacao': posto,
+                            'cargo_funcao': cargo,
+                            'categoria': current_category,
+                            'status_confirmacao': status_conf,
+                            'max_acompanhantes': max_acomp,
+                        }
+                        
+                        conv_data_with_placa = dict(conv_data)
+                        conv_data_with_placa['status_placa'] = status_placa
+
+                        if key in existing_map:
+                            existing_id = existing_map[key]['id']
+                            try:
+                                db.table('jade_convidados').update(conv_data_with_placa).eq('id', existing_id).execute()
+                            except Exception:
+                                db.table('jade_convidados').update(conv_data).eq('id', existing_id).execute()
+                            
+                            sync_companions(existing_id, nome, max_acomp, event_id, current_category)
+                            count_updated += 1
+                        else:
+                            res_ins = None
+                            try:
+                                res_ins = db.table('jade_convidados').insert(conv_data_with_placa).execute()
+                            except Exception:
+                                res_ins = db.table('jade_convidados').insert(conv_data).execute()
+                            
+                            if res_ins and res_ins.data:
+                                new_id = res_ins.data[0]['id']
+                                sync_companions(new_id, nome, max_acomp, event_id, current_category)
+                            count_inserted += 1
+
+                    ui.notify(f'✅ Importação concluída! {count_inserted} novos, {count_updated} atualizados.', color='positive')
+                    log_container.clear()
+                    with log_container:
+                        with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg').style('background: rgba(0,255,150,0.1); border: 1px solid rgba(0,255,150,0.3);'):
+                            ui.label('📊 RELATÓRIO DE IMPORTAÇÃO CONCLUÍDA').classes('text-xs font-bold text-green')
+                            ui.label(f'• Registros Processados: {count_inserted + count_updated}').classes('text-xs text-white')
+                            ui.label(f'• 🆕 Novos Convidados Inseridos: {count_inserted}').classes('text-xs text-green font-bold')
+                            ui.label(f'• 🔄 Atualizados (Merge Anti-Duplicação): {count_updated}').classes('text-xs text-cyan font-bold')
+                            ui.label(f'• ✅ Confirmados (Placa na Fila de Produção): {count_conf}').classes('text-xs text-amber font-bold')
+                            ui.label(f'• ❌ Recusados: {count_rec}').classes('text-xs text-red')
+                            ui.label(f'• ❓ Pendentes: {count_pend}').classes('text-xs text-grey-4')
+                    
+                    render_content.refresh()
+
+                except Exception as ex:
+                    print(f"[SMART IMPORT ERR] {ex}")
+                    ui.notify(f'❌ Erro ao processar planilha: {ex}', color='negative')
+
+            ui.upload(on_upload=handle_upload, auto_upload=True).props('accept=.xlsx dark').classes('w-full q-my-sm')
+            
+            with ui.row().classes('w-full justify-end q-mt-sm'):
                 ui.button('Fechar', icon='close', on_click=diag.close).props('unelevated color=grey-8 dense').classes('text-xs')
 
         diag.open()
