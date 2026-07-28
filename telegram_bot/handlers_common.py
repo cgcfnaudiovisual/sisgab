@@ -917,6 +917,7 @@ def register_common_handlers(bot):
                         novo_registro = {
                             'titulo_evento': f"⚡ {titulo_m}",
                             'solicitante_nome': user_name,
+                            'contato': 'COMSOC / Telegram',
                             'setor': 'COMSOC / GABINETE',
                             'data_evento': now_str,
                             'hora_evento': datetime.now().strftime('%H:%M'),
