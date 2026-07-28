@@ -96,7 +96,7 @@ def render_page():
                                         ).lte(
                                             'data_evento', fim.isoformat()
                                         ).order('data_evento', desc=False).execute()
-                                        week_events = res_w.data if res_w.data else []
+                                        week_events = [ev for ev in (res_w.data or []) if str(ev.get('status', '')).strip().lower() not in ('concluida', 'concluido', 'concluidas', 'rejeitado', 'rejeitada')]
                                     except Exception as we:
                                         print(f"[AGENDA WEEK ERR] {we}")
                                 
@@ -128,7 +128,7 @@ def render_page():
                                     if filter_by_date:
                                         query = query.eq('data_evento', filter_by_date)
                                     res = query.order('data_evento', desc=False).execute()
-                                    events_list = res.data if res.data else []
+                                    events_list = [ev for ev in (res.data or []) if str(ev.get('status', '')).strip().lower() not in ('concluida', 'concluido', 'concluidas', 'rejeitado', 'rejeitada')]
                                 except Exception as err:
                                     print(f"[AGENDA DB ERR] {err}")
                             

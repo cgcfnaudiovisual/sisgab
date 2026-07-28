@@ -111,26 +111,41 @@ def _format_militar_responsavel(ev, db=None):
                 
         if not m_ids:
             return "ASD"
+
+        if not db:
+            from database import get_bot_db_connection
+            db = get_bot_db_connection()
             
         nomes = []
         if db:
             try:
-                res_ef = db.table('efetivo').select('id, nome_guerra').execute()
+                res_ef = db.table('efetivo').select('*').execute()
                 if res_ef and res_ef.data:
-                    ef_map = {str(item['id']): item['nome_guerra'] for item in res_ef.data}
+                    ef_map = {}
+                    for item in res_ef.data:
+                        nome_g = str(item.get('nome_guerra') or item.get('nome') or '').replace('None', '').strip()
+                        pg = str(item.get('posto_grad') or item.get('posto') or '').replace('None', '').strip()
+                        full_name = f"{pg} {nome_g}".strip() if pg else nome_g
+                        if item.get('id'):
+                            ef_map[str(item['id'])] = full_name
+                        if nome_g:
+                            ef_map[nome_g.upper()] = full_name
+
                     for mid in m_ids:
-                        mid_str = str(mid)
+                        mid_str = str(mid).strip()
                         if mid_str in ef_map:
                             nomes.append(ef_map[mid_str])
+                        elif mid_str.upper() in ef_map:
+                            nomes.append(ef_map[mid_str.upper()])
                         elif not mid_str.isdigit():
                             nomes.append(mid_str)
-            except Exception:
-                pass
+            except Exception as ef_err:
+                print(f"[FORMAT MILITAR RESP DB ERR] {ef_err}")
                 
         if not nomes:
-            nomes = [str(x) for x in m_ids if str(x).strip()]
+            nomes = [str(x) for x in m_ids if str(x).strip() and not str(x).isdigit()]
             
-        return ", ".join(nomes) if nomes else "ASD"
+        return ", ".join(list(set(nomes))) if nomes else "ASD"
     except Exception:
         return "ASD"
 
