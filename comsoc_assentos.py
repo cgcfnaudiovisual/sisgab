@@ -123,6 +123,20 @@ def render_page():
 
         current_event = next((e for e in eventos if e['id'] == state.selected_event_id), None)
 
+        convidados = []
+        layout = {}
+        if current_event:
+            try:
+                res_conv = db.table('jade_convidados').select('*').eq('evento_id', current_event['id']).order('id', desc=False).execute()
+                convidados = res_conv.data if res_conv.data else []
+            except Exception as e:
+                print(f"[JADE GUESTS FETCH ERR] {e}")
+
+            try:
+                layout = json.loads(current_event['layout_json']) if current_event.get('layout_json') else {}
+            except Exception as e:
+                print(f"[LAYOUT PARSE ERR] {e}")
+
         # --- CABEÇALHO DE CONTROLE DE EVENTOS ---
         with ui.card().classes('w-full q-pa-md no-shadow rounded-xl q-mb-md').style(
             f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
@@ -241,21 +255,6 @@ def render_page():
                 ui.label('Por favor, crie um evento para iniciar o mapeamento de assentos.').classes('text-md text-white font-bold')
                 ui.button('Criar Primeiro Evento', icon='add', on_click=open_create_event_dialog).props('unelevated color=primary text-color=black')
             return
-
-        # Carregar convidados do evento ativo
-        convidados = []
-        try:
-            res_conv = db.table('jade_convidados').select('*').eq('evento_id', current_event['id']).order('id', desc=False).execute()
-            convidados = res_conv.data if res_conv.data else []
-        except Exception as e:
-            print(f"[JADE GUESTS FETCH ERR] {e}")
-
-        # Parse do layout do evento
-        layout = {}
-        try:
-            layout = json.loads(current_event['layout_json']) if current_event.get('layout_json') else {}
-        except Exception as e:
-            print(f"[LAYOUT PARSE ERR] {e}")
             
         rows_count = layout.get('rows', 5)
         cols_count = layout.get('cols', 8)
