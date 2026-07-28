@@ -109,10 +109,16 @@ def get_multi_militar_inline_keyboard(efetivo_list, selected_ids=None, prefix="s
     return markup
 
 def get_efetivo_linking_keyboard(efetivo_lista):
+    from .utils import sort_efetivo_by_rank
+    sorted_ef = sort_efetivo_by_rank(efetivo_lista)
+    
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     row = []
-    for ef in efetivo_lista:
-        row.append(types.KeyboardButton(f"🎖️ {ef['nome_guerra']}"))
+    for ef in sorted_ef:
+        nome_g = ef.get('nome_guerra') or ef.get('nome') or 'MILITAR'
+        pg = ef.get('posto_grad') or ''
+        label = f"🎖️ {pg} {nome_g}".strip() if pg else f"🎖️ {nome_g}"
+        row.append(types.KeyboardButton(label))
         if len(row) == 2:
             markup.row(*row)
             row = []

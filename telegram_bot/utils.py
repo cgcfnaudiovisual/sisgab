@@ -336,10 +336,24 @@ def get_rank_seniority(rank_str: str) -> int:
     return 98
 
 def sort_efetivo_by_rank(ef_list: list) -> list:
-    """Ordena uma lista de militares estritamente por Antiguidade Militar e Nome de Guerra."""
+    """Ordena uma lista de militares priorizando 1º a Equipe COMSOC e 2º Praças do Gabinete (por antiguidade militar)."""
     def sort_key(item):
-        role = str(item.get('role', 'compel')).strip().lower()
-        is_comsoc = role in ('admin', 'supervisor', 'comsoc', 'comsoc_design', 'operador')
+        role = str(item.get('role', '')).strip().lower()
+        setor = str(item.get('setor', '')).strip().upper()
+        secao = str(item.get('secao', '')).strip().upper()
+        funcao = str(item.get('funcao', '')).strip().upper()
+        
+        is_comsoc = (
+            role in ('admin', 'supervisor', 'comsoc', 'comsoc_design', 'operador') or
+            'COMSOC' in setor or
+            'COMSOC' in secao or
+            'COMSOC' in funcao or
+            'COMUNICA' in funcao or
+            'DESIGN' in funcao or
+            'FOTO' in funcao or
+            'VIDEO' in funcao
+        )
+        
         group_priority = 0 if is_comsoc else 1
         
         pg = item.get('posto_grad') or ''
