@@ -315,24 +315,29 @@ def get_rank_seniority(rank_str: str) -> int:
     """Retorna o valor numérico de antiguidade militar (menor número = maior antiguidade)."""
     if not rank_str:
         return 99
-    rank = str(rank_str).upper().replace('.', '').replace(' ', '').strip()
     
-    if rank in ('AE', 'ALMIRANTEDEESQUADRA'): return 1
-    if rank in ('VA', 'VICEALMIRANTE'): return 2
-    if rank in ('CA', 'CONTRAALMIRANTE'): return 3
-    if rank in ('CMG', 'CAPITAODEMAREGUERRA'): return 4
-    if rank in ('CF', 'CAPITAODEFRAGATA'): return 5
-    if rank in ('CC', 'CAPITAODECORVETA'): return 6
-    if rank in ('CT', 'CAPITAOTENENTE'): return 7
-    if any(x in rank for x in ('1TEN', '1ºTEN', '1SOTEN', '1TENENTE', '1ºTENENTE')): return 8
-    if any(x in rank for x in ('2TEN', '2ºTEN', '2SOTEN', '2TENENTE', '2ºTENENTE')): return 9
-    if rank in ('GM', 'GUARDAMARINHA'): return 10
-    if rank in ('SO', 'SUBOFICIAL', 'SUB-OFICIAL'): return 11
-    if any(x in rank for x in ('1SG', '1ºSG', '1SGT', '1ºSGT', '1ºSARGENTO', '1SARGENTO')): return 12
-    if any(x in rank for x in ('2SG', '2ºSG', '2SGT', '2ºSGT', '2ºSARGENTO', '2SARGENTO')): return 13
-    if any(x in rank for x in ('3SG', '3ºSG', '3SGT', '3ºSGT', '3ºSARGENTO', '3SARGENTO', 'SG', 'SARGENTO')): return 14
-    if rank in ('CB', 'CABO'): return 15
-    if rank in ('SD', 'SOLDADO', 'MN', 'MARINHEIRO'): return 16
+    tokens = re.findall(r'[A-Z0-9º]+', str(rank_str).upper())
+    if not tokens:
+        return 99
+
+    for t in tokens:
+        if t in ('AE', 'ALMIRANTE'): return 1
+        if t in ('VA', 'VICEALMIRANTE'): return 2
+        if t in ('CA', 'CONTRAALMIRANTE'): return 3
+        if t in ('CMG', 'CAPITAODEMAREGUERRA'): return 4
+        if t in ('CF', 'CAPITAODEFRAGATA'): return 5
+        if t in ('CC', 'CAPITAODECORVETA'): return 6
+        if t in ('CT', 'CAPITAOTENENTE'): return 7
+        if t in ('1TEN', '1ºTEN', '1SOTEN', '1TENENTE', '1ºTENENTE'): return 8
+        if t in ('2TEN', '2ºTEN', '2SOTEN', '2TENENTE', '2ºTENENTE'): return 9
+        if t in ('GM', 'GUARDAMARINHA'): return 10
+        if t in ('SO', 'SUBOFICIAL', 'SUB-OFICIAL'): return 11
+        if t in ('1SG', '1ºSG', '1SGT', '1ºSGT', '1ºSARGENTO'): return 12
+        if t in ('2SG', '2ºSG', '2SGT', '2ºSGT', '2ºSARGENTO'): return 13
+        if t in ('3SG', '3ºSG', '3SGT', '3ºSGT', '3ºSARGENTO', 'SG', 'SARGENTO'): return 14
+        if t in ('CB', 'CABO'): return 15
+        if t in ('SD', 'SOLDADO', 'MN', 'MARINHEIRO'): return 16
+
     return 98
 
 def sort_efetivo_by_rank(ef_list: list) -> list:
@@ -356,8 +361,8 @@ def sort_efetivo_by_rank(ef_list: list) -> list:
         
         group_priority = 0 if is_comsoc else 1
         
-        pg = item.get('posto_grad') or ''
-        seniority = get_rank_seniority(pg)
+        pg_text = f"{item.get('posto_grad') or ''} {item.get('posto') or ''} {item.get('nome_guerra') or ''}".strip()
+        seniority = get_rank_seniority(pg_text)
         nome_guerra = str(item.get('nome_guerra') or item.get('nome') or '').upper()
         return (group_priority, seniority, nome_guerra)
         
