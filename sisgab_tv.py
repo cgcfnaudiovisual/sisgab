@@ -52,6 +52,48 @@ def render_page():
                     ui.label('MONITOR TÁTICO COMSOC').style('font-size: 1.5rem; font-weight: 900; color: #ffffff; letter-spacing: 2px;')
                     ui.label('CENTRAL DE OPERAÇÕES E COMUNICAÇÃO').style('font-size: 0.65rem; color: #00e5ff; font-weight: 700; letter-spacing: 1px;')
             
+            with ui.row().classes('items-center gap-2'):
+                def open_tv_missao_rapida_dialog():
+                    with ui.dialog() as diag, ui.card().classes('w-96 q-pa-md bg-slate-900 border border-deep-orange-500/50 rounded-xl'):
+                        ui.label('⚡ LANÇAR MISSÃO RÁPIDA (TV)').classes('text-deep-orange font-bold text-md cyber-title')
+                        ui.label('Cadastre uma missão de campo urgente diretamente pelo painel.').classes('text-xs text-grey-4 q-mb-sm')
+                        tit_inp = ui.input('Título / Objetivo da Missão', placeholder='Ex: Cobertura Urgente Chegada Comandante').props('dark outlined dense w-full')
+                        loc_inp = ui.input('Local', value='Gabinete / COMSOC').props('dark outlined dense w-full')
+                        
+                        def salvar_missao():
+                            t = tit_inp.value.strip()
+                            if not t:
+                                ui.notify('Digite um título válido', color='warning')
+                                return
+                            try:
+                                db = fresh_db()
+                                if db:
+                                    now_str = datetime.now().strftime('%Y-%m-%d')
+                                    db.table('demandas_comunicacao').insert({
+                                        'titulo_evento': f"⚡ {t}",
+                                        'solicitante_nome': 'MONITOR TV',
+                                        'contato': 'COMSOC / Monitor TV',
+                                        'setor': 'COMSOC / GABINETE',
+                                        'data_evento': now_str,
+                                        'hora_evento': datetime.now().strftime('%H:%M'),
+                                        'local_evento': loc_inp.value or 'Gabinete',
+                                        'status': 'aprovada',
+                                        'categoria_demanda': 'audiovisual'
+                                    }).execute()
+                                    ui.notify(f"⚡ Missão Rápida '{t}' lançada com sucesso!", color='positive')
+                                    diag.close()
+                                    render_tv_dashboard.refresh()
+                            except Exception as e:
+                                ui.notify(f'Erro ao lançar missão: {e}', color='negative')
+
+                        with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
+                            ui.button('Cancelar', on_click=diag.close).props('flat color=grey text-color=white')
+                            ui.button('⚡ Lançar Agora', on_click=salvar_missao).props('unelevated color=deep-orange text-color=white bold')
+                    diag.open()
+
+                ui.button('⚡ Missão Rápida', on_click=open_tv_missao_rapida_dialog).props('unelevated color=deep-orange-9 text-color=white dense bold icon=flash_on').classes('text-xs q-px-sm')
+                ui.button('🪪 Placas JADE', on_click=lambda: app.navigate.to('/comsoc_assentos')).props('outline color=indigo-4 text-color=white dense bold icon=badge').classes('text-xs q-px-sm')
+
             # Relógio Digital Gigante
             with ui.column().classes('items-end gap-0'):
                 nonlocal_time = ui.label('').style('font-size: 1.8rem; font-weight: 900; color: #ffffff; line-height: 1;')
@@ -122,6 +164,31 @@ def render_page():
                         efetivo_pronto_str = f"{prontos}/{tot_ef}"
                     else:
                         efetivo_pronto_str = f"{tot_ef}/{tot_ef}"
+
+                    # 2. CARGA DE KPIS JADE & MISSÕES RÁPIDAS
+                    jade_event_name = "Nenhum"
+                    jade_printed = 0
+                    jade_total = 0
+                    try:
+                        res_ev = db.table('jade_eventos').select('*').order('data_evento', desc=True).limit(1).execute()
+                        if res_ev.data:
+                            active_ev = res_ev.data[0]
+                            jade_event_name = active_ev.get('nome', 'Solenidade')
+                            res_c = db.table('jade_convidados').select('id, status_placa').eq('evento_id', active_ev['id']).execute()
+                            if res_c.data:
+                                convs = res_c.data
+                                jade_total = len(convs)
+                                jade_printed = sum(1 for c in convs if c.get('status_placa') == 'impressa')
+                    except Exception as j_err:
+                        print(f"[TV JADE KPI ERR] {j_err}")
+
+                    missões_rapidas_cnt = 0
+                    try:
+                        res_mr = db.table('demandas_comunicacao').select('id').eq('data_evento', hoje_str).like('titulo_evento', '%⚡%').execute()
+                        if res_mr.data:
+                            missões_rapidas_cnt = len(res_mr.data)
+                    except Exception:
+                        pass
                 except Exception as e:
                     print(f"[TV KPIs ERR] {e}")
 
@@ -137,45 +204,52 @@ def render_page():
                 )
             last_known_pendentes[0] = demandas_pendentes
 
-            # ── BLOCO 1: PAINEL DE KPIs OPERACIONAIS (6 CARDS TÁTICOS) ──
+            # ── BLOCO 1: PAINEL DE KPIs OPERACIONAIS (CARDS TÁTICOS COMPLETO) ──
             with ui.row().classes('w-full gap-2 justify-between items-center q-mt-xs flex-wrap'):
                 # KPI 1: Pautas Aprovadas
-                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-3 justify-center').style('background: rgba(10,15,30,0.4); min-width: 140px;'):
+                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-3 justify-center').style('background: rgba(10,15,30,0.4); min-width: 130px;'):
                     ui.icon('camera_alt', color='cyan-5', size='sm')
                     with ui.column().classes('gap-0'):
                         ui.label('PAUTAS ATIVAS').classes('text-[9px] text-grey-5 font-bold tracking-wider')
                         ui.label(str(total_pautas)).classes('text-lg font-black text-white')
                 
                 # KPI 2: Pendente Análise
-                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-3 justify-center').style('background: rgba(10,15,30,0.4); min-width: 140px;'):
+                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-3 justify-center').style('background: rgba(10,15,30,0.4); min-width: 130px;'):
                     ui.icon('hourglass_top', color='amber-5', size='sm')
                     with ui.column().classes('gap-0'):
                         ui.label('PENDENTE ANÁLISE').classes('text-[9px] text-grey-5 font-bold tracking-wider')
                         ui.label(str(demandas_pendentes)).classes('text-lg font-black text-amber-4')
 
                 # KPI 3: Em Ajuste
-                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-3 justify-center').style('background: rgba(10,15,30,0.4); min-width: 140px;'):
+                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-3 justify-center').style('background: rgba(10,15,30,0.4); min-width: 130px;'):
                     ui.icon('build_circle', color='orange-5', size='sm')
                     with ui.column().classes('gap-0'):
                         ui.label('EM AJUSTE').classes('text-[9px] text-grey-5 font-bold tracking-wider')
                         ui.label(str(demandas_ajustes)).classes('text-lg font-black text-orange-4')
 
                 # KPI 4: Prontidão 24 Horas
-                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-3 justify-center').style('background: rgba(10,15,30,0.4); min-width: 140px;'):
+                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-3 justify-center').style('background: rgba(10,15,30,0.4); min-width: 130px;'):
                     ui.icon('bolt', color='yellow-5', size='sm')
                     with ui.column().classes('gap-0'):
                         ui.label('PRONTIDÃO 24H').classes('text-[9px] text-grey-5 font-bold tracking-wider')
                         ui.label(str(eventos_24h)).classes('text-lg font-black text-yellow-4')
 
-                # KPI 5: Taxa de Entrega
-                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-3 justify-center').style('background: rgba(10,15,30,0.4); min-width: 140px;'):
-                    ui.icon('task_alt', color='green-5', size='sm')
+                # KPI 5: Missões Rápidas Hoje
+                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-3 justify-center').style('background: rgba(10,15,30,0.4); min-width: 130px;'):
+                    ui.icon('flash_on', color='deep-orange-5', size='sm')
                     with ui.column().classes('gap-0'):
-                        ui.label('TAXA ENTREGAS').classes('text-[9px] text-grey-5 font-bold tracking-wider')
-                        ui.label(taxa_entregas_str).classes('text-lg font-black text-green-4')
+                        ui.label('MISSÕES RÁPIDAS').classes('text-[9px] text-grey-5 font-bold tracking-wider')
+                        ui.label(str(missões_rapidas_cnt)).classes('text-lg font-black text-deep-orange-4')
 
-                # KPI 6: Efetivo no Pronto
+                # KPI 6: Placas JADE (Solenidade)
                 with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-3 justify-center').style('background: rgba(10,15,30,0.4); min-width: 140px;'):
+                    ui.icon('badge', color='indigo-4', size='sm')
+                    with ui.column().classes('gap-0'):
+                        ui.label('PLACAS JADE').classes('text-[9px] text-grey-5 font-bold tracking-wider')
+                        ui.label(f"{jade_printed}/{jade_total} IMP.").classes('text-sm font-black text-indigo-3')
+
+                # KPI 7: Efetivo no Pronto
+                with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-3 justify-center').style('background: rgba(10,15,30,0.4); min-width: 130px;'):
                     ui.icon('shield', color='teal-4', size='sm')
                     with ui.column().classes('gap-0'):
                         ui.label('EFETIVO NO PRONTO').classes('text-[9px] text-grey-5 font-bold tracking-wider')
