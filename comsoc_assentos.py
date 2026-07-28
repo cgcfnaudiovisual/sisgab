@@ -2226,28 +2226,68 @@ def render_page():
             name = re.sub(r'\s*\(\d+(/\d+)?\)$', '', name).strip()
             return name.upper()
 
+        def get_rank_logo_asset(posto_str):
+            if not posto_str:
+                return None
+            p = str(posto_str).upper().strip()
+            
+            sigla = None
+            if any(k in p for k in ['ESQUADRA', 'SQUADRA', 'AE', 'ALMIRANTE DE ESQUADRA']):
+                sigla = 'AE'
+            elif any(k in p for k in ['VICE', 'VADM', 'V-ADM', 'VA', 'VICE-ALMIRANTE']):
+                sigla = 'VA'
+            elif any(k in p for k in ['CONTRA', 'CALTE', 'C-ADM', 'CA', 'CONTRA-ALMIRANTE']):
+                sigla = 'CA'
+            elif any(k in p for k in ['MAR E GUERRA', 'CMG']):
+                sigla = 'CMG'
+            elif any(k in p for k in ['FRAGATA', 'CF']):
+                sigla = 'CF'
+            elif any(k in p for k in ['CORVETA', 'CC']):
+                sigla = 'CC'
+            elif any(k in p for k in ['TENENTE', 'CT']):
+                sigla = 'CT'
+            else:
+                sigla = p.split()[0] if p else None
+
+            if not sigla:
+                return None
+
+            sigla_clean = re.sub(r'\W+', '', sigla).upper()
+
+            # 1. Procura no bucket 'logos' do Supabase por ex: AE.png, AE.PNG, ae.png
+            try:
+                from database import list_supabase_storage_files
+                bucket_files = list_supabase_storage_files("logos")
+                for f in bucket_files:
+                    fname = f.get('name', '')
+                    fname_no_ext = os.path.splitext(fname)[0].upper()
+                    if fname_no_ext == sigla_clean:
+                        return f.get('url')
+            except Exception as b_err:
+                print(f"[RANK LOGO BUCKET ERR] {b_err}")
+
+            # 2. Procura localmente em assets/insignias/
+            possible_names = [f"{sigla_clean.lower()}.png", f"{sigla_clean}.png", f"{sigla_clean.lower()}.jpg", f"{sigla_clean}.jpg"]
+            for p_name in possible_names:
+                local_p = os.path.join('assets', 'insignias', p_name)
+                if os.path.exists(local_p):
+                    return local_p
+
+            return None
+
         def parse_almirantado_stars(posto_str):
             if not posto_str:
                 return {'eh_almirante': False, 'stars': '', 'title': '', 'color': '#000000', 'png_asset': None}
             p = str(posto_str).upper().strip()
             
-            png_path = None
+            png_path = get_rank_logo_asset(p)
+            
             if any(k in p for k in ['ESQUADRA', 'SQUADRA', 'AE', 'ALMIRANTE DE ESQUADRA']):
-                if os.path.exists('assets/insignias/ae.png'):
-                    png_path = 'assets/insignias/ae.png'
                 return {'eh_almirante': True, 'stars': '★ ★ ★ ★', 'title': 'ALMIRANTE DE ESQUADRA', 'color': '#000000', 'png_asset': png_path}
             elif any(k in p for k in ['VICE', 'VADM', 'V-ADM', 'VA', 'VICE-ALMIRANTE']):
-                if os.path.exists('assets/insignias/va.png'):
-                    png_path = 'assets/insignias/va.png'
                 return {'eh_almirante': True, 'stars': '★ ★ ★', 'title': 'VICE-ALMIRANTE', 'color': '#000000', 'png_asset': png_path}
             elif any(k in p for k in ['CONTRA', 'CALTE', 'C-ADM', 'CA', 'CONTRA-ALMIRANTE']):
-                if os.path.exists('assets/insignias/ca.png'):
-                    png_path = 'assets/insignias/ca.png'
                 return {'eh_almirante': True, 'stars': '★ ★', 'title': 'CONTRA-ALMIRANTE', 'color': '#000000', 'png_asset': png_path}
-            
-            possible_png = f"assets/insignias/{p.lower()}.png"
-            if os.path.exists(possible_png):
-                png_path = possible_png
 
             return {'eh_almirante': False, 'stars': '', 'title': p, 'color': '#000000', 'png_asset': png_path}
 
