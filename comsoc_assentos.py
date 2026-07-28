@@ -2300,7 +2300,7 @@ def render_page():
             # ═══════════════════════════════════════════════════════════════
             with ui.card().classes('w-full q-pa-md bg-black/50 border border-cyan-500/30 rounded-xl q-mb-md print-hide'):
 
-                # ── Linha 1: Modelo + Toggles ──
+                # ── Linha 1: Modelo + Placas por Folha + Toggles ──
                 with ui.row().classes('w-full items-center gap-3 wrap'):
                     ui.label('Modelo:').classes('text-xs text-grey-3 font-bold')
                     model_select = ui.select(
@@ -2313,7 +2313,13 @@ def render_page():
                             'template_custom': '🎨 Template Customizado (Imagem de Fundo)'
                         },
                         value='prisma_a4_4slots'
-                    ).props('dark outlined dense').style('min-width: 320px;')
+                    ).props('dark outlined dense').style('min-width: 310px;')
+
+                    ui.label('Placas / Folha A4:').classes('text-xs text-grey-3 font-bold q-ml-xs')
+                    input_items_per_sheet = ui.select(
+                        options={1: '1 por Folha A4', 2: '2 por Folha A4', 4: '4 por Folha A4 (Padrão)', 6: '6 por Folha A4', 8: '8 por Folha A4'},
+                        value=4
+                    ).props('dark outlined dense').style('width: 170px;')
 
                     with ui.row().classes('items-center gap-2'):
                         chk_only_confirmed = ui.checkbox('Só Confirmados / Fila Ativa', value=False).props('dark dense').classes('text-xs text-amber-3')
@@ -2816,91 +2822,50 @@ def render_page():
                     return True
 
                 with ui.column().classes('w-full gap-4 print-area'):
-                    # Verifica se há algum convidado com assento alocado para exibir
-                    total_com_assento = sum(
-                        len([c for c in list_c_raw if c.get('assento_id')])
-                        for list_c_raw in allocated_by_row.values()
-                    )
-                    if total_com_assento == 0:
+                    # 1. Coleta TODOS os cartões alocados em uma única lista contínua sem separar por fileira
+                    all_cards = []
+                    for row_label, list_c_raw in allocated_by_row.items():
+                        for c in list_c_raw:
+                            if c.get('assento_id') and should_print(c):
+                                all_cards.append(c)
+
+                    def sort_key_assento(c):
+                        ass = str(c.get('assento_id', '')).upper().strip()
+                        match = re.match(r'([A-Z]+)-?(\d+)', ass)
+                        if match:
+                            row, num = match.groups()
+                            return (row, int(num))
+                        return (ass, 0)
+
+                    all_cards.sort(key=sort_key_assento)
+
+                    if not all_cards:
                         with ui.column().classes('w-full items-center justify-center q-py-xl gap-3'):
                             ui.icon('chair_alt', size='3rem', color='cyan-3')
                             ui.label('Nenhum convidado alocado no mapa de assentos ainda.').classes('text-sm text-grey-4 text-center')
                             ui.label('Acesse o mapa de assentos acima, clique em um assento e vincule um convidado para que as placas apareçam aqui.').classes('text-xs text-grey-6 text-center')
                         return
 
-                    for row_label, list_c_raw in allocated_by_row.items():
-                        list_c = [c for c in list_c_raw if should_print(c)]
-                        if not list_c:
-                            continue
+                    # 2. Pega a quantidade solicitada de placas por folha A4 (configurável pelo operador, padrão 4)
+                    items_per_sheet = int(input_items_per_sheet.value or 4)
+                    total_pages = (len(all_cards) + items_per_sheet - 1) // items_per_sheet
 
-                        with ui.column().classes('w-full gap-2 jade-horizontal-sheet q-mb-md'):
+                    for page_idx in range(total_pages):
+                        batch = all_cards[page_idx * items_per_sheet : (page_idx + 1) * items_per_sheet]
+                        
+                        with ui.column().classes('w-full gap-2 page-break q-mb-md'):
                             with ui.row().classes('w-full justify-between items-center bg-cyan-950/60 q-pa-sm rounded-lg border border-cyan-500/40 print-hide'):
-                                ui.label(f"FILEIRA {row_label} — {len(list_c)} PLACAS").classes('text-sm font-bold text-cyan')
-                                ui.badge(f"Lote Fileira {row_label}").props('color=cyan text-color=black')
+                                first_seat = batch[0].get('assento_id', '')
+                                last_seat = batch[-1].get('assento_id', '')
+                                ui.label(f"📄 FOLHA A4 #{page_idx + 1} DE {total_pages} — {len(batch)} PLACAS (ASSENTOS {first_seat} ATÉ {last_seat})").classes('text-sm font-bold text-cyan')
+                                ui.badge(f"Folha {page_idx + 1} / {total_pages}").props('color=cyan text-color=black')
 
-                            # ═══ MODELO: PLACA HORIZONTAL CGCFN (PADRÃO OFICIAL) ═══
-                            if current_model == 'jade_horizontal_a4':
-                                sorted_list = sorted(list_c, key=lambda x: x.get('assento_id', ''))
-                                # Renderiza em blocos de 4 (1 folha A4 = 4 placas: 2 colunas × 2 linhas)
-                                for sheet_start in range(0, len(sorted_list), 4):
-                                    sheet_batch = sorted_list[sheet_start:sheet_start + 4]
-                                    with ui.element('div').classes('jade-horizontal-grid w-full'):
-                                        for c in sheet_batch:
-                                            is_acomp = bool(c.get('convidado_principal_id'))
-                                            posto_abrev = (c.get('posto_graduacao') or '').strip()
-                                            insignia_data = RANK_INSIGNIAS.get(posto_abrev, None)
-                                            posto_ext = insignia_data['title'] if insignia_data else posto_abrev
-                                            stars = insignia_data['stars'] if insignia_data else ''
-                                            nome_guerra = c['nome'].strip().upper()
-                                            assento = c.get('assento_id') or ''
-
-                                            import urllib.parse
-                                            qr_data = urllib.parse.quote(f"JADE|{event.get('id','')}|{c['id']}|{posto_abrev}|{c['nome']}|{assento}")
-                                            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=80x80&data={qr_data}&color=1a1a6e&bgcolor=ffffff"
-
-                                            logo_html = ''
-                                            if show_logo and resolved_logo_url:
-                                                logo_html = f'<img src="{resolved_logo_url}" style="width:{logo_w}mm;height:auto;object-fit:contain;" />'
-                                            else:
-                                                logo_html = f'<span style="font-size:{logo_w}px;">⚓</span>'
-
-                                            stars_html = ''
-                                            if stars and show_rank:
-                                                star_list = [s for s in stars]
-                                                stars_html = ''.join(f'<span class="jade-star">{s}</span>' for s in star_list)
-
-                                            reservado_html = '<div class="jade-reservado">RESERVADO</div>' if is_acomp else ''
-                                            assento_html = f'<div class="jade-assento-badge">ASSENTO {assento}</div>' if assento else ''
-                                            qr_html = f'<img src="{qr_url}" style="width:{qr_size}mm;height:{qr_size}mm;background:#fff;border-radius:3px;border:1px solid #ccc;" /><div style="font-size:7px;color:#888;font-family:monospace;">{assento}</div>' if show_qr else ''
-
-                                            ui.html(f'''
-                                            <div class="jade-placa-horiz">
-                                                <div class="jade-placa-left">
-                                                    {logo_html}
-                                                    <div style="display:flex;flex-direction:column;align-items:center;gap:1px;margin-top:4px;">
-                                                        {stars_html}
-                                                    </div>
-                                                </div>
-                                                <div class="jade-placa-center">
-                                                    {reservado_html}
-                                                    <div class="jade-posto-ext" style="font-size:{f_posto}pt;">{posto_ext}</div>
-                                                    <div class="jade-nome-guerra" style="font-size:{f_nome}pt;">{nome_guerra}</div>
-                                                    {assento_html}
-                                                </div>
-                                                <div class="jade-placa-right">
-                                                    {qr_html}
-                                                </div>
-                                            </div>
-                                            ''')
-                                    if sheet_start + 4 < len(sorted_list):
-                                        ui.html('<div class="jade-cut-line print-hide" style="border-top:1px dashed #ccc;margin:8px 0;"></div>')
-
-                            # ═══ MODELO: PRISMA INSTITUCIONAL A4 (4 SLOTS POR FOLHA) ═══
-                            elif current_model == 'prisma_a4_4slots':
+                            # ═══ MODELO: PRISMA INSTITUCIONAL A4 (4 por Folha) ═══
+                            if current_model == 'prisma_a4_4slots':
                                 termo_reservado = input_termo_conv.value or 'RESERVADO'
                                 show_double_border = chk_border.value
                                 with ui.column().classes('w-full gap-3'):
-                                    for c in sorted(list_c, key=lambda x: x.get('assento_id', '')):
+                                    for c in batch:
                                         is_acomp = bool(c.get('convidado_principal_id'))
                                         posto = c.get('posto_graduacao') or ''
                                         almirantado_info = parse_almirantado_stars(posto)
@@ -2911,7 +2876,7 @@ def render_page():
                                         
                                         with ui.element('div').classes('prisma-card-a4-slot').style(border_style):
                                             # Canto Superior Esquerdo: Brasão + Estrelas / PNG Insígnias com Posição X/Y e Escala
-                                            with ui.element('div').style(f'position: absolute; top: {logo_y}mm; left: {logo_x}mm; z-index: 10; display: flex; flex-direction: column; align-items: flex-start;'):
+                                            with ui.element('div').style(f'position: absolute; top: {logo_y}mm; left: {logo_x}mm; z-index: 10; display: flex; flex-direction: column; align-items: flex-start; shadow: none;'):
                                                 if show_logo and target_logo:
                                                     ui.image(target_logo).style(f'width: {logo_w}mm; height: auto; object-fit: contain;')
                                                 elif show_logo:
@@ -2946,6 +2911,57 @@ def render_page():
                                                     elif posto:
                                                         ui.label(posto.upper()).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
                                                     ui.label(nome_limpo).classes('prisma-nome-autoridade').style(f'font-size: {f_nome}pt;')
+
+                            # ═══ MODELO: PLACA HORIZONTAL CGCFN (PADRÃO OFICIAL) ═══
+                            elif current_model == 'jade_horizontal_a4':
+                                with ui.element('div').classes('jade-horizontal-grid w-full'):
+                                    for c in batch:
+                                        is_acomp = bool(c.get('convidado_principal_id'))
+                                        posto_abrev = (c.get('posto_graduacao') or '').strip()
+                                        insignia_data = RANK_INSIGNIAS.get(posto_abrev, None)
+                                        posto_ext = insignia_data['title'] if insignia_data else posto_abrev
+                                        stars = insignia_data['stars'] if insignia_data else ''
+                                        nome_guerra = c['nome'].strip().upper()
+                                        assento = c.get('assento_id') or ''
+
+                                        import urllib.parse
+                                        qr_data = urllib.parse.quote(f"JADE|{event.get('id','')}|{c['id']}|{posto_abrev}|{c['nome']}|{assento}")
+                                        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=80x80&data={qr_data}&color=1a1a6e&bgcolor=ffffff"
+
+                                        logo_html = ''
+                                        if show_logo and resolved_logo_url:
+                                            logo_html = f'<img src="{resolved_logo_url}" style="width:{logo_w}mm;height:auto;object-fit:contain;" />'
+                                        else:
+                                            logo_html = f'<span style="font-size:{logo_w}px;">⚓</span>'
+
+                                        stars_html = ''
+                                        if stars and show_rank:
+                                            star_list = [s for s in stars]
+                                            stars_html = ''.join(f'<span class="jade-star">{s}</span>' for s in star_list)
+
+                                        reservado_html = '<div class="jade-reservado">RESERVADO</div>' if is_acomp else ''
+                                        assento_html = f'<div class="jade-assento-badge">ASSENTO {assento}</div>' if assento else ''
+                                        qr_html = f'<img src="{qr_url}" style="width:{qr_size}mm;height:{qr_size}mm;background:#fff;border-radius:3px;border:1px solid #ccc;" /><div style="font-size:7px;color:#888;font-family:monospace;">{assento}</div>' if show_qr else ''
+
+                                        ui.html(f'''
+                                        <div class="jade-placa-horiz">
+                                            <div class="jade-placa-left">
+                                                {logo_html}
+                                                <div style="display:flex;flex-direction:column;align-items:center;gap:1px;margin-top:4px;">
+                                                    {stars_html}
+                                                </div>
+                                            </div>
+                                            <div class="jade-placa-center">
+                                                {reservado_html}
+                                                <div class="jade-posto-ext" style="font-size:{f_posto}pt;">{posto_ext}</div>
+                                                <div class="jade-nome-guerra" style="font-size:{f_nome}pt;">{nome_guerra}</div>
+                                                {assento_html}
+                                            </div>
+                                            <div class="jade-placa-right">
+                                                {qr_html}
+                                            </div>
+                                        </div>
+                                        ''')
 
                             # ═══ MODELO: TEMPLATE CUSTOMIZADO ═══
                             elif current_model == 'template_custom' or use_bg:
