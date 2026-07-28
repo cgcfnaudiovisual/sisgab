@@ -93,15 +93,23 @@ def render_page():
 
                 ui.button('⚡ Missão Rápida', on_click=open_tv_missao_rapida_dialog).props('unelevated color=deep-orange-9 text-color=white dense bold icon=flash_on').classes('text-xs q-px-sm')
                 ui.button('🪪 Placas JADE', on_click=lambda: app.navigate.to('/comsoc_assentos')).props('outline color=indigo-4 text-color=white dense bold icon=badge').classes('text-xs q-px-sm')
+                
+                def toggle_alerts(val):
+                    app.storage.user['tv_alerts_enabled'] = val
+                    render_tv_dashboard.refresh()
 
-            # Relógio Digital Gigante
+                alerts_enabled = app.storage.user.get('tv_alerts_enabled', True)
+                ui.checkbox('Card Alertas', value=alerts_enabled, on_change=lambda e: toggle_alerts(e.value)).props('dark dense').classes('text-xs text-white q-ml-sm')
+
+            # Relógio Digital Gigante (Horário de Brasília GMT-3)
             with ui.column().classes('items-end gap-0'):
                 nonlocal_time = ui.label('').style('font-size: 1.8rem; font-weight: 900; color: #ffffff; line-height: 1;')
                 nonlocal_date = ui.label('').style('font-size: 0.75rem; color: #a1a1aa; font-weight: bold; letter-spacing: 1.5px;')
                 
                 def update_clock():
-                    nonlocal_time.text = datetime.now().strftime('%H:%M:%S')
-                    nonlocal_date.text = datetime.now().strftime('%d DE %B DE %Y').upper()
+                    now_br = datetime.utcnow() - timedelta(hours=3)
+                    nonlocal_time.text = now_br.strftime('%H:%M:%S')
+                    nonlocal_date.text = now_br.strftime('%d DE %B DE %Y').upper()
                 
                 ui.timer(1.0, update_clock)
                 update_clock()
@@ -123,7 +131,7 @@ def render_page():
             jade_total = 0
             missoes_rapidas_cnt = 0
 
-            hoje = datetime.now().date()
+            hoje = (datetime.utcnow() - timedelta(hours=3)).date()
             amanha = hoje + timedelta(days=1)
             hoje_str = hoje.strftime('%Y-%m-%d')
 
@@ -255,10 +263,12 @@ def render_page():
                         ui.label('EFETIVO NO PRONTO').classes('text-[9px] text-grey-5 font-bold tracking-wider')
                         ui.label(efetivo_pronto_str).classes('text-lg font-black text-teal-3')
 
-            # ── SELO HIGHLIGHT: COBERTURA EM ANDAMENTO AGORA ──
-            agora_dt = datetime.now()
-            pauta_ao_vivo = None
-            if db:
+            # ── SELO HIGHLIGHT: COBERTURA EM TEMPO REAL / PRÓXIMO EVENTO ──
+            agora_dt = datetime.utcnow() - timedelta(hours=3)
+            show_alerts = app.storage.user.get('tv_alerts_enabled', True)
+            pautas_alertas = []
+            
+            if db and show_alerts:
                 try:
                     res_live = db.table('demandas_comunicacao').select('*').eq('data_evento', hoje_str).execute()
                     if res_live.data:
@@ -269,23 +279,41 @@ def render_page():
                                 try:
                                     hr_dt = datetime.strptime(f"{hoje_str} {hr_str[:5]}", '%Y-%m-%d %H:%M')
                                     diff_mins = (agora_dt - hr_dt).total_seconds() / 60.0
+                                    
+                                    # LIVE: entre 30 minutos antes e 120 minutos depois do início
                                     if -30 <= diff_mins <= 120:
-                                        pauta_ao_vivo = p_live
-                                        break
+                                        p_live['alert_type'] = 'LIVE'
+                                        pautas_alertas.append(p_live)
+                                    # PRÓXIMO: mais de 30 minutos antes do início (ainda vai acontecer hoje)
+                                    elif diff_mins < -30:
+                                        p_live['alert_type'] = 'NEXT'
+                                        pautas_alertas.append(p_live)
                                 except Exception:
                                     pass
                 except Exception as live_err:
                     print(f"[TV LIVE HIGHLIGHT ERR] {live_err}")
 
-            if pauta_ao_vivo:
-                with ui.card().classes('w-full q-pa-sm no-shadow rounded-xl border border-red-500/50 flex-row items-center justify-between no-wrap animate-pulse q-mb-xs').style('background: rgba(239,68,68,0.15);'):
+            if pautas_alertas:
+                # Ordena os alertas (LIVE primeiro, depois os de NEXT por hora)
+                pautas_alertas.sort(key=lambda x: (0 if x.get('alert_type') == 'LIVE' else 1, x.get('hora_evento', '')))
+                
+                # Rotaciona entre os alertas a cada 15 segundos com base no timestamp
+                alert_idx = (int(datetime.utcnow().timestamp() // 15)) % len(pautas_alertas)
+                pauta_alerta = pautas_alertas[alert_idx]
+                
+                is_live = pauta_alerta.get('alert_type') == 'LIVE'
+                badge_text = '🔴 EM COBERTURA AGORA' if is_live else '⏳ PRÓXIMO EVENTO'
+                card_style = 'background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.5);' if is_live else 'background: rgba(0,229,255,0.1); border: 1px solid rgba(0,229,255,0.3);'
+                badge_color = 'red-10' if is_live else 'cyan-9'
+                
+                with ui.card().classes('w-full q-pa-sm no-shadow rounded-xl flex-row items-center justify-between no-wrap q-mb-xs').style(f'{card_style} {"animate-pulse" if is_live else ""};'):
                     with ui.row().classes('items-center gap-2'):
-                        ui.badge('🔴 EM COBERTURA AGORA', color='red-10').classes('text-xs font-black tracking-wider q-px-sm')
-                        ui.label(pauta_ao_vivo.get('titulo_evento', '')).classes('text-xs font-bold text-white truncate max-w-[450px]')
+                        ui.badge(badge_text, color=badge_color).classes('text-xs font-black tracking-wider q-px-sm')
+                        ui.label(pauta_alerta.get('titulo_evento', '')).classes('text-xs font-bold text-white truncate max-w-[450px]')
                     with ui.row().classes('items-center gap-3 text-[11px] text-grey-3 font-semibold'):
-                        ui.label(f"📍 {pauta_ao_vivo.get('local_evento', 'Gabinete')}")
-                        ui.label(f"🕒 {pauta_ao_vivo.get('hora_evento', '')}")
-                        ui.label(f"👤 Solicitante: {pauta_ao_vivo.get('solicitante_nome', 'COMSOC')}")
+                        ui.label(f"📍 {pauta_alerta.get('local_evento', 'Gabinete')}")
+                        ui.label(f"🕒 {pauta_alerta.get('hora_evento', '')}")
+                        ui.label(f"👤 Solicitante: {pauta_alerta.get('solicitante_nome', 'COMSOC')}")
 
             # ── GRIDS PRINCIPAIS DO MONITOR ──
             with ui.grid(columns=1).classes('w-full gap-4 flex-grow gt-xs').style('grid-template-columns: 1.2fr 1.1fr 1fr; margin-top: 6px;'):
@@ -328,7 +356,7 @@ def render_page():
                             ui.icon('calendar_today', size='2.5rem')
                             ui.label('Sem pautas registradas.').classes('text-xs')
                     else:
-                        hoje_dt = datetime.now()
+                        hoje_dt = datetime.utcnow() - timedelta(hours=3)
                         active_view = view_state['active']
 
                         if active_view == 'semana':
@@ -452,7 +480,7 @@ def render_page():
                         ui.badge('PRONTIDÃO 48H', color='amber-9').classes('text-[8px] font-mono')
 
                     pautas_hoje_amanha = []
-                    hoje_obj = datetime.now().date()
+                    hoje_obj = (datetime.utcnow() - timedelta(hours=3)).date()
                     amanha_obj = hoje_obj + timedelta(days=1)
 
                     if pautas:
@@ -503,7 +531,7 @@ def render_page():
                             with ui.row().classes('items-center gap-2'):
                                 ui.icon('shield', color='orange-5', size='xs')
                                 ui.label('ESCALA DE SERVIÇO DIÁRIA').classes('text-xs font-bold text-white tracking-wider')
-                            ui.label(datetime.now().strftime('%d/%m')).classes('text-[10px] text-amber-5 font-mono font-bold')
+                            ui.label((datetime.utcnow() - timedelta(hours=3)).strftime('%d/%m')).classes('text-[10px] text-amber-5 font-mono font-bold')
 
                         escala = {}
                         if db:
@@ -544,7 +572,7 @@ def render_page():
                             ui.badge(f'{count_jade_pending} PLACAS', color='amber-10').classes('text-[10px] font-black')
 
                     # BLOCO 2: MODO CARROSSEL DE INFORMATIVOS & EFEMÉRIDES (PAINEL INFERIOR)
-                    slide_idx = (int(datetime.now().timestamp() // 15)) % 3
+                    slide_idx = (int(datetime.utcnow().timestamp() // 15)) % 3
                     slide_headers = [
                         ('announcement', '📢 BOLETINS COMSOC'),
                         ('anchor', '⚓ SETOR NAVAL'),
