@@ -917,14 +917,41 @@ def register_common_handlers(bot):
                 state['data']['autoridades'] = text
                 state['step'] = 'choose_coverage'
                 state['data']['selected_services_set'] = set()
-                await bot.reply_to(
-                    message, 
-                    "[Passo 9/9] 📸 **Selecione os Tipos de Serviço Requeridos**\n\n"
-                    "Clique nos botões inline abaixo para marcar um ou mais serviços.\n"
-                    "Quando terminar, clique em **➡️ CONCLUIR SELEÇÃO DOS SERVIÇOS ➡️**:", 
-                    reply_markup=get_multi_service_inline_keyboard(state['data']['selected_services_set']), 
-                    parse_mode='Markdown'
-                )
+                try:
+                    await bot.reply_to(
+                        message, 
+                        "[Passo 9/9] 📸 **Selecione os Tipos de Serviço Requeridos**\n\n"
+                        "Clique nos botões inline abaixo para marcar um ou mais serviços.\n"
+                        "Quando terminar, clique em **➡️ CONCLUIR SELEÇÃO DOS SERVIÇOS ➡️**:", 
+                        reply_markup=get_multi_service_inline_keyboard(state['data']['selected_services_set']), 
+                        parse_mode='Markdown'
+                    )
+                except Exception:
+                    await bot.reply_to(
+                        message, 
+                        "[Passo 9/9] Selecione os Tipos de Serviço Requeridos abaixo:", 
+                        reply_markup=get_multi_service_inline_keyboard(state['data']['selected_services_set'])
+                    )
+
+            elif step == 'choose_coverage':
+                history.append(('choose_coverage', dict(state['data'])))
+                state['step'] = 'observacoes'
+                from .keyboards import get_observations_keyboard
+                try:
+                    await bot.reply_to(
+                        message,
+                        "[Passo Extra] 📝 **Observações ou Detalhes Adicionais**\n\n"
+                        "Deseja registrar alguma informação adicional (ex: roteiro, transmissão, contatos extra)?\n"
+                        "Ou clique em **⏭️ Pular / Nenhuma Observação**:",
+                        reply_markup=get_observations_keyboard(),
+                        parse_mode='Markdown'
+                    )
+                except Exception:
+                    await bot.reply_to(
+                        message,
+                        "[Passo Extra] Observações ou Detalhes Adicionais:",
+                        reply_markup=get_observations_keyboard()
+                    )
 
             elif step == 'observacoes':
                 history.append(('observacoes', dict(state['data'])))
@@ -954,7 +981,11 @@ def register_common_handlers(bot):
                     f"📝 **Observações:** {d.get('observacoes')}\n\n"
                     "⚠️ *Confirma os dados acima para cadastrar a solicitação?*"
                 )
-                await bot.reply_to(message, resumo, reply_markup=get_confirm_demanda_keyboard(), parse_mode='Markdown')
+                try:
+                    await bot.reply_to(message, resumo, reply_markup=get_confirm_demanda_keyboard(), parse_mode='Markdown')
+                except Exception:
+                    clean_resumo = resumo.replace('**', '').replace('__', '').replace('*', '')
+                    await bot.reply_to(message, clean_resumo, reply_markup=get_confirm_demanda_keyboard())
 
             elif step == 'review_confirm':
                 if "Confirmar" in text or "✅" in text:

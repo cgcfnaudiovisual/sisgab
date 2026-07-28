@@ -174,16 +174,17 @@ async def broadcast_notification(text: str, notification_type: str, role_require
 def notify_telegram(text: str, notification_type: str, role_required: str = None, specific_user_id: str = None, request_id: str = None, custom_chat_id: str = None):
     """Sincronamente despacha o envio de notificação."""
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
             loop.create_task(broadcast_notification(text, notification_type, role_required, specific_user_id, request_id, specific_telegram_id=custom_chat_id))
         else:
-            loop.run_until_complete(broadcast_notification(text, notification_type, role_required, specific_user_id, request_id, specific_telegram_id=custom_chat_id))
-    except Exception:
-        try:
             asyncio.run(broadcast_notification(text, notification_type, role_required, specific_user_id, request_id, specific_telegram_id=custom_chat_id))
-        except Exception as e:
-            print(f"[NOTIFY] Falha ao despachar notificação de Telegram: {e}", flush=True)
+    except Exception as e:
+        print(f"[NOTIFY ERR] Falha ao despachar notificação de Telegram: {e}", flush=True)
 
 
 async def broadcast_photo_notification(photo_bytes: bytes, caption: str, notification_type: str = "aviso"):
@@ -241,16 +242,17 @@ async def broadcast_photo_notification(photo_bytes: bytes, caption: str, notific
 def notify_telegram_photo(photo_bytes: bytes, caption: str, notification_type: str = "aviso"):
     """Sincronamente despacha o envio de foto via Telegram."""
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
             loop.create_task(broadcast_photo_notification(photo_bytes, caption, notification_type))
         else:
-            loop.run_until_complete(broadcast_photo_notification(photo_bytes, caption, notification_type))
-    except Exception:
-        try:
             asyncio.run(broadcast_photo_notification(photo_bytes, caption, notification_type))
-        except Exception as e:
-            print(f"[NOTIFY] Falha ao despachar notificação de foto: {e}", flush=True)
+    except Exception as e:
+        print(f"[NOTIFY ERR] Falha ao despachar notificação de foto: {e}", flush=True)
 
 
 def notify_jade_production(event_name: str, count_new: int, count_total_pending: int):
