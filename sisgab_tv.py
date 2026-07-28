@@ -525,35 +525,7 @@ def render_page():
                 # =========================================================================
                 with ui.column().classes('w-full gap-3 flex-grow q-pa-none'):
                     
-                    # BLOCO 1: ESCALA DE SERVIÇO E OPERAÇÕES (PAINEL SUPERIOR)
-                    with ui.card().classes('w-full q-pa-sm no-shadow rounded-xl border border-cyan-950/60').style('background: rgba(10,15,30,0.45);'):
-                        with ui.row().classes('w-full items-center justify-between q-mb-xs'):
-                            with ui.row().classes('items-center gap-2'):
-                                ui.icon('shield', color='orange-5', size='xs')
-                                ui.label('ESCALA DE SERVIÇO DIÁRIA').classes('text-xs font-bold text-white tracking-wider')
-                            ui.label((datetime.utcnow() - timedelta(hours=3)).strftime('%d/%m')).classes('text-[10px] text-amber-5 font-mono font-bold')
 
-                        escala = {}
-                        if db:
-                            try:
-                                res_esc = db.table('escala_diaria').select('*').eq('data', hoje_str).execute()
-                                if res_esc.data:
-                                    escala = res_esc.data[0]
-                            except Exception as e:
-                                print(f"[TV ESCALA ERR] {e}")
-
-                        esc_rows = [
-                            ('SUPERVISOR', escala.get('supervisor_dia', '1º TEN CALAÇA')),
-                            ('FOTÓGRAFO', escala.get('inspetor_dia', 'SG SILVA')),
-                            ('CINEGRAFISTA', escala.get('oficial_dia', 'CB COSTA')),
-                            ('MÍDIAS SOCIAIS', escala.get('auxiliar_dia', 'AL AMANDA'))
-                        ]
-                        
-                        with ui.column().classes('w-full gap-1 q-mt-xs'):
-                            for label, name in esc_rows:
-                                with ui.row().classes('w-full justify-between items-center bg-black/20 py-0.5 px-2 rounded border border-white/5 text-[11px]'):
-                                    ui.label(label).classes('text-grey-4 text-[9px] font-semibold')
-                                    ui.label(name).classes('text-white font-bold text-[10px]')
 
                     # BLOCO 1.5: ALERTA TÁTICO DE PLACAS JADE PENDENTES
                     count_jade_pending = 0
