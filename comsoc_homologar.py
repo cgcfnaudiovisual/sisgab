@@ -479,11 +479,38 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
                     except Exception as e:
                         error_lbl.text = f"Erro na gravação: {e}"
 
+            def deletar_pauta_confirm():
+                def efetuar_delecao():
+                    db = get_service_db_connection() or get_db_connection()
+                    if db:
+                        try:
+                            dem_id = demanda['id']
+                            if isinstance(dem_id, str) and dem_id.isdigit():
+                                dem_id = int(dem_id)
+                            db.table('demandas_comunicacao').delete().eq('id', dem_id).execute()
+                            ui.notify(f"🗑️ Pauta #{demanda.get('id')} excluída permanentemente!", color='negative')
+                            confirm_del_dialog.close()
+                            tramitar_dialog.close()
+                            if callback_refresh:
+                                callback_refresh()
+                        except Exception as e_del:
+                            error_lbl.text = f"Erro ao excluir pauta: {e_del}"
+
+                with ui.dialog() as confirm_del_dialog, ui.card().classes('w-96 q-pa-md bg-slate-900 border border-red-500/50 rounded-xl'):
+                    ui.label('⚠️ CONFIRMAR EXCLUSÃO').classes('text-red font-bold text-md cyber-title')
+                    ui.label(f"Tem certeza que deseja excluir permanentemente a pauta #{demanda.get('id')} ({demanda.get('titulo_evento')})?").classes('text-xs text-white q-my-sm')
+                    ui.label('Esta ação não poderá ser desfeita.').classes('text-[10px] text-grey-4 italic')
+                    with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
+                        ui.button('Cancelar', on_click=confirm_del_dialog.close).props('flat color=grey text-color=white')
+                        ui.button('🗑️ Excluir Permanentemente', on_click=efetuar_delecao).props('unelevated color=red text-color=white bold')
+                confirm_del_dialog.open()
+
             with ui.row().classes('w-full justify-between gap-2 q-mt-xs flex-wrap'):
                 ui.button('Rejeitar', on_click=lambda: submeter_tramitacao('rejeitado', 'Demanda Rejeitada')).props('unelevated color=red text-color=white bold').classes('col q-py-sm rounded-lg')
                 ui.button('Pedir Ajustes', on_click=lambda: submeter_tramitacao('ajustes', 'Solicitado Ajustes')).props('unelevated color=orange text-color=black bold').classes('col q-py-sm rounded-lg')
                 ui.button('Aprovar', on_click=lambda: submeter_tramitacao('aprovada', 'Demanda Aprovada')).props('unelevated color=green text-color=white bold').classes('col q-py-sm rounded-lg')
                 ui.button('🎯 Concluir Missão', on_click=lambda: (tramitar_dialog.close(), open_concluir_missao_dialog(demanda, user_name_guerra, callback_refresh))).props('unelevated color=cyan text-color=black bold').classes('col q-py-sm rounded-lg')
+                ui.button('🗑️ Excluir Pauta', on_click=deletar_pauta_confirm).props('outline color=red text-color=red bold icon=delete').classes('col q-py-sm rounded-lg')
 
         ui.button('Fechar', on_click=tramitar_dialog.close).props('flat color=grey').classes('w-full q-mt-md text-xs bold')
     tramitar_dialog.open()
