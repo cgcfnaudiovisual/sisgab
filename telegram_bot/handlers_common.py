@@ -889,6 +889,8 @@ def register_common_handlers(bot):
                     parse_mode='Markdown'
                 )
             elif step == 'select_militares':
+                user_name = profile.get('nome_guerra') or profile.get('nome') or 'Operador' if profile else 'Operador'
+                user_name = str(user_name).replace('None ', '').replace('None', '').strip().upper()
                 titulo_m = state.get('titulo', 'Missão Rápida')
                 efetivo_list = state.get('efetivo_list', [])
                 nome_digitado = text.replace('🎖️', '').strip().upper()
