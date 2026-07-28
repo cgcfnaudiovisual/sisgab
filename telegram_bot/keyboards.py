@@ -214,28 +214,68 @@ def get_observations_keyboard():
     markup.row(types.KeyboardButton("⬅️ Voltar"), types.KeyboardButton("❌ Cancelar"))
     return markup
 
-def get_multi_service_inline_keyboard(selected_services=None):
+def get_demandas_list_reply_keyboard(demandas_list):
+    """Gera teclado de resposta rápida no rodapé para selecionar qual demanda gerenciar."""
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    row = []
+    for d in demandas_list:
+        d_id = d.get('id')
+        tit = (d.get('titulo_evento') or 'Pauta')[:22]
+        row.append(types.KeyboardButton(f"⚙️ #{d_id} — {tit}"))
+        if len(row) == 2:
+            markup.row(*row)
+            row = []
+    if row:
+        markup.row(*row)
+    markup.row(types.KeyboardButton("⬅️ Voltar ao Menu Principal"))
+    return markup
+
+
+def get_demanda_actions_reply_keyboard(demanda_id, status='aprovada'):
+    """Gera teclado de resposta rápida no rodapé para gerenciar uma demanda específica."""
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    st = str(status).lower().strip()
+
+    markup.row(types.KeyboardButton(f"🔎 Detalhes #{demanda_id}"), types.KeyboardButton(f"👤 Equipe #{demanda_id}"))
+
+    if st in ('pendente', 'em_ajuste', 'ajustes'):
+        markup.row(types.KeyboardButton(f"✅ Aprovar #{demanda_id}"), types.KeyboardButton(f"❌ Rejeitar #{demanda_id}"))
+        markup.row(types.KeyboardButton(f"✏️ Editar Horário #{demanda_id}"), types.KeyboardButton(f"✏️ Editar Local #{demanda_id}"))
+    elif st in ('aprovada', 'aprovado'):
+        markup.row(types.KeyboardButton(f"🎯 Concluir Missão #{demanda_id}"), types.KeyboardButton(f"❌ Rejeitar #{demanda_id}"))
+        markup.row(types.KeyboardButton(f"✏️ Editar Horário #{demanda_id}"), types.KeyboardButton(f"✏️ Editar Local #{demanda_id}"))
+        markup.row(types.KeyboardButton(f"✏️ Editar Título #{demanda_id}"))
+    elif st in ('concluida', 'concluído', 'concluido'):
+        markup.row(types.KeyboardButton(f"🔄 Reabrir Pauta #{demanda_id}"))
+    else:
+        markup.row(types.KeyboardButton(f"🎯 Concluir Missão #{demanda_id}"), types.KeyboardButton(f"👤 Equipe #{demanda_id}"))
+
+    markup.row(types.KeyboardButton("📋 Voltar para Lista de Demandas"), types.KeyboardButton("⬅️ Voltar ao Menu Principal"))
+    return markup
+
+
+def get_multi_service_reply_keyboard(selected_services=None):
     if selected_services is None:
         selected_services = set()
-    
-    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     
     services = [
         ("foto", "📸 Cobertura Fotográfica"),
-        ("video", "🎥 Cobertura em Vídeo / Filmagem"),
-        ("grafico", "🎨 Serviço Gráfico / Design"),
+        ("video", "🎥 Cobertura em Vídeo"),
+        ("grafico", "🎨 Serviço Gráfico"),
         ("drone", "🚁 Imagens Aéreas / Drone"),
-        ("redes", "📱 Mídias Sociais / Reels / Shorts")
+        ("redes", "📱 Mídias Sociais / Reels")
     ]
     
     for code, label in services:
         is_sel = code in selected_services
         icon = "✅" if is_sel else "☑️"
-        btn_txt = f"{icon} {label}"
-        markup.add(types.InlineKeyboardButton(text=btn_txt, callback_data=f"toggle_service:{code}"))
+        markup.row(types.KeyboardButton(f"{label} {icon}"))
         
-    markup.add(types.InlineKeyboardButton(text="📦 Selecionar Tudo (Completo)", callback_data="toggle_service:all"))
-    markup.add(types.InlineKeyboardButton(text="➡️ CONCLUIR SELEÇÃO DOS SERVIÇOS ➡️", callback_data="toggle_service:done"))
+    cnt = len(selected_services)
+    markup.row(types.KeyboardButton(f"➡️ CONCLUIR SELEÇÃO DOS SERVIÇOS ({cnt}) ➡️"))
+    markup.row(types.KeyboardButton("📦 Selecionar Todos os Serviços"))
+    markup.row(types.KeyboardButton("⬅️ Voltar"), types.KeyboardButton("❌ Cancelar"))
     return markup
 
 def get_confirm_demanda_keyboard():
