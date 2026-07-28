@@ -229,7 +229,7 @@ sisgab_menu_categories = [
             {'name': 'Entrega em Hot', 'icon': 'photo_library', 'path': '/comsoc_galeria', 'subtitle': 'Upload de fotos em campo'},
             {'name': 'Arquivo e Histórico', 'icon': 'history', 'path': '/comsoc_historico', 'subtitle': 'Busca e links de coberturas passadas'},
             {'name': 'Aniversariantes & Datas', 'icon': 'cake', 'path': '/comsoc_aniversariantes', 'subtitle': 'Mensagens com IA e impressão'},
-            {'name': 'Monitor TV (COMSOC TV)', 'icon': 'tv', 'path': '/sisgab_tv', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Modo TV tático', 'new_tab': True},
+            {'name': 'Monitor TV (COMSOC TV)', 'icon': 'tv', 'path': '/sisgab_tv', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'tv', 'tv_comcia'], 'subtitle': 'Modo TV tático', 'new_tab': True},
         ]
     },
     {

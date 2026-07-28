@@ -118,7 +118,8 @@ def render_page():
         # ── PAINEL PRINCIPAL REFRESHÁVEL AUTOMATICAMENTE ──
         @ui.refreshable
         def render_tv_dashboard():
-            db = fresh_db()
+            def _build_dashboard():
+                db = fresh_db()
             efetivo_nomes = {}
 
             def get_militar_nome(m_id):
@@ -687,6 +688,16 @@ def render_page():
                 ui.label('ÚLTIMAS NOTÍCIAS').classes('bg-cyan-500 text-black text-[10px] font-black q-px-sm q-py-xs rounded-sm shrink-0 q-mr-sm tracking-wider')
                 with ui.row().classes('marquee-container flex-grow'):
                     ui.label(bulletin_ticker_text).classes('marquee-content text-xs text-white')
+
+            try:
+                _build_dashboard()
+            except Exception as tv_err:
+                import traceback
+                print(f"[TV DASHBOARD ERR]\n{traceback.format_exc()}", flush=True)
+                with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-red-4'):
+                    ui.icon('warning', size='3rem')
+                    ui.label('Monitor Tático em Inicialização').classes('text-lg font-bold text-amber-4')
+                    ui.label(f"Aguardando dados / Conexão: {tv_err}").classes('text-xs font-mono text-grey-4')
 
         render_tv_dashboard()
         # Auto-refresh do painel a cada 15 segundos para rotação do Carrossel e atualização de pautas
