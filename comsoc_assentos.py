@@ -2330,19 +2330,42 @@ def render_page():
 
                         async def handle_logo_upload(e):
                             try:
-                                content = e.content.read() if hasattr(e.content, 'read') else e.content
-                                fname = e.name
-                                content_type = getattr(e, 'type', 'image/png') or 'image/png'
+                                import inspect
+                                import asyncio
+                                import os
+                                file_obj = getattr(e, 'file', None)
+                                if not file_obj:
+                                    ui.notify('❌ Nenhum arquivo detectado no upload.', color='negative')
+                                    return
                                 
-                                public_url = upload_file_to_supabase_storage(content, fname, content_type=content_type, bucket_name='logos')
+                                content = file_obj.read()
+                                if inspect.isawaitable(content):
+                                    content = await content
+                                
+                                fname = getattr(file_obj, 'name', 'logo.png')
+                                content_type = getattr(file_obj, 'content_type', 'image/png') or 'image/png'
+                                
+                                fname_lower = fname.lower()
+                                os.makedirs('assets/insignias', exist_ok=True)
+                                local_path = os.path.join('assets', 'insignias', fname_lower)
+                                try:
+                                    with open(local_path, 'wb') as f_out:
+                                        f_out.write(content)
+                                except Exception as f_err:
+                                    print(f"[LOCAL SAVE ERR] {f_err}")
+
+                                public_url = await asyncio.to_thread(upload_file_to_supabase_storage, content, fname, content_type, 'logos')
                                 if public_url:
-                                    ui.notify(f'✅ Logo "{fname}" enviado para o Supabase!', color='positive')
+                                    ui.notify(f'✅ Logo "{fname}" enviado para o Supabase com sucesso!', color='positive')
                                     refresh_logo_options()
                                     sel_logo_preset.value = public_url
                                     upload_diag.close()
                                     preview_container.refresh()
                                 else:
-                                    ui.notify(f'❌ Falha ao enviar logo para o Supabase.', color='negative')
+                                    ui.notify(f'✅ Salvo localmente em assets/insignias/{fname_lower}', color='warning')
+                                    refresh_logo_options()
+                                    upload_diag.close()
+                                    preview_container.refresh()
                             except Exception as u_err:
                                 print(f"[LOGO UPLOAD ERR] {u_err}")
                                 ui.notify(f'❌ Erro no upload: {u_err}', color='negative')
