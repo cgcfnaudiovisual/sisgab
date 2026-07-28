@@ -2215,17 +2215,41 @@ def render_page():
             'Maj': {'stars': '★',    'title': 'MAJOR',                       'color': '#C0C0C0'}
         }
 
+        import os
+        import re
+
+        def clean_authority_name(raw_name):
+            if not raw_name:
+                return ""
+            name = str(raw_name).strip()
+            name = re.sub(r'^(ACOMP\.|ACOMPANHANTE)\s*', '', name, flags=re.IGNORECASE)
+            name = re.sub(r'\s*\(\d+(/\d+)?\)$', '', name).strip()
+            return name.upper()
+
         def parse_almirantado_stars(posto_str):
             if not posto_str:
-                return {'eh_almirante': False, 'stars': '', 'title': '', 'color': '#000000'}
+                return {'eh_almirante': False, 'stars': '', 'title': '', 'color': '#000000', 'png_asset': None}
             p = str(posto_str).upper().strip()
+            
+            png_path = None
             if any(k in p for k in ['ESQUADRA', 'SQUADRA', 'AE', 'ALMIRANTE DE ESQUADRA']):
-                return {'eh_almirante': True, 'stars': '★ ★ ★ ★', 'title': 'ALMIRANTE DE ESQUADRA', 'color': '#000000'}
+                if os.path.exists('assets/insignias/ae.png'):
+                    png_path = 'assets/insignias/ae.png'
+                return {'eh_almirante': True, 'stars': '★ ★ ★ ★', 'title': 'ALMIRANTE DE ESQUADRA', 'color': '#000000', 'png_asset': png_path}
             elif any(k in p for k in ['VICE', 'VADM', 'V-ADM', 'VA', 'VICE-ALMIRANTE']):
-                return {'eh_almirante': True, 'stars': '★ ★ ★', 'title': 'VICE-ALMIRANTE', 'color': '#000000'}
+                if os.path.exists('assets/insignias/va.png'):
+                    png_path = 'assets/insignias/va.png'
+                return {'eh_almirante': True, 'stars': '★ ★ ★', 'title': 'VICE-ALMIRANTE', 'color': '#000000', 'png_asset': png_path}
             elif any(k in p for k in ['CONTRA', 'CALTE', 'C-ADM', 'CA', 'CONTRA-ALMIRANTE']):
-                return {'eh_almirante': True, 'stars': '★ ★', 'title': 'CONTRA-ALMIRANTE', 'color': '#000000'}
-            return {'eh_almirante': False, 'stars': '', 'title': p, 'color': '#000000'}
+                if os.path.exists('assets/insignias/ca.png'):
+                    png_path = 'assets/insignias/ca.png'
+                return {'eh_almirante': True, 'stars': '★ ★', 'title': 'CONTRA-ALMIRANTE', 'color': '#000000', 'png_asset': png_path}
+            
+            possible_png = f"assets/insignias/{p.lower()}.png"
+            if os.path.exists(possible_png):
+                png_path = possible_png
+
+            return {'eh_almirante': False, 'stars': '', 'title': p, 'color': '#000000', 'png_asset': png_path}
 
         with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 860px; max-width: 96vw; max-height: 92vh; overflow-y: auto;'):
             ui.label(f"🖨️ ESTÚDIO DE IMPRESSÃO DE PLACAS & CREDENCIAIS JADE").classes('text-md font-bold text-cyan cyber-title q-mb-xs')
@@ -2253,10 +2277,6 @@ def render_page():
 
                     with ui.row().classes('items-center gap-2'):
                         chk_only_confirmed = ui.checkbox('Só Confirmados / Fila Ativa', value=False).props('dark dense').classes('text-xs text-amber-3')
-                        chk_logo = ui.checkbox('Brasão MB', value=True).props('dark dense').classes('text-xs text-grey-3')
-                        chk_qr = ui.checkbox('QR Code', value=True).props('dark dense').classes('text-xs text-grey-3')
-                        chk_rank = ui.checkbox('Insígnia de Posto', value=True).props('dark dense').classes('text-xs text-grey-3')
-                        chk_border = ui.checkbox('Borda Dupla', value=True).props('dark dense').classes('text-xs text-grey-3')
                         chk_logo = ui.checkbox('Brasão MB', value=True).props('dark dense').classes('text-xs text-grey-3')
                         chk_qr = ui.checkbox('QR Code', value=True).props('dark dense').classes('text-xs text-grey-3')
                         chk_rank = ui.checkbox('Insígnia de Posto', value=True).props('dark dense').classes('text-xs text-grey-3')
@@ -2662,31 +2682,47 @@ def render_page():
                                         is_acomp = bool(c.get('convidado_principal_id'))
                                         posto = c.get('posto_graduacao') or ''
                                         almirantado_info = parse_almirantado_stars(posto)
+                                        nome_limpo = clean_authority_name(c['nome'])
                                         
                                         border_style = 'border: 1.5pt solid #1a1a1a; outline: 0.5pt solid #1a1a1a; outline-offset: -2.5mm;' if show_double_border else 'border: 1.5pt solid #1a1a1a;'
                                         
                                         with ui.element('div').classes('prisma-card-a4-slot').style(border_style):
-                                            # Canto Superior Esquerdo: Brasão + Estrelas
+                                            # Canto Superior Esquerdo: Brasão + Estrelas / PNG Insígnias
                                             with ui.element('div').classes('prisma-canto-esquerdo'):
                                                 if show_logo and brasao_l_url:
                                                     ui.image(brasao_l_url).classes('prisma-brasao-om')
                                                 elif show_logo:
                                                     ui.label('⚓').classes('text-xl text-black')
                                                 
-                                                if show_rank and almirantado_info['stars']:
-                                                    ui.label(almirantado_info['stars']).classes('prisma-estrelas-esquerda')
+                                                if show_rank:
+                                                    if almirantado_info['png_asset']:
+                                                        ui.image(almirantado_info['png_asset']).classes('w-8 h-auto q-mt-xs')
+                                                    elif almirantado_info['stars']:
+                                                        ui.label(almirantado_info['stars']).classes('prisma-estrelas-esquerda')
 
-                                            # Bloco Central - Totalmente Centralizado
+                                            # Canto Superior Direito: QR Code Opcional
+                                            if show_qr:
+                                                qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=70x70&data={c['id']}&color=000000&bgcolor=ffffff"
+                                                with ui.element('div').style('position: absolute; top: 3mm; right: 5mm; z-index: 10; font-size: 7px; text-align: center;'):
+                                                    ui.image(qr_url).style('width: 13mm; height: 13mm;')
+                                                    if c.get('assento_id'):
+                                                        ui.label(f"{c.get('assento_id', '')}").classes('text-[7px] font-mono text-black font-bold')
+
+                                            # Bloco Central - Totalmente Centralizado (Nome limpo da autoridade, sem ACOMP. ou indicativo numérico)
                                             with ui.element('div').classes('prisma-conteudo-central'):
                                                 if is_acomp:
                                                     ui.label(termo_reservado).classes('prisma-texto-reservado')
-                                                    if posto:
+                                                    if almirantado_info['title']:
+                                                        ui.label(almirantado_info['title']).classes('prisma-posto-extenso')
+                                                    elif posto:
                                                         ui.label(posto.upper()).classes('prisma-posto-extenso')
-                                                    ui.label(c['nome'].upper()).classes('prisma-nome-autoridade')
+                                                    ui.label(nome_limpo).classes('prisma-nome-autoridade')
                                                 else:
                                                     if almirantado_info['title']:
                                                         ui.label(almirantado_info['title']).classes('prisma-posto-extenso')
-                                                    ui.label(c['nome'].upper()).classes('prisma-nome-autoridade')
+                                                    elif posto:
+                                                        ui.label(posto.upper()).classes('prisma-posto-extenso')
+                                                    ui.label(nome_limpo).classes('prisma-nome-autoridade')
 
                             # ═══ MODELO: TEMPLATE CUSTOMIZADO ═══
                             elif current_model == 'template_custom' or use_bg:
