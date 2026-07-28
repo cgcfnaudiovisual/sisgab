@@ -1421,6 +1421,14 @@ def register_common_handlers(bot):
             except Exception as e:
                 await safe_answer(f"Erro: {e}")
 
+    # 🛡️ CATCH-ALL CALLBACK HANDLER: Garante que NENHUM botão inline no Telegram fique travado ou sem resposta!
+    @bot.callback_query_handler(func=lambda call: True)
+    async def handle_catchall_callbacks(call):
+        try:
+            await bot.answer_callback_query(call.id)
+        except Exception:
+            pass
+
 
     @bot.message_handler(content_types=['photo'])
     async def handle_photo_messages(message):
