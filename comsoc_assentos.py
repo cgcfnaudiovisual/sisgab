@@ -3169,12 +3169,22 @@ def render_page():
                     return True
 
                 with ui.column().classes('w-full gap-4 print-area'):
-                    # 1. Coleta TODOS os cartões alocados em uma única lista contínua sem separar por fileira
+                    # 1. Coleta TODOS os cartões (alocados + não alocados) em uma única lista contínua
                     all_cards = []
-                    for row_label, list_c_raw in allocated_by_row.items():
-                        for c in list_c_raw:
-                            if c.get('assento_id') and should_print(c):
+                    seen_ids = set()
+                    
+                    # Se abriu o estúdio passando uma lista específica
+                    if convidados and len(convidados) > 0 and isinstance(convidados, list):
+                        for c in convidados:
+                            if c['id'] not in seen_ids and should_print(c):
+                                seen_ids.add(c['id'])
                                 all_cards.append(c)
+                    else:
+                        for row_label, list_c_raw in allocated_by_row.items():
+                            for c in list_c_raw:
+                                if c['id'] not in seen_ids and should_print(c):
+                                    seen_ids.add(c['id'])
+                                    all_cards.append(c)
 
                     def sort_key_assento(c):
                         ass = str(c.get('assento_id', '')).upper().strip()
@@ -3182,15 +3192,14 @@ def render_page():
                         if match:
                             row, num = match.groups()
                             return (row, int(num))
-                        return (ass, 0)
+                        return (ass if ass else 'ZZZ', 0)
 
                     all_cards.sort(key=sort_key_assento)
 
                     if not all_cards:
                         with ui.column().classes('w-full items-center justify-center q-py-xl gap-3'):
                             ui.icon('chair_alt', size='3rem', color='cyan-3')
-                            ui.label('Nenhum convidado alocado no mapa de assentos ainda.').classes('text-sm text-grey-4 text-center')
-                            ui.label('Acesse o mapa de assentos acima, clique em um assento e vincule um convidado para que as placas apareçam aqui.').classes('text-xs text-grey-6 text-center')
+                            ui.label('Nenhum convidado confirmado para impressão nesta solenidade.').classes('text-sm text-grey-4 text-center')
                         return
 
                     # 2. Pega a quantidade solicitada de placas por folha A4 (configurável pelo operador, padrão 4)
@@ -3202,9 +3211,9 @@ def render_page():
                         
                         with ui.column().classes('w-full gap-2 page-break q-mb-md'):
                             with ui.row().classes('w-full justify-between items-center bg-cyan-950/60 q-pa-sm rounded-lg border border-cyan-500/40 print-hide'):
-                                first_seat = batch[0].get('assento_id', '')
-                                last_seat = batch[-1].get('assento_id', '')
-                                ui.label(f"📄 FOLHA A4 #{page_idx + 1} DE {total_pages} — {len(batch)} PLACAS (ASSENTOS {first_seat} ATÉ {last_seat})").classes('text-sm font-bold text-cyan')
+                                first_seat = batch[0].get('assento_id') or 'Sem Assento'
+                                last_seat = batch[-1].get('assento_id') or 'Sem Assento'
+                                ui.label(f"📄 FOLHA A4 #{page_idx + 1} DE {total_pages} — {len(batch)} PLACAS ({first_seat} ATÉ {last_seat})").classes('text-sm font-bold text-cyan')
                                 ui.badge(f"Folha {page_idx + 1} / {total_pages}").props('color=cyan text-color=black')
 
                             # ═══ MODELO: PRISMA INSTITUCIONAL A4 (4 por Folha) ═══
@@ -3222,14 +3231,15 @@ def render_page():
                                         border_style = 'border: 1.5pt solid #1a1a1a; outline: 0.5pt solid #1a1a1a; outline-offset: -2.5mm;' if show_double_border else 'border: 1.5pt solid #1a1a1a;'
                                         
                                         with ui.element('div').classes('prisma-card-a4-slot').style(border_style):
-                                            # Canto Superior Esquerdo: Brasão + Estrelas / PNG Insígnias com Posição X/Y e Escala
+                                            # Canto Superior Esquerdo: Brasão + Estrelas / PNG Insígnias
                                             with ui.element('div').style(f'position: absolute; top: {logo_y}mm; left: {logo_x}mm; z-index: 10; display: flex; flex-direction: column; align-items: flex-start; shadow: none;'):
                                                 if show_logo and target_logo:
                                                     ui.image(target_logo).style(f'width: {logo_w}mm; height: auto; object-fit: contain;')
                                                 elif show_logo:
                                                     ui.label('⚓').style(f'font-size: {logo_w}px; color: #000;')
                                                 
-                                                if show_rank:
+                                                # Insígnia/Estrelas aparecem APENAS para o titular militar (NÃO para o acompanhante)
+                                                if show_rank and not is_acomp:
                                                     if almirantado_info['png_asset']:
                                                         ui.image(almirantado_info['png_asset']).style(f'width: {logo_w}mm; height: auto; margin-top: 1mm;')
                                                     elif almirantado_info['stars']:
@@ -3530,9 +3540,53 @@ def render_page():
             model_select.on('update:model-value', lambda: preview_container.refresh())
             preview_container()
 
+            js_clean_print_cards = """
+            (function() {
+                var area = document.querySelector('.print-area');
+                if (!area) { window.print(); return; }
+                var win = window.open('', '_blank', 'width=1050,height=800');
+                if (!win) { window.print(); return; }
+                
+                var cssStyles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+                                     .map(s => s.outerHTML).join('\\n');
+                                     
+                win.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>JADE - Impressão Oficial de Placas</title>
+                        ${cssStyles}
+                        <style>
+                            @page { size: A4 portrait; margin: 5mm; }
+                            body { margin: 0 !important; padding: 0 !important; background: #ffffff !important; color: #000000 !important; font-family: Arial, sans-serif !important; }
+                            .print-hide, .q-header, .q-drawer, .q-footer { display: none !important; }
+                            .print-area { display: block !important; position: static !important; width: 100% !important; visibility: visible !important; }
+                            .prisma-card-a4-slot { border: 1.5pt solid #1a1a1a !important; outline: 0.5pt solid #1a1a1a !important; outline-offset: -2.5mm !important; margin-bottom: 8mm !important; page-break-inside: avoid !important; background: #ffffff !important; color: #000000 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; }
+                            .prisma-conteudo-central { display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; text-align: center !important; width: 100% !important; }
+                            .prisma-texto-reservado { font-weight: bold !important; letter-spacing: 2px !important; text-transform: uppercase !important; color: #1f4e79 !important; font-size: 14pt !important; }
+                            .prisma-posto-extenso { font-weight: bold !important; text-transform: uppercase !important; letter-spacing: 1px !important; font-size: 14pt !important; }
+                            .prisma-nome-autoridade { font-weight: 900 !important; text-transform: uppercase !important; font-size: 22pt !important; line-height: 1.1 !important; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="print-area">
+                            ${area.innerHTML}
+                        </div>
+                        <script>
+                            window.onload = function() {
+                                setTimeout(function() { window.print(); window.close(); }, 400);
+                            };
+                        <\\/script>
+                    </body>
+                    </html>
+                `);
+                win.document.close();
+            })();
+            """
+
             with ui.row().classes('w-full justify-end gap-2 q-mt-md print-hide'):
                 ui.button('Fechar', on_click=diag.close).props('unelevated color=grey-8 dense')
-                ui.button('🖨️ Imprimir Placas Selecionadas (Ctrl + P)', on_click=lambda: ui.run_javascript('window.print()')).props('unelevated color=cyan text-color=black bold dense')
+                ui.button('🖨️ Imprimir Placas Selecionadas', on_click=lambda: ui.run_javascript(js_clean_print_cards)).props('unelevated color=cyan text-color=black bold dense')
         diag.open()
 
     def open_tactical_scanner_dialog(event, convidados):
