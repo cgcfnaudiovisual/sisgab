@@ -2377,8 +2377,8 @@ def render_page():
 
                     upload_diag.open()
 
-                # ── Linha 3: Brasões e Posicionamento ──
-                with ui.row().classes('w-full gap-3 items-end wrap'):
+                # ── Linha 3: Brasão Principal (Esquerdo) ──
+                with ui.row().classes('w-full gap-3 items-end wrap bg-cyan-950/20 q-pa-sm rounded-lg border border-cyan-500/10'):
                     with ui.column().classes('gap-0'):
                         ui.label('Posição dos Brasões:').classes('text-[10px] text-grey-5')
                         sel_brasao_pos = ui.select(
@@ -2389,19 +2389,32 @@ def render_page():
                                 'nenhum': '✕ Sem Brasão'
                             },
                             value='esquerda'
-                        ).props('dark outlined dense').style('min-width: 210px;')
+                        ).props('dark outlined dense').style('min-width: 170px;')
 
                     with ui.column().classes('gap-0'):
-                        ui.label('Logo do Bucket Supabase:').classes('text-[10px] text-grey-5')
-                        with ui.row().classes('items-center gap-1'):
+                        ui.label('Origem Brasão Principal:').classes('text-[10px] text-grey-5')
+                        sel_origin_logo_l = ui.select(
+                            options={'bucket': '☁️ Bucket Supabase', 'url': '🔗 URL Externa Customizada'},
+                            value='bucket'
+                        ).props('dark outlined dense').style('min-width: 170px;')
+
+                    with ui.column().classes('gap-0 col'):
+                        ui.label('Brasão Principal (Bucket Supabase):').classes('text-[10px] text-grey-5')
+                        with ui.row().classes('items-center gap-1 w-full'):
                             sel_logo_preset = ui.select(
                                 options=get_dynamic_logo_options(),
                                 value='cfn'
-                            ).props('dark outlined dense').style('min-width: 210px;')
+                            ).props('dark outlined dense').classes('col')
                             
                             ui.button(icon='refresh', on_click=refresh_logo_options).props('flat round dense color=cyan text-color=white').classes('text-xs').tooltip('Recarregar logos do Supabase')
-                            ui.button('➕ Novo Logo', icon='cloud_upload', on_click=open_logo_upload_dialog).props('unelevated color=cyan text-color=black dense bold').classes('text-xs')
+                            ui.button('➕ Upload', icon='cloud_upload', on_click=open_logo_upload_dialog).props('unelevated color=cyan text-color=black dense bold').classes('text-xs')
 
+                    with ui.column().classes('gap-0 col'):
+                        ui.label('URL Direta Brasão Principal (se URL Externa):').classes('text-[10px] text-grey-5')
+                        upload_brasao_left = ui.input(placeholder='https://.../brasao.png').props('dark outlined dense').classes('w-full')
+
+                # ── Linha 4: Brasão Secundário (Direito) & QR Code ──
+                with ui.row().classes('w-full gap-3 items-end wrap bg-cyan-950/20 q-pa-sm rounded-lg border border-cyan-500/10 q-mt-xs'):
                     with ui.column().classes('gap-0'):
                         ui.label('Posição QR Code:').classes('text-[10px] text-grey-5')
                         sel_qr_pos = ui.select(
@@ -2411,23 +2424,45 @@ def render_page():
                                 'centro_baixo': '▼ Centro Inferior'
                             },
                             value='direita'
-                        ).props('dark outlined dense').style('min-width: 180px;')
+                        ).props('dark outlined dense').style('min-width: 170px;')
+
+                    with ui.column().classes('gap-0'):
+                        ui.label('Origem Brasão Direito:').classes('text-[10px] text-grey-5')
+                        sel_origin_logo_r = ui.select(
+                            options={'bucket': '☁️ Bucket Supabase', 'url': '🔗 URL Externa Customizada'},
+                            value='bucket'
+                        ).props('dark outlined dense').style('min-width: 170px;')
 
                     with ui.column().classes('gap-0 col'):
-                        ui.label('URL Brasão Esquerdo (PNG) — só se "URL Customizada":').classes('text-[10px] text-grey-5')
-                        upload_brasao_left = ui.input(placeholder='URL do brasão esquerdo...').props('dark outlined dense').classes('w-full')
+                        ui.label('Brasão Direito (Bucket Supabase):').classes('text-[10px] text-grey-5')
+                        sel_logo_r_preset = ui.select(
+                            options=get_dynamic_logo_options(),
+                            value='mb'
+                        ).props('dark outlined dense').classes('w-full')
+
                     with ui.column().classes('gap-0 col'):
-                        ui.label('URL Brasão Direito (PNG) — opcional:').classes('text-[10px] text-grey-5')
-                        upload_brasao_right = ui.input(placeholder='URL do brasão direito...').props('dark outlined dense').classes('w-full')
+                        ui.label('URL Direta Brasão Direito (se URL Externa):').classes('text-[10px] text-grey-5')
+                        upload_brasao_right = ui.input(placeholder='https://.../brasao_direita.png').props('dark outlined dense').classes('w-full')
 
-                ui.separator().classes('q-my-sm').style('border-color: rgba(255,255,255,0.08);')
+                # ── Linha 5: Template de Fundo (Background) ──
+                with ui.row().classes('w-full gap-3 items-end wrap bg-cyan-950/20 q-pa-sm rounded-lg border border-cyan-500/10 q-mt-xs'):
+                    with ui.column().classes('gap-0'):
+                        ui.label('Origem Imagem de Fundo:').classes('text-[10px] text-amber-4 font-bold')
+                        sel_origin_bg = ui.select(
+                            options={'none': '🎨 Fundo Padrão (Sem Imagem)', 'bucket': '☁️ Bucket Supabase', 'url': '🔗 URL Externa Customizada'},
+                            value='none'
+                        ).props('dark outlined dense').style('min-width: 210px;')
 
-                # ── Linha 4: Template de Fundo ──
-                with ui.row().classes('w-full gap-3 items-end'):
-                    with ui.column().classes('col gap-0'):
-                        ui.label('🎨 Template de Fundo (URL da Imagem PNG/JPG):').classes('text-[10px] text-amber-4 font-bold')
-                        input_template_bg = ui.input(placeholder='Cole a URL da imagem de fundo ou deixe vazio para fundo padrão...').props('dark outlined dense').classes('w-full')
-                        ui.label('As informações (Nome, Posto, Assento, QR Code) serão sobrepostas sobre a imagem.').classes('text-[9px] text-grey-6')
+                    with ui.column().classes('gap-0 col'):
+                        ui.label('Imagem de Fundo (Bucket Supabase):').classes('text-[10px] text-amber-4 font-bold')
+                        sel_bg_preset = ui.select(
+                            options=get_dynamic_logo_options(),
+                            value='cfn'
+                        ).props('dark outlined dense').classes('w-full')
+
+                    with ui.column().classes('gap-0 col'):
+                        ui.label('URL Direta Imagem de Fundo (se URL Externa):').classes('text-[10px] text-amber-4 font-bold')
+                        input_template_bg = ui.input(placeholder='https://.../fundo.png').props('dark outlined dense').classes('w-full')
 
                 ui.separator().classes('q-my-sm').style('border-color: rgba(255,255,255,0.08);')
 
@@ -2690,36 +2725,36 @@ def render_page():
                         return val
                     return f"{SUPABASE_LOGOS_BUCKET_URL}/{val.lstrip('/')}"
 
-                brasao_l_url = ''
-                try:
-                    raw_l = upload_brasao_left.value.strip() if upload_brasao_left.value else ''
-                    brasao_l_url = resolve_logo_url(raw_l)
-                except Exception:
-                    brasao_l_url = ''
-                brasao_r_url = ''
-                try:
-                    raw_r = upload_brasao_right.value.strip() if upload_brasao_right.value else ''
-                    brasao_r_url = resolve_logo_url(raw_r)
-                except Exception:
-                    brasao_r_url = ''
-                use_bg = bool(bg_url) or current_model == 'template_custom'
-
-                # Resolve logo: preset, URL do Supabase Storage ou custom URL
                 LOGO_URLS = {
                     'cgcfn': f"{SUPABASE_LOGOS_BUCKET_URL}/brasao_cgcfn.png",
                     'mb':    f"{SUPABASE_LOGOS_BUCKET_URL}/brasao_marinha.png",
                     'cfn':   'https://upload.wikimedia.org/wikipedia/commons/thumb/2/21/Distintivo_do_Corpo_de_Fuzileiros_Navais_do_Brasil.svg/240px-Distintivo_do_Corpo_de_Fuzileiros_Navais_do_Brasil.svg.png',
                 }
-                logo_preset_val = sel_logo_preset.value if hasattr(sel_logo_preset, 'value') else 'cfn'
-                
-                if logo_preset_val in LOGO_URLS:
-                    resolved_logo_url = LOGO_URLS[logo_preset_val]
-                elif logo_preset_val and (logo_preset_val.startswith('http://') or logo_preset_val.startswith('https://')):
-                    resolved_logo_url = logo_preset_val
-                elif logo_preset_val == 'custom' and brasao_l_url:
-                    resolved_logo_url = brasao_l_url
-                else:
-                    resolved_logo_url = brasao_l_url or LOGO_URLS.get('cfn', '')
+
+                def resolve_asset_image(origin_type, bucket_val, custom_val):
+                    if origin_type == 'bucket' and bucket_val:
+                        if bucket_val in LOGO_URLS:
+                            return LOGO_URLS[bucket_val]
+                        return resolve_logo_url(bucket_val)
+                    elif origin_type == 'url' and custom_val:
+                        return resolve_logo_url(custom_val.strip())
+                    return ""
+
+                origin_l = sel_origin_logo_l.value if hasattr(sel_origin_logo_l, 'value') else 'bucket'
+                preset_l = sel_logo_preset.value if hasattr(sel_logo_preset, 'value') else 'cfn'
+                custom_l = upload_brasao_left.value if hasattr(upload_brasao_left, 'value') else ''
+                resolved_logo_url = resolve_asset_image(origin_l, preset_l, custom_l) or LOGO_URLS.get('cfn', '')
+
+                origin_r = sel_origin_logo_r.value if hasattr(sel_origin_logo_r, 'value') else 'bucket'
+                preset_r = sel_logo_r_preset.value if hasattr(sel_logo_r_preset, 'value') else 'mb'
+                custom_r = upload_brasao_right.value if hasattr(upload_brasao_right, 'value') else ''
+                brasao_r_url = resolve_asset_image(origin_r, preset_r, custom_r)
+
+                origin_bg = sel_origin_bg.value if hasattr(sel_origin_bg, 'value') else 'none'
+                preset_bg = sel_bg_preset.value if hasattr(sel_bg_preset, 'value') else ''
+                custom_bg = input_template_bg.value if hasattr(input_template_bg, 'value') else ''
+                bg_url = resolve_asset_image(origin_bg, preset_bg, custom_bg)
+                use_bg = bool(bg_url) or current_model == 'template_custom'
 
                 # Escala e Posicionamento Fino
                 logo_w = float(input_logo_width.value or 16)
