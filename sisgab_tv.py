@@ -118,6 +118,10 @@ def render_page():
             eventos_24h = 0
             taxa_entregas_str = "100%"
             efetivo_pronto_str = "0 / 0"
+            jade_event_name = "Nenhum"
+            jade_printed = 0
+            jade_total = 0
+            missoes_rapidas_cnt = 0
 
             hoje = datetime.now().date()
             amanha = hoje + timedelta(days=1)
@@ -166,9 +170,6 @@ def render_page():
                         efetivo_pronto_str = f"{tot_ef}/{tot_ef}"
 
                     # 2. CARGA DE KPIS JADE & MISSÕES RÁPIDAS
-                    jade_event_name = "Nenhum"
-                    jade_printed = 0
-                    jade_total = 0
                     try:
                         res_ev = db.table('jade_eventos').select('*').order('data_evento', desc=True).limit(1).execute()
                         if res_ev.data:
@@ -182,11 +183,10 @@ def render_page():
                     except Exception as j_err:
                         print(f"[TV JADE KPI ERR] {j_err}")
 
-                    missões_rapidas_cnt = 0
                     try:
                         res_mr = db.table('demandas_comunicacao').select('id').eq('data_evento', hoje_str).like('titulo_evento', '%⚡%').execute()
                         if res_mr.data:
-                            missões_rapidas_cnt = len(res_mr.data)
+                            missoes_rapidas_cnt = len(res_mr.data)
                     except Exception:
                         pass
                 except Exception as e:
@@ -239,7 +239,7 @@ def render_page():
                     ui.icon('flash_on', color='deep-orange-5', size='sm')
                     with ui.column().classes('gap-0'):
                         ui.label('MISSÕES RÁPIDAS').classes('text-[9px] text-grey-5 font-bold tracking-wider')
-                        ui.label(str(missões_rapidas_cnt)).classes('text-lg font-black text-deep-orange-4')
+                        ui.label(str(missoes_rapidas_cnt)).classes('text-lg font-black text-deep-orange-4')
 
                 # KPI 6: Placas JADE (Solenidade)
                 with ui.card().classes('col q-pa-sm rounded-lg border border-cyan-950/60 flex-row items-center gap-3 justify-center').style('background: rgba(10,15,30,0.4); min-width: 140px;'):
