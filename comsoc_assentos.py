@@ -167,6 +167,7 @@ def render_page():
                         ui.button('🔍 Scanner & Conferência', icon='qr_code_scanner', on_click=lambda: open_tactical_scanner_dialog(current_event, convidados)).props('unelevated color=amber text-color=black dense bold').classes('q-px-sm')
                         ui.button('📋 Checklist Produção', icon='checklist', on_click=lambda: open_production_checklist_dialog(current_event, convidados)).props('unelevated color=amber-9 text-color=black dense bold').classes('q-px-sm')
                         ui.button('🎖️ Precedência / Antiguidade', icon='verified', on_click=lambda: open_seniority_checklist_dialog(current_event, convidados)).props('unelevated color=teal text-color=white dense bold').classes('q-px-sm')
+                        ui.button('📄 Relatório Montagem', icon='assignment', on_click=lambda: open_field_assembly_report_dialog(current_event, convidados)).props('unelevated color=light-blue-9 text-color=white dense bold').classes('q-px-sm')
                         
                         ui.button('Editar Evento', icon='edit', on_click=lambda: open_edit_event_dialog(current_event, layout)).props('unelevated color=accent dense outline').classes('q-px-sm')
                         ui.button('Excluir Evento', icon='delete', on_click=lambda: confirm_delete_event(current_event)).props('unelevated color=danger dense outline').classes('q-px-sm')
@@ -2327,6 +2328,7 @@ def render_page():
                     model_select = ui.select(
                         options={
                             'prisma_a4_4slots': '🏛️ Prisma Institucional A4 (4 por Folha - Moldura Dupla)',
+                            'prisma_dobravel_v': '📐 Prisma Dobrável V (Frente & Verso Invertido 180°)',
                             'jade_horizontal_a4': '📋 Placa Horizontal CGCFN (Padrão Oficial)',
                             'cadeira_a4': '📄 Placa de Cadeira (A4 Padrão)',
                             'mesa_a5_dobravel': '🏷️ Placa de Mesa Dobrável (A5)',
@@ -2926,12 +2928,64 @@ def render_page():
                                                     elif posto:
                                                         ui.label(posto.upper()).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
                                                     ui.label(nome_limpo).classes('prisma-nome-autoridade').style(f'font-size: {f_nome}pt;')
-                                                else:
-                                                    if almirantado_info['title']:
-                                                        ui.label(almirantado_info['title']).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
-                                                    elif posto:
-                                                        ui.label(posto.upper()).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
-                                                    ui.label(nome_limpo).classes('prisma-nome-autoridade').style(f'font-size: {f_nome}pt;')
+                            # ═══ MODELO: PRISMA DOBRÁVEL V (FRENTE E VERSO INVERTIDO 180°) ═══
+                            elif current_model == 'prisma_dobravel_v':
+                                termo_reservado = input_termo_conv.value or 'RESERVADO'
+                                with ui.column().classes('w-full gap-4'):
+                                    for c in batch:
+                                        is_acomp = bool(c.get('convidado_principal_id'))
+                                        posto = c.get('posto_graduacao') or ''
+                                        almirantado_info = parse_almirantado_stars(posto)
+                                        nome_limpo = clean_authority_name(c['nome'])
+                                        target_logo = resolved_logo_url or brasao_l_url
+                                        
+                                        # Geração local offline de QR Code
+                                        import qrcode, io, base64
+                                        qr_b64 = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={c['id']}"
+                                        try:
+                                            qr_obj = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=4, border=1)
+                                            qr_obj.add_data(f"JADE|{event.get('id','')}|{c['id']}|{c.get('assento_id','')}")
+                                            qr_obj.make(fit=True)
+                                            img_q = qr_obj.make_image(fill_color="black", back_color="white")
+                                            buf_q = io.BytesIO()
+                                            img_q.save(buf_q, format="PNG")
+                                            qr_b64 = f"data:image/png;base64,{base64.b64encode(buf_q.getvalue()).decode('utf-8')}"
+                                        except Exception:
+                                            pass
+
+                                        with ui.element('div').classes('w-full border border-black rounded-lg bg-white text-black q-pa-xs').style('min-height: 170mm; display: flex; flex-direction: column; justify-content: space-between; position: relative;'):
+                                            # Verso da Dobra (Texto Invertido 180° para quem olha de frente)
+                                            with ui.element('div').style('transform: rotate(180deg); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10mm 4mm;'):
+                                                if show_logo and target_logo:
+                                                    ui.image(target_logo).style(f'width: {logo_w}mm; height: auto; object-fit: contain; margin-bottom: 2mm;')
+                                                if is_acomp:
+                                                    ui.label(termo_reservado).classes('prisma-texto-reservado').style(f'font-size: {f_reservado}pt;')
+                                                if almirantado_info['title']:
+                                                    ui.label(almirantado_info['title']).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
+                                                elif posto:
+                                                    ui.label(posto.upper()).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
+                                                ui.label(nome_limpo).classes('prisma-nome-autoridade').style(f'font-size: {f_nome}pt;')
+
+                                            # Linha de Dobra do Papel A4
+                                            ui.html('<div style="border-top: 2px dashed #000; text-align: center; margin: 4px 0;"><span style="background:#fff; padding: 0 8px; font-size: 8px; color: #666; font-family: monospace;">✂️ LINHA DE DOBRA DO PRISMA DE MESA (V-SHAPE)</span></div>')
+
+                                            # Frente da Dobra (Texto Normal 0° para quem olha do corredor)
+                                            with ui.element('div').style('display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10mm 4mm; position: relative;'):
+                                                if show_logo and target_logo:
+                                                    ui.image(target_logo).style(f'width: {logo_w}mm; height: auto; object-fit: contain; margin-bottom: 2mm;')
+                                                if is_acomp:
+                                                    ui.label(termo_reservado).classes('prisma-texto-reservado').style(f'font-size: {f_reservado}pt;')
+                                                if almirantado_info['title']:
+                                                    ui.label(almirantado_info['title']).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
+                                                elif posto:
+                                                    ui.label(posto.upper()).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
+                                                ui.label(nome_limpo).classes('prisma-nome-autoridade').style(f'font-size: {f_nome}pt;')
+
+                                                if show_qr:
+                                                    with ui.element('div').style('position: absolute; right: 4mm; bottom: 4mm; text-align: center;'):
+                                                        ui.image(qr_b64).style(f'width: {qr_size}mm; height: {qr_size}mm;')
+                                                        if c.get('assento_id'):
+                                                            ui.label(f"{c.get('assento_id', '')}").classes('text-[7px] font-mono text-black font-bold')
 
                             # ═══ MODELO: PLACA HORIZONTAL CGCFN (PADRÃO OFICIAL) ═══
                             elif current_model == 'jade_horizontal_a4':
@@ -3267,15 +3321,121 @@ def render_page():
                                 ui.label('✅ CONFERIDO & SEPARADO COM SUCESSO!').classes('text-sm font-bold text-green-3')
                                 ui.label(f"{target.get('posto_graduacao') or ''} {target['nome']}{main_info}").classes('text-md font-bold text-white')
                                 
-                                with ui.row().classes('w-full justify-center items-center gap-2 q-mt-xs'):
+                                with ui.row().classes('w-full justify-center items-center gap-2 q-mt-xs wrap'):
                                     ui.badge(f"COLOCAR NA FILEIRA {row_name}").props('color=cyan text-color=black bold').classes('text-sm q-px-sm')
                                     ui.badge(f"ASSENTO {seat}").props('color=green text-color=white bold').classes('text-sm q-px-sm')
+                                    
+                                    async def remap_seat_dialog(target_guest):
+                                        with ui.dialog() as r_diag, ui.card().classes('q-pa-md bg-cyan-950 border border-cyan-400 rounded-xl').style('min-width: 320px;'):
+                                            ui.label('🔀 REMAPEAR ASSENTO NO SALÃO').classes('text-xs font-bold text-cyan q-mb-xs')
+                                            ui.label(f"Convidado: {target_guest['nome']}").classes('text-[11px] text-grey-3 q-mb-sm')
+                                            new_seat_input = ui.input(label='Novo Código de Assento (ex: A-1, F-5)', value=target_guest.get('assento_id', '')).props('dark outlined dense').classes('w-full q-mb-md')
+                                            
+                                            async def confirm_remap():
+                                                val_seat = new_seat_input.value.strip().upper()
+                                                if val_seat:
+                                                    _db = get_service_db_connection() or get_db_connection()
+                                                    if _db:
+                                                        _db.table('jade_convidados').update({'assento_id': val_seat}).eq('id', target_guest['id']).execute()
+                                                        target_guest['assento_id'] = val_seat
+                                                        ui.notify(f"✅ Assento remapeado para {val_seat}!", color='positive')
+                                                        r_diag.close()
+                                                        process_scan(target_guest['id'])
+                                                        render_content.refresh()
+
+                                            with ui.row().classes('w-full justify-end gap-2'):
+                                                ui.button('Cancelar', on_click=r_diag.close).props('flat dense color=grey')
+                                                ui.button('Salvar Remapeamento', on_click=confirm_remap).props('unelevated color=cyan text-color=black dense bold')
+                                        r_diag.open()
+
+                                    ui.button('🔀 Mudar Assento', on_click=lambda tg=target: remap_seat_dialog(tg)).props('unelevated color=amber text-color=black dense bold').classes('text-xs').tooltip('Trocar assento desta placa no salão instantaneamente')
 
             scan_input.on('keydown.enter', lambda: process_scan(scan_input.value))
 
             with ui.row().classes('w-full justify-between items-center q-mt-md'):
                 ui.label(f"Total Conferidos: {len(scanned_history)} de {len([c for c in convidados if c.get('assento_id')])} cartões").classes('text-xs text-cyan font-bold')
                 ui.button('Concluir Conferência', on_click=diag.close).props('unelevated color=grey-8 dense')
+        diag.open()
+
+    def open_field_assembly_report_dialog(event, convidados):
+        """Gera relatório de prancheta de campo para a equipe de montagem de assentos no salão."""
+        with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 800px; max-width: 95vw; max-height: 90vh; overflow-y: auto;'):
+            with ui.row().classes('w-full justify-between items-center q-mb-md print-hide'):
+                with ui.row().classes('items-center gap-2'):
+                    ui.icon('assignment', size='md', color='cyan')
+                    ui.label('📋 RELATÓRIO DE PRANCHETA DE MONTAGEM DO SALÃO').classes('text-md font-bold text-cyan cyber-title')
+                with ui.row().classes('items-center gap-2'):
+                    ui.button('🖨️ Imprimir Prancheta', icon='print', on_click=lambda: ui.run_javascript('window.print()')).props('unelevated color=cyan text-color=black dense bold').classes('text-xs')
+                    ui.button(icon='close', on_click=diag.close).props('flat round dense color=grey-4')
+
+            with ui.column().classes('w-full print-area q-pa-sm'):
+                allocated = [c for c in convidados if c.get('assento_id')]
+                
+                def sort_key_assento(c):
+                    ass = str(c.get('assento_id', '')).upper().strip()
+                    match = re.match(r'([A-Z]+)-?(\d+)', ass)
+                    if match:
+                        row, num = match.groups()
+                        return (row, int(num))
+                    return (ass, 0)
+
+                allocated.sort(key=sort_key_assento)
+
+                rows_html = ""
+                for idx, c in enumerate(allocated, 1):
+                    assento = c.get('assento_id', 'N/I')
+                    posto = c.get('posto_graduacao', '') or ''
+                    nome = c.get('nome', '')
+                    is_acomp = bool(c.get('convidado_principal_id'))
+                    tipo_placa = "RESERVADO (Acompanhante)" if is_acomp else "Titular"
+                    st = c.get('status_placa', 'pendente').upper()
+                    bg_row = "#f9f9f9" if idx % 2 == 0 else "#ffffff"
+
+                    rows_html += f'''
+                    <tr style="background: {bg_row};">
+                        <td style="padding: 6px; border: 1px solid #ccc; text-align: center; font-size: 14pt;">☐</td>
+                        <td style="padding: 6px; border: 1px solid #ccc; font-weight: bold; color: #1f4e79;">{assento}</td>
+                        <td style="padding: 6px; border: 1px solid #ccc; font-weight: bold;">{posto} {clean_authority_name(nome)}</td>
+                        <td style="padding: 6px; border: 1px solid #ccc;">{tipo_placa}</td>
+                        <td style="padding: 6px; border: 1px solid #ccc; font-size: 8pt;">{st}</td>
+                    </tr>
+                    '''
+
+                ui.html(f'''
+                <div style="font-family: Arial, sans-serif; color: #000; background: #fff; padding: 16px; border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px;">
+                        <div>
+                            <h2 style="margin: 0; font-size: 16pt; font-weight: bold; text-transform: uppercase;">📋 JADE — RELATÓRIO DE MONTAGEM DE ASSENTOS DE CAMPO</h2>
+                            <div style="font-size: 10pt; color: #444;">Solenidade: <strong>{event.get('nome','')}</strong> | Data: <strong>{event.get('data_evento','N/I')}</strong></div>
+                        </div>
+                        <div style="text-align: right; font-size: 9pt;">
+                            <div><strong>COMSOC / CERIMONIAL</strong></div>
+                            <div>Total: {len(allocated)} Assentos</div>
+                        </div>
+                    </div>
+
+                    <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
+                        <thead>
+                            <tr style="background: #1f4e79; color: #fff; text-align: left;">
+                                <th style="padding: 6px; border: 1px solid #333; width: 40px; text-align: center;">[  ]</th>
+                                <th style="padding: 6px; border: 1px solid #333; width: 90px;">Assento</th>
+                                <th style="padding: 6px; border: 1px solid #333;">Posto / Graduação e Nome da Autoridade</th>
+                                <th style="padding: 6px; border: 1px solid #333; width: 140px;">Tipo de Placa</th>
+                                <th style="padding: 6px; border: 1px solid #333; width: 110px;">Status Placa</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows_html}
+                        </tbody>
+                    </table>
+
+                    <div style="margin-top: 20px; font-size: 9pt; display: flex; justify-content: space-between; border-top: 1px solid #999; padding-top: 8px;">
+                        <div>Responsável pela Montagem: _____________________________________</div>
+                        <div>Visto do Chefe do Cerimonial: _____________________________________</div>
+                    </div>
+                </div>
+                ''')
+
         diag.open()
 
     def download_template():
