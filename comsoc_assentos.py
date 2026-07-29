@@ -3559,11 +3559,11 @@ def render_page():
                         <title>JADE - Impressão Oficial de Placas</title>
                         ${cssStyles}
                         <style>
-                            @page { size: A4 portrait; margin: 5mm; }
-                            body { margin: 0 !important; padding: 0 !important; background: #ffffff !important; color: #000000 !important; font-family: Arial, sans-serif !important; }
+                            @page { size: A4 portrait; margin: 0mm !important; }
+                            body { margin: 0 !important; padding: 4mm 6mm !important; background: #ffffff !important; color: #000000 !important; font-family: Arial, sans-serif !important; }
                             .print-hide, .q-header, .q-drawer, .q-footer { display: none !important; }
                             .print-area { display: block !important; position: static !important; width: 100% !important; visibility: visible !important; }
-                            .prisma-card-a4-slot { border: 1.5pt solid #1a1a1a !important; outline: 0.5pt solid #1a1a1a !important; outline-offset: -2.5mm !important; margin-bottom: 8mm !important; page-break-inside: avoid !important; background: #ffffff !important; color: #000000 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; }
+                            .prisma-card-a4-slot { height: 66mm !important; max-height: 66mm !important; border: 1.5pt solid #1a1a1a !important; outline: 0.5pt solid #1a1a1a !important; outline-offset: -2.5mm !important; margin-bottom: 4.5mm !important; page-break-inside: avoid !important; background: #ffffff !important; color: #000000 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; position: relative !important; box-sizing: border-box !important; }
                             .prisma-conteudo-central { display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; text-align: center !important; width: 100% !important; }
                             .prisma-texto-reservado { font-weight: bold !important; letter-spacing: 2px !important; text-transform: uppercase !important; color: #1f4e79 !important; font-size: 14pt !important; }
                             .prisma-posto-extenso { font-weight: bold !important; text-transform: uppercase !important; letter-spacing: 1px !important; font-size: 14pt !important; }
@@ -3603,11 +3603,11 @@ def render_page():
                         <title>JADE - Placas de Assento (Documento PDF Oficial)</title>
                         ${cssStyles}
                         <style>
-                            @page { size: A4 portrait; margin: 0mm; }
-                            body { margin: 0 !important; padding: 5mm !important; background: #ffffff !important; color: #000000 !important; font-family: Arial, sans-serif !important; }
+                            @page { size: A4 portrait; margin: 0mm !important; }
+                            body { margin: 0 !important; padding: 4mm 6mm !important; background: #ffffff !important; color: #000000 !important; font-family: Arial, sans-serif !important; }
                             .print-hide, .q-header, .q-drawer, .q-footer { display: none !important; }
                             .print-area { display: block !important; position: static !important; width: 100% !important; visibility: visible !important; }
-                            .prisma-card-a4-slot { border: 1.5pt solid #1a1a1a !important; outline: 0.5pt solid #1a1a1a !important; outline-offset: -2.5mm !important; margin-bottom: 8mm !important; page-break-inside: avoid !important; background: #ffffff !important; color: #000000 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; }
+                            .prisma-card-a4-slot { height: 66mm !important; max-height: 66mm !important; border: 1.5pt solid #1a1a1a !important; outline: 0.5pt solid #1a1a1a !important; outline-offset: -2.5mm !important; margin-bottom: 4.5mm !important; page-break-inside: avoid !important; background: #ffffff !important; color: #000000 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; position: relative !important; box-sizing: border-box !important; }
                             .prisma-conteudo-central { display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; text-align: center !important; width: 100% !important; }
                             .prisma-texto-reservado { font-weight: bold !important; letter-spacing: 2px !important; text-transform: uppercase !important; color: #1f4e79 !important; font-size: 14pt !important; }
                             .prisma-posto-extenso { font-weight: bold !important; text-transform: uppercase !important; letter-spacing: 1px !important; font-size: 14pt !important; }
