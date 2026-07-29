@@ -2503,24 +2503,49 @@ def render_page():
             row_label = get_row_label(r)
             allocated_by_row[row_label] = [c for c in convidados if (c.get('assento_id') or '').startswith(f"{row_label}-")]
 
-        # Estado do estúdio de impressão
+        # Estado e Persistência do Estúdio de Impressão
+        saved_cfg = {}
+        if isinstance(layout, dict):
+            saved_cfg = layout.get('print_config', {})
+        elif isinstance(event, dict) and event.get('layout_json'):
+            try:
+                import json
+                l_dict = json.loads(event.get('layout_json') or '{}')
+                saved_cfg = l_dict.get('print_config', {})
+            except Exception:
+                saved_cfg = {}
+
         print_config = {
-            'model': 'cadeira_a4',
-            'show_logo': True,
-            'show_qr': True,
-            'show_rank': True,
-            'show_cargo': True,
-            'qr_position': 'direita',
-            'brasao_position': 'esquerda',
-            'header_line1': 'MARINHA DO BRASIL',
-            'header_line2': event.get('nome', 'SOLENIDADE').upper(),
-            'template_bg_url': '',
-            'brasao_left_url': '',
-            'brasao_right_url': '',
-            'use_template_bg': False,
-            'termo_convidado': 'RESERVADO',
-            'gap_linhas_mm': 6,
-            'exibir_borda_dupla': True
+            'model': saved_cfg.get('model', 'prisma_a4_4slots'),
+            'items_per_sheet': int(saved_cfg.get('items_per_sheet', 4)),
+            'chk_only_confirmed': bool(saved_cfg.get('chk_only_confirmed', False)),
+            'chk_logo': bool(saved_cfg.get('chk_logo', True)),
+            'chk_qr': bool(saved_cfg.get('chk_qr', True)),
+            'chk_rank': bool(saved_cfg.get('chk_rank', True)),
+            'chk_border': bool(saved_cfg.get('chk_border', True)),
+            'header_line1': str(saved_cfg.get('header_line1', 'MARINHA DO BRASIL')),
+            'header_line2': str(saved_cfg.get('header_line2', event.get('nome', 'SOLENIDADE').upper())),
+            'termo_convidado': str(saved_cfg.get('termo_convidado', 'RESERVADO')),
+            'brasao_pos': str(saved_cfg.get('brasao_pos', 'esquerda')),
+            'origin_logo_l': str(saved_cfg.get('origin_logo_l', 'bucket')),
+            'logo_preset_l': str(saved_cfg.get('logo_preset_l', 'cfn')),
+            'upload_brasao_left': str(saved_cfg.get('upload_brasao_left', '')),
+            'qr_pos': str(saved_cfg.get('qr_pos', 'direita')),
+            'origin_logo_r': str(saved_cfg.get('origin_logo_r', 'bucket')),
+            'logo_preset_r': str(saved_cfg.get('logo_preset_r', 'mb')),
+            'upload_brasao_right': str(saved_cfg.get('upload_brasao_right', '')),
+            'origin_bg': str(saved_cfg.get('origin_bg', 'none')),
+            'bg_preset': str(saved_cfg.get('bg_preset', 'cfn')),
+            'template_bg_url': str(saved_cfg.get('template_bg_url', '')),
+            'logo_width': float(saved_cfg.get('logo_width', 16)),
+            'logo_pos_x': float(saved_cfg.get('logo_pos_x', 6)),
+            'logo_pos_y': float(saved_cfg.get('logo_pos_y', 4)),
+            'qr_size': float(saved_cfg.get('qr_size', 13)),
+            'qr_pos_x': float(saved_cfg.get('qr_pos_x', 5)),
+            'qr_pos_y': float(saved_cfg.get('qr_pos_y', 3)),
+            'font_nome': float(saved_cfg.get('font_nome', 22)),
+            'font_posto': float(saved_cfg.get('font_posto', 13)),
+            'font_reservado': float(saved_cfg.get('font_reservado', 18)),
         }
 
         # Configurações Padrão de Prisma
@@ -2659,21 +2684,21 @@ def render_page():
                             'credencial': '🪪 Credencial / Crachá de Peito',
                             'template_custom': '🎨 Template Customizado (Imagem de Fundo)'
                         },
-                        value='prisma_a4_4slots'
+                        value=print_config['model']
                     ).props('dark outlined dense').style('min-width: 310px;')
 
                     ui.label('Placas / Folha A4:').classes('text-xs text-grey-3 font-bold q-ml-xs')
                     input_items_per_sheet = ui.select(
                         options={1: '1 por Folha A4', 2: '2 por Folha A4', 4: '4 por Folha A4 (Padrão)', 6: '6 por Folha A4', 8: '8 por Folha A4'},
-                        value=4
+                        value=print_config['items_per_sheet']
                     ).props('dark outlined dense').style('width: 170px;')
 
                     with ui.row().classes('items-center gap-2'):
-                        chk_only_confirmed = ui.checkbox('Só Confirmados / Fila Ativa', value=False).props('dark dense').classes('text-xs text-amber-3')
-                        chk_logo = ui.checkbox('Brasão MB', value=True).props('dark dense').classes('text-xs text-grey-3')
-                        chk_qr = ui.checkbox('QR Code', value=True).props('dark dense').classes('text-xs text-grey-3')
-                        chk_rank = ui.checkbox('Insígnia de Posto', value=True).props('dark dense').classes('text-xs text-grey-3')
-                        chk_border = ui.checkbox('Borda Dupla', value=True).props('dark dense').classes('text-xs text-grey-3')
+                        chk_only_confirmed = ui.checkbox('Só Confirmados / Fila Ativa', value=print_config['chk_only_confirmed']).props('dark dense').classes('text-xs text-amber-3')
+                        chk_logo = ui.checkbox('Brasão MB', value=print_config['chk_logo']).props('dark dense').classes('text-xs text-grey-3')
+                        chk_qr = ui.checkbox('QR Code', value=print_config['chk_qr']).props('dark dense').classes('text-xs text-grey-3')
+                        chk_rank = ui.checkbox('Insígnia de Posto', value=print_config['chk_rank']).props('dark dense').classes('text-xs text-grey-3')
+                        chk_border = ui.checkbox('Borda Dupla', value=print_config['chk_border']).props('dark dense').classes('text-xs text-grey-3')
 
                 ui.separator().classes('q-my-sm').style('border-color: rgba(255,255,255,0.08);')
 
@@ -2687,7 +2712,7 @@ def render_page():
                         input_header2 = ui.input(value=print_config['header_line2']).props('dark outlined dense').classes('w-full')
                     with ui.column().classes('col-3 gap-0'):
                         ui.label('Termo Convidado:').classes('text-[10px] text-grey-5')
-                        input_termo_conv = ui.input(value='RESERVADO').props('dark outlined dense').classes('w-full')
+                        input_termo_conv = ui.input(value=print_config['termo_convidado']).props('dark outlined dense').classes('w-full')
 
                 ui.separator().classes('q-my-sm').style('border-color: rgba(255,255,255,0.08);')
 
@@ -2781,14 +2806,14 @@ def render_page():
                                 'centro': '● Brasão Centralizado',
                                 'nenhum': '✕ Sem Brasão'
                             },
-                            value='esquerda'
+                            value=print_config['brasao_pos']
                         ).props('dark outlined dense').style('min-width: 170px;')
 
                     with ui.column().classes('gap-0'):
                         ui.label('Origem Brasão Principal:').classes('text-[10px] text-grey-5')
                         sel_origin_logo_l = ui.select(
                             options={'bucket': '☁️ Bucket Supabase', 'url': '🔗 URL Externa Customizada'},
-                            value='bucket'
+                            value=print_config['origin_logo_l']
                         ).props('dark outlined dense').style('min-width: 170px;')
 
                     with ui.column().classes('gap-0 col'):
@@ -2796,7 +2821,7 @@ def render_page():
                         with ui.row().classes('items-center gap-1 w-full'):
                             sel_logo_preset = ui.select(
                                 options=get_dynamic_logo_options(),
-                                value='cfn'
+                                value=print_config['logo_preset_l']
                             ).props('dark outlined dense').classes('col')
                             
                             ui.button(icon='refresh', on_click=refresh_logo_options).props('flat round dense color=cyan text-color=white').classes('text-xs').tooltip('Recarregar logos do Supabase')
@@ -2804,7 +2829,7 @@ def render_page():
 
                     with ui.column().classes('gap-0 col'):
                         ui.label('URL Direta Brasão Principal (se URL Externa):').classes('text-[10px] text-grey-5')
-                        upload_brasao_left = ui.input(placeholder='https://.../brasao.png').props('dark outlined dense').classes('w-full')
+                        upload_brasao_left = ui.input(value=print_config['upload_brasao_left'], placeholder='https://.../brasao.png').props('dark outlined dense').classes('w-full')
 
                 # ── Linha 4: Brasão Secundário (Direito) & QR Code ──
                 with ui.row().classes('w-full gap-3 items-end wrap bg-cyan-950/20 q-pa-sm rounded-lg border border-cyan-500/10 q-mt-xs'):
@@ -2816,26 +2841,26 @@ def render_page():
                                 'esquerda': '◀ Canto Esquerdo',
                                 'centro_baixo': '▼ Centro Inferior'
                             },
-                            value='direita'
+                            value=print_config['qr_pos']
                         ).props('dark outlined dense').style('min-width: 170px;')
 
                     with ui.column().classes('gap-0'):
                         ui.label('Origem Brasão Direito:').classes('text-[10px] text-grey-5')
                         sel_origin_logo_r = ui.select(
                             options={'bucket': '☁️ Bucket Supabase', 'url': '🔗 URL Externa Customizada'},
-                            value='bucket'
+                            value=print_config['origin_logo_r']
                         ).props('dark outlined dense').style('min-width: 170px;')
 
                     with ui.column().classes('gap-0 col'):
                         ui.label('Brasão Direito (Bucket Supabase):').classes('text-[10px] text-grey-5')
                         sel_logo_r_preset = ui.select(
                             options=get_dynamic_logo_options(),
-                            value='mb'
+                            value=print_config['logo_preset_r']
                         ).props('dark outlined dense').classes('w-full')
 
                     with ui.column().classes('gap-0 col'):
                         ui.label('URL Direta Brasão Direito (se URL Externa):').classes('text-[10px] text-grey-5')
-                        upload_brasao_right = ui.input(placeholder='https://.../brasao_direita.png').props('dark outlined dense').classes('w-full')
+                        upload_brasao_right = ui.input(value=print_config['upload_brasao_right'], placeholder='https://.../brasao_direita.png').props('dark outlined dense').classes('w-full')
 
                 # ── Linha 5: Template de Fundo (Background) ──
                 with ui.row().classes('w-full gap-3 items-end wrap bg-cyan-950/20 q-pa-sm rounded-lg border border-cyan-500/10 q-mt-xs'):
@@ -2843,19 +2868,19 @@ def render_page():
                         ui.label('Origem Imagem de Fundo:').classes('text-[10px] text-amber-4 font-bold')
                         sel_origin_bg = ui.select(
                             options={'none': '🎨 Fundo Padrão (Sem Imagem)', 'bucket': '☁️ Bucket Supabase', 'url': '🔗 URL Externa Customizada'},
-                            value='none'
+                            value=print_config['origin_bg']
                         ).props('dark outlined dense').style('min-width: 210px;')
 
                     with ui.column().classes('gap-0 col'):
                         ui.label('Imagem de Fundo (Bucket Supabase):').classes('text-[10px] text-amber-4 font-bold')
                         sel_bg_preset = ui.select(
                             options=get_dynamic_logo_options(),
-                            value='cfn'
+                            value=print_config['bg_preset']
                         ).props('dark outlined dense').classes('w-full')
 
                     with ui.column().classes('gap-0 col'):
                         ui.label('URL Direta Imagem de Fundo (se URL Externa):').classes('text-[10px] text-amber-4 font-bold')
-                        input_template_bg = ui.input(placeholder='https://.../fundo.png').props('dark outlined dense').classes('w-full')
+                        input_template_bg = ui.input(value=print_config['template_bg_url'], placeholder='https://.../fundo.png').props('dark outlined dense').classes('w-full')
 
                 ui.separator().classes('q-my-sm').style('border-color: rgba(255,255,255,0.08);')
 
@@ -2864,36 +2889,96 @@ def render_page():
                     with ui.row().classes('w-full gap-3 q-pa-sm wrap items-end'):
                         with ui.column().classes('gap-0'):
                             ui.label('Largura Logo (mm):').classes('text-[10px] text-grey-4')
-                            input_logo_width = ui.number(value=16, min=5, max=60, step=1).props('dark outlined dense').style('width: 110px;')
+                            input_logo_width = ui.number(value=print_config['logo_width'], min=5, max=60, step=1).props('dark outlined dense').style('width: 110px;')
                         with ui.column().classes('gap-0'):
                             ui.label('Posição Logo X (mm):').classes('text-[10px] text-grey-4')
-                            input_logo_pos_x = ui.number(value=6, min=0, max=60, step=1).props('dark outlined dense').style('width: 110px;')
+                            input_logo_pos_x = ui.number(value=print_config['logo_pos_x'], min=0, max=60, step=1).props('dark outlined dense').style('width: 110px;')
                         with ui.column().classes('gap-0'):
                             ui.label('Posição Logo Y (mm):').classes('text-[10px] text-grey-4')
-                            input_logo_pos_y = ui.number(value=4, min=0, max=40, step=1).props('dark outlined dense').style('width: 110px;')
+                            input_logo_pos_y = ui.number(value=print_config['logo_pos_y'], min=0, max=40, step=1).props('dark outlined dense').style('width: 110px;')
 
                         with ui.column().classes('gap-0'):
                             ui.label('Tamanho QR Code (mm):').classes('text-[10px] text-grey-4')
-                            input_qr_size = ui.number(value=13, min=5, max=40, step=1).props('dark outlined dense').style('width: 120px;')
+                            input_qr_size = ui.number(value=print_config['qr_size'], min=5, max=40, step=1).props('dark outlined dense').style('width: 120px;')
                         with ui.column().classes('gap-0'):
                             ui.label('Posição QR Code X (mm):').classes('text-[10px] text-grey-4')
-                            input_qr_pos_x = ui.number(value=5, min=0, max=60, step=1).props('dark outlined dense').style('width: 120px;')
+                            input_qr_pos_x = ui.number(value=print_config['qr_pos_x'], min=0, max=60, step=1).props('dark outlined dense').style('width: 120px;')
                         with ui.column().classes('gap-0'):
                             ui.label('Posição QR Code Y (mm):').classes('text-[10px] text-grey-4')
-                            input_qr_pos_y = ui.number(value=3, min=0, max=40, step=1).props('dark outlined dense').style('width: 120px;')
+                            input_qr_pos_y = ui.number(value=print_config['qr_pos_y'], min=0, max=40, step=1).props('dark outlined dense').style('width: 120px;')
 
                         with ui.column().classes('gap-0'):
                             ui.label('Fonte Nome (pt):').classes('text-[10px] text-grey-4')
-                            input_font_nome = ui.number(value=22, min=10, max=40, step=1).props('dark outlined dense').style('width: 100px;')
+                            input_font_nome = ui.number(value=print_config['font_nome'], min=10, max=40, step=1).props('dark outlined dense').style('width: 100px;')
                         with ui.column().classes('gap-0'):
                             ui.label('Fonte Posto (pt):').classes('text-[10px] text-grey-4')
-                            input_font_posto = ui.number(value=13, min=8, max=30, step=1).props('dark outlined dense').style('width: 100px;')
+                            input_font_posto = ui.number(value=print_config['font_posto'], min=8, max=30, step=1).props('dark outlined dense').style('width: 100px;')
                         with ui.column().classes('gap-0'):
                             ui.label('Fonte Reservado (pt):').classes('text-[10px] text-grey-4')
-                            input_font_reservado = ui.number(value=18, min=10, max=36, step=1).props('dark outlined dense').style('width: 110px;')
+                            input_font_reservado = ui.number(value=print_config['font_reservado'], min=10, max=36, step=1).props('dark outlined dense').style('width: 110px;')
 
-                with ui.row().classes('w-full justify-end q-mt-sm'):
-                    ui.button('🔄 Atualizar Pré-Visualização', on_click=lambda: preview_container.refresh()).props('unelevated color=cyan text-color=black dense bold').classes('text-xs')
+                def collect_current_print_config():
+                    return {
+                        'model': model_select.value,
+                        'items_per_sheet': input_items_per_sheet.value,
+                        'chk_only_confirmed': chk_only_confirmed.value,
+                        'chk_logo': chk_logo.value,
+                        'chk_qr': chk_qr.value,
+                        'chk_rank': chk_rank.value,
+                        'chk_border': chk_border.value,
+                        'header_line1': input_header1.value or '',
+                        'header_line2': input_header2.value or '',
+                        'termo_convidado': input_termo_conv.value or 'RESERVADO',
+                        'brasao_pos': sel_brasao_pos.value,
+                        'origin_logo_l': sel_origin_logo_l.value,
+                        'logo_preset_l': sel_logo_preset.value,
+                        'upload_brasao_left': upload_brasao_left.value or '',
+                        'qr_pos': sel_qr_pos.value,
+                        'origin_logo_r': sel_origin_logo_r.value,
+                        'logo_preset_r': sel_logo_r_preset.value,
+                        'upload_brasao_right': upload_brasao_right.value or '',
+                        'origin_bg': sel_origin_bg.value,
+                        'bg_preset': sel_bg_preset.value,
+                        'template_bg_url': input_template_bg.value or '',
+                        'logo_width': input_logo_width.value or 16,
+                        'logo_pos_x': input_logo_pos_x.value or 6,
+                        'logo_pos_y': input_logo_pos_y.value or 4,
+                        'qr_size': input_qr_size.value or 13,
+                        'qr_pos_x': input_qr_pos_x.value or 5,
+                        'qr_pos_y': input_qr_pos_y.value or 3,
+                        'font_nome': input_font_nome.value or 22,
+                        'font_posto': input_font_posto.value or 13,
+                        'font_reservado': input_font_reservado.value or 18,
+                    }
+
+                def save_print_config_to_event(notify_user=True):
+                    try:
+                        import json
+                        from database import get_db_connection
+                        _db = get_db_connection()
+
+                        cfg = collect_current_print_config()
+                        target_layout = layout if isinstance(layout, dict) else {}
+                        target_layout['print_config'] = cfg
+                        
+                        new_layout_str = json.dumps(target_layout, ensure_ascii=False)
+                        _db.table('jade_eventos').update({'layout_json': new_layout_str}).eq('id', event['id']).execute()
+                        if notify_user:
+                            ui.notify('💾 Configurações salvas como padrão deste evento!', color='positive', icon='check_circle')
+                    except Exception as s_err:
+                        print(f"[SAVE PRINT CONFIG ERR] {s_err}")
+                        if notify_user:
+                            ui.notify(f'❌ Erro ao salvar configurações: {s_err}', color='negative')
+
+                def on_update_and_preview():
+                    save_print_config_to_event(notify_user=False)
+                    preview_container.refresh()
+
+                with ui.row().classes('w-full justify-between items-center q-mt-sm'):
+                    ui.label('💡 As configurações salvas são gravadas como padrão deste evento.').classes('text-[11px] text-cyan-3 italic')
+                    with ui.row().classes('gap-2'):
+                        ui.button('💾 Salvar Configurações no Evento', icon='save', on_click=lambda: save_print_config_to_event(notify_user=True)).props('unelevated color=emerald text-color=white dense bold').classes('text-xs').tooltip('Salva o modelo, brasões, títulos e fontes como padrão permanente deste evento')
+                        ui.button('🔄 Atualizar Pré-Visualização', icon='refresh', on_click=on_update_and_preview).props('unelevated color=cyan text-color=black dense bold').classes('text-xs')
 
             # ═══════════════════════════════════════════════════════════════
             # CSS DE IMPRESSÃO
@@ -3631,10 +3716,20 @@ def render_page():
             })();
             """
 
-            with ui.row().classes('w-full justify-end gap-2 q-mt-md print-hide'):
-                ui.button('Fechar', on_click=diag.close).props('unelevated color=grey-8 dense')
-                ui.button('📄 Baixar / Exportar em PDF', icon='picture_as_pdf', on_click=lambda: ui.run_javascript(js_pdf_export_cards)).props('unelevated color=deep-purple text-color=white bold dense')
-                ui.button('🖨️ Imprimir Placas Selecionadas', icon='print', on_click=lambda: ui.run_javascript(js_clean_print_cards)).props('unelevated color=cyan text-color=black bold dense')
+            def on_trigger_print():
+                save_print_config_to_event(notify_user=False)
+                ui.run_javascript(js_clean_print_cards)
+
+            def on_trigger_pdf():
+                save_print_config_to_event(notify_user=False)
+                ui.run_javascript(js_pdf_export_cards)
+
+            with ui.row().classes('w-full justify-between items-center q-mt-md print-hide'):
+                ui.button('💾 Salvar Configurações no Evento', icon='save', on_click=lambda: save_print_config_to_event(notify_user=True)).props('unelevated color=emerald text-color=white bold dense').classes('text-xs').tooltip('Salva o modelo, brasões, títulos e fontes como padrão permanente deste evento')
+                with ui.row().classes('gap-2'):
+                    ui.button('Fechar', on_click=diag.close).props('unelevated color=grey-8 dense')
+                    ui.button('📄 Baixar / Exportar em PDF', icon='picture_as_pdf', on_click=on_trigger_pdf).props('unelevated color=deep-purple text-color=white bold dense')
+                    ui.button('🖨️ Imprimir Placas Selecionadas', icon='print', on_click=on_trigger_print).props('unelevated color=cyan text-color=black bold dense')
         diag.open()
 
     def open_tactical_scanner_dialog(event, convidados):
