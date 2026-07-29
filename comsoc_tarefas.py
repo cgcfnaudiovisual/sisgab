@@ -230,6 +230,9 @@ def open_editar_tarefa_dialog(tarefa: dict, efetivo_options: dict, callback_refr
 
     st_val = str(tarefa.get('status', 'pendente') or 'pendente').lower()
 
+    if enc_id is not None and enc_id not in efetivo_options:
+        efetivo_options[enc_id] = f"Militar Inativo (ID: {enc_id})"
+
     with ui.dialog() as dlg, ui.card().classes('w-[660px] max-w-[96vw] q-pa-lg').style(
         'background:#131a26; border:1px solid rgba(0,229,255,0.3); max-height:92vh; overflow-y:auto;'
     ):

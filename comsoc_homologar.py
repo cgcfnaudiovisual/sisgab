@@ -160,6 +160,11 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                         des_id = mid_int
                         break
 
+                if enc_id is not None and enc_id not in efetivo_options:
+                    efetivo_options[enc_id] = f"Militar Inativo (ID: {enc_id})"
+                if des_id is not None and des_id not in efetivo_options:
+                    efetivo_options[des_id] = f"Militar Inativo (ID: {des_id})"
+
                 ui.label('🎖️ Designação de Equipe Operacional / Criativa').classes('text-xs font-bold text-cyan q-mt-xs')
                 with ui.row().classes('w-full gap-2 no-wrap'):
                     encarregado_select = ui.select(
@@ -268,6 +273,9 @@ def open_concluir_missao_dialog(demanda, user_name_guerra="SUPERVISOR", callback
             enc_id = int(str(enc_id).strip()) if enc_id else None
         except ValueError:
             enc_id = None
+
+        if enc_id is not None and enc_id not in efetivo_options:
+            efetivo_options[enc_id] = f"Militar Inativo (ID: {enc_id})"
 
         with ui.column().classes('w-full gap-3 text-xs'):
             encarregado_sel = ui.select(efetivo_options, value=enc_id, label='👤 Encarregado da Missão').props('dark outlined dense option-dark w-full').classes('w-full')
@@ -398,6 +406,11 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
             if enc_id is None or str(mid_int) != str(enc_id):
                 des_id = mid_int
                 break
+
+        if enc_id is not None and enc_id not in efetivo_options:
+            efetivo_options[enc_id] = f"Militar Inativo (ID: {enc_id})"
+        if des_id is not None and des_id not in efetivo_options:
+            efetivo_options[des_id] = f"Militar Inativo (ID: {des_id})"
 
         with ui.column().classes('w-full gap-3 text-xs'):
             with ui.row().classes('w-full gap-2 no-wrap'):
