@@ -651,7 +651,8 @@ def register_common_handlers(bot):
                         msg_jade += "🎉 *Nenhuma placa pendente no momento!*\n"
 
                     msg_jade += "\n━━━━━━━━━━━━━━━━━━"
-                    await bot.reply_to(message, msg_jade, parse_mode='Markdown')
+                    from .keyboards import get_jade_menu_inline_keyboard
+                    await bot.reply_to(message, msg_jade, reply_markup=get_jade_menu_inline_keyboard(), parse_mode='Markdown')
                 except Exception as e_j:
                     await bot.reply_to(message, f"❌ Erro ao consultar placas JADE: {e_j}")
 
@@ -947,27 +948,32 @@ def register_common_handlers(bot):
                 db = get_db_connection()
                 if db:
                     try:
-                        res_ev = db.table('eventos_assentos').select('*').limit(1).execute()
-                        event_id = res_ev.data[0]['id'] if res_ev.data else 'e1'
+                        event_id = state.get('event_id')
+                        if not event_id:
+                            res_ev = db.table('jade_eventos').select('*').order('data_evento', desc=True).limit(1).execute()
+                            if not res_ev.data:
+                                res_ev = db.table('eventos_assentos').select('*').limit(1).execute()
+                            event_id = res_ev.data[0]['id'] if (res_ev and res_ev.data) else 'e1'
                         
-                        main_ins = db.table('convidados').insert({
+                        main_ins = db.table('jade_convidados').insert({
                             'evento_id': event_id,
                             'nome': nome_val,
                             'posto_graduacao': posto_val,
+                            'status_confirmacao': 'confirmado',
                             'status_placa': 'pendente',
-                            'presenca_confirmada': True
+                            'max_acompanhantes': num_acomp
                         }).execute()
 
                         main_id = main_ins.data[0]['id'] if (main_ins and main_ins.data) else None
                         
                         for i in range(num_acomp):
-                            db.table('convidados').insert({
+                            db.table('jade_convidados').insert({
                                 'evento_id': event_id,
                                 'nome': f"ACOMP. {nome_val} ({i+1}/{num_acomp})",
                                 'posto_graduacao': posto_val,
                                 'convidado_principal_id': main_id,
-                                'status_placa': 'pendente',
-                                'presenca_confirmada': True
+                                'status_confirmacao': 'confirmado',
+                                'status_placa': 'pendente'
                             }).execute()
                     except Exception as db_e:
                         print(f"[JADE SOLICITAR ASSENTO ERR] {db_e}")
@@ -1476,6 +1482,125 @@ def register_common_handlers(bot):
                     await bot.reply_to(message, "✏️ **Formulação Reiniciada**\n\n[Passo 1/9] ⚓ A solicitação é do **CGCFN** ou de **Outra OM**?", reply_markup=get_om_keyboard(), parse_mode='Markdown')
                 else:
                     await bot.reply_to(message, "Selecione uma das opções nos botões abaixo:", reply_markup=get_confirm_demanda_keyboard())
+            return
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(('solicitar_assento_jade', 'jade_escolher_evento', 'jade_ev_sel:', 'jade_extra_acomp', 'jade_refresh_queue', 'jade_cancel')))
+    async def handle_jade_menu_callbacks(call):
+        chat_id = call.message.chat.id if call.message else call.from_user.id
+        data = call.data
+
+        try:
+            await bot.answer_callback_query(call.id)
+        except Exception:
+            pass
+
+        from database import get_bot_db_connection as get_db_connection
+        db = get_db_connection()
+
+        if data == 'jade_refresh_queue':
+            if db:
+                res_j = db.table('jade_convidados').select('*').eq('status_placa', 'pendente').execute()
+                pendentes = res_j.data if res_j.data else []
+                res_prod = db.table('jade_convidados').select('*').eq('status_placa', 'em_producao').execute()
+                em_producao = res_prod.data if res_prod.data else []
+                res_imp = db.table('jade_convidados').select('*').eq('status_placa', 'impressa').execute()
+                impressas = res_imp.data if res_imp.data else []
+
+                msg_jade = (
+                    f"🪑 **FILA DE PRODUÇÃO DE PLACAS JADE (ATUALIZADA)**\n"
+                    f"━━━━━━━━━━━━━━━━━━\n\n"
+                    f"🟡 **Pendentes:** {len(pendentes)} placa(s)\n"
+                    f"🔵 **Em Produção:** {len(em_producao)} placa(s)\n"
+                    f"🟢 **Já Impressas:** {len(impressas)} placa(s)\n\n"
+                )
+                if pendentes:
+                    msg_jade += "📌 **PRÓXIMAS PLACAS A CONFECCIONAR:**\n"
+                    for idx, p in enumerate(pendentes[:10], 1):
+                        msg_jade += f"{idx}. *{p.get('posto_graduacao','') or ''} {p.get('nome','N/I')}* — _{p.get('cargo_funcao','') or ''}_\n"
+                else:
+                    msg_jade += "🎉 *Nenhuma placa pendente no momento!*\n"
+
+                msg_jade += "\n━━━━━━━━━━━━━━━━━━"
+                from .keyboards import get_jade_menu_inline_keyboard
+                await bot.send_message(chat_id, msg_jade, reply_markup=get_jade_menu_inline_keyboard(), parse_mode='Markdown')
+            return
+
+        elif data == 'jade_escolher_evento':
+            if db:
+                res_ev = db.table('jade_eventos').select('*').order('data_evento', desc=True).limit(8).execute()
+                events_list = res_ev.data if res_ev and res_ev.data else []
+                if not events_list:
+                    res_ev = db.table('eventos_assentos').select('*').limit(8).execute()
+                    events_list = res_ev.data if res_ev and res_ev.data else []
+
+                if events_list:
+                    from .keyboards import get_jade_events_inline_keyboard
+                    await bot.send_message(
+                        chat_id,
+                        "🏛️ **SELECIONE A SOLENIDADE / EVENTO:**\n"
+                        "Escolha para qual solenidade você deseja cadastrar ou gerenciar as placas JADE:",
+                        reply_markup=get_jade_events_inline_keyboard(events_list),
+                        parse_mode='Markdown'
+                    )
+                else:
+                    await bot.send_message(chat_id, "⚠️ Nenhuma solenidade cadastrada no momento. Crie o evento no painel web primeiro.")
+            return
+
+        elif data.startswith('jade_ev_sel:'):
+            ev_id = data.split(':')[1]
+            chat_states[chat_id] = {
+                'action': 'solicitar_assento_jade',
+                'step': 'select_posto',
+                'event_id': ev_id,
+                'data': {}
+            }
+            from .keyboards import get_gabarito_postos_keyboard
+            await bot.send_message(
+                chat_id,
+                "✅ **Solenidade selecionada!**\n\n"
+                "Selecione o **Posto/Graduação ou Cargo da Autoridade** no menu abaixo:",
+                reply_markup=get_gabarito_postos_keyboard(),
+                parse_mode='Markdown'
+            )
+            return
+
+        elif data == 'solicitar_assento_jade':
+            chat_states[chat_id] = {
+                'action': 'solicitar_assento_jade',
+                'step': 'select_posto',
+                'data': {}
+            }
+            from .keyboards import get_gabarito_postos_keyboard
+            await bot.send_message(
+                chat_id,
+                "🪑 **SOLICITAÇÃO DE ASSENTO JADE**\n\n"
+                "Selecione o **Posto/Graduação ou Cargo da Autoridade** no teclado abaixo:",
+                reply_markup=get_gabarito_postos_keyboard(),
+                parse_mode='Markdown'
+            )
+            return
+
+        elif data == 'jade_extra_acomp':
+            chat_states[chat_id] = {
+                'action': 'solicitar_assento_jade',
+                'step': 'input_nome',
+                'data': {'posto': 'RESERVADO (Extra)'}
+            }
+            from .keyboards import get_cancel_keyboard
+            await bot.send_message(
+                chat_id,
+                "➕ **PLACA EXTRA DE ACOMPANHANTE**\n\n"
+                "Digite o **Nome da Autoridade Principal ou Acompanhante** para quem deseja a placa extra:",
+                reply_markup=get_cancel_keyboard(),
+                parse_mode='Markdown'
+            )
+            return
+
+        elif data == 'jade_cancel':
+            if chat_id in chat_states:
+                del chat_states[chat_id]
+            from .keyboards import get_main_menu_keyboard
+            await bot.send_message(chat_id, "❌ Operação cancelada.", reply_markup=get_main_menu_keyboard())
             return
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith(('opcoes_dem:', 'fechar_opcoes_dem:', 'concluir_dem:', 'rejeitar_dem:', 'equipe_dem:', 'edithora_dem:', 'sel_mil:', 'quick_mil:', 'detalhe_dem:', 'aprovar_dem:', 'editlocal_dem:', 'edittitulo_dem:', 'reabrir_dem:')))

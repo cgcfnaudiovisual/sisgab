@@ -310,3 +310,32 @@ def get_presenca_keyboard():
     markup.row(types.KeyboardButton("❌ Cancelar"))
     return markup
 
+
+def get_jade_menu_inline_keyboard():
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.row(
+        types.InlineKeyboardButton("➕ Solicitar Nova Placa JADE", callback_data="solicitar_assento_jade")
+    )
+    markup.row(
+        types.InlineKeyboardButton("📅 Escolher Solenidade / Evento Específico", callback_data="jade_escolher_evento")
+    )
+    markup.row(
+        types.InlineKeyboardButton("➕ Adicionar Placa Extra / Acompanhante", callback_data="jade_extra_acomp")
+    )
+    markup.row(
+        types.InlineKeyboardButton("🔄 Atualizar Fila JADE", callback_data="jade_refresh_queue")
+    )
+    return markup
+
+
+def get_jade_events_inline_keyboard(events_list):
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    for ev in events_list:
+        ev_id = ev['id']
+        ev_nome = ev.get('nome', 'Solenidade')
+        ev_data = ev.get('data_evento', '')
+        btn_text = f"🏛️ {ev_nome} ({ev_data})" if ev_data else f"🏛️ {ev_nome}"
+        markup.row(types.InlineKeyboardButton(btn_text[:50], callback_data=f"jade_ev_sel:{ev_id}"))
+    markup.row(types.InlineKeyboardButton("❌ Cancelar", callback_data="jade_cancel"))
+    return markup
+
