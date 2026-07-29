@@ -509,16 +509,29 @@ def render_page():
             efetivo_options: dict = {}
             efetivo_map: dict = {}
 
+            # Função para ordenar tarefas cronologicamente (pelo prazo limite ou data do evento)
+            def ordenar_cronologicamente(task_list):
+                def get_sort_key(t):
+                    p_date = str(t.get('prazo_limite') or t.get('data_evento') or '').strip()
+                    p_time = str(t.get('hora_evento') or '').strip()
+                    if not p_date or p_date == 'None' or p_date == 'null':
+                        p_date = '9999-12-31'
+                    if not p_time or p_time == 'None' or p_time == 'null':
+                        p_time = '09:00'
+                    return (p_date, p_time, int(t.get('id', 0)))
+                return sorted(task_list, key=get_sort_key)
+
             if db:
                 try:
                     res_d = db.table('demandas_comunicacao').select('*').order('id', desc=True).execute()
                     if res_d and hasattr(res_d, 'data') and res_d.data:
                         # Filtra: apenas categorias que NÃO são audiovisual
-                        todas_tarefas = [
+                        raw_tarefas = [
                             d for d in res_d.data
                             if isinstance(d, dict)
                             and str(d.get('categoria_demanda') or '').strip().lower() not in ('audiovisual',)
                         ]
+                        todas_tarefas = ordenar_cronologicamente(raw_tarefas)
                 except Exception as e:
                     print(f'[TAREFAS LOAD ERR] {e}')
                     ui.notify('Erro ao carregar tarefas.', color='warning')
@@ -567,7 +580,7 @@ def render_page():
             )
             concluidas = sum(1 for t in todas_tarefas if status_para_coluna(t.get('status')) == 'concluida')
 
-            with ui.row().classes('w-full gap-3 flex-wrap q-mb-sm'):
+            with ui.row().classes('w-full gap-3 flex-nowrap q-mb-sm').style('overflow-x:auto;'):
                 for kpi_label, kpi_val, kpi_color in [
                     ('Total de Tarefas', total, '#64748b'),
                     ('Em Execução', em_exec, '#00e5ff'),
@@ -575,7 +588,7 @@ def render_page():
                     ('✅ Concluídas', concluidas, '#00e676'),
                 ]:
                     with ui.card().classes('q-pa-sm no-shadow rounded-lg').style(
-                        f'background:rgba(19,26,38,0.8); border:1px solid {kpi_color}33; min-width:110px;'
+                        f'background:rgba(19,26,38,0.8); border:1px solid {kpi_color}33; min-width:140px; flex: 1;'
                     ):
                         ui.label(str(kpi_val)).style(f'font-size:1.6rem; font-weight:900; color:{kpi_color}; font-family:Rajdhani;')
                         ui.label(kpi_label).classes('text-[10px] text-grey-4')
@@ -609,7 +622,7 @@ def render_page():
                     col_tarefas = [t for t in tarefas_filtradas if status_para_coluna(t.get('status')) == col_key]
 
                     with ui.column().classes('gap-2').style(
-                        f'min-width:240px; max-width:280px; flex:1; background:rgba(11,15,25,0.6); border:1px solid {col_border}; border-radius:10px; padding:10px;'
+                        f'min-width:250px; flex:1; background:rgba(11,15,25,0.6); border:1px solid {col_border}; border-radius:10px; padding:10px;'
                     ):
                         # Cabeçalho da coluna
                         with ui.row().classes('w-full items-center justify-between q-mb-xs'):
