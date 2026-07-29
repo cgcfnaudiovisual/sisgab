@@ -538,7 +538,7 @@ def render_page():
     with ui.column().classes('w-full q-pa-md gap-4'):
         with ui.row().classes('w-full justify-between items-center bg-slate-900/60 q-pa-md rounded-xl border border-cyan-500/20'):
             with ui.column().classes('gap-0'):
-                ui.label('⚖️ HOMOLOGAÇÃO & GESTÃO DE PAUTAS').classes('text-xl font-bold text-white cyber-title')
+                ui.label('⚖️ GESTÃO DE DEMANDAS & PAUTAS').classes('text-xl font-bold text-white cyber-title')
                 ui.label('Painel de Acompanhamento, Parecer e Homologação de Coberturas COMSOC').classes('text-xs text-grey-4')
             
             ui.button('🔄 Recarregar Dados', on_click=lambda: render_content.refresh()).props('unelevated color=cyan text-color=black dense bold icon=refresh').classes('text-xs')

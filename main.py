@@ -215,7 +215,7 @@ sisgab_menu_categories = [
         'items': [
             {'name': 'Nova Solicitação / Demanda', 'icon': 'add_box', 'path': '/comsoc_demandas', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar'], 'subtitle': 'Formulário de pautas e tarefas'},
             {'name': 'Tarefas COMSOC', 'icon': 'task_alt', 'path': '/comsoc_tarefas', 'roles': ['admin', 'supervisor', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'operador'], 'subtitle': 'Kanban de tarefas criativas e internas'},
-            {'name': 'Homologar Pautas', 'icon': 'gavel', 'path': '/comsoc_homologar', 'roles': ['admin', 'supervisor', 'oficial_gab', 'comsoc', 'praca_gab'], 'subtitle': 'Parecer e aprovação de demandas'},
+            {'name': 'Gestão de Demandas', 'icon': 'gavel', 'path': '/comsoc_homologar', 'roles': ['admin', 'supervisor', 'oficial_gab', 'comsoc', 'praca_gab'], 'subtitle': 'Parecer e aprovação de pautas'},
             {'name': 'Agenda Geral', 'icon': 'calendar_month', 'path': '/agenda_geral', 'subtitle': 'Google Calendar e Pautas'},
             {'name': 'Chamada & Presença Diária', 'icon': 'assignment_ind', 'path': '/presenca', 'subtitle': 'Chamada matutina e Pronto do CheGab'},
             {'name': 'Placas de Assento (Jade)', 'icon': 'event_seat', 'path': '/comsoc_assentos', 'subtitle': 'Mapeamento e alocação de auditório'},
