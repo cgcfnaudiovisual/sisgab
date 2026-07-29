@@ -3172,6 +3172,7 @@ def render_page():
                     # 1. Coleta TODOS os cartões (alocados + não alocados) em uma única lista contínua
                     all_cards = []
                     seen_ids = set()
+                    main_guests_map = {g['id']: g for g in convidados if not g.get('convidado_principal_id')}
                     
                     # Se abriu o estúdio passando uma lista específica
                     if convidados and len(convidados) > 0 and isinstance(convidados, list):
@@ -3223,7 +3224,8 @@ def render_page():
                                 with ui.column().classes('w-full gap-3'):
                                     for c in batch:
                                         is_acomp = bool(c.get('convidado_principal_id'))
-                                        posto = c.get('posto_graduacao') or ''
+                                        main_g = main_guests_map.get(c.get('convidado_principal_id')) if is_acomp else None
+                                        posto = (c.get('posto_graduacao') or (main_g.get('posto_graduacao') if main_g else '') or '').strip()
                                         almirantado_info = parse_almirantado_stars(posto)
                                         nome_limpo = clean_authority_name(c['nome'])
                                         target_logo = resolved_logo_url or brasao_l_url
@@ -3584,9 +3586,55 @@ def render_page():
             })();
             """
 
+            js_pdf_export_cards = """
+            (function() {
+                var area = document.querySelector('.print-area');
+                if (!area) return;
+                var win = window.open('', '_blank', 'width=1050,height=800');
+                if (!win) return;
+                
+                var cssStyles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+                                     .map(s => s.outerHTML).join('\\n');
+                                     
+                win.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>JADE - Placas de Assento (Documento PDF Oficial)</title>
+                        ${cssStyles}
+                        <style>
+                            @page { size: A4 portrait; margin: 0mm; }
+                            body { margin: 0 !important; padding: 5mm !important; background: #ffffff !important; color: #000000 !important; font-family: Arial, sans-serif !important; }
+                            .print-hide, .q-header, .q-drawer, .q-footer { display: none !important; }
+                            .print-area { display: block !important; position: static !important; width: 100% !important; visibility: visible !important; }
+                            .prisma-card-a4-slot { border: 1.5pt solid #1a1a1a !important; outline: 0.5pt solid #1a1a1a !important; outline-offset: -2.5mm !important; margin-bottom: 8mm !important; page-break-inside: avoid !important; background: #ffffff !important; color: #000000 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; }
+                            .prisma-conteudo-central { display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; text-align: center !important; width: 100% !important; }
+                            .prisma-texto-reservado { font-weight: bold !important; letter-spacing: 2px !important; text-transform: uppercase !important; color: #1f4e79 !important; font-size: 14pt !important; }
+                            .prisma-posto-extenso { font-weight: bold !important; text-transform: uppercase !important; letter-spacing: 1px !important; font-size: 14pt !important; }
+                            .prisma-nome-autoridade { font-weight: 900 !important; text-transform: uppercase !important; font-size: 22pt !important; line-height: 1.1 !important; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="print-area">
+                            ${area.innerHTML}
+                        </div>
+                        <script>
+                            window.onload = function() {
+                                document.title = "placas_jade_oficial.pdf";
+                                setTimeout(function() { window.print(); }, 400);
+                            };
+                        <\\/script>
+                    </body>
+                    </html>
+                `);
+                win.document.close();
+            })();
+            """
+
             with ui.row().classes('w-full justify-end gap-2 q-mt-md print-hide'):
                 ui.button('Fechar', on_click=diag.close).props('unelevated color=grey-8 dense')
-                ui.button('🖨️ Imprimir Placas Selecionadas', on_click=lambda: ui.run_javascript(js_clean_print_cards)).props('unelevated color=cyan text-color=black bold dense')
+                ui.button('📄 Baixar / Exportar em PDF', icon='picture_as_pdf', on_click=lambda: ui.run_javascript(js_pdf_export_cards)).props('unelevated color=deep-purple text-color=white bold dense')
+                ui.button('🖨️ Imprimir Placas Selecionadas', icon='print', on_click=lambda: ui.run_javascript(js_clean_print_cards)).props('unelevated color=cyan text-color=black bold dense')
         diag.open()
 
     def open_tactical_scanner_dialog(event, convidados):
