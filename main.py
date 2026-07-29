@@ -186,6 +186,7 @@ import sisgab_tv
 import ajuda_sobre
 import comsoc_noticias
 import comsoc_demandas
+import comsoc_tarefas
 import comsoc_cautela
 import comsoc_brindes
 import comsoc_galeria
@@ -213,6 +214,7 @@ sisgab_menu_categories = [
         'category': '🏛️ GABINETE & OPERAÇÕES',
         'items': [
             {'name': 'Nova Solicitação / Demanda', 'icon': 'add_box', 'path': '/comsoc_demandas', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar'], 'subtitle': 'Formulário de pautas e tarefas'},
+            {'name': 'Tarefas COMSOC', 'icon': 'task_alt', 'path': '/comsoc_tarefas', 'roles': ['admin', 'supervisor', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'operador'], 'subtitle': 'Kanban de tarefas criativas e internas'},
             {'name': 'Homologar Pautas', 'icon': 'gavel', 'path': '/comsoc_homologar', 'roles': ['admin', 'supervisor', 'oficial_gab', 'comsoc', 'praca_gab'], 'subtitle': 'Parecer e aprovação de demandas'},
             {'name': 'Agenda Geral', 'icon': 'calendar_month', 'path': '/agenda_geral', 'subtitle': 'Google Calendar e Pautas'},
             {'name': 'Chamada & Presença Diária', 'icon': 'assignment_ind', 'path': '/presenca', 'subtitle': 'Chamada matutina e Pronto do CheGab'},
@@ -701,6 +703,12 @@ def comsoc_demandas_page(autofill: str = None):
         build_layout(lambda: comsoc_demandas.render_page(autofill=autofill))()
     else:
         build_layout(comsoc_demandas.render_page)()
+
+
+@ui.page('/comsoc_tarefas')
+def comsoc_tarefas_page():
+    app.storage.user['current_path'] = '/comsoc_tarefas'
+    build_layout(comsoc_tarefas.render_page)()
 
 
 @ui.page('/comsoc_homologar')
