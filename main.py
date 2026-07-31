@@ -194,6 +194,7 @@ import comsoc_historico
 import comsoc_aniversariantes
 import smart_editor
 import agenda_geral
+import painel_comando
 import modulo_presenca
 import comsoc_assentos
 from database import authenticate_user, get_user_by_id
@@ -213,10 +214,10 @@ sisgab_menu_categories = [
     {
         'category': '🏛️ GABINETE & OPERAÇÕES',
         'items': [
+            {'name': 'Painel de Comando', 'icon': 'dashboard', 'path': '/', 'subtitle': 'Agenda, KPIs e panorama geral'},
             {'name': 'Nova Solicitação / Demanda', 'icon': 'add_box', 'path': '/comsoc_demandas', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar'], 'subtitle': 'Formulário de pautas e tarefas'},
             {'name': 'Tarefas COMSOC', 'icon': 'task_alt', 'path': '/comsoc_tarefas', 'roles': ['admin', 'supervisor', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'operador'], 'subtitle': 'Kanban de tarefas criativas e internas'},
             {'name': 'Gestão de Demandas', 'icon': 'gavel', 'path': '/comsoc_homologar', 'roles': ['admin', 'supervisor', 'oficial_gab', 'comsoc', 'praca_gab'], 'subtitle': 'Parecer e aprovação de pautas'},
-            {'name': 'Agenda Geral', 'icon': 'calendar_month', 'path': '/agenda_geral', 'subtitle': 'Google Calendar e Pautas'},
             {'name': 'Chamada & Presença Diária', 'icon': 'assignment_ind', 'path': '/presenca', 'subtitle': 'Chamada matutina e Pronto do CheGab'},
             {'name': 'Placas de Assento (Jade)', 'icon': 'event_seat', 'path': '/comsoc_assentos', 'subtitle': 'Mapeamento e alocação de auditório'},
             {'name': 'Estoque de Brindes', 'icon': 'card_giftcard', 'path': '/comsoc_brindes', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Controle de brindes do RP'},
@@ -655,8 +656,8 @@ def logout():
 
 @ui.page('/')
 def index_page():
-    app.storage.user['current_path'] = '/' 
-    build_layout(comsoc_noticias.render_page)()
+    app.storage.user['current_path'] = '/'
+    build_layout(painel_comando.render_page)()
 
 
 @ui.page('/admin')
@@ -756,8 +757,8 @@ def comsoc_aniversariantes_page():
 
 @ui.page('/agenda_geral')
 def agenda_geral_page():
-    app.storage.user['current_path'] = '/agenda_geral'
-    build_layout(agenda_geral.render_page)()
+    """Redireciona para o Painel de Comando unificado."""
+    ui.navigate.to('/')
 
 
 @ui.page('/presenca')
