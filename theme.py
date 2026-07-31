@@ -1,18 +1,18 @@
 # modules/theme.py
 from nicegui import ui
 
-# Paleta de Cores "Cyber Military"
+# Paleta de Cores "Gold Military" (alinhada com o brasão COMSOC)
 colors = {
     'bg_app': '#0b0f19',       # Fundo Global
     'bg_panel': '#131a26',     # Sidebar / Cards
     'bg_editor': '#1b2535',    # Cor específica do editor
     'bg_input': '#1b2535',     # Campos de texto
-    'primary': '#00e5ff',      # Ciano Neon (Primário)
+    'primary': '#c5a059',      # Dourado Metálico (Primário)
     'secondary': '#f8fafc',    # Branco azulado
-    'accent': '#00a2ff',       # Azul Neon
+    'accent': '#d4af37',       # Dourado Brilhante
     'text_main': '#e2e8f0',
     'text_dim': '#64748b',
-    'border': 'rgba(0, 229, 255, 0.15)',
+    'border': 'rgba(197, 160, 89, 0.15)',
     'success': '#00e676',
     'danger': '#ff1744'
 }
@@ -56,7 +56,7 @@ body {
 /* Customização dos painéis do Quasar e NiceGUI */
 .q-card, .nicegui-card {
     background-color: #131a26 !important;
-    border: 1px solid rgba(0, 229, 255, 0.15) !important;
+    border: 1px solid rgba(197, 160, 89, 0.15) !important;
     box-shadow: 0 4px 25px 0 rgba(0, 0, 0, 0.6) !important;
     color: #e2e8f0 !important;
     border-radius: 8px !important;
@@ -75,14 +75,14 @@ body {
     background: #0b0f19;
 }
 ::-webkit-scrollbar-thumb {
-    background: rgba(0, 229, 255, 0.2);
+    background: rgba(197, 160, 89, 0.2);
     border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-    background: rgba(0, 229, 255, 0.5);
+    background: rgba(197, 160, 89, 0.5);
 }
 
-/* Permite que as abas do Quasar façam wrap (quebrem linha para baixo) quando o espaço horizontal for reduzido */
+/* Permite que as abas do Quasar façam wrap */
 .q-tabs__content {
     flex-wrap: wrap !important;
     height: auto !important;
@@ -94,12 +94,12 @@ body {
 /* Inputs do Quasar */
 .q-field--dark .q-field__control {
     background-color: #1b2535 !important;
-    border: 1px solid rgba(0, 229, 255, 0.1) !important;
+    border: 1px solid rgba(197, 160, 89, 0.1) !important;
     border-radius: 6px !important;
 }
 .q-field--dark.q-field--focused .q-field__control {
-    border-color: #00e5ff !important;
-    box-shadow: 0 0 10px rgba(0, 229, 255, 0.2) !important;
+    border-color: #c5a059 !important;
+    box-shadow: 0 0 10px rgba(197, 160, 89, 0.2) !important;
 }
 .q-field__native, .q-field__prefix, .q-field__suffix, .q-field__input {
     color: #e2e8f0 !important;
@@ -110,8 +110,8 @@ body {
 
 /* Efeito Glow Cyber */
 .cyber-glow {
-    box-shadow: 0 0 15px rgba(0, 229, 255, 0.25) !important;
-    border: 1px solid rgba(0, 229, 255, 0.4) !important;
+    box-shadow: 0 0 15px rgba(197, 160, 89, 0.25) !important;
+    border: 1px solid rgba(197, 160, 89, 0.4) !important;
 }
 .cyber-glow-amber {
     box-shadow: 0 0 15px rgba(212, 175, 55, 0.25) !important;
@@ -125,12 +125,12 @@ body {
     text-transform: uppercase !important;
 }
 .q-btn--outline {
-    border: 1px solid rgba(0, 229, 255, 0.3) !important;
-    color: #00e5ff !important;
+    border: 1px solid rgba(197, 160, 89, 0.3) !important;
+    color: #c5a059 !important;
 }
 .q-btn--outline:hover {
-    background: rgba(0, 229, 255, 0.05) !important;
-    box-shadow: 0 0 8px rgba(0, 229, 255, 0.3) !important;
+    background: rgba(197, 160, 89, 0.05) !important;
+    box-shadow: 0 0 8px rgba(197, 160, 89, 0.3) !important;
 }
 
 /* Responsividade para Tabelas do Quasar */
