@@ -291,7 +291,7 @@ def render_page():
         with cal_container:
             # Cabeçalho dos dias da semana
             for dia_nome in DIAS_SEMANA:
-                ui.element('div').classes('cal-header').text(dia_nome)
+                ui.label(dia_nome).classes('cal-header')
 
             # Dias do mês
             for week in cal_weeks:
