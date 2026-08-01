@@ -82,7 +82,7 @@ def render_page():
     is_editor = user_role in ('admin', 'supervisor')
 
     # ── Injetar CSS responsivo ──
-    ui.html('''<style>
+    ui.add_head_html('''<style>
         .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; width: 100%; }
         .cal-header { text-align: center; font-size: 10px; font-weight: 700; color: #64748b; padding: 6px 0; letter-spacing: 1px; }
         .cal-day {
