@@ -550,22 +550,28 @@ def render_page(autofill: str = None):
                                                         if tag_mil not in obs_text:
                                                             obs_text = f"{tag_mil} {obs_text}".strip()
                                             
+                                            # Trata observações e autoridades sem quebrar colunas do Supabase
+                                            aut_val = str(ev.get('autoridades') or '').strip()
+                                            if obs_text:
+                                                if aut_val:
+                                                    aut_val = f"{aut_val} | Obs: {obs_text}"
+                                                else:
+                                                    aut_val = f"Obs: {obs_text}"
+                                            
+                                            cat_dem = ev.get('categoria_demanda') or 'audiovisual'
+
                                             payloads.append({
                                                 'solicitante_nome': ev.get('solicitante_nome') or 'COMSOC / GABINETE',
                                                 'setor': ev.get('setor') or 'Gabinete',
                                                 'contato': ev.get('contato') or 'Interno',
                                                 'titulo_evento': str(ev.get('titulo_evento', '')).upper(),
-                                                'categoria_demanda': 'cobertura_foto_video',
-                                                'produto_especifico': '',
-                                                'prioridade': ev.get('prioridade') or 'normal',
-                                                'prazo_limite': ev.get('data_evento') or '',
-                                                'observacoes_execucao': obs_text,
+                                                'categoria_demanda': cat_dem,
                                                 'data_evento': ev.get('data_evento'),
                                                 'data_fim': ev.get('data_evento'),
                                                 'hora_evento': ev.get('hora_evento') or '09:00',
                                                 'local_evento': ev.get('local_evento') or 'Quartel / Gabinete',
                                                 'tipo_cobertura': json.dumps(cobs),
-                                                'autoridades': ev.get('autoridades') or '',
+                                                'autoridades': aut_val,
                                                 'score_esforco': 1.0,
                                                 'sigiloso': int(ev.get('sigiloso', 0)),
                                                 'status': 'aprovado',
@@ -805,6 +811,14 @@ def render_page(autofill: str = None):
                                     dt_ev = (ev_data.value if hasattr(ev_data, 'value') and ev_data.value else None) or prazo_limite.value
                                     loc_ev = (ev_local.value if hasattr(ev_local, 'value') and ev_local.value else None) or 'Gabinete / CGCFN'
 
+                                    aut_single = (ev_aut.value if hasattr(ev_aut, 'value') and ev_aut.value else '') or ''
+                                    obs_single = (observacoes_exec.value if hasattr(observacoes_exec, 'value') and observacoes_exec.value else '') or ''
+                                    if obs_single:
+                                        if aut_single:
+                                            aut_single = f"{aut_single} | Obs: {obs_single}"
+                                        else:
+                                            aut_single = f"Obs: {obs_single}"
+
                                     registro = {
                                         'solicitante_nome': nome_sol,
                                         'setor': sol_setor.value or ('GABINETE / QUARTEL' if eh_evento_interno else 'Gabinete'),
@@ -814,13 +828,12 @@ def render_page(autofill: str = None):
                                         'produto_especifico': produto_especifico.value or '',
                                         'prioridade': prioridade_select.value or 'normal',
                                         'prazo_limite': prazo_limite.value or '',
-                                        'observacoes_execucao': observacoes_exec.value or '',
                                         'data_evento': dt_ev,
                                         'data_fim': dt_ev,
                                         'hora_evento': (ev_hora.value if hasattr(ev_hora, 'value') and ev_hora.value else None) or '09:00',
                                         'local_evento': loc_ev,
                                         'tipo_cobertura': json.dumps(coberturas),
-                                        'autoridades': (ev_aut.value if hasattr(ev_aut, 'value') and ev_aut.value else '') or '',
+                                        'autoridades': aut_single,
                                         'score_esforco': calcular_score(),
                                         'sigiloso': 1 if chk_sigilo.value else 0,
                                         'status': 'aprovado' if eh_evento_interno else status_inicial,
