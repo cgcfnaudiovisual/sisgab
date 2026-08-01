@@ -410,14 +410,18 @@ def render_page(autofill: str = None):
                                                         if not initial_mil_val:
                                                             initial_mil_val = raw_mil
 
+                                                # Garante que o valor customizado exista nas opções daquele card
+                                                card_mil_opts = dict(mil_opts)
+                                                if initial_mil_val and initial_mil_val not in card_mil_opts:
+                                                    card_mil_opts[initial_mil_val] = f"✏️ {initial_mil_val}"
+
                                                 m_sel = ui.select(
-                                                    options=mil_opts,
-                                                    value=initial_mil_val if initial_mil_val in mil_opts else '',
+                                                    options=card_mil_opts,
+                                                    value=initial_mil_val,
                                                     label='🎯 Militar Responsável',
                                                     with_input=True,
-                                                    new_value_mode='add',
                                                     clearable=True
-                                                ).props('dark outlined dense').classes('w-full text-[11px]')
+                                                ).props('dark outlined dense new-value-mode=add').classes('w-full text-[11px]')
                                                 m_sel.bind_value(ev, 'militar_designado')
 
                                                 obs = ui.input('Observações', value=ev.get('observacoes_execucao', '')).props('dark outlined dense').classes('w-full text-[11px]')
