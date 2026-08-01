@@ -218,22 +218,22 @@ def render_page():
                     'unelevated color=amber-9 text-color=black dense'
                 ).classes('text-xs')
 
-    # Elemento dinâmico para valor de Demandas do Mês
-    kpi_mes_val_holder = {'element': None}
+    # Elementos dinâmicos para atualização de TODOS os KPIs conforme o mês do calendário
+    kpi_elements = {}
 
     # ══════════════════════════════════════════════════════════
-    #  KPIs — Barra de Métricas Clicáveis (Grupo 1 e 2)
+    #  KPIs — Barra de Métricas Clicáveis (Sincronizadas com o Mês)
     # ══════════════════════════════════════════════════════════
     with ui.row().classes('w-full gap-2 q-mb-md q-px-md kpi-row'):
         kpi_items = [
-            {'label': 'PENDENTES', 'value': kpi_pendentes, 'icon': 'hourglass_top', 'color': 'amber', 'bg': 'rgba(245,158,11,0.08)', 'border': 'rgba(245,158,11,0.3)', 'path': '/comsoc_homologar', 'is_mes': False},
-            {'label': 'EM EXECUÇÃO', 'value': kpi_tarefas_exec, 'icon': 'play_circle', 'color': 'cyan', 'bg': 'rgba(0,229,255,0.08)', 'border': 'rgba(0,229,255,0.3)', 'path': '/comsoc_tarefas', 'is_mes': False},
-            {'label': 'DEMANDAS MÊS', 'value': 0, 'icon': 'calendar_month', 'color': 'amber', 'bg': 'rgba(245,158,11,0.08)', 'border': 'rgba(245,158,11,0.3)', 'path': None, 'is_mes': True},
-            {'label': 'CONCLUÍDAS', 'value': kpi_concluidas, 'icon': 'check_circle', 'color': 'green', 'bg': 'rgba(34,197,94,0.08)', 'border': 'rgba(34,197,94,0.3)', 'path': '/comsoc_historico', 'is_mes': False},
-            {'label': 'COBERTURAS', 'value': kpi_cobertura_campo, 'icon': 'linked_camera', 'color': 'cyan', 'bg': 'rgba(0,229,255,0.08)', 'border': 'rgba(0,229,255,0.3)', 'path': '/agenda_geral', 'is_mes': False},
-            {'label': '⚡ URGENTES', 'value': kpi_urgentes, 'icon': 'bolt', 'color': 'orange', 'bg': 'rgba(251,146,60,0.08)', 'border': 'rgba(251,146,60,0.3)', 'path': '/comsoc_homologar', 'is_mes': False},
-            {'label': 'VENCIDAS', 'value': kpi_vencidas, 'icon': 'error', 'color': 'red', 'bg': 'rgba(255,23,68,0.08)', 'border': 'rgba(255,23,68,0.3)', 'path': '/comsoc_homologar', 'is_mes': False},
-            {'label': 'HOJE', 'value': kpi_eventos_hoje, 'icon': 'today', 'color': 'primary', 'bg': 'rgba(197,160,89,0.08)', 'border': 'rgba(197,160,89,0.3)', 'path': None, 'is_mes': False},
+            {'key': 'pendentes', 'label': 'PENDENTES', 'icon': 'hourglass_top', 'color': 'amber', 'bg': 'rgba(245,158,11,0.08)', 'border': 'rgba(245,158,11,0.3)', 'path': '/comsoc_homologar'},
+            {'key': 'execucao', 'label': 'EM EXECUÇÃO', 'icon': 'play_circle', 'color': 'cyan', 'bg': 'rgba(0,229,255,0.08)', 'border': 'rgba(0,229,255,0.3)', 'path': '/comsoc_tarefas'},
+            {'key': 'demandas_mes', 'label': 'DEMANDAS MÊS', 'icon': 'calendar_month', 'color': 'amber', 'bg': 'rgba(245,158,11,0.08)', 'border': 'rgba(245,158,11,0.3)', 'path': None},
+            {'key': 'concluidas', 'label': 'CONCLUÍDAS', 'icon': 'check_circle', 'color': 'green', 'bg': 'rgba(34,197,94,0.08)', 'border': 'rgba(34,197,94,0.3)', 'path': '/comsoc_historico'},
+            {'key': 'coberturas', 'label': 'COBERTURAS', 'icon': 'linked_camera', 'color': 'cyan', 'bg': 'rgba(0,229,255,0.08)', 'border': 'rgba(0,229,255,0.3)', 'path': '/agenda_geral'},
+            {'key': 'urgentes', 'label': '⚡ URGENTES', 'icon': 'bolt', 'color': 'orange', 'bg': 'rgba(251,146,60,0.08)', 'border': 'rgba(251,146,60,0.3)', 'path': '/comsoc_homologar'},
+            {'key': 'vencidas', 'label': 'VENCIDAS', 'icon': 'error', 'color': 'red', 'bg': 'rgba(255,23,68,0.08)', 'border': 'rgba(255,23,68,0.3)', 'path': '/comsoc_homologar'},
+            {'key': 'hoje', 'label': 'HOJE', 'icon': 'today', 'color': 'primary', 'bg': 'rgba(197,160,89,0.08)', 'border': 'rgba(197,160,89,0.3)', 'path': None},
         ]
         for kpi in kpi_items:
             with ui.card().classes(
@@ -244,9 +244,8 @@ def render_page():
                 with ui.row().classes('items-center gap-1 justify-center no-wrap q-py-xs'):
                     ui.icon(kpi['icon'], color=kpi['color'], size='1.2rem')
                     with ui.column().classes('gap-0 items-start'):
-                        lbl_v = ui.label(str(kpi['value'])).classes(f"text-base font-black text-{kpi['color']}")
-                        if kpi['is_mes']:
-                            kpi_mes_val_holder['element'] = lbl_v
+                        lbl_v = ui.label('0').classes(f"text-base font-black text-{kpi['color']}")
+                        kpi_elements[kpi['key']] = lbl_v
                         ui.label(kpi['label']).classes('text-[8px] font-bold text-grey-5 tracking-tighter leading-tight')
 
     # ══════════════════════════════════════════════════════════
@@ -309,19 +308,61 @@ def render_page():
                      'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO']
         month_label.text = f'{meses_pt[m]} {y}'
 
-        # Recalcula a quantidade de demandas do mês ativo (y, m) no KPI
-        kpi_mes_cnt = 0
+        # Recalcula TODOS os KPIs especificamente para o mês (y, m) selecionado no calendário!
+        k_pend = 0
+        k_exec = 0
+        k_mes = 0
+        k_conc = 0
+        k_cob = 0
+        k_urg = 0
+        k_venc = 0
+        k_hoje = 0
+
         for d in todas_demandas:
+            st = str(d.get('status', '')).strip().lower()
+            cat = str(d.get('categoria_demanda') or d.get('categoria') or '').strip().lower()
+            cobs = str(d.get('tipo_cobertura') or '').strip().lower()
+            prio = str(d.get('prioridade') or '').strip().lower()
+            tit = str(d.get('titulo_evento') or '').strip()
+
             dt_s = str(d.get('data_evento', ''))
             try:
                 dt_e = datetime.strptime(dt_s, '%Y-%m-%d').date()
+                
+                # Pertence ao mês e ano selecionados no calendário
                 if dt_e.year == y and dt_e.month == m:
-                    kpi_mes_cnt += 1
+                    k_mes += 1
+
+                    if st in ('pendente', 'pendentes'):
+                        k_pend += 1
+                    elif st in ('concluida', 'concluido', 'concluidas', 'concluído'):
+                        k_conc += 1
+
+                    if st in ('em_execucao', 'em_andamento', 'em execução', 'em andamento', 'execucao'):
+                        k_exec += 1
+
+                    if 'audiovisual' in cat or any(x in cobs for x in ('foto', 'video', 'redes', 'drone', 'transmissao')):
+                        k_cob += 1
+
+                    if prio == 'urgente' or d.get('sigiloso') in (1, True, '1') or '⚡' in tit:
+                        k_urg += 1
+
+                    if dt_e < hoje and st not in ('concluida', 'concluido', 'concluidas', 'rejeitado', 'rejeitada'):
+                        k_venc += 1
+
+                if dt_e == hoje:
+                    k_hoje += 1
             except Exception:
                 pass
 
-        if kpi_mes_val_holder.get('element'):
-            kpi_mes_val_holder['element'].text = str(kpi_mes_cnt)
+        if kpi_elements.get('pendentes'): kpi_elements['pendentes'].text = str(k_pend)
+        if kpi_elements.get('execucao'): kpi_elements['execucao'].text = str(k_exec)
+        if kpi_elements.get('demandas_mes'): kpi_elements['demandas_mes'].text = str(k_mes)
+        if kpi_elements.get('concluidas'): kpi_elements['concluidas'].text = str(k_conc)
+        if kpi_elements.get('coberturas'): kpi_elements['coberturas'].text = str(k_cob)
+        if kpi_elements.get('urgentes'): kpi_elements['urgentes'].text = str(k_urg)
+        if kpi_elements.get('vencidas'): kpi_elements['vencidas'].text = str(k_venc)
+        if kpi_elements.get('hoje'): kpi_elements['hoje'].text = str(k_hoje)
 
         # Dias do mês (calendar.monthcalendar já respeita firstweekday=MONDAY)
         cal_weeks = calendar.monthcalendar(y, m)
