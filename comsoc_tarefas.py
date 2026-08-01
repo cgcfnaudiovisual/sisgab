@@ -162,14 +162,16 @@ def open_nova_tarefa_dialog(efetivo_options: dict, callback_refresh=None):
                     if obs_val: aut_parts.append(f"Obs: {obs_val}")
                     full_aut = " | ".join(aut_parts)
 
+                    dt_evento_def = (prazo_in.value or '').strip() or str(datetime.now().date())
+
                     registro = {
                         'titulo_evento': titulo_in.value.strip().upper(),
                         'categoria_demanda': cat_sel.value or 'design_arte',
                         'solicitante_nome': sol_in.value.strip(),
                         'setor': setor_in.value.strip(),
                         'contato': 'Interno',
-                        'data_evento': prazo_in.value or None,
-                        'data_fim': prazo_in.value or None,
+                        'data_evento': dt_evento_def,
+                        'data_fim': dt_evento_def,
                         'hora_evento': '09:00',
                         'local_evento': 'Gabinete / CGCFN',
                         'tipo_cobertura': json.dumps([]),
@@ -311,11 +313,13 @@ def open_editar_tarefa_dialog(tarefa: dict, efetivo_options: dict, callback_refr
                     if obs_val: aut_parts.append(f"Obs: {obs_val}")
                     full_aut = " | ".join(aut_parts)
 
+                    dt_evento_def = (prazo_in.value or '').strip() or str(datetime.now().date())
+
                     payload_clean = {
                         'titulo_evento': titulo_in.value.strip().upper(),
                         'categoria_demanda': cat_sel.value,
-                        'data_evento': prazo_in.value or None,
-                        'data_fim': prazo_in.value or None,
+                        'data_evento': dt_evento_def,
+                        'data_fim': dt_evento_def,
                         'status': status_sel.value,
                         'encarregado_id': resp_sel.value,
                         'notificar_militar_ids': json.dumps(militar_ids),
