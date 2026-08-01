@@ -376,9 +376,14 @@ def get_config_value(key: str, default: str = "") -> str:
         from database import get_bot_db_connection, get_db_connection
         db = get_bot_db_connection() or get_db_connection()
         if db:
-            res = db.table('Config').select('valor').eq('chave', key).execute()
-            if res.data:
-                return res.data[0]['valor']
+            try:
+                res = db.table('config').select('valor').eq('chave', key).execute()
+                if res.data and res.data[0].get('valor'):
+                    return res.data[0]['valor']
+            except Exception:
+                res = db.table('Config').select('valor').eq('chave', key).execute()
+                if res.data and res.data[0].get('valor'):
+                    return res.data[0]['valor']
     except Exception:
         pass
     return default
