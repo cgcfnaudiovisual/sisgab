@@ -356,6 +356,7 @@ def render_page(autofill: str = None):
                                         return
 
                                     if not state_lote_dem['eventos']:
+                                        ui.label('⚠️ Nenhum evento foi identificado no texto ou a resposta veio vazia. Verifique se o texto contém datas/eventos ou tente selecionar outro modelo de IA acima.').classes('text-xs text-amber q-pa-sm italic')
                                         return
                                     
                                     ui.label(f"✨ EVENTOS EXTRAÍDOS ({len(state_lote_dem['eventos'])}):").classes('text-xs font-bold text-cyan border-b border-gray-800 w-full q-pb-xs q-my-xs')

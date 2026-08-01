@@ -138,8 +138,9 @@ Retorne APENAS um objeto JSON válido, sem cercas de markdown (```json), sem exp
 
 def parse_multiple_events(raw_text: str) -> str:
     """Usa o Gemini para ler um texto bruto de um ou múltiplos eventos e estruturá-los em um JSON (lista)."""
-    if not _get_google_api_key():
-        return "[]"
+    api_key = _get_google_api_key()
+    if not api_key:
+        raise ValueError("Chave de API (GOOGLE_API_KEY) não encontrada ou não configurada.")
     
     from datetime import datetime
     current_year = str(datetime.now().year)
@@ -186,7 +187,14 @@ Exemplo de formato de saída esperado:
         user_content = f"Texto Bruto para Extração:\n---\n{raw_text}\n---"
         response = model.generate_content(user_content)
         
-        output = response.candidates[0].content.parts[0].text.strip()
+        # Extrai texto de forma segura via propriedade .text ou candidatos
+        output = ""
+        if hasattr(response, 'text') and response.text:
+            output = response.text.strip()
+        elif response.candidates and response.candidates[0].content.parts:
+            parts_text = [p.text for p in response.candidates[0].content.parts if hasattr(p, 'text') and p.text]
+            output = "\n".join(parts_text).strip()
+            
         # Remove cercas de markdown se houver
         if output.startswith("```"):
             lines = output.splitlines()
@@ -196,10 +204,13 @@ Exemplo de formato de saída esperado:
                 lines = lines[:-1]
             output = "\n".join(lines).strip()
             
+        if not output:
+            return "[]"
+            
         return output
     except Exception as e:
-        print(f"[PARSE MULTIPLE EVENTS ERR] {e}")
-        return "[]"
+        print(f"[PARSE MULTIPLE EVENTS ERR] {e}", flush=True)
+        raise e
 
 
 def generate_image_caption(image_url: str = None, description: str = None) -> str:
