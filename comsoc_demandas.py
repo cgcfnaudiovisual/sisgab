@@ -341,10 +341,20 @@ def render_page(autofill: str = None):
                                     placeholder='Ex: Pautas da semana:\n1. Formatura matutina dia 28/07 às 09:00h no pátio principal, uniforme 3.2, presença do Comandante-Geral.\n2. Reunião de pauta no gabinete dia 29/07 às 14:00h para planejar coberturas.'
                                 ).props('dark outlined rows=4').classes('w-full text-xs')
                                 
-                                state_lote_dem = {'eventos': []}
+                                state_lote_dem = {'eventos': [], 'loading': False, 'error': None}
                                 
                                 @ui.refreshable
                                 def render_lote_review_dem():
+                                    if state_lote_dem['loading']:
+                                        with ui.column().classes('w-full items-center justify-center q-pa-md'):
+                                            ui.spinner(color='cyan', size='md')
+                                            ui.label('Extraindo e destrinchando eventos com IA...').classes('text-xs text-cyan text-center font-bold q-mt-xs')
+                                        return
+                                    
+                                    if state_lote_dem['error']:
+                                        ui.label(f"Erro ao extrair lote: {state_lote_dem['error']}").classes('text-red text-xs q-pa-sm')
+                                        return
+
                                     if not state_lote_dem['eventos']:
                                         return
                                     
@@ -391,23 +401,21 @@ def render_page(autofill: str = None):
                                         ui.notify('Cole o texto da lista semanal primeiro!', color='warning')
                                         return
                                     
-                                    lote_review_container_dem.clear()
-                                    with lote_review_container_dem:
-                                        ui.spinner(color='cyan', size='md').classes('q-mx-auto')
-                                        ui.label('Extraindo e destrinchando eventos com IA...').classes('text-xs text-cyan text-center w-full font-bold')
+                                    state_lote_dem['loading'] = True
+                                    state_lote_dem['error'] = None
+                                    render_lote_review_dem.refresh()
                                     
                                     try:
-                                        ai_helper.GEMINI_MODEL_NAME = model_select_ia.value or 'gemini-2.0-flash'
+                                        ai_helper.GEMINI_MODEL_NAME = model_select_ia.value or 'gemini-3.6-flash'
                                         res_json = await run.io_bound(ai_helper.parse_multiple_events, text)
                                         state_lote_dem['eventos'] = json.loads(res_json)
-                                        lote_review_container_dem.clear()
-                                        with lote_review_container_dem:
-                                            render_lote_review_dem()
+                                        state_lote_dem['loading'] = False
+                                        render_lote_review_dem.refresh()
                                     except Exception as err:
-                                        lote_review_container_dem.clear()
-                                        with lote_review_container_dem:
-                                            ui.label(f"Erro ao extrair lote: {err}").classes('text-red text-xs')
-                                            ui.notify('Falha ao processar lista. Tente outro modelo.', color='warning')
+                                        state_lote_dem['loading'] = False
+                                        state_lote_dem['error'] = str(err)
+                                        render_lote_review_dem.refresh()
+                                        ui.notify(f'Falha ao processar lista: {err}', color='warning')
 
                                 async def salvar_lote_agenda_dem():
                                     db = get_service_db_connection() or get_db_connection()
@@ -486,8 +494,9 @@ def render_page(autofill: str = None):
                                         ui.notify(f"🎯 {len(payloads)} eventos cadastrados com sucesso na agenda!", color='success')
                                         
                                         state_lote_dem['eventos'] = []
+                                        state_lote_dem['loading'] = False
                                         lote_input_dem.value = ''
-                                        lote_review_container_dem.clear()
+                                        render_lote_review_dem.refresh()
                                     except Exception as save_err:
                                         ui.notify(f"Erro ao salvar lote: {save_err}", color='red')
 
@@ -498,7 +507,7 @@ def render_page(autofill: str = None):
                                         on_click=extrair_lote_ia_dem
                                     ).props('unelevated color=cyan text-color=black bold dense').classes('text-[10px] q-px-sm')
                                 
-                                lote_review_container_dem = ui.column().classes('w-full q-mt-xs')
+                                render_lote_review_dem()
 
             # 📝 CARD 2: Formulário Unificado com 2 colunas horizontais no Desktop
             with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
