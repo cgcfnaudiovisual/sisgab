@@ -406,8 +406,14 @@ def render_page(autofill: str = None):
                                                 a = ui.input('Autoridades', value=ev.get('autoridades', '')).props('dark outlined dense').classes('w-full text-[11px]')
                                                 a.bind_value(ev, 'autoridades')
 
-                                                # 📂 Categoria da Demanda
-                                                cat_val = ev.get('categoria_demanda') or 'audiovisual'
+                                                # 📂 Categoria da Demanda (Multi-Seleção)
+                                                cat_val = ev.get('categoria_demanda') or ['audiovisual']
+                                                if isinstance(cat_val, str):
+                                                    try: cat_val = json.loads(cat_val)
+                                                    except: cat_val = [cat_val]
+                                                if not isinstance(cat_val, list):
+                                                    cat_val = ['audiovisual']
+
                                                 cat_sel = ui.select(
                                                     options={
                                                         'audiovisual': '📸 Cobertura Audiovisual',
@@ -419,7 +425,9 @@ def render_page(autofill: str = None):
                                                         'outra_tarefa': '⚡ Outra Tarefa'
                                                     },
                                                     value=cat_val,
-                                                    label='📂 Categoria'
+                                                    label='📂 Categoria(s)',
+                                                    multiple=True,
+                                                    clearable=True
                                                 ).props('dark outlined dense option-dark').classes('w-full text-[11px]')
                                                 cat_sel.bind_value(ev, 'categoria_demanda')
 
@@ -444,34 +452,47 @@ def render_page(autofill: str = None):
                                                 ).props('dark outlined dense option-dark').classes('w-full text-[11px]')
                                                 cob_sel.bind_value(ev, 'tipo_cobertura')
 
-                                                # 🎯 Tenta associar o militar designado extraído pela IA
-                                                raw_mil = str(ev.get('militar_designado') or '').strip()
-                                                initial_mil_val = ''
-                                                if raw_mil:
-                                                    if raw_mil in mil_opts:
-                                                        initial_mil_val = raw_mil
-                                                    else:
-                                                        # Procura por nome de guerra
-                                                        for k, label in mil_opts.items():
-                                                            if k and raw_mil.lower() in label.lower():
-                                                                initial_mil_val = k
-                                                                ev['militar_designado'] = k
-                                                                break
-                                                        if not initial_mil_val:
-                                                            initial_mil_val = raw_mil
+                                                # 🎯 Militar(es) Responsável(is) (Multi-Seleção)
+                                                raw_mil = ev.get('militar_designado')
+                                                mil_list = []
+                                                if isinstance(raw_mil, list):
+                                                    mil_list = [str(x).strip() for x in raw_mil if str(x).strip()]
+                                                elif isinstance(raw_mil, str) and raw_mil.strip():
+                                                    try:
+                                                        parsed_mil = json.loads(raw_mil)
+                                                        if isinstance(parsed_mil, list):
+                                                            mil_list = [str(x).strip() for x in parsed_mil if str(x).strip()]
+                                                        else:
+                                                            mil_list = [raw_mil.strip()]
+                                                    except Exception:
+                                                        mil_list = [raw_mil.strip()]
 
-                                                # Garante que o valor customizado exista nas opções daquele card
+                                                initial_mil_vals = []
                                                 card_mil_opts = dict(mil_opts)
-                                                if initial_mil_val and initial_mil_val not in card_mil_opts:
-                                                    card_mil_opts[initial_mil_val] = f"✏️ {initial_mil_val}"
+
+                                                for m_item in mil_list:
+                                                    if m_item in mil_opts:
+                                                        initial_mil_vals.append(m_item)
+                                                    else:
+                                                        found_k = None
+                                                        for k, label in mil_opts.items():
+                                                            if k and m_item.lower() in label.lower():
+                                                                found_k = k
+                                                                break
+                                                        if found_k:
+                                                            initial_mil_vals.append(found_k)
+                                                        else:
+                                                            initial_mil_vals.append(m_item)
+                                                            card_mil_opts[m_item] = f"✏️ {m_item}"
 
                                                 m_sel = ui.select(
                                                     options=card_mil_opts,
-                                                    value=initial_mil_val,
-                                                    label='🎯 Militar Responsável',
+                                                    value=initial_mil_vals,
+                                                    label='🎯 Militar(es) Responsável(is)',
+                                                    multiple=True,
                                                     with_input=True,
                                                     clearable=True
-                                                ).props('dark outlined dense new-value-mode=add').classes('w-full text-[11px]')
+                                                ).props('dark outlined dense option-dark new-value-mode=add').classes('w-full text-[11px]')
                                                 m_sel.bind_value(ev, 'militar_designado')
 
                                                 obs = ui.input('Observações', value=ev.get('observacoes_execucao', '')).props('dark outlined dense').classes('w-full text-[11px]')
@@ -526,27 +547,36 @@ def render_page(autofill: str = None):
                                             if isinstance(cobs, str):
                                                 try: cobs = json.loads(cobs)
                                                 except: cobs = [cobs]
+                                            if not isinstance(cobs, list):
+                                                cobs = ['foto']
 
-                                            # Trata militar designado
-                                            m_des = str(ev.get('militar_designado') or '').strip()
+                                            # Trata militar(es) designado(s)
+                                            raw_m_des = ev.get('militar_designado')
+                                            m_des_items = []
+                                            if isinstance(raw_m_des, list):
+                                                m_des_items = raw_m_des
+                                            elif isinstance(raw_m_des, str) and raw_m_des.strip():
+                                                m_des_items = [raw_m_des.strip()]
+
                                             notificar_ids = []
                                             obs_text = ev.get('observacoes_execucao') or ''
 
-                                            if m_des:
-                                                if m_des.isdigit():
-                                                    notificar_ids.append(int(m_des))
+                                            for m_item in m_des_items:
+                                                m_str = str(m_item).strip()
+                                                if not m_str:
+                                                    continue
+                                                if m_str.isdigit():
+                                                    notificar_ids.append(int(m_str))
                                                 else:
-                                                    # Tenta encontrar no efetivo_options
                                                     found_id = None
                                                     for ef_id, ef_label in efetivo_options.items():
-                                                        if m_des.lower() in ef_label.lower() or str(ef_id) == m_des:
+                                                        if m_str.lower() in ef_label.lower() or str(ef_id) == m_str:
                                                             found_id = ef_id
                                                             break
                                                     if found_id:
                                                         notificar_ids.append(int(found_id))
                                                     else:
-                                                        # Texto livre digitado pelo usuário
-                                                        tag_mil = f"[Responsável: {m_des}]"
+                                                        tag_mil = f"[Responsável: {m_str}]"
                                                         if tag_mil not in obs_text:
                                                             obs_text = f"{tag_mil} {obs_text}".strip()
                                             
@@ -558,7 +588,11 @@ def render_page(autofill: str = None):
                                                 else:
                                                     aut_val = f"Obs: {obs_text}"
                                             
-                                            cat_dem = ev.get('categoria_demanda') or 'audiovisual'
+                                            raw_cat = ev.get('categoria_demanda') or ['audiovisual']
+                                            if isinstance(raw_cat, list):
+                                                cat_dem = json.dumps(raw_cat) if len(raw_cat) > 1 else (raw_cat[0] if raw_cat else 'audiovisual')
+                                            else:
+                                                cat_dem = str(raw_cat)
 
                                             payloads.append({
                                                 'solicitante_nome': ev.get('solicitante_nome') or 'COMSOC / GABINETE',
