@@ -158,6 +158,7 @@ Para cada evento identificado, extraia e retorne os seguintes campos:
 - hora_evento: Horário do evento no formato HH:MM (ex: "09:00", "14:30"). Se ausente, use "09:00".
 - local_evento: Local onde ocorrerá o evento. Se ausente, use "Quartel / Gabinete".
 - autoridades: Autoridades militares ou civis presentes no evento. Se nenhuma, deixe em branco.
+- militar_designado: Se o texto citar algum militar responsável, encarregado ou designado para a pauta (ex: "Cb Silva", "3º Sgt Souza"), extraia o nome dele aqui. Se não for citado nenhum militar, retorne null.
 - tipo_cobertura: Uma lista contendo os serviços necessários, podendo incluir: "foto", "video", "redes". Ex: ["foto", "video"]. Se não especificado, use ["foto"].
 - prioridade: Prioridade ("baixa", "normal", "alta"). Se não especificado, use "normal".
 - observacoes_execucao: Observações extras ou detalhes do evento.
@@ -176,6 +177,7 @@ Exemplo de formato de saída esperado:
     "hora_evento": "10:30",
     "local_evento": "Sala do Comandante",
     "autoridades": "Comandante-Geral",
+    "militar_designado": "Cb Silva",
     "tipo_cobertura": ["foto"],
     "prioridade": "normal",
     "observacoes_execucao": "Reunião fechada",

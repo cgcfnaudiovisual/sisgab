@@ -361,6 +361,11 @@ def render_page(autofill: str = None):
                                     
                                     ui.label(f"✨ EVENTOS EXTRAÍDOS ({len(state_lote_dem['eventos'])}):").classes('text-xs font-bold text-cyan border-b border-gray-800 w-full q-pb-xs q-my-xs')
                                     
+                                    # Prepara opções do efetivo para o dropdown
+                                    mil_opts = {'': '-- Não designado (Escolha Posterior) --'}
+                                    for m_id, m_label in efetivo_options.items():
+                                        mil_opts[str(m_id)] = m_label
+
                                     for index, ev in enumerate(state_lote_dem['eventos']):
                                         with ui.card().classes('w-full q-pa-xs border border-cyan-500/30 rounded bg-black/30 q-mb-xs').style('border-left: 4px solid #00e5ff;'):
                                             with ui.row().classes('w-full justify-between items-center no-wrap border-b border-gray-800/50 q-pb-xs'):
@@ -370,7 +375,7 @@ def render_page(autofill: str = None):
                                                     on_click=lambda idx=index: (state_lote_dem['eventos'].pop(idx), render_lote_review_dem.refresh())
                                                 ).props('flat round dense color=red').classes('text-xs')
                                             
-                                            with ui.grid(columns=1).classes('w-full gap-1 sm:grid-cols-2 md:grid-cols-3 q-mt-xs'):
+                                            with ui.grid(columns=1).classes('w-full gap-1 sm:grid-cols-2 md:grid-cols-4 q-mt-xs'):
                                                 t = ui.input('Título', value=ev.get('titulo_evento', '')).props('dark outlined dense').classes('w-full text-[11px]')
                                                 t.bind_value(ev, 'titulo_evento')
                                                 
@@ -388,6 +393,35 @@ def render_page(autofill: str = None):
                                                 
                                                 a = ui.input('Autoridades', value=ev.get('autoridades', '')).props('dark outlined dense').classes('w-full text-[11px]')
                                                 a.bind_value(ev, 'autoridades')
+
+                                                # 🎯 Tenta associar o militar designado extraído pela IA
+                                                raw_mil = str(ev.get('militar_designado') or '').strip()
+                                                initial_mil_val = ''
+                                                if raw_mil:
+                                                    if raw_mil in mil_opts:
+                                                        initial_mil_val = raw_mil
+                                                    else:
+                                                        # Procura por nome de guerra
+                                                        for k, label in mil_opts.items():
+                                                            if k and raw_mil.lower() in label.lower():
+                                                                initial_mil_val = k
+                                                                ev['militar_designado'] = k
+                                                                break
+                                                        if not initial_mil_val:
+                                                            initial_mil_val = raw_mil
+
+                                                m_sel = ui.select(
+                                                    options=mil_opts,
+                                                    value=initial_mil_val if initial_mil_val in mil_opts else '',
+                                                    label='🎯 Militar Responsável',
+                                                    with_input=True,
+                                                    new_value_mode='add',
+                                                    clearable=True
+                                                ).props('dark outlined dense').classes('w-full text-[11px]')
+                                                m_sel.bind_value(ev, 'militar_designado')
+
+                                                obs = ui.input('Observações', value=ev.get('observacoes_execucao', '')).props('dark outlined dense').classes('w-full text-[11px]')
+                                                obs.bind_value(ev, 'observacoes_execucao')
                                 
                                     with ui.row().classes('w-full justify-center q-mt-sm'):
                                         ui.button(
@@ -438,6 +472,29 @@ def render_page(autofill: str = None):
                                             if isinstance(cobs, str):
                                                 try: cobs = json.loads(cobs)
                                                 except: cobs = [cobs]
+
+                                            # Trata militar designado
+                                            m_des = str(ev.get('militar_designado') or '').strip()
+                                            notificar_ids = []
+                                            obs_text = ev.get('observacoes_execucao') or ''
+
+                                            if m_des:
+                                                if m_des.isdigit():
+                                                    notificar_ids.append(int(m_des))
+                                                else:
+                                                    # Tenta encontrar no efetivo_options
+                                                    found_id = None
+                                                    for ef_id, ef_label in efetivo_options.items():
+                                                        if m_des.lower() in ef_label.lower() or str(ef_id) == m_des:
+                                                            found_id = ef_id
+                                                            break
+                                                    if found_id:
+                                                        notificar_ids.append(int(found_id))
+                                                    else:
+                                                        # Texto livre digitado pelo usuário
+                                                        tag_mil = f"[Responsável: {m_des}]"
+                                                        if tag_mil not in obs_text:
+                                                            obs_text = f"{tag_mil} {obs_text}".strip()
                                             
                                             payloads.append({
                                                 'solicitante_nome': ev.get('solicitante_nome') or 'COMSOC / GABINETE',
@@ -448,7 +505,7 @@ def render_page(autofill: str = None):
                                                 'produto_especifico': '',
                                                 'prioridade': ev.get('prioridade') or 'normal',
                                                 'prazo_limite': ev.get('data_evento') or '',
-                                                'observacoes_execucao': ev.get('observacoes_execucao') or '',
+                                                'observacoes_execucao': obs_text,
                                                 'data_evento': ev.get('data_evento'),
                                                 'data_fim': ev.get('data_evento'),
                                                 'hora_evento': ev.get('hora_evento') or '09:00',
@@ -459,7 +516,7 @@ def render_page(autofill: str = None):
                                                 'sigiloso': int(ev.get('sigiloso', 0)),
                                                 'status': 'aprovado',
                                                 'captacao_entrega': 'captacao_e_edicao',
-                                                'notificar_militar_ids': '[]'
+                                                'notificar_militar_ids': json.dumps(notificar_ids)
                                             })
                                         
                                         if not payloads:
