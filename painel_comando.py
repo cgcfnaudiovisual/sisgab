@@ -145,26 +145,49 @@ def render_page():
 
     hoje = datetime.now().date()
 
-    # Classificar por status
+    # Classificar por status e categorias
     kpi_pendentes = 0
     kpi_aprovadas = 0
     kpi_ajustes = 0
     kpi_eventos_hoje = 0
     kpi_vencidas = 0
     kpi_tarefas_exec = 0
+    kpi_concluidas = 0
+    kpi_cobertura_campo = 0
+    kpi_urgentes = 0
 
     # Mapeamento: data_evento -> lista de status
     eventos_por_dia = {}
 
     for d in todas_demandas:
         st = str(d.get('status', '')).strip().lower()
+        cat = str(d.get('categoria_demanda') or d.get('categoria') or '').strip().lower()
+        cobs = str(d.get('tipo_cobertura') or '').strip().lower()
+        prio = str(d.get('prioridade') or '').strip().lower()
+        tit = str(d.get('titulo_evento') or '').strip()
+
+        # Status principal
         if st in ('pendente', 'pendentes'):
             kpi_pendentes += 1
         elif st in ('aprovada', 'aprovado', 'aprovadas'):
             kpi_aprovadas += 1
         elif st in ('ajustes', 'ajuste'):
             kpi_ajustes += 1
+        elif st in ('concluida', 'concluido', 'concluidas', 'concluído'):
+            kpi_concluidas += 1
 
+        if st in ('em_execucao', 'em_andamento', 'em execução', 'em andamento', 'execucao'):
+            kpi_tarefas_exec += 1
+
+        # Cobertura de Campo / Audiovisual
+        if 'audiovisual' in cat or any(x in cobs for x in ('foto', 'video', 'redes', 'drone', 'transmissao')):
+            kpi_cobertura_campo += 1
+
+        # Urgentes / Prioritárias
+        if prio == 'urgente' or d.get('sigiloso') in (1, True, '1') or '⚡' in tit:
+            kpi_urgentes += 1
+
+        # Data do evento
         dt_str = str(d.get('data_evento', ''))
         try:
             dt_ev = datetime.strptime(dt_str, '%Y-%m-%d').date()
@@ -179,13 +202,6 @@ def render_page():
             eventos_por_dia[dt_str].append(st)
         except Exception:
             pass
-
-    # Contar tarefas/demandas atualmente em execução
-    for d in todas_demandas:
-        cat = str(d.get('categoria_demanda') or d.get('categoria') or '').strip().lower()
-        st = str(d.get('status', '')).strip().lower()
-        if st in ('em_execucao', 'em_andamento', 'em execução', 'em andamento', 'execucao'):
-            kpi_tarefas_exec += 1
 
     # ══════════════════════════════════════════════════════════
     #  ALERTA DE PENDÊNCIAS (para admin/supervisor)
@@ -202,28 +218,36 @@ def render_page():
                     'unelevated color=amber-9 text-color=black dense'
                 ).classes('text-xs')
 
+    # Elemento dinâmico para valor de Demandas do Mês
+    kpi_mes_val_holder = {'element': None}
+
     # ══════════════════════════════════════════════════════════
-    #  KPIs — Barra de Métricas Clicáveis
+    #  KPIs — Barra de Métricas Clicáveis (Grupo 1 e 2)
     # ══════════════════════════════════════════════════════════
     with ui.row().classes('w-full gap-2 q-mb-md q-px-md kpi-row'):
         kpi_items = [
-            {'label': 'PENDENTES', 'value': kpi_pendentes, 'icon': 'hourglass_top', 'color': 'amber', 'bg': 'rgba(245,158,11,0.08)', 'border': 'rgba(245,158,11,0.3)', 'path': '/comsoc_homologar'},
-            {'label': 'APROVADAS', 'value': kpi_aprovadas, 'icon': 'check_circle', 'color': 'green', 'bg': 'rgba(34,197,94,0.08)', 'border': 'rgba(34,197,94,0.3)', 'path': '/comsoc_homologar'},
-            {'label': 'EM EXECUÇÃO', 'value': kpi_tarefas_exec, 'icon': 'play_circle', 'color': 'primary', 'bg': 'rgba(197,160,89,0.08)', 'border': 'rgba(197,160,89,0.3)', 'path': '/comsoc_tarefas'},
-            {'label': 'VENCIDAS', 'value': kpi_vencidas, 'icon': 'error', 'color': 'red', 'bg': 'rgba(255,23,68,0.08)', 'border': 'rgba(255,23,68,0.3)', 'path': '/comsoc_homologar'},
-            {'label': 'HOJE', 'value': kpi_eventos_hoje, 'icon': 'today', 'color': 'primary', 'bg': 'rgba(197,160,89,0.08)', 'border': 'rgba(197,160,89,0.3)', 'path': None},
+            {'label': 'PENDENTES', 'value': kpi_pendentes, 'icon': 'hourglass_top', 'color': 'amber', 'bg': 'rgba(245,158,11,0.08)', 'border': 'rgba(245,158,11,0.3)', 'path': '/comsoc_homologar', 'is_mes': False},
+            {'label': 'EM EXECUÇÃO', 'value': kpi_tarefas_exec, 'icon': 'play_circle', 'color': 'cyan', 'bg': 'rgba(0,229,255,0.08)', 'border': 'rgba(0,229,255,0.3)', 'path': '/comsoc_tarefas', 'is_mes': False},
+            {'label': 'DEMANDAS MÊS', 'value': 0, 'icon': 'calendar_month', 'color': 'amber', 'bg': 'rgba(245,158,11,0.08)', 'border': 'rgba(245,158,11,0.3)', 'path': None, 'is_mes': True},
+            {'label': 'CONCLUÍDAS', 'value': kpi_concluidas, 'icon': 'check_circle', 'color': 'green', 'bg': 'rgba(34,197,94,0.08)', 'border': 'rgba(34,197,94,0.3)', 'path': '/comsoc_historico', 'is_mes': False},
+            {'label': 'COBERTURAS', 'value': kpi_cobertura_campo, 'icon': 'linked_camera', 'color': 'cyan', 'bg': 'rgba(0,229,255,0.08)', 'border': 'rgba(0,229,255,0.3)', 'path': '/agenda_geral', 'is_mes': False},
+            {'label': '⚡ URGENTES', 'value': kpi_urgentes, 'icon': 'bolt', 'color': 'orange', 'bg': 'rgba(251,146,60,0.08)', 'border': 'rgba(251,146,60,0.3)', 'path': '/comsoc_homologar', 'is_mes': False},
+            {'label': 'VENCIDAS', 'value': kpi_vencidas, 'icon': 'error', 'color': 'red', 'bg': 'rgba(255,23,68,0.08)', 'border': 'rgba(255,23,68,0.3)', 'path': '/comsoc_homologar', 'is_mes': False},
+            {'label': 'HOJE', 'value': kpi_eventos_hoje, 'icon': 'today', 'color': 'primary', 'bg': 'rgba(197,160,89,0.08)', 'border': 'rgba(197,160,89,0.3)', 'path': None, 'is_mes': False},
         ]
         for kpi in kpi_items:
             with ui.card().classes(
-                'q-pa-sm no-shadow rounded-xl cursor-pointer hover:scale-[1.02] transition-all kpi-card'
+                'q-pa-xs no-shadow rounded-xl cursor-pointer hover:scale-[1.02] transition-all kpi-card'
             ).style(
-                f"background: {kpi['bg']}; border: 1px solid {kpi['border']}; flex: 1; min-width: 100px;"
+                f"background: {kpi['bg']}; border: 1px solid {kpi['border']}; flex: 1; min-width: 90px;"
             ).on('click', lambda p=kpi['path']: ui.navigate.to(p) if p else None):
-                with ui.row().classes('items-center gap-2 justify-center'):
-                    ui.icon(kpi['icon'], color=kpi['color'], size='1.3rem')
-                    with ui.column().classes('gap-0'):
-                        ui.label(str(kpi['value'])).classes(f"text-lg font-black text-{kpi['color']}")
-                        ui.label(kpi['label']).classes('text-[9px] font-bold text-grey-5 tracking-wider')
+                with ui.row().classes('items-center gap-1 justify-center no-wrap q-py-xs'):
+                    ui.icon(kpi['icon'], color=kpi['color'], size='1.2rem')
+                    with ui.column().classes('gap-0 items-start'):
+                        lbl_v = ui.label(str(kpi['value'])).classes(f"text-base font-black text-{kpi['color']}")
+                        if kpi['is_mes']:
+                            kpi_mes_val_holder['element'] = lbl_v
+                        ui.label(kpi['label']).classes('text-[8px] font-bold text-grey-5 tracking-tighter leading-tight')
 
     # ══════════════════════════════════════════════════════════
     #  CALENDÁRIO MENSAL NATIVO
@@ -284,6 +308,20 @@ def render_page():
         meses_pt = ['', 'JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO',
                      'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO']
         month_label.text = f'{meses_pt[m]} {y}'
+
+        # Recalcula a quantidade de demandas do mês ativo (y, m) no KPI
+        kpi_mes_cnt = 0
+        for d in todas_demandas:
+            dt_s = str(d.get('data_evento', ''))
+            try:
+                dt_e = datetime.strptime(dt_s, '%Y-%m-%d').date()
+                if dt_e.year == y and dt_e.month == m:
+                    kpi_mes_cnt += 1
+            except Exception:
+                pass
+
+        if kpi_mes_val_holder.get('element'):
+            kpi_mes_val_holder['element'].text = str(kpi_mes_cnt)
 
         # Dias do mês (calendar.monthcalendar já respeita firstweekday=MONDAY)
         cal_weeks = calendar.monthcalendar(y, m)
