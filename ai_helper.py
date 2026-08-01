@@ -399,40 +399,60 @@ def _get_gemini_model_name() -> str:
 
 def get_available_gemini_models() -> dict[str, str]:
     """Retorna um dicionário de modelos do Gemini disponíveis e funcionais (chave: id, valor: nome/descrição).
-    Filtra apenas modelos ativos e conhecidos para evitar listar modelos experimentais ou descontinuados."""
-    # Lista de modelos funcionais conhecidos (atualizáveis manualmente)
-    MODELOS_FUNCIONAIS = {
-        "gemini-2.5-flash": "Gemini 2.5 Flash (Recomendado)",
+    Consulta diretamente a API do Google Generative AI para retornar todos os modelos mais recentes (Gemini 3.6, 3.5, 2.5, etc.)."""
+    fallback_models = {
+        "gemini-3.6-flash": "Gemini 3.6 Flash (Mais Recente & Recomendado)",
+        "gemini-3.5-flash": "Gemini 3.5 Flash",
+        "gemini-3.1-pro-preview": "Gemini 3.1 Pro",
+        "gemini-2.5-flash": "Gemini 2.5 Flash",
         "gemini-2.5-pro": "Gemini 2.5 Pro",
         "gemini-2.0-flash": "Gemini 2.0 Flash",
-        "gemini-2.0-flash-lite": "Gemini 2.0 Flash Lite",
-        "gemini-1.5-flash": "Gemini 1.5 Flash",
-        "gemini-1.5-pro": "Gemini 1.5 Pro",
     }
     
     api_key = _get_google_api_key()
     if not api_key:
-        return MODELOS_FUNCIONAIS
+        return fallback_models
         
     try:
         genai.configure(api_key=api_key)
-        api_models = set()
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods and 'gemini' in m.name:
-                api_models.add(m.name.replace('models/', ''))
+        models_dict = {}
         
-        # Retorna apenas os modelos da allowlist que a API confirma como disponíveis
-        if api_models:
-            filtered = {}
-            for model_id, display_name in MODELOS_FUNCIONAIS.items():
-                if model_id in api_models:
-                    filtered[model_id] = display_name
-            if filtered:
-                return filtered
+        # Filtros para excluir modelos de nicho (TTS, áudio, robótica, imagem pura)
+        ignore_keywords = ['tts', 'robotics', 'lyria', 'image', 'banana', 'computer-use']
+        
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                model_id = m.name.replace('models/', '')
+                
+                # Ignora modelos não focados em texto/estruturação
+                if any(kw in model_id.lower() for kw in ignore_keywords):
+                    continue
+                
+                display_name = getattr(m, 'display_name', '') or model_id
+                
+                if model_id == "gemini-3.6-flash":
+                    display_name += " (Recomendado)"
+                    
+                models_dict[model_id] = display_name
+                
+        if models_dict:
+            # Ordena por versão (3.6 -> 3.5 -> 3.1 -> 3.0 -> 2.5 -> 2.0 -> 1.5)
+            def model_sort_key(k):
+                if '3.6' in k: return 0
+                if '3.5' in k: return 1
+                if '3.1' in k: return 2
+                if '3-pro' in k or '3-flash' in k: return 3
+                if '2.5' in k: return 4
+                if '2.0' in k: return 5
+                if '1.5' in k: return 6
+                return 7
+                
+            sorted_keys = sorted(models_dict.keys(), key=model_sort_key)
+            return {k: models_dict[k] for k in sorted_keys}
     except Exception as e:
         print(f"[GEMINI LIST_MODELS ERROR] {e}")
         
-    return MODELOS_FUNCIONAIS
+    return fallback_models
 
 
 def generate_google_tts(text: str, lang: str = None) -> str:
