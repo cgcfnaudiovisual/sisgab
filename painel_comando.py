@@ -180,11 +180,11 @@ def render_page():
         except Exception:
             pass
 
-    # Contar tarefas em execução (categoria != audiovisual)
+    # Contar tarefas/demandas atualmente em execução
     for d in todas_demandas:
-        cat = str(d.get('categoria', '')).strip().lower()
+        cat = str(d.get('categoria_demanda') or d.get('categoria') or '').strip().lower()
         st = str(d.get('status', '')).strip().lower()
-        if cat != 'audiovisual' and st in ('em andamento', 'em_andamento', 'aprovada', 'aprovado'):
+        if st in ('em_execucao', 'em_andamento', 'em execução', 'em andamento', 'execucao'):
             kpi_tarefas_exec += 1
 
     # ══════════════════════════════════════════════════════════
