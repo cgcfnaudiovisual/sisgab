@@ -170,14 +170,18 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                     encarregado_select = ui.select(
                         efetivo_options,
                         value=enc_id,
-                        label='👤 Encarregado da Missão'
-                    ).props('dark outlined dense option-dark').classes('w-1/2')
+                        label='👤 Encarregado da Missão',
+                        with_input=True,
+                        clearable=True
+                    ).props('dark outlined dense option-dark new-value-mode=add').classes('w-1/2')
 
                     designer_select = ui.select(
                         efetivo_options,
                         value=des_id,
-                        label='🎨 Militar Designado (Arte / Design)'
-                    ).props('dark outlined dense option-dark').classes('w-1/2')
+                        label='🎨 Militar Designado (Arte / Design)',
+                        with_input=True,
+                        clearable=True
+                    ).props('dark outlined dense option-dark new-value-mode=add').classes('w-1/2')
 
                 ui.label('📸 Tipos de Serviço Requeridos').classes('text-xs font-bold text-cyan q-mt-xs')
                 
@@ -186,6 +190,27 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                 chk_grafico = ui.checkbox('🎨 Serviço Gráfico / Design', value='grafico' in cob_list)
                 chk_drone = ui.checkbox('🚁 Imagens Aéreas / Drone', value='drone' in cob_list)
                 chk_redes = ui.checkbox('📱 Mídias Sociais / Reels', value='redes' in cob_list)
+
+                def excluir_pauta():
+                    with ui.dialog() as confirm_dlg, ui.card().classes('q-pa-md bg-slate-900 border border-red-500 rounded-xl').style('max-width: 440px;'):
+                        ui.label('⚠️ Confirmar Exclusão').classes('text-md font-bold text-red cyber-title')
+                        ui.label(f"Tem certeza que deseja excluir permanentemente a pauta '{demanda.get('titulo_evento','')}'? Esta ação não poderá ser desfeita.").classes('text-xs text-grey-3 q-my-md')
+                        with ui.row().classes('w-full justify-end gap-2'):
+                            ui.button('Cancelar', on_click=confirm_dlg.close).props('flat color=grey')
+                            def confirmar_delecao():
+                                db_del = get_service_db_connection() or get_db_connection()
+                                if db_del:
+                                    dem_id_del = demanda['id']
+                                    if isinstance(dem_id_del, str) and dem_id_del.isdigit():
+                                        dem_id_del = int(dem_id_del)
+                                    db_del.table('demandas_comunicacao').delete().eq('id', dem_id_del).execute()
+                                    ui.notify('🗑️ Pauta excluída com sucesso!', color='positive')
+                                    confirm_dlg.close()
+                                    edit_dialog.close()
+                                    if callback_refresh:
+                                        callback_refresh()
+                            ui.button('🗑️ Sim, Excluir', on_click=confirmar_delecao).props('unelevated color=red text-color=white bold')
+                    confirm_dlg.open()
 
                 def salvar_edicao():
                     if not in_titulo.value or not in_data_inicio.value or not in_local.value:
@@ -203,10 +228,29 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                     if db:
                         try:
                             militar_ids = []
-                            if encarregado_select.value:
-                                militar_ids.append(encarregado_select.value)
-                            if designer_select.value:
-                                militar_ids.append(designer_select.value)
+                            enc_save = None
+                            aut_extra = []
+
+                            enc_val = encarregado_select.value
+                            if enc_val:
+                                if isinstance(enc_val, int) or (isinstance(enc_val, str) and enc_val.isdigit()):
+                                    enc_save = int(enc_val)
+                                    militar_ids.append(enc_save)
+                                else:
+                                    aut_extra.append(f"[Responsável: {str(enc_val).strip()}]")
+
+                            des_val = designer_select.value
+                            if des_val:
+                                if isinstance(des_val, int) or (isinstance(des_val, str) and des_val.isdigit()):
+                                    militar_ids.append(int(des_val))
+                                else:
+                                    aut_extra.append(f"[Design: {str(des_val).strip()}]")
+
+                            aut_final = in_autoridades.value.strip()
+                            if aut_extra:
+                                for a_ex in aut_extra:
+                                    if a_ex not in aut_final:
+                                        aut_final = f"{aut_final} {a_ex}".strip()
 
                             update_payload = {
                                 'titulo_evento': in_titulo.value.strip(),
@@ -217,11 +261,11 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                                 'data_evento': in_data_inicio.value,
                                 'data_fim': in_data_fim.value or in_data_inicio.value,
                                 'hora_evento': in_hora.value or '09:00',
-                                'autoridades': in_autoridades.value.strip(),
+                                'autoridades': aut_final,
                                 'status': in_status.value,
                                 'categoria_demanda': in_categoria.value,
                                 'produto_especifico': in_produto.value.strip(),
-                                'encarregado_id': encarregado_select.value,
+                                'encarregado_id': enc_save,
                                 'notificar_militar_ids': json.dumps(list(set(militar_ids))),
                                 'tipo_cobertura': json.dumps(cobs)
                             }
@@ -237,9 +281,11 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                         except Exception as e_save:
                             ui.notify(f'Erro ao editar pauta: {e_save}', color='negative')
 
-                with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
-                    ui.button('Cancelar', on_click=edit_dialog.close).props('flat color=grey')
-                    ui.button('💾 Salvar Alterações', on_click=salvar_edicao).props('unelevated color=green text-color=white bold')
+                with ui.row().classes('w-full justify-between items-center q-mt-md'):
+                    ui.button('🗑️ Excluir Pauta', on_click=excluir_pauta).props('flat color=red icon=delete').classes('text-xs')
+                    with ui.row().classes('items-center gap-2'):
+                        ui.button('Cancelar', on_click=edit_dialog.close).props('flat color=grey')
+                        ui.button('💾 Salvar Alterações', on_click=salvar_edicao).props('unelevated color=green text-color=white bold')
                     
         edit_dialog.open()
     except Exception as err_dlg:
