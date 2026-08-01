@@ -162,18 +162,32 @@ async def api_photo_processed(payload: dict = Body(...)):
 import theme
 from logo_base64 import LOGO_BASE64
 
-# Decodifica o logotipo base64 para gerar os ícones do PWA na inicialização se não existirem
+# Carrega o logotipo (URL ou Base64) para gerar os ícones do PWA na inicialização se não existirem
 try:
-    import base64
-    logo_data = LOGO_BASE64.split(',')[-1]
-    logo_bytes = base64.b64decode(logo_data)
-    for icon_name in ['icon-192.png', 'icon-512.png', 'apple-touch-icon.png']:
-        icon_path = os.path.join(assets_dir, icon_name)
-        if not os.path.exists(icon_path):
-            with open(icon_path, 'wb') as f:
-                f.write(logo_bytes)
+    logo_bytes = None
+    if LOGO_BASE64.startswith('http'):
+        import requests
+        for icon_name in ['icon-192.png', 'icon-512.png', 'apple-touch-icon.png']:
+            icon_path = os.path.join(assets_dir, icon_name)
+            if not os.path.exists(icon_path):
+                if logo_bytes is None:
+                    res = requests.get(LOGO_BASE64, timeout=5)
+                    if res.status_code == 200:
+                        logo_bytes = res.content
+                if logo_bytes:
+                    with open(icon_path, 'wb') as f:
+                        f.write(logo_bytes)
+    else:
+        import base64
+        logo_data = LOGO_BASE64.split(',')[-1]
+        logo_bytes = base64.b64decode(logo_data)
+        for icon_name in ['icon-192.png', 'icon-512.png', 'apple-touch-icon.png']:
+            icon_path = os.path.join(assets_dir, icon_name)
+            if not os.path.exists(icon_path):
+                with open(icon_path, 'wb') as f:
+                    f.write(logo_bytes)
 except Exception as e:
-    print(f"[PWA] Erro ao decodificar logo base64 para icones: {e}", flush=True)
+    print(f"[PWA] Erro ao carregar logo para icones: {e}", flush=True)
 
 import admin
 import notifications
@@ -366,7 +380,7 @@ def build_layout_base():
             # LADO ESQUERDO: Botão de Menu + Logo + Título
             with ui.row().classes('items-center gap-2 no-wrap shrink-0'):
                 ui.button(on_click=lambda: left_drawer.toggle(), icon='menu').props('flat color=white dense')
-                ui.image(LOGO_BASE64).style('width: 30px; height: 30px; box-shadow: 0 0 10px rgba(197, 160, 89, 0.5); border-radius: 50%; border: 1px solid rgba(197, 160, 89, 0.3);').classes('drop-shadow-[0_0_8px_rgba(197,160,89,0.4)] shrink-0')
+                ui.image(LOGO_BASE64).style('width: 30px; height: 30px; filter: drop-shadow(0 0 4px rgba(197, 160, 89, 0.85));').classes('shrink-0')
                 with ui.column().classes('gap-0 items-start'):
                     ui.label(system_title).style(f'color: {theme.colors["primary"]}; font-weight: bold; line-height: 1.1; letter-spacing: 1px; font-size: 0.9rem;').classes('cyber-title text-left no-wrap')
                     ui.label('Comunicação Social • Gabinete').style('font-size: 0.65rem; color: #64748b;').classes('text-left no-wrap gt-xs')
@@ -989,7 +1003,7 @@ def login_page(request: Request):
             with ui.column().classes('w-full items-center gap-4'):
                 
                 # ── TOPO: LOGO E IDENTIFICAÇÃO ──
-                ui.image(LOGO_BASE64).style('width: 180px; height: 180px; box-shadow: 0 0 35px rgba(197, 160, 89, 0.65); border-radius: 50%; border: 2px solid rgba(197, 160, 89, 0.4);').classes('drop-shadow-[0_0_20px_rgba(197,160,89,0.5)]')
+                ui.image(LOGO_BASE64).style('width: 180px; height: 180px; filter: drop-shadow(0 0 15px rgba(197, 160, 89, 0.85));')
                 ui.label('SisGAB').classes('cyber-title').style(
                     f'color: {theme.colors["primary"]}; font-size: 2.8rem; font-weight: 700; letter-spacing: 2px; line-height: 1;'
                 )
