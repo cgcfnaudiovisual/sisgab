@@ -994,38 +994,35 @@ def login_page(request: Request):
                 ui.button('Enviar', on_click=submit_recovery).props('unelevated color=amber-9 text-color=black')
 
     # Fundo do login
-    with ui.column().classes('w-full h-screen items-center justify-center p-4 gap-4').style(
+    with ui.column().classes('w-full min-h-screen items-center justify-center p-2 sm:p-4 gap-2').style(
         'background: linear-gradient(135deg, #121212 0%, #1e1e2f 100%);'
     ):
-        with ui.card().classes('w-full max-w-md no-shadow rounded-xl q-pa-lg').style(
+        with ui.card().classes('w-full max-w-sm no-shadow rounded-xl q-pa-md').style(
             f'background: {theme.colors["bg_panel"]}; border: 1px solid {theme.colors["border"]}; box-shadow: 0 10px 40px rgba(0,0,0,0.6) !important;'
         ):
-            with ui.column().classes('w-full items-center gap-4'):
+            with ui.column().classes('w-full items-center gap-2'):
                 
-                # ── TOPO: LOGO E IDENTIFICAÇÃO ──
-                ui.image(LOGO_BASE64).style('width: 180px; height: 180px; filter: drop-shadow(0 0 15px rgba(197, 160, 89, 0.85));')
+                # ── TOPO: LOGO COMPACTO E TÍTULO ──
+                ui.image(LOGO_BASE64).style('width: 110px; height: 110px; filter: drop-shadow(0 0 12px rgba(197, 160, 89, 0.85));')
                 ui.label('SisGAB').classes('cyber-title').style(
-                    f'color: {theme.colors["primary"]}; font-size: 2.8rem; font-weight: 700; letter-spacing: 2px; line-height: 1;'
+                    f'color: {theme.colors["primary"]}; font-size: 2.2rem; font-weight: 700; letter-spacing: 2px; line-height: 1;'
                 )
-                with ui.column().classes('gap-0 items-center text-center'):
-                    ui.label('Gestão de Gabinete e COMSOC').classes('text-white text-md font-bold')
-                    ui.label('Centro de Instrução da Marinha').classes('text-grey-4 text-xs tracking-wider q-mt-xs')
                 
-                ui.separator().style('background-color: rgba(197, 160, 89, 0.15); height: 1px;').classes('w-3/4 q-my-sm')
+                ui.separator().style('background-color: rgba(197, 160, 89, 0.15); height: 1px;').classes('w-3/4 q-my-xs')
                 
-                # ── FORMULÁRIO DE ACESSO ──
-                with ui.element('form').props('onsubmit="return false;"').classes('w-full flex flex-col gap-4 items-center').on('submit', lambda: try_login()):
-                    with ui.column().classes('w-full gap-0.5 items-center text-center q-mb-xs'):
-                        ui.label('🔐 ACESSO AO SISTEMA').classes('text-white text-md font-bold cyber-title tracking-widest')
-                        ui.label('Entre com suas credenciais').classes('text-grey-5 text-xs')
+                # ── FORMULÁRIO DE ACESSO DIRETO ──
+                with ui.element('form').props('onsubmit="return false;"').classes('w-full flex flex-col gap-2 items-center').on('submit', lambda: try_login()):
+                    with ui.column().classes('w-full gap-0 items-center text-center q-mb-xs'):
+                        ui.label('🔐 ACESSO AO SISTEMA').classes('text-white text-sm font-bold cyber-title tracking-widest')
+                        ui.label('Entre com suas credenciais').classes('text-grey-5 text-[11px]')
                     
-                    user = ui.input('E-mail ou Usuário', value=app.storage.user.get('last_username', '')).props('dark outlined w-full autocomplete=username name=username').classes('w-full text-sm')
-                    pwd = ui.input('Senha', password=True).props('dark outlined w-full autocomplete=current-password name=password').classes('w-full text-sm')
+                    user = ui.input('E-mail ou Usuário', value=app.storage.user.get('last_username', '')).props('dark outlined w-full autocomplete=username name=username dense').classes('w-full text-xs')
+                    pwd = ui.input('Senha', password=True).props('dark outlined w-full autocomplete=current-password name=password dense').classes('w-full text-xs')
                     
                     session_type = ui.radio(
                         {0: 'Manter conectado (Sempre)', 7200: 'Sessão temporária (2 horas)'}, 
                         value=0
-                    ).props('dark inline dense').classes('text-[11px] text-grey q-mt-xs self-center')
+                    ).props('dark inline dense').classes('text-[10px] text-grey q-mt-xs self-center')
                     
                     error_label = ui.label('').classes('text-xs text-red w-full text-center')
                     
