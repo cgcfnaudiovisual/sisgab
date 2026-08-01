@@ -154,30 +154,49 @@ def open_nova_tarefa_dialog(efetivo_options: dict, callback_refresh=None):
 
                 try:
                     militar_ids = [resp_sel.value] if resp_sel.value else []
+                    prod_val = prod_in.value.strip()
+                    obs_val = obs_in.value.strip()
+                    
+                    aut_parts = []
+                    if prod_val: aut_parts.append(f"[Produto: {prod_val}]")
+                    if obs_val: aut_parts.append(f"Obs: {obs_val}")
+                    full_aut = " | ".join(aut_parts)
+
                     registro = {
                         'titulo_evento': titulo_in.value.strip().upper(),
                         'categoria_demanda': cat_sel.value or 'design_arte',
-                        'produto_especifico': prod_in.value.strip(),
                         'solicitante_nome': sol_in.value.strip(),
                         'setor': setor_in.value.strip(),
                         'contato': 'Interno',
-                        'prioridade': prio_sel.value or 'normal',
-                        'prazo_limite': prazo_in.value or '',
                         'data_evento': prazo_in.value or None,
                         'data_fim': prazo_in.value or None,
                         'hora_evento': '09:00',
                         'local_evento': 'Gabinete / CGCFN',
-                        'observacoes_execucao': obs_in.value.strip(),
                         'tipo_cobertura': json.dumps([]),
                         'score_esforco': 1.0,
                         'sigiloso': 0,
                         'status': 'pendente',
                         'captacao_entrega': 'entrega_digital',
                         'notificar_militar_ids': json.dumps(militar_ids),
-                        'autoridades': '',
+                        'autoridades': full_aut,
                         'encarregado_id': resp_sel.value,
                     }
-                    res = db.table('demandas_comunicacao').insert(registro).execute()
+
+                    try:
+                        # Tenta primeiro com campos estendidos (caso existam no banco)
+                        registro_ext = dict(registro)
+                        registro_ext.update({
+                            'produto_especifico': prod_val,
+                            'prioridade': prio_sel.value or 'normal',
+                            'prazo_limite': prazo_in.value or '',
+                            'observacoes_execucao': obs_val,
+                        })
+                        res = db.table('demandas_comunicacao').insert(registro_ext).execute()
+                    except Exception as ins_err:
+                        if 'PGRST204' in str(ins_err) or 'column' in str(ins_err).lower():
+                            res = db.table('demandas_comunicacao').insert(registro).execute()
+                        else:
+                            raise ins_err
                     new_id = None
                     if res.data and isinstance(res.data, list) and len(res.data) > 0:
                         new_id = res.data[0].get('id')
@@ -284,23 +303,44 @@ def open_editar_tarefa_dialog(tarefa: dict, efetivo_options: dict, callback_refr
                     return
                 try:
                     militar_ids = [resp_sel.value] if resp_sel.value else []
-                    payload = {
+                    prod_val = prod_in.value.strip()
+                    obs_val = obs_in.value.strip()
+                    
+                    aut_parts = []
+                    if prod_val: aut_parts.append(f"[Produto: {prod_val}]")
+                    if obs_val: aut_parts.append(f"Obs: {obs_val}")
+                    full_aut = " | ".join(aut_parts)
+
+                    payload_clean = {
                         'titulo_evento': titulo_in.value.strip().upper(),
                         'categoria_demanda': cat_sel.value,
-                        'produto_especifico': prod_in.value.strip(),
-                        'prioridade': prio_sel.value or 'normal',
-                        'prazo_limite': prazo_in.value or '',
                         'data_evento': prazo_in.value or None,
                         'data_fim': prazo_in.value or None,
                         'status': status_sel.value,
                         'encarregado_id': resp_sel.value,
                         'notificar_militar_ids': json.dumps(militar_ids),
-                        'observacoes_execucao': obs_in.value.strip(),
+                        'autoridades': full_aut,
                     }
+
+                    payload_ext = dict(payload_clean)
+                    payload_ext.update({
+                        'produto_especifico': prod_val,
+                        'prioridade': prio_sel.value or 'normal',
+                        'prazo_limite': prazo_in.value or '',
+                        'observacoes_execucao': obs_val,
+                    })
+
                     dem_id = tarefa['id']
                     if isinstance(dem_id, str) and dem_id.isdigit():
                         dem_id = int(dem_id)
-                    db.table('demandas_comunicacao').update(payload).eq('id', dem_id).execute()
+
+                    try:
+                        db.table('demandas_comunicacao').update(payload_ext).eq('id', dem_id).execute()
+                    except Exception as upd_err:
+                        if 'PGRST204' in str(upd_err) or 'column' in str(upd_err).lower():
+                            db.table('demandas_comunicacao').update(payload_clean).eq('id', dem_id).execute()
+                        else:
+                            raise upd_err
                     hist = {
                         'demanda_id': dem_id,
                         'data_hora': datetime.now().isoformat(),
@@ -377,11 +417,32 @@ def deletar_tarefa(tarefa_id, callback_refresh=None):
 #  Card individual de tarefa no Kanban
 # ─────────────────────────────────────────────
 def render_tarefa_card(t: dict, efetivo_map: dict, usuario: str, callback_refresh, coluna_key: str, is_approver: bool):
-    """Renderiza um card de tarefa dentro de uma coluna Kanban."""
-    cat_key = str(t.get('categoria_demanda') or 'design_arte').strip()
-    cat_info = CATEGORIAS_TAREFA.get(cat_key, ('⚡', cat_key.replace('_', ' ').title(), '#94a3b8'))
-    cat_icone, cat_nome, cat_cor = cat_info
+    """Renderiza um card de tarefa otimizado no Kanban com suporte a múltiplos militares, categorias e busca."""
+    import re
 
+    # 1. Tratamento de Múltiplas Categorias (String ou Array JSON)
+    raw_cat = t.get('categoria_demanda') or 'design_arte'
+    cat_keys = []
+    if isinstance(raw_cat, list):
+        cat_keys = [str(c).strip() for c in raw_cat if str(c).strip()]
+    elif isinstance(raw_cat, str) and raw_cat.strip():
+        try:
+            parsed_c = json.loads(raw_cat)
+            if isinstance(parsed_c, list):
+                cat_keys = [str(c).strip() for c in parsed_c if str(c).strip()]
+            else:
+                cat_keys = [raw_cat.strip()]
+        except Exception:
+            cat_keys = [raw_cat.strip()]
+            
+    if not cat_keys:
+        cat_keys = ['design_arte']
+
+    first_cat = cat_keys[0]
+    first_cat_info = CATEGORIAS_TAREFA.get(first_cat, ('⚡', first_cat.replace('_', ' ').title(), '#94a3b8'))
+    first_cor = first_cat_info[2]
+
+    # Prioridade
     prio_key = str(t.get('prioridade') or 'normal').strip().lower()
     prio_info = PRIORIDADES.get(prio_key, ('🔵', 'Normal', 'blue'))
     prio_badge_icone, prio_nome, prio_color = prio_info
@@ -390,7 +451,7 @@ def render_tarefa_card(t: dict, efetivo_map: dict, usuario: str, callback_refres
     prazo_str = str(t.get('prazo_limite') or t.get('data_evento') or '').strip()
     prazo_vencido = False
     prazo_display = '—'
-    if prazo_str and prazo_str not in ('None', ''):
+    if prazo_str and prazo_str not in ('None', 'null', ''):
         try:
             prazo_dt = date.fromisoformat(prazo_str)
             prazo_display = prazo_dt.strftime('%d/%m/%Y')
@@ -398,52 +459,99 @@ def render_tarefa_card(t: dict, efetivo_map: dict, usuario: str, callback_refres
         except ValueError:
             prazo_display = prazo_str
 
-    # Responsável
+    # 2. Resolução Completa de Todos os Militares Escalados (Equipe)
+    nomer_resps = []
+    
+    # a) Encarregado Principal
     enc_id = t.get('encarregado_id')
-    resp_nome = '—'
     if enc_id:
         try:
             enc_id_int = int(str(enc_id).strip())
-            resp_nome = efetivo_map.get(enc_id_int, efetivo_map.get(str(enc_id), '—'))
-            # Extrai só o nome de guerra (sem o role em parênteses)
-            if '(' in resp_nome:
-                resp_nome = resp_nome.split('(')[0].strip()
+            lbl = efetivo_map.get(enc_id_int, efetivo_map.get(str(enc_id)))
+            if lbl:
+                nomer_resps.append(lbl.split('(')[0].strip())
         except (ValueError, TypeError):
-            resp_nome = str(enc_id)
+            nomer_resps.append(str(enc_id).strip())
 
+    # b) Notificar / Equipe Múltipla (JSON Array)
+    raw_notif = t.get('notificar_militar_ids')
+    if raw_notif:
+        n_ids = []
+        if isinstance(raw_notif, list):
+            n_ids = raw_notif
+        elif isinstance(raw_notif, str) and raw_notif.strip():
+            try:
+                parsed_n = json.loads(raw_notif)
+                if isinstance(parsed_n, list): n_ids = parsed_n
+                elif parsed_n: n_ids = [parsed_n]
+            except Exception: pass
+
+        for m_id in n_ids:
+            try:
+                m_id_int = int(str(m_id).strip())
+                lbl = efetivo_map.get(m_id_int, efetivo_map.get(str(m_id)))
+                if lbl:
+                    nome_curto = lbl.split('(')[0].strip()
+                    if nome_curto not in nomer_resps:
+                        nomer_resps.append(nome_curto)
+            except Exception: pass
+
+    # c) Menções em Texto Livre [Responsável: Nome]
+    aut_raw = str(t.get('autoridades') or '')
+    if '[Responsável:' in aut_raw:
+        matches = re.findall(r'\[Responsável:\s*([^\]]+)\]', aut_raw)
+        for m in matches:
+            if m.strip() and m.strip() not in nomer_resps:
+                nomer_resps.append(m.strip())
+
+    resp_display = ", ".join(nomer_resps) if nomer_resps else '—'
+
+    # 3. Resolução do Produto Específico e Briefing / Observações
     produto = str(t.get('produto_especifico') or '').strip()
     obs = str(t.get('observacoes_execucao') or '').strip()
-    tarefa_id = t['id']
+    
+    if '[Produto:' in aut_raw and not produto:
+        m_prod = re.search(r'\[Produto:\s*([^\]]+)\]', aut_raw)
+        if m_prod:
+            produto = m_prod.group(1).strip()
+            
+    if 'Obs:' in aut_raw and not obs:
+        parts = aut_raw.split('Obs:')
+        if len(parts) > 1:
+            obs = parts[1].strip()
 
-    border_color = 'rgba(255,23,68,0.7)' if prazo_vencido else cat_cor
+    tarefa_id = t['id']
+    border_color = 'rgba(255,23,68,0.7)' if prazo_vencido else first_cor
 
     with ui.card().classes('w-full q-pa-sm no-shadow rounded-lg').style(
         f'background: rgba(19,26,38,0.95); border-left: 3px solid {border_color}; border-top: 1px solid rgba(255,255,255,0.06); border-right: 1px solid rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.04);'
     ):
-        # Cabeçalho: categoria + prioridade
+        # Cabeçalho: badges de categorias + prioridade
         with ui.row().classes('w-full items-center justify-between no-wrap gap-1 q-mb-xs'):
-            with ui.row().classes('items-center gap-1 no-wrap'):
-                ui.label(cat_icone).style(f'font-size:14px;')
-                ui.label(cat_nome).classes('text-[10px] font-bold').style(f'color:{cat_cor};')
+            with ui.row().classes('items-center gap-1 flex-wrap'):
+                for c_k in cat_keys:
+                    c_info = CATEGORIAS_TAREFA.get(c_k, ('⚡', c_k.replace('_', ' ').title(), '#94a3b8'))
+                    ui.badge(f"{c_info[0]} {c_info[1]}").style(f'background:{c_info[2]}22; color:{c_info[2]}; border:1px solid {c_info[2]}55; font-size:9px; padding:2px 4px;')
+            
             ui.badge(f'{prio_badge_icone} {prio_nome}').props(f'color={prio_color}').classes('text-[9px]')
 
         # Título
         ui.label(str(t.get('titulo_evento') or 'Sem título')).classes('text-xs font-bold text-white leading-tight q-mb-xs')
 
-        # Produto
+        # Produto Específico
         if produto:
-            ui.label(produto).classes('text-[10px] text-grey-4 italic')
+            ui.label(f"📦 {produto}").classes('text-[10px] text-cyan-3 font-semibold q-mb-xs')
 
-        # Prazo + Responsável
+        # Prazo + Equipe Responsável
         with ui.row().classes('w-full items-center justify-between no-wrap q-mt-xs'):
             prazo_color = 'color:#ff1744;font-weight:700;' if prazo_vencido else 'color:#64748b;'
             prazo_prefix = '⚠️ ' if prazo_vencido else '📅 '
             ui.label(f'{prazo_prefix}{prazo_display}').style(f'font-size:10px; {prazo_color}')
-            ui.label(f'👤 {resp_nome}').classes('text-[10px] text-grey-5')
+            ui.label(f'👥 {resp_display}').classes('text-[10px] text-grey-4 font-medium').style('max-width:55%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;')
 
         # Observações (colapsável se existir)
         if obs:
-            with ui.expansion('📝 Briefing', value=False).classes('w-full text-[10px] text-grey-4'):
+            with ui.expansion('📝 Briefing / Detalhes', value=False).classes('w-full text-[10px] text-grey-4'):
                 ui.label(obs).classes('text-[10px] text-grey-3 whitespace-pre-wrap')
 
         ui.separator().style('background:rgba(255,255,255,0.05); margin: 6px 0;')
@@ -525,11 +633,11 @@ def render_page():
                 try:
                     res_d = db.table('demandas_comunicacao').select('*').order('id', desc=True).execute()
                     if res_d and hasattr(res_d, 'data') and res_d.data:
-                        # Filtra: apenas categorias que NÃO são audiovisual
+                        # Filtra: apenas categorias que NÃO são exclusivamente 'audiovisual'
                         raw_tarefas = [
                             d for d in res_d.data
                             if isinstance(d, dict)
-                            and str(d.get('categoria_demanda') or '').strip().lower() not in ('audiovisual',)
+                            and str(d.get('categoria_demanda') or '').strip().lower() not in ('audiovisual', '["audiovisual"]')
                         ]
                         todas_tarefas = ordenar_cronologicamente(raw_tarefas)
                 except Exception as e:
@@ -541,15 +649,19 @@ def render_page():
                     if res_ef.data:
                         sorted_ef = sort_efetivo_list(res_ef.data)
                         for item in sorted_ef:
-                            label = f"{item.get('posto_grad') or ''} {item['nome_guerra']} ({item['role'].upper()})".strip()
+                            label = f"{item.get('posto_grad') or ''} {item['nome_guerra']} ({(item.get('role') or 'membro').upper()})".strip()
                             efetivo_options[item['id']] = label
                             efetivo_map[item['id']] = label
                 except Exception as e:
                     print(f'[EFETIVO LOAD ERR] {e}')
 
-            # ── Filtros ──────────────────────────────────────
+            # ── Filtros e Pesquisa ────────────────────────────
             with ui.row().classes('w-full items-center gap-3 flex-wrap q-mb-sm'):
                 ui.label('🔎 Filtros:').classes('text-xs font-bold text-grey-4')
+
+                filtro_busca = ui.input(
+                    placeholder='Pesquisar título, solicitante ou briefing...'
+                ).props('dark outlined dense clearable icon=search').classes('w-64 text-xs')
 
                 filtro_cat = ui.select(
                     {'': '— Todas as Categorias —', **{k: f"{v[0]} {v[1]}" for k, v in CATEGORIAS_TAREFA.items()}},
@@ -604,15 +716,38 @@ def render_page():
 
             # ── Aplica Filtros ───────────────────────────────
             def tarefa_visivel(t):
-                cat_ok = (not filtro_cat.value) or (str(t.get('categoria_demanda') or '').strip() == filtro_cat.value)
+                # Busca por Texto Livre
+                txt_b = (filtro_busca.value or '').strip().lower()
+                if txt_b:
+                    in_t = txt_b in str(t.get('titulo_evento') or '').lower()
+                    in_s = txt_b in str(t.get('solicitante_nome') or '').lower()
+                    in_a = txt_b in str(t.get('autoridades') or '').lower()
+                    in_o = txt_b in str(t.get('observacoes_execucao') or '').lower()
+                    in_p = txt_b in str(t.get('produto_especifico') or '').lower()
+                    if not (in_t or in_s or in_a or in_o or in_p):
+                        return False
+
+                # Filtro Categoria
+                cat_raw = str(t.get('categoria_demanda') or '').strip().lower()
+                if filtro_cat.value:
+                    if filtro_cat.value.lower() not in cat_raw:
+                        return False
+
+                # Filtro Responsável
                 enc_id_t = str(t.get('encarregado_id') or '').strip()
-                resp_ok = (not filtro_resp.value) or (enc_id_t == filtro_resp.value)
+                raw_notif = str(t.get('notificar_militar_ids') or '')
+                aut_raw = str(t.get('autoridades') or '')
+                if filtro_resp.value:
+                    if enc_id_t != filtro_resp.value and filtro_resp.value not in raw_notif and filtro_resp.value not in aut_raw:
+                        return False
+
+                # Filtro Vencidas
                 venc_ok = (not filtro_vencidas.value) or (
                     status_para_coluna(t.get('status')) not in ('concluida',)
                     and str(t.get('prazo_limite') or t.get('data_evento') or '').strip() not in ('', 'None')
                     and _prazo_vencido(str(t.get('prazo_limite') or t.get('data_evento') or ''))
                 )
-                return cat_ok and resp_ok and venc_ok
+                return venc_ok
 
             tarefas_filtradas = [t for t in todas_tarefas if tarefa_visivel(t)]
 
