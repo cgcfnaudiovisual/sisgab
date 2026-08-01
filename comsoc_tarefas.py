@@ -11,12 +11,13 @@ THEME = theme.colors
 
 # Categorias que são TAREFAS (não pautas audiovisuais de evento)
 CATEGORIAS_TAREFA = {
-    'design_arte':       ('🎨', 'Design / Arte Visual',         '#00e5ff'),
-    'impressos_albuns':  ('📕', 'Impressos & Encadernação',      '#f59e0b'),
-    'brindes_lembrancas':('🎁', 'Brindes & Lembranças',         '#a78bfa'),
+    'audiovisual':       ('📸', 'Audiovisual',                  '#38bdf8'),
+    'design_arte':       ('🎨', 'Design / Arte Visual',         '#c084fc'),
+    'impressos_albuns':  ('📕', 'Impressos & Encadernação',      '#fbbf24'),
+    'brindes_lembrancas':('🎁', 'Brindes & Lembranças',         '#f472b6'),
     'redacao_textos':    ('✍️', 'Redação & Discursos',           '#34d399'),
     'suporte_evento':    ('📦', 'Suporte Logístico',             '#fb923c'),
-    'outra_tarefa':      ('⚡', 'Outra Tarefa Especial',         '#f472b6'),
+    'outra_tarefa':      ('⚡', 'Outra Tarefa Especial',         '#a78bfa'),
 }
 
 PRIORIDADES = {
@@ -534,10 +535,12 @@ def render_tarefa_card(t: dict, efetivo_map: dict, usuario: str, callback_refres
         with ui.row().classes('w-full items-center justify-between no-wrap gap-1 q-mb-xs'):
             with ui.row().classes('items-center gap-1 flex-wrap'):
                 for c_k in cat_keys:
-                    c_info = CATEGORIAS_TAREFA.get(c_k, ('⚡', c_k.replace('_', ' ').title(), '#94a3b8'))
-                    ui.badge(f"{c_info[0]} {c_info[1]}").style(f'background:{c_info[2]}22; color:{c_info[2]}; border:1px solid {c_info[2]}55; font-size:9px; padding:2px 4px;')
+                    c_info = CATEGORIAS_TAREFA.get(c_k, ('⚡', c_k.replace('_', ' ').title(), '#00e5ff'))
+                    ui.badge(f"{c_info[0]} {c_info[1]}").style(
+                        f"background: #091326 !important; color: {c_info[2]} !important; border: 1px solid {c_info[2]}aa !important; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px;"
+                    )
             
-            ui.badge(f'{prio_badge_icone} {prio_nome}').props(f'color={prio_color}').classes('text-[9px]')
+            ui.badge(f'{prio_badge_icone} {prio_nome}').props(f'color={prio_color}').classes('text-[9px] font-bold')
 
         # Título
         ui.label(str(t.get('titulo_evento') or 'Sem título')).classes('text-xs font-bold text-white leading-tight q-mb-xs')
