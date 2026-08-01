@@ -600,65 +600,106 @@ def render_page():
 
             initial_tab = tab_pend if len(pendentes) > 0 else tab_aprov
 
+            # Helper para renderizar card completo de demanda com ações rápidas
+            def render_homologar_card(d, status_type):
+                bg_style = 'background: rgba(0,229,255,0.03); border: 1px solid rgba(0,229,255,0.25);'
+                st_color = 'amber-9'
+                if status_type == 'aprovada':
+                    bg_style = 'background: rgba(34,197,94,0.04); border: 1px solid rgba(34,197,94,0.3);'
+                    st_color = 'green-9'
+                elif status_type == 'ajustes':
+                    bg_style = 'background: rgba(251,146,60,0.04); border: 1px solid rgba(251,146,60,0.3);'
+                    st_color = 'orange-9'
+                elif status_type == 'concluida':
+                    bg_style = 'background: rgba(148,163,184,0.04); border: 1px solid rgba(148,163,184,0.2);'
+                    st_color = 'grey-7'
+                elif status_type == 'rejeitada':
+                    bg_style = 'background: rgba(239,68,68,0.04); border: 1px solid rgba(239,68,68,0.3);'
+                    st_color = 'red-9'
+
+                with ui.card().classes('w-full q-pa-md no-shadow rounded-2xl flex flex-col justify-between hover:border-cyan-400/60 transition-all').style(bg_style):
+                    with ui.column().classes('w-full gap-2'):
+                        # Header do Card: Título + Badge Status + Score
+                        with ui.row().classes('w-full justify-between items-start gap-2'):
+                            ui.label(d.get('titulo_evento', 'PAUTA SEM TÍTULO')).classes('text-sm font-black text-white cyber-title leading-tight')
+                            with ui.row().classes('items-center gap-1 shrink-0'):
+                                score = d.get('score_esforco', 1.0)
+                                score_col = "green" if score <= 2.0 else ("orange" if score <= 3.5 else "red")
+                                ui.badge(f"Esforço: {score}").props(f"color={score_col}").classes('text-[9px]')
+                                st_label = str(d.get('status', status_type)).upper().replace('_', ' ')
+                                ui.badge(st_label).props(f"color={st_color} text-color=white bold").classes('text-[9px] q-px-xs')
+
+                        # Categoria & Serviços
+                        cat_val = str(d.get('categoria_demanda') or 'audiovisual').strip().lower()
+                        cob_val = d.get('tipo_cobertura') or '[]'
+                        try:
+                            cobs = json.loads(cob_val) if isinstance(cob_val, str) else (cob_val if isinstance(cob_val, list) else [])
+                        except Exception:
+                            cobs = []
+
+                        with ui.row().classes('items-center gap-1 flex-wrap q-my-xs'):
+                            if 'audiovisual' in cat_val or any(x in cobs for x in ('foto', 'video', 'redes', 'drone')):
+                                ui.badge('📸 Audiovisual').props('color=cyan-9 text-color=white bold').classes('text-[10px] q-px-xs')
+                            if 'design' in cat_val or 'grafic' in cat_val:
+                                ui.badge('🎨 Design / Artes').props('color=purple-9 text-color=white bold').classes('text-[10px] q-px-xs')
+                            if 'impresso' in cat_val:
+                                ui.badge('🖨️ Impressos').props('color=orange-9 text-color=white bold').classes('text-[10px] q-px-xs')
+
+                            prod_manual = d.get('produto_especifico') or ''
+                            if prod_manual:
+                                ui.badge(f"📦 {prod_manual}").props('color=blue-9 text-color=white').classes('text-[10px] q-px-xs')
+
+                            for cob in cobs:
+                                if cob == 'foto': ui.badge('📷 Fotografia').props('color=cyan-10').classes('text-[9px] q-px-xs')
+                                elif cob == 'video': ui.badge('🎥 Vídeo').props('color=teal-10').classes('text-[9px] q-px-xs')
+                                elif cob == 'drone': ui.badge('🚁 Imagens Aéreas').props('color=amber-10').classes('text-[9px] q-px-xs')
+                                elif cob == 'redes': ui.badge('📱 Redes Sociais').props('color=pink-10').classes('text-[9px] q-px-xs')
+
+                        ui.separator().style('background: rgba(255,255,255,0.08); margin: 2px 0;')
+
+                        # Informações do Evento
+                        with ui.column().classes('w-full gap-1 text-xs'):
+                            ui.label(f"👤 Solicitante: {d.get('solicitante_nome', 'COMSOC')} ({d.get('setor', 'Gabinete')})").classes('text-grey-3 font-medium')
+                            
+                            dt_ev = d.get('data_evento', 'N/I')
+                            hr_ev = d.get('hora_evento', '09:00')
+                            dt_label = f"📅 Data: {dt_ev} às {hr_ev}"
+                            if dt_ev == str(datetime.now().date()):
+                                dt_label += " ⚡ (HOJE!)"
+                            ui.label(dt_label).classes('text-cyan-3 font-bold')
+
+                            if d.get('local_evento'):
+                                ui.label(f"📍 Local: {d['local_evento']}").classes('text-grey-4')
+
+                            # Autoridades / Observações
+                            aut_txt = str(d.get('autoridades') or '').strip()
+                            if aut_txt:
+                                ui.label(f"👑 Autoridades/Obs: {aut_txt[:90]}{'...' if len(aut_txt)>90 else ''}").classes('text-[11px] text-amber-2/90 italic q-mt-xs')
+
+                    # Rodapé com Botões de Ação Rápida
+                    ui.separator().style('background: rgba(255,255,255,0.08); margin: 6px 0;')
+                    with ui.row().classes('w-full justify-between items-center gap-1 flex-wrap'):
+                        with ui.row().classes('items-center gap-1'):
+                            ui.button('✏️', on_click=lambda cur_d=d: open_editar_pauta_dialog(cur_d, render_content.refresh)).props('flat round dense color=cyan size=sm').tooltip('Editar Pauta')
+                            ui.button('📅', on_click=lambda: ui.navigate.to('/agenda_geral')).props('flat round dense color=cyan size=sm').tooltip('Ver na Agenda Geral')
+
+                        with ui.row().classes('items-center gap-1'):
+                            if status_type == 'pendente':
+                                ui.button('⚖️ Analisar & Tramitar', on_click=lambda cur_d=d: open_tramitar_dialog(cur_d, user_name_guerra, is_approver, render_content.refresh)).props('unelevated color=primary text-color=black dense bold').classes('text-xs q-px-sm')
+                            elif status_type == 'aprovada':
+                                ui.button('🎯 Concluir Missão', on_click=lambda cur_d=d: open_concluir_missao_dialog(cur_d, user_name_guerra, render_content.refresh)).props('unelevated color=green text-color=white dense bold icon=task_alt').classes('text-xs q-px-xs')
+                                ui.button('Detalhes', on_click=lambda cur_d=d: open_tramitar_dialog(cur_d, user_name_guerra, is_approver, render_content.refresh)).props('flat color=cyan dense').classes('text-xs')
+                            else:
+                                ui.button('Detalhes / Parecer', on_click=lambda cur_d=d: open_tramitar_dialog(cur_d, user_name_guerra, is_approver, render_content.refresh)).props('flat color=cyan dense').classes('text-xs')
+
             with ui.tab_panels(tabs, value=initial_tab).classes('w-full bg-transparent no-shadow q-pa-none q-mt-md'):
                 
                 # --- ABA PENDENTES ---
                 with ui.tab_panel(tab_pend):
                     if pendentes:
-                        with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
+                        with ui.element('div').classes('w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'):
                             for d in pendentes:
-                                with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style('background: rgba(0,229,255,0.03); border: 1px solid rgba(0,229,255,0.2);'):
-                                    with ui.row().classes('w-full justify-between items-center'):
-                                        ui.label(d.get('titulo_evento', 'Pauta sem título')).classes('text-sm font-bold text-white cyber-title')
-                                        score = d.get('score_esforco', 1.0)
-                                        color = "green" if score <= 2.0 else "orange" if score <= 3.5 else "red"
-                                        ui.badge(f"Esforço: {score}").props(f"color={color}").classes('text-[9px]')
-
-                                    # Dedução inteligente de categoria e produto caso estejam vazios ou padrão
-                                    cat_val = str(d.get('categoria_demanda') or 'design_arte').strip().lower()
-                                    cob_val = d.get('tipo_cobertura') or '[]'
-                                    try:
-                                        cobs = json.loads(cob_val) if isinstance(cob_val, str) else cob_val
-                                        if not isinstance(cobs, list):
-                                            cobs = []
-                                    except Exception:
-                                        cobs = []
-                                        
-                                    if cobs and cat_val == 'design_arte':
-                                        cat_val = 'audiovisual'
-                                        
-                                    cat_nome = '📸 Cobertura Audiovisual' if cat_val == 'audiovisual' else cat_val.replace('_', ' ').title()
-                                    
-                                    with ui.row().classes('items-center gap-2 q-mt-xs wrap'):
-                                        # Badge da Categoria
-                                        ui.badge(f"📌 {cat_nome}").props('color=amber-9 text-color=black bold').classes('text-xs q-py-xs q-px-sm')
-                                        
-                                        # Se houver especificação de produto manual
-                                        prod_manual = d.get('produto_especifico') or ''
-                                        if prod_manual:
-                                            ui.badge(f"🎯 {prod_manual}").props('color=blue-9 text-color=white bold').classes('text-xs q-py-xs q-px-sm')
-                                        
-                                        # Badges individuais para cada serviço/cobertura selecionada
-                                        for cob in cobs:
-                                            if cob == 'foto':
-                                                ui.badge('📸 Fotografia').props('color=cyan-9 text-color=white bold').classes('text-xs q-py-xs q-px-sm')
-                                            elif cob == 'video':
-                                                ui.badge('🎥 Vídeo / Filmagem').props('color=teal-9 text-color=white bold').classes('text-xs q-py-xs q-px-sm')
-                                            elif cob == 'grafico':
-                                                ui.badge('🎨 Design / Arte').props('color=purple-9 text-color=white bold').classes('text-xs q-py-xs q-px-sm')
-                                            elif cob == 'drone':
-                                                ui.badge('🚁 Imagens Aéreas').props('color=orange-9 text-color=white bold').classes('text-xs q-py-xs q-px-sm')
-                                            elif cob == 'redes':
-                                                ui.badge('📱 Mídias Sociais').props('color=pink-9 text-color=white bold').classes('text-xs q-py-xs q-px-sm')
-
-                                    ui.separator().style('background: rgba(255,255,255,0.05); margin: 6px 0;')
-                                    ui.label(f"👤 Solicitante: {d.get('solicitante_nome', 'N/I')} ({d.get('setor', 'CGCFN')})").classes('text-xs text-grey-3')
-                                    ui.label(f"📅 Data: {d.get('data_evento', 'N/I')} às {d.get('hora_evento', '09:00')}").classes('text-xs text-grey-3')
-                                    ui.label(f"📍 Local: {d.get('local_evento', 'N/I')}").classes('text-xs text-grey-3')
-
-                                    with ui.row().classes('w-full justify-end gap-2 q-mt-sm'):
-                                        ui.button('✏️ Editar', on_click=lambda d=d: open_editar_pauta_dialog(d, render_content.refresh)).props('flat color=cyan dense icon=edit').classes('text-xs')
-                                        ui.button('⚖️ Analisar & Tramitar', on_click=lambda d=d: open_tramitar_dialog(d, user_name_guerra, is_approver, render_content.refresh)).props('unelevated color=primary text-color=black dense bold').classes('text-xs q-px-sm')
+                                render_homologar_card(d, 'pendente')
                     else:
                         with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
                             ui.icon('check_circle', size='3rem', color='green')
@@ -667,22 +708,9 @@ def render_page():
                 # --- ABA APROVADAS ---
                 with ui.tab_panel(tab_aprov):
                     if aprovadas:
-                        with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
+                        with ui.element('div').classes('w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'):
                             for d in aprovadas:
-                                with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style('background: rgba(76,175,80,0.04); border: 1px solid rgba(76,175,80,0.3);'):
-                                    with ui.row().classes('w-full justify-between items-center'):
-                                        ui.label(d.get('titulo_evento', 'Pauta sem título')).classes('text-sm font-bold text-white cyber-title')
-                                        ui.badge('APROVADA').props('color=green').classes('text-[9px]')
-
-                                    ui.separator().style('background: rgba(255,255,255,0.05); margin: 6px 0;')
-                                    ui.label(f"👤 Solicitante: {d.get('solicitante_nome', 'N/I')} ({d.get('setor', 'CGCFN')})").classes('text-xs text-grey-3')
-                                    ui.label(f"📅 Data: {d.get('data_evento', 'N/I')} às {d.get('hora_evento', '09:00')}").classes('text-xs text-grey-3')
-                                    ui.label(f"📍 Local: {d.get('local_evento', 'N/I')}").classes('text-xs text-grey-3')
-
-                                    with ui.row().classes('w-full justify-end items-center gap-1 q-mt-sm'):
-                                        ui.button('✏️ Editar', on_click=lambda d=d: open_editar_pauta_dialog(d, render_content.refresh)).props('flat color=cyan dense icon=edit').classes('text-xs')
-                                        ui.button('🎯 Concluir Missão', on_click=lambda d=d: open_concluir_missao_dialog(d, user_name_guerra, render_content.refresh)).props('flat color=green dense bold icon=task_alt').classes('text-xs')
-                                        ui.button('Detalhes', on_click=lambda d=d: open_tramitar_dialog(d, user_name_guerra, is_approver, render_content.refresh)).props('flat color=cyan dense').classes('text-xs')
+                                render_homologar_card(d, 'aprovada')
                     else:
                         with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
                             ui.icon('event_available', size='3rem')
@@ -691,17 +719,9 @@ def render_page():
                 # --- ABA AJUSTES ---
                 with ui.tab_panel(tab_ajust):
                     if ajustes:
-                        with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
+                        with ui.element('div').classes('w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'):
                             for d in ajustes:
-                                with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style('background: rgba(255,152,0,0.04); border: 1px solid rgba(255,152,0,0.3);'):
-                                    ui.label(d.get('titulo_evento', 'Pauta sem título')).classes('text-sm font-bold text-white cyber-title')
-                                    ui.label(f"De: {d.get('solicitante_nome', 'N/I')} ({d.get('setor', 'CGCFN')})").classes('text-xs text-grey-3')
-                                    ui.label(f"📅 Data: {d.get('data_evento', 'N/I')} às {d.get('hora_evento', '09:00')}").classes('text-xs text-grey-3')
-                                    ui.badge('AGUARDANDO CORREÇÃO').props('color=orange').classes('text-[9px] q-mt-xs')
-
-                                    with ui.row().classes('w-full justify-end gap-2 q-mt-sm'):
-                                        ui.button('✏️ Editar', on_click=lambda d=d: open_editar_pauta_dialog(d, render_content.refresh)).props('flat color=cyan dense icon=edit').classes('text-xs')
-                                        ui.button('Ver Detalhes', on_click=lambda d=d: open_tramitar_dialog(d, user_name_guerra, is_approver, render_content.refresh)).props('flat color=cyan dense').classes('text-xs')
+                                render_homologar_card(d, 'ajustes')
                     else:
                         with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
                             ui.icon('thumb_up', size='3rem')
@@ -710,16 +730,9 @@ def render_page():
                 # --- ABA CONCLUÍDAS ---
                 with ui.tab_panel(tab_concl):
                     if concluidas:
-                        with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
+                        with ui.element('div').classes('w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'):
                             for d in concluidas:
-                                with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style('background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.1);'):
-                                    ui.label(d.get('titulo_evento', 'Pauta sem título')).classes('text-sm font-bold text-white cyber-title')
-                                    ui.label(f"De: {d.get('solicitante_nome', 'N/I')} ({d.get('setor', 'CGCFN')})").classes('text-xs text-grey-3')
-                                    ui.badge('CONCLUÍDA').props('color=grey-7').classes('text-[9px] q-mt-xs')
-
-                                    with ui.row().classes('w-full justify-end gap-2 q-mt-sm'):
-                                        ui.button('✏️ Editar', on_click=lambda d=d: open_editar_pauta_dialog(d, render_content.refresh)).props('flat color=cyan dense icon=edit').classes('text-xs')
-                                        ui.button('Ver Histórico', on_click=lambda d=d: open_tramitar_dialog(d, user_name_guerra, is_approver, render_content.refresh)).props('flat color=grey dense').classes('text-xs')
+                                render_homologar_card(d, 'concluida')
                     else:
                         with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
                             ui.icon('task_alt', size='3rem')
@@ -728,15 +741,9 @@ def render_page():
                 # --- ABA REJEITADAS ---
                 with ui.tab_panel(tab_rej):
                     if rejeitadas:
-                        with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
+                        with ui.element('div').classes('w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'):
                             for d in rejeitadas:
-                                with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style('background: rgba(244,67,54,0.04); border: 1px solid rgba(244,67,54,0.3);'):
-                                    ui.label(d.get('titulo_evento', 'Pauta sem título')).classes('text-sm font-bold text-white cyber-title')
-                                    ui.label(f"De: {d.get('solicitante_nome', 'N/I')} ({d.get('setor', 'CGCFN')})").classes('text-xs text-grey-3')
-                                    ui.badge('INDEFERIDA').props('color=red').classes('text-[9px] q-mt-xs')
-
-                                    with ui.row().classes('w-full justify-end q-mt-sm'):
-                                        ui.button('Ver Motivo / Parecer', on_click=lambda d=d: open_tramitar_dialog(d, user_name_guerra, is_approver, render_content.refresh)).props('flat color=red dense').classes('text-xs')
+                                render_homologar_card(d, 'rejeitada')
                     else:
                         with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
                             ui.icon('block', size='3rem')
