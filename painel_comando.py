@@ -91,9 +91,9 @@ def render_page():
             transition: all 0.15s ease; border: 1px solid transparent; min-height: 44px;
             display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
         }
-        .cal-day:hover { background: rgba(0,229,255,0.08); border-color: rgba(0,229,255,0.3); }
-        .cal-day.today { background: rgba(0,229,255,0.12); border-color: rgba(0,229,255,0.5); font-weight: 800; color: #00e5ff; }
-        .cal-day.selected { background: rgba(0,229,255,0.2); border-color: #00e5ff; }
+        .cal-day:hover { background: rgba(197,160,89,0.08); border-color: rgba(197,160,89,0.3); }
+        .cal-day.today { background: rgba(197,160,89,0.12); border-color: rgba(197,160,89,0.5); font-weight: 800; color: #c5a059; }
+        .cal-day.selected { background: rgba(197,160,89,0.2); border-color: #c5a059; }
         .cal-day.empty { cursor: default; }
         .cal-day.empty:hover { background: transparent; border-color: transparent; }
         .cal-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
@@ -209,9 +209,9 @@ def render_page():
         kpi_items = [
             {'label': 'PENDENTES', 'value': kpi_pendentes, 'icon': 'hourglass_top', 'color': 'amber', 'bg': 'rgba(245,158,11,0.08)', 'border': 'rgba(245,158,11,0.3)', 'path': '/comsoc_homologar'},
             {'label': 'APROVADAS', 'value': kpi_aprovadas, 'icon': 'check_circle', 'color': 'green', 'bg': 'rgba(34,197,94,0.08)', 'border': 'rgba(34,197,94,0.3)', 'path': '/comsoc_homologar'},
-            {'label': 'EM EXECUÇÃO', 'value': kpi_tarefas_exec, 'icon': 'play_circle', 'color': 'cyan', 'bg': 'rgba(0,229,255,0.08)', 'border': 'rgba(0,229,255,0.3)', 'path': '/comsoc_tarefas'},
+            {'label': 'EM EXECUÇÃO', 'value': kpi_tarefas_exec, 'icon': 'play_circle', 'color': 'primary', 'bg': 'rgba(197,160,89,0.08)', 'border': 'rgba(197,160,89,0.3)', 'path': '/comsoc_tarefas'},
             {'label': 'VENCIDAS', 'value': kpi_vencidas, 'icon': 'error', 'color': 'red', 'bg': 'rgba(255,23,68,0.08)', 'border': 'rgba(255,23,68,0.3)', 'path': '/comsoc_homologar'},
-            {'label': 'HOJE', 'value': kpi_eventos_hoje, 'icon': 'today', 'color': 'cyan', 'bg': 'rgba(0,229,255,0.08)', 'border': 'rgba(0,229,255,0.3)', 'path': None},
+            {'label': 'HOJE', 'value': kpi_eventos_hoje, 'icon': 'today', 'color': 'primary', 'bg': 'rgba(197,160,89,0.08)', 'border': 'rgba(197,160,89,0.3)', 'path': None},
         ]
         for kpi in kpi_items:
             with ui.card().classes(
@@ -530,7 +530,7 @@ def render_page():
             if boletins:
                 ui.label('📢 Informativos Internos').classes('text-xs font-bold text-white q-mb-xs')
                 for b in boletins:
-                    with ui.row().classes('w-full items-center gap-3 q-py-xs').style('border-bottom: 1px solid rgba(0,229,255,0.06);'):
+                    with ui.row().classes('w-full items-center gap-3 q-py-xs').style('border-bottom: 1px solid rgba(197,160,89,0.06);'):
                         ui.label(b.get('titulo', '')).classes('text-xs font-bold text-cyan flex-grow')
                         ui.label(b.get('data', '')).classes('text-[9px] text-grey-5')
                         if b.get('tags'):

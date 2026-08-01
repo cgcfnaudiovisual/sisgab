@@ -366,7 +366,7 @@ def build_layout_base():
             # LADO ESQUERDO: Botão de Menu + Logo + Título
             with ui.row().classes('items-center gap-2 no-wrap shrink-0'):
                 ui.button(on_click=lambda: left_drawer.toggle(), icon='menu').props('flat color=white dense')
-                ui.image(LOGO_BASE64).style('width: 30px; height: 30px; box-shadow: 0 0 10px rgba(0, 229, 255, 0.5); border-radius: 50%; border: 1px solid rgba(0, 229, 255, 0.3);').classes('drop-shadow-[0_0_8px_rgba(0,229,255,0.4)] shrink-0')
+                ui.image(LOGO_BASE64).style('width: 30px; height: 30px; box-shadow: 0 0 10px rgba(197, 160, 89, 0.5); border-radius: 50%; border: 1px solid rgba(197, 160, 89, 0.3);').classes('drop-shadow-[0_0_8px_rgba(197,160,89,0.4)] shrink-0')
                 with ui.column().classes('gap-0 items-start'):
                     ui.label(system_title).style(f'color: {theme.colors["primary"]}; font-weight: bold; line-height: 1.1; letter-spacing: 1px; font-size: 0.9rem;').classes('cyber-title text-left no-wrap')
                     ui.label('Comunicação Social • Gabinete').style('font-size: 0.65rem; color: #64748b;').classes('text-left no-wrap gt-xs')
@@ -382,7 +382,7 @@ def build_layout_base():
                     app.storage.user['year_notified'] = True
 
                 # Player de Rádio Minimalista
-                with ui.row().classes('items-center gap-1 no-wrap q-mr-xs gt-xs').style('border-right: 1px solid rgba(0, 229, 255, 0.1); padding-right: 8px;'):
+                with ui.row().classes('items-center gap-1 no-wrap q-mr-xs gt-xs').style('border-right: 1px solid rgba(197, 160, 89, 0.1); padding-right: 8px;'):
                     ui.html('<audio id="radio-player" src="https://stm0.inovativa.net/listen/radiomarinha/radio.mp3" preload="none"></audio>')
                     ui.label('RÁDIO MARINHA').classes('text-[10px] font-bold tracking-wider text-cyan q-mr-xs gt-sm')
                     
@@ -424,7 +424,7 @@ def build_layout_base():
                 ui.element('div').classes('shadow shrink-0').style(
                     f"width: 30px; height: 30px; background-image: url('{user_avatar_src}'); "
                     f"background-size: cover; background-position: center; border-radius: 4px; "
-                    f"border: 1.5px solid rgba(0, 229, 255, 0.4); box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);"
+                    f"border: 1.5px solid rgba(197, 160, 89, 0.4); box-shadow: 0 0 10px rgba(197, 160, 89, 0.2);"
                 )
 
                 with ui.button(on_click=lambda: open_change_password_dialog(user), icon='vpn_key').props('flat round color=amber-9 dense'):
@@ -492,14 +492,14 @@ def build_layout_base():
                             if is_active:
                                 block_style = (
                                     f'border: 1.5px solid {theme.colors["primary"]}; '
-                                    f'background: rgba(0, 229, 255, 0.08); '
-                                    f'box-shadow: 0 0 10px rgba(0, 229, 255, 0.15);'
+                                    f'background: rgba(197, 160, 89, 0.08); '
+                                    f'box-shadow: 0 0 10px rgba(197, 160, 89, 0.15);'
                                 )
                                 icon_color = theme.colors['primary']
                                 text_color = theme.colors['primary']
                             else:
                                 block_style = (
-                                    f'border: 1px solid rgba(0, 229, 255, 0.08); '
+                                    f'border: 1px solid rgba(197, 160, 89, 0.08); '
                                     f'background: rgba(12, 18, 30, 0.25);'
                                 )
                                 icon_color = '#64748b'
@@ -989,7 +989,7 @@ def login_page(request: Request):
             with ui.column().classes('w-full items-center gap-4'):
                 
                 # ── TOPO: LOGO E IDENTIFICAÇÃO ──
-                ui.image(LOGO_BASE64).style('width: 180px; height: 180px; box-shadow: 0 0 35px rgba(0, 229, 255, 0.65); border-radius: 50%; border: 2px solid rgba(0, 229, 255, 0.4);').classes('drop-shadow-[0_0_20px_rgba(0,229,255,0.5)]')
+                ui.image(LOGO_BASE64).style('width: 180px; height: 180px; box-shadow: 0 0 35px rgba(197, 160, 89, 0.65); border-radius: 50%; border: 2px solid rgba(197, 160, 89, 0.4);').classes('drop-shadow-[0_0_20px_rgba(197,160,89,0.5)]')
                 ui.label('SisGAB').classes('cyber-title').style(
                     f'color: {theme.colors["primary"]}; font-size: 2.8rem; font-weight: 700; letter-spacing: 2px; line-height: 1;'
                 )
@@ -997,7 +997,7 @@ def login_page(request: Request):
                     ui.label('Gestão de Gabinete e COMSOC').classes('text-white text-md font-bold')
                     ui.label('Centro de Instrução da Marinha').classes('text-grey-4 text-xs tracking-wider q-mt-xs')
                 
-                ui.separator().style('background-color: rgba(0, 229, 255, 0.15); height: 1px;').classes('w-3/4 q-my-sm')
+                ui.separator().style('background-color: rgba(197, 160, 89, 0.15); height: 1px;').classes('w-3/4 q-my-sm')
                 
                 # ── FORMULÁRIO DE ACESSO ──
                 with ui.element('form').props('onsubmit="return false;"').classes('w-full flex flex-col gap-4 items-center').on('submit', lambda: try_login()):
