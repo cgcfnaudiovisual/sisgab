@@ -73,7 +73,6 @@ def render_page():
         with ui.tabs().classes('w-full text-primary border-b border-gray-800 flex-wrap') as tabs:
             tab_chat = ui.tab('💬 Chat Geral & Dúvidas').classes('text-xs sm:text-sm')
             tab_redator = ui.tab('📝 Redator de Releases & Notas').classes('text-xs sm:text-sm')
-            tab_demandas = ui.tab('📋 Triagem de Demandas (Questionários)').classes('text-xs sm:text-sm')
             tab_lote = ui.tab('📅 Cadastro em Lote (IA)').classes('text-xs sm:text-sm')
 
         with ui.tab_panels(tabs, value=tab_chat).classes('w-full bg-transparent no-shadow gap-0'):
@@ -276,100 +275,6 @@ def render_page():
                                     redator_scroll.scroll_to(percent=0.0)
 
                                 ui.timer(0.1, run_redator_ai, once=True)
-
-            # ABA 3: TRIAGEM DE DEMANDAS / QUESTIONÁRIOS
-            with ui.tab_panel(tab_demandas).classes('p-0 gap-4 w-full'):
-                with ui.card().classes('w-full q-pa-md border border-gray-800').style(f'background: {THEME["bg_panel"]}'):
-                    with ui.row().classes('w-full justify-between items-center border-b border-gray-800 q-pb-sm q-mb-sm'):
-                        with ui.row().classes('items-center gap-2'):
-                            ui.label('📋 IMPORTADOR & DIGESTOR DE QUESTIONÁRIOS').classes('text-xs text-weight-bold text-primary cyber-title')
-                            
-                            # Seletor de Modelo Gemini dinâmico na Triagem
-                            modelos_disponiveis = ai_helper.get_available_gemini_models()
-                            modelo_salvo = app.storage.user.get('preferred_gemini_model', 'gemini-2.0-flash')
-                            if modelo_salvo not in modelos_disponiveis:
-                                modelos_disponiveis[modelo_salvo] = f"{modelo_salvo} (Ativo)"
-                                
-                            triagem_model_select = ui.select(
-                                modelos_disponiveis,
-                                value=modelo_salvo,
-                                on_change=lambda e: app.storage.user.update({'preferred_gemini_model': e.value})
-                            ).props('dark outlined dense options-dark').classes('w-44 text-[10px]').style('max-height: 28px;')
-
-                        ui.button(
-                            'Copiar Questionário Padrão', 
-                            icon='content_copy', 
-                            on_click=lambda: (ui.run_javascript(f"navigator.clipboard.writeText({repr(CHECKLIST_TEMPLATE)})"), ui.notify("Questionário copiado!", color="success"))
-                        ).props('flat dense color=cyan text-color=cyan size=sm')
-
-                    ui.label('Cole a mensagem copiada do WhatsApp ou Telegram contendo as respostas brutas preenchidas pelo solicitante. A IA processará e preparará as informações estruturadas.').classes('text-xs text-grey-4 q-mb-md')
-                    
-                    with ui.row().classes('w-full gap-4 items-center no-wrap'):
-                        triagem_input = ui.textarea(
-                            placeholder='Cole a mensagem recebida com as respostas do questionário aqui...'
-                        ).props('dark outlined w-full rows=6').classes('flex-grow')
-                        
-                        async def processar_triagem_ia():
-                            text = triagem_input.value.strip()
-                            if not text:
-                                ui.notify('Cole o texto das respostas primeiro!', color='warning')
-                                return
-                            
-                            # Limpa e mostra carregando
-                            triagem_output.clear()
-                            with triagem_output:
-                                ui.spinner(color='cyan', size='md')
-                                ui.label('Digerindo questionário...').classes('text-xs text-cyan')
-                            
-                            async def run_triagem():
-                                try:
-                                    ai_helper.GEMINI_MODEL_NAME = triagem_model_select.value or 'gemini-2.0-flash'
-                                    res_json = await run.io_bound(ai_helper.digest_demand_questionnaire, text)
-                                    parsed = json.loads(res_json)
-                                    
-                                    triagem_output.clear()
-                                    with triagem_output:
-                                        ui.label('✨ DADOS EXTRAÍDOS COM SUCESSO!').classes('text-xs font-bold text-cyan border-b border-gray-800 w-full q-pb-xs')
-                                        with ui.grid(columns=2).classes('w-full gap-2 text-xs q-mt-md'):
-                                            ui.label('Solicitante:').classes('text-grey-5')
-                                            ui.label(parsed.get('solicitante_nome', 'N/I')).classes('text-white font-bold')
-                                            
-                                            ui.label('Setor/Divisão:').classes('text-grey-5')
-                                            ui.label(parsed.get('setor', 'N/I')).classes('text-white font-bold')
-                                            
-                                            ui.label('Título da Pauta:').classes('text-grey-5')
-                                            ui.label(parsed.get('titulo_evento', 'N/I')).classes('text-white font-bold')
-                                            
-                                            ui.label('Data/Hora:').classes('text-grey-5')
-                                            ui.label(f"{parsed.get('data_evento', 'N/I')} às {parsed.get('hora_evento', 'N/I')}").classes('text-white font-bold')
-                                            
-                                            ui.label('Local:').classes('text-grey-5')
-                                            ui.label(parsed.get('local_evento', 'N/I')).classes('text-white font-bold')
-                                            
-                                            ui.label('Autoridades:').classes('text-grey-5')
-                                            ui.label(parsed.get('autoridades', 'N/I')).classes('text-white font-bold')
-                                        
-                                        ui.button(
-                                            '⚡ Abrir Módulo de Demandas com esses dados preenchidos',
-                                            on_click=lambda: ui.navigate.to(f'/comsoc_demandas?autofill={urllib.parse.quote(res_json)}')
-                                        ).props('unelevated color=cyan text-color=black w-full q-mt-md').classes('font-bold')
-                                except Exception as err:
-                                    triagem_output.clear()
-                                    with triagem_output:
-                                        ui.label(f"Erro ao processar: {err}").classes('text-red text-xs')
-                                        ui.notify('Ocorreu um erro no processamento. Tente outro modelo na barra acima.', color='warning')
-
-                            ui.timer(0.1, run_triagem, once=True)
-
-                        ui.button(
-                            'Processar Respostas',
-                            icon='psychology',
-                            on_click=processar_triagem_ia
-                        ).props('unelevated color=cyan text-color=black bold').classes('q-py-xl font-bold flex-shrink-0')
-                    
-                    triagem_output = ui.column().classes('w-full q-mt-md q-pa-md border border-gray-800 rounded bg-black/20')
-                    with triagem_output:
-                        ui.label('Os dados extraídos da triagem aparecerão aqui após processar o questionário.').classes('text-xs text-grey-5 italic text-center w-full')
 
             # ABA 4: CADASTRO EM LOTE (IA)
             with ui.tab_panel(tab_lote).classes('p-0 gap-4 w-full'):

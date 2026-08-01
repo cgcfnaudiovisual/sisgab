@@ -398,43 +398,41 @@ def _get_gemini_model_name() -> str:
 
 
 def get_available_gemini_models() -> dict[str, str]:
-    """Retorna um dicionário de modelos do Gemini disponíveis (chave: id, valor: nome/descrição)"""
-    fallback_models = {
-        "gemini-2.0-flash": "Gemini 2.0 Flash (Recomendado)",
+    """Retorna um dicionário de modelos do Gemini disponíveis e funcionais (chave: id, valor: nome/descrição).
+    Filtra apenas modelos ativos e conhecidos para evitar listar modelos experimentais ou descontinuados."""
+    # Lista de modelos funcionais conhecidos (atualizáveis manualmente)
+    MODELOS_FUNCIONAIS = {
+        "gemini-2.5-flash": "Gemini 2.5 Flash (Recomendado)",
+        "gemini-2.5-pro": "Gemini 2.5 Pro",
+        "gemini-2.0-flash": "Gemini 2.0 Flash",
+        "gemini-2.0-flash-lite": "Gemini 2.0 Flash Lite",
         "gemini-1.5-flash": "Gemini 1.5 Flash",
-        "gemini-1.5-pro": "Gemini 1.5 Pro"
+        "gemini-1.5-pro": "Gemini 1.5 Pro",
     }
     
     api_key = _get_google_api_key()
     if not api_key:
-        return fallback_models
+        return MODELOS_FUNCIONAIS
         
     try:
         genai.configure(api_key=api_key)
-        models_dict = {}
+        api_models = set()
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods and 'gemini' in m.name:
-                model_id = m.name.replace('models/', '')
-                display_name = m.display_name if hasattr(m, 'display_name') and m.display_name else model_id
-                
-                if model_id == "gemini-2.0-flash":
-                    display_name += " (Recomendado)"
-                    
-                models_dict[model_id] = display_name
-                
-        if models_dict:
-            # Ordena colocando o recomendado gemini-2.0-flash no topo, e o resto decrescente
-            sorted_models = {}
-            if "gemini-2.0-flash" in models_dict:
-                sorted_models["gemini-2.0-flash"] = models_dict["gemini-2.0-flash"]
-            for k in sorted(models_dict.keys(), reverse=True):
-                if k != "gemini-2.0-flash":
-                    sorted_models[k] = models_dict[k]
-            return sorted_models
+                api_models.add(m.name.replace('models/', ''))
+        
+        # Retorna apenas os modelos da allowlist que a API confirma como disponíveis
+        if api_models:
+            filtered = {}
+            for model_id, display_name in MODELOS_FUNCIONAIS.items():
+                if model_id in api_models:
+                    filtered[model_id] = display_name
+            if filtered:
+                return filtered
     except Exception as e:
         print(f"[GEMINI LIST_MODELS ERROR] {e}")
         
-    return fallback_models
+    return MODELOS_FUNCIONAIS
 
 
 def generate_google_tts(text: str, lang: str = None) -> str:

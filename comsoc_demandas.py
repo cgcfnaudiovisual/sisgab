@@ -2,7 +2,7 @@
 from datetime import datetime
 import json
 import urllib.parse
-from nicegui import ui, app
+from nicegui import ui, app, run
 import theme
 from database import get_db_connection, get_service_db_connection
 import ai_helper
@@ -265,62 +265,240 @@ def render_page(autofill: str = None):
                         ui.button('📜 Discurso / Nota', on_click=aplicar_template_redacao).props('unelevated color=purple-9 text-color=white dense').classes('text-xs font-bold q-px-sm')
                         ui.button('📸 Foto & Vídeo', on_click=aplicar_template_audiovisual).props('unelevated color=green-9 text-color=white dense').classes('text-xs font-bold q-px-sm')
 
-            # 🤖 CARD 1: Assistente de Entrada com IA (No topo, expansível e full-width)
+            # 🤖 CARD 1: Assistente de Entrada & Triagem com IA (2 Modos)
             with ui.card().classes('w-full q-pa-sm no-shadow rounded-xl bg-black/40 border border-cyan-500/20 q-mb-xs'):
-                with ui.expansion('🤖 Assistente de Entrada / Triagem com IA', icon='psychology', value=False).classes('w-full font-bold text-cyan').style('color: #00e5ff;'):
+                with ui.expansion('🤖 Assistente de Entrada / Triagem com IA (2 Modos)', icon='psychology', value=False).classes('w-full font-bold text-cyan').style('color: #00e5ff;'):
                     with ui.column().classes('w-full q-pa-md gap-3'):
-                        ui.label('Cole a mensagem bruta com as respostas do solicitante no campo abaixo. O Gemini analisará o texto e preencherá todo o formulário automaticamente.').classes('text-xs text-grey-4')
                         
-                        # Seletor de Modelo Gemini dinâmico
-                        with ui.row().classes('w-full items-center justify-between no-wrap'):
-                            ui.label('Modelo IA:').classes('text-xs text-grey-4')
+                        # Topo: Seletor de Modelo Gemini dinâmico e persistente (Modelos Ativos Apenas)
+                        with ui.row().classes('w-full items-center justify-between no-wrap border-b border-cyan-500/20 q-pb-xs q-mb-xs'):
+                            ui.label('SELECIONE O MOTOR DE IA:').classes('text-[11px] font-bold text-cyan tracking-wider')
                             modelos_disponiveis = ai_helper.get_available_gemini_models()
                             modelo_salvo = app.storage.user.get('preferred_gemini_model', 'gemini-2.0-flash')
                             if modelo_salvo not in modelos_disponiveis:
-                                modelos_disponiveis[modelo_salvo] = f"{modelo_salvo} (Ativo)"
+                                modelo_salvo = list(modelos_disponiveis.keys())[0] if modelos_disponiveis else 'gemini-2.0-flash'
+                                app.storage.user['preferred_gemini_model'] = modelo_salvo
                                 
                             model_select_ia = ui.select(
                                 modelos_disponiveis,
                                 value=modelo_salvo,
                                 on_change=lambda e: app.storage.user.update({'preferred_gemini_model': e.value})
-                            ).props('dark outlined dense options-dark').classes('w-36 text-[10px]').style('max-height: 28px;')
+                            ).props('dark outlined dense options-dark').classes('w-52 text-[10px]').style('max-height: 28px;')
 
-                        raw_input = ui.textarea(
-                            placeholder='Cole a mensagem recebida com as respostas do questionário aqui...'
-                        ).props('dark outlined w-full rows=3').classes('w-full text-xs')
-                        
-                        async def processar_texto_ia():
-                            text = raw_input.value.strip()
-                            if not text:
-                                ui.notify('Cole o texto das respostas primeiro!', color='warning')
-                                return
-                            ui.notify('Gemini analisando questionário...', color='info')
+                        # Sub-abas de escolha de modo
+                        with ui.tabs().classes('w-full text-cyan dense') as ai_tabs:
+                            tab_indiv = ui.tab('📋 Questionário Individual (1 Pauta)').classes('text-xs')
+                            tab_lote_dem = ui.tab('📅 Lista Semanal / Múltiplas Pautas (Lote)').classes('text-xs')
+
+                        with ui.tab_panels(ai_tabs, value=tab_indiv).classes('w-full bg-transparent no-shadow gap-0 q-pt-sm'):
                             
-                            selected_model = model_select_ia.value or 'gemini-2.0-flash'
-                            ai_helper.GEMINI_MODEL_NAME = selected_model
-                            
-                            try:
-                                response_json = ai_helper.digest_demand_questionnaire(text)
-                                popular_form_ia(response_json)
-                            except Exception as err:
-                                err_msg = str(err)
-                                if "429" in err_msg or "quota" in err_msg.lower():
-                                    ui.notify('⚠️ Cota excedida no modelo atual! Selecione outro modelo ao lado e tente novamente.', color='warning', duration=8)
-                                else:
-                                    ui.notify(f'Erro na digestão: {err}', color='danger')
+                            # ── MODO 1: QUESTIONÁRIO INDIVIDUAL ──
+                            with ui.tab_panel(tab_indiv).classes('p-0 gap-3 w-full'):
+                                ui.label('Cole a mensagem bruta com as respostas do solicitante no campo abaixo. O Gemini analisará o texto e preencherá o formulário individual automaticamente.').classes('text-xs text-grey-4')
+                                
+                                raw_input = ui.textarea(
+                                    placeholder='Cole a mensagem recebida com as respostas do questionário aqui...'
+                                ).props('dark outlined w-full rows=3').classes('w-full text-xs')
+                                
+                                async def processar_texto_ia():
+                                    text = raw_input.value.strip()
+                                    if not text:
+                                        ui.notify('Cole o texto das respostas primeiro!', color='warning')
+                                        return
+                                    ui.notify('Gemini analisando questionário...', color='info')
                                     
-                        with ui.row().classes('w-full justify-between items-center q-mt-xs'):
-                            ui.button(
-                                'Copiar Questionário WhatsApp', 
-                                icon='content_copy', 
-                                on_click=copiar_checklist_whatsapp
-                            ).props('unelevated color=primary text-color=black bold dense').classes('text-[10px] q-px-sm')
-                            
-                            ui.button(
-                                'Processar e Preencher',
-                                icon='psychology',
-                                on_click=processar_texto_ia
-                            ).props('unelevated color=cyan text-color=black bold dense').classes('text-[10px] q-px-sm')
+                                    selected_model = model_select_ia.value or 'gemini-2.0-flash'
+                                    ai_helper.GEMINI_MODEL_NAME = selected_model
+                                    
+                                    try:
+                                        response_json = await run.io_bound(ai_helper.digest_demand_questionnaire, text)
+                                        popular_form_ia(response_json)
+                                    except Exception as err:
+                                        err_msg = str(err)
+                                        if "429" in err_msg or "quota" in err_msg.lower():
+                                            ui.notify('⚠️ Cota excedida no modelo atual! Selecione outro modelo acima e tente novamente.', color='warning', duration=8)
+                                        else:
+                                            ui.notify(f'Erro na digestão: {err}', color='danger')
+                                            
+                                with ui.row().classes('w-full justify-between items-center q-mt-xs'):
+                                    ui.button(
+                                        'Copiar Questionário WhatsApp', 
+                                        icon='content_copy', 
+                                        on_click=copiar_checklist_whatsapp
+                                    ).props('unelevated color=primary text-color=black bold dense').classes('text-[10px] q-px-sm')
+                                    
+                                    ui.button(
+                                        'Processar e Preencher',
+                                        icon='psychology',
+                                        on_click=processar_texto_ia
+                                    ).props('unelevated color=cyan text-color=black bold dense').classes('text-[10px] q-px-sm')
+
+                            # ── MODO 2: LISTA SEMANAL / MÚLTIPLAS PAUTAS (LOTE) ──
+                            with ui.tab_panel(tab_lote_dem).classes('p-0 gap-3 w-full'):
+                                ui.label('Cole um texto livre (pauta semanal, mensagens do WhatsApp, e-mail) contendo vários eventos. A IA extrairá todas as pautas e permitirá revisar antes de cadastrar tudo na agenda de uma vez.').classes('text-xs text-grey-4')
+                                
+                                lote_input_dem = ui.textarea(
+                                    placeholder='Ex: Pautas da semana:\n1. Formatura matutina dia 28/07 às 09:00h no pátio principal, uniforme 3.2, presença do Comandante-Geral.\n2. Reunião de pauta no gabinete dia 29/07 às 14:00h para planejar coberturas.'
+                                ).props('dark outlined rows=4').classes('w-full text-xs')
+                                
+                                state_lote_dem = {'eventos': []}
+                                
+                                @ui.refreshable
+                                def render_lote_review_dem():
+                                    if not state_lote_dem['eventos']:
+                                        return
+                                    
+                                    ui.label(f"✨ EVENTOS EXTRAÍDOS ({len(state_lote_dem['eventos'])}):").classes('text-xs font-bold text-cyan border-b border-gray-800 w-full q-pb-xs q-my-xs')
+                                    
+                                    for index, ev in enumerate(state_lote_dem['eventos']):
+                                        with ui.card().classes('w-full q-pa-xs border border-cyan-500/30 rounded bg-black/30 q-mb-xs').style('border-left: 4px solid #00e5ff;'):
+                                            with ui.row().classes('w-full justify-between items-center no-wrap border-b border-gray-800/50 q-pb-xs'):
+                                                ui.label(f"Pauta #{index + 1}").classes('text-[11px] font-bold text-cyan')
+                                                ui.button(
+                                                    icon='delete', 
+                                                    on_click=lambda idx=index: (state_lote_dem['eventos'].pop(idx), render_lote_review_dem.refresh())
+                                                ).props('flat round dense color=red').classes('text-xs')
+                                            
+                                            with ui.grid(columns=1).classes('w-full gap-1 sm:grid-cols-2 md:grid-cols-3 q-mt-xs'):
+                                                t = ui.input('Título', value=ev.get('titulo_evento', '')).props('dark outlined dense').classes('w-full text-[11px]')
+                                                t.bind_value(ev, 'titulo_evento')
+                                                
+                                                d = ui.input('Data (AAAA-MM-DD)', value=ev.get('data_evento', '')).props('dark outlined dense').classes('w-full text-[11px]')
+                                                d.bind_value(ev, 'data_evento')
+                                                
+                                                h = ui.input('Hora (HH:MM)', value=ev.get('hora_evento', '')).props('dark outlined dense').classes('w-full text-[11px]')
+                                                h.bind_value(ev, 'hora_evento')
+                                                
+                                                l = ui.input('Local', value=ev.get('local_evento', '')).props('dark outlined dense').classes('w-full text-[11px]')
+                                                l.bind_value(ev, 'local_evento')
+                                                
+                                                s = ui.input('Solicitante', value=ev.get('solicitante_nome', '')).props('dark outlined dense').classes('w-full text-[11px]')
+                                                s.bind_value(ev, 'solicitante_nome')
+                                                
+                                                a = ui.input('Autoridades', value=ev.get('autoridades', '')).props('dark outlined dense').classes('w-full text-[11px]')
+                                                a.bind_value(ev, 'autoridades')
+                                
+                                    with ui.row().classes('w-full justify-center q-mt-sm'):
+                                        ui.button(
+                                            'Confirmar e Cadastrar Todos na Agenda',
+                                            icon='playlist_add_check',
+                                            on_click=salvar_lote_agenda_dem
+                                        ).props('unelevated color=green text-color=black bold dense').classes('q-py-xs text-xs font-black w-full')
+
+                                async def extrair_lote_ia_dem():
+                                    text = lote_input_dem.value.strip()
+                                    if not text:
+                                        ui.notify('Cole o texto da lista semanal primeiro!', color='warning')
+                                        return
+                                    
+                                    lote_review_container_dem.clear()
+                                    with lote_review_container_dem:
+                                        ui.spinner(color='cyan', size='md').classes('q-mx-auto')
+                                        ui.label('Extraindo e destrinchando eventos com IA...').classes('text-xs text-cyan text-center w-full font-bold')
+                                    
+                                    try:
+                                        ai_helper.GEMINI_MODEL_NAME = model_select_ia.value or 'gemini-2.0-flash'
+                                        res_json = await run.io_bound(ai_helper.parse_multiple_events, text)
+                                        state_lote_dem['eventos'] = json.loads(res_json)
+                                        lote_review_container_dem.clear()
+                                        with lote_review_container_dem:
+                                            render_lote_review_dem()
+                                    except Exception as err:
+                                        lote_review_container_dem.clear()
+                                        with lote_review_container_dem:
+                                            ui.label(f"Erro ao extrair lote: {err}").classes('text-red text-xs')
+                                            ui.notify('Falha ao processar lista. Tente outro modelo.', color='warning')
+
+                                async def salvar_lote_agenda_dem():
+                                    db = get_service_db_connection() or get_db_connection()
+                                    if not db:
+                                        ui.notify('Sem conexão com o banco de dados.', color='red')
+                                        return
+                                    
+                                    try:
+                                        payloads = []
+                                        for ev in state_lote_dem['eventos']:
+                                            if not ev.get('titulo_evento') or not str(ev.get('titulo_evento')).strip():
+                                                ui.notify('Todos os eventos precisam de um Título!', color='warning')
+                                                return
+                                            if not ev.get('data_evento'):
+                                                ui.notify(f"Falta a data para o evento '{ev.get('titulo_evento')}'!", color='warning')
+                                                return
+                                            
+                                            cobs = ev.get('tipo_cobertura', ['foto'])
+                                            if isinstance(cobs, str):
+                                                try: cobs = json.loads(cobs)
+                                                except: cobs = [cobs]
+                                            
+                                            payloads.append({
+                                                'solicitante_nome': ev.get('solicitante_nome') or 'COMSOC / GABINETE',
+                                                'setor': ev.get('setor') or 'Gabinete',
+                                                'contato': ev.get('contato') or 'Interno',
+                                                'titulo_evento': str(ev.get('titulo_evento', '')).upper(),
+                                                'categoria_demanda': 'cobertura_foto_video',
+                                                'produto_especifico': '',
+                                                'prioridade': ev.get('prioridade') or 'normal',
+                                                'prazo_limite': ev.get('data_evento') or '',
+                                                'observacoes_execucao': ev.get('observacoes_execucao') or '',
+                                                'data_evento': ev.get('data_evento'),
+                                                'data_fim': ev.get('data_evento'),
+                                                'hora_evento': ev.get('hora_evento') or '09:00',
+                                                'local_evento': ev.get('local_evento') or 'Quartel / Gabinete',
+                                                'tipo_cobertura': json.dumps(cobs),
+                                                'autoridades': ev.get('autoridades') or '',
+                                                'score_esforco': 1.0,
+                                                'sigiloso': int(ev.get('sigiloso', 0)),
+                                                'status': 'aprovado',
+                                                'captacao_entrega': 'captacao_e_edicao',
+                                                'notificar_militar_ids': '[]'
+                                            })
+                                        
+                                        if not payloads:
+                                            ui.notify('Nenhum evento na lista para salvar.', color='warning')
+                                            return
+                                        
+                                        res = db.table('demandas_comunicacao').insert(payloads).execute()
+                                        inserted_rows = res.data if res.data else []
+                                        
+                                        for r in inserted_rows:
+                                            dem_id = r.get('id')
+                                            if dem_id:
+                                                hist = {
+                                                    'demanda_id': dem_id,
+                                                    'data_hora': datetime.now().isoformat(),
+                                                    'usuario': app.storage.user.get('user_data', {}).get('nome_guerra', 'ASSISTENTE IA'),
+                                                    'acao': 'Pauta Cadastrada em Lote (IA)',
+                                                    'parecer': 'Evento importado diretamente em lote via Inteligência Artificial.'
+                                                }
+                                                db.table('demandas_historico_tramitacao').insert(hist).execute()
+                                        
+                                        try:
+                                            from notifications_manager import notify_telegram
+                                            alert_txt = (
+                                                f"📅 **CADASTRO EM LOTE REALIZADO (IA)**\n\n"
+                                                f"👤 Operador: {app.storage.user.get('user_data', {}).get('nome_guerra', 'ASSISTENTE IA')}\n"
+                                                f"📂 Total: {len(payloads)} eventos cadastrados na agenda tática."
+                                            )
+                                            notify_telegram(alert_txt, "saude", role_required="admin")
+                                        except Exception as tel_err:
+                                            print(f"[TELEGRAM NOTIF ERR] {tel_err}")
+                                        
+                                        ui.notify(f"🎯 {len(payloads)} eventos cadastrados com sucesso na agenda!", color='success')
+                                        
+                                        state_lote_dem['eventos'] = []
+                                        lote_input_dem.value = ''
+                                        lote_review_container_dem.clear()
+                                    except Exception as save_err:
+                                        ui.notify(f"Erro ao salvar lote: {save_err}", color='red')
+
+                                with ui.row().classes('w-full justify-between items-center q-mt-xs'):
+                                    ui.button(
+                                        'Extrair e Destrinchar Eventos',
+                                        icon='psychology',
+                                        on_click=extrair_lote_ia_dem
+                                    ).props('unelevated color=cyan text-color=black bold dense').classes('text-[10px] q-px-sm')
+                                
+                                lote_review_container_dem = ui.column().classes('w-full q-mt-xs')
 
             # 📝 CARD 2: Formulário Unificado com 2 colunas horizontais no Desktop
             with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
