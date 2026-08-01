@@ -96,31 +96,53 @@ def render_page():
                 users_res = db_conn.table('users').select('*').execute()
                 users_data = users_res.data if users_res.data else []
                 
+                # Conjuntos para desduplicação robusta
+                existing_emails = {str(u.get('email', '')).strip().lower() for u in users_data if u.get('email')}
+                existing_tgs = {str(u.get('telegram_id', '')).strip() for u in users_data if u.get('telegram_id')}
+
+                existing_names = set()
+                for u in users_data:
+                    n = str(u.get('nome', '')).strip().upper()
+                    if n:
+                        existing_names.add(n)
+                        for part in n.split():
+                            if len(part) > 2 and part not in ('SO', 'SG', 'CB', 'SD', 'MN', 'CMG', 'CF', 'CC', 'CT', '1TEN', '2TEN', 'GM', 'NONE'):
+                                existing_names.add(part)
+
                 efetivo_res = db_conn.table('efetivo').select('*').execute()
                 posto_map = {}
                 if efetivo_res and efetivo_res.data:
                     for ef in efetivo_res.data:
                         pg = ef.get('posto_grad') or ''
-                        email = ef.get('email') or ''
-                        guerra = ef.get('nome_guerra') or ''
-                        if email:
-                            posto_map[email.lower()] = pg
-                        if guerra:
-                            posto_map[guerra.upper()] = pg
+                        email = str(ef.get('email') or '').strip().lower()
+                        guerra = str(ef.get('nome_guerra') or '').strip().upper()
+                        tg_id = str(ef.get('telegram_id') or '').strip()
 
-                    existing_user_ids = {str(u.get('id')) for u in users_data}
-                    for ef in efetivo_res.data:
-                        ef_id = str(ef.get('id'))
-                        if ef_id not in existing_user_ids:
+                        if email: posto_map[email] = pg
+                        if guerra: posto_map[guerra] = pg
+
+                        # Checa se este operador já existe nos usuários
+                        is_dup = False
+                        if email and email in existing_emails:
+                            is_dup = True
+                        elif tg_id and tg_id in existing_tgs:
+                            is_dup = True
+                        elif guerra and guerra in existing_names:
+                            is_dup = True
+
+                        if not is_dup:
                             users_data.append({
-                                'id': ef_id,
-                                'username': ef.get('nome_guerra', 'militar').lower(),
-                                'nome': f"{ef.get('posto_grad') or ''} {ef.get('nome_guerra') or ''}".strip(),
+                                'id': str(ef.get('id')),
+                                'username': guerra.lower() if guerra else 'militar',
+                                'nome': f"{pg} {guerra}".strip(),
                                 'role': ef.get('role', 'operador'),
                                 'telegram_id': ef.get('telegram_id', ''),
                                 'url_foto': ef.get('url_foto', ''),
-                                'posto_grad': ef.get('posto_grad') or ''
+                                'posto_grad': pg
                             })
+                            if email: existing_emails.add(email)
+                            if tg_id: existing_tgs.add(tg_id)
+                            if guerra: existing_names.add(guerra)
 
                 # Preenche posto_grad para os usuários da tabela users
                 for u in users_data:
