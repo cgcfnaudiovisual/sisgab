@@ -137,7 +137,7 @@ def open_nova_tarefa_dialog(efetivo_options: dict, callback_refresh=None):
             ).props('dark outlined dense option-dark w-full clearable')
 
             # Observações
-            obs_in = ui.textarea('Observações / Briefing').props('dark outlined dense w-full rows=3')
+            obs_in = ui.textarea('Observações / Briefing').props('dark outlined dense w-full rows=3 stack-label')
 
             # Botões
             def salvar():
@@ -163,7 +163,9 @@ def open_nova_tarefa_dialog(efetivo_options: dict, callback_refresh=None):
                     if obs_val: aut_parts.append(f"Obs: {obs_val}")
                     full_aut = " | ".join(aut_parts)
 
-                    dt_evento_def = (prazo_in.value or '').strip() or str(datetime.now().date())
+                    dt_evento_def = str(prazo_in.value or '').strip()
+                    if not dt_evento_def or dt_evento_def.lower() in ('none', 'null', 'dd / mm / aaaa'):
+                        dt_evento_def = str(date.today().isoformat())
 
                     registro = {
                         'titulo_evento': titulo_in.value.strip().upper(),
@@ -297,7 +299,7 @@ def open_editar_tarefa_dialog(tarefa: dict, efetivo_options: dict, callback_refr
                 label='👤 Responsável'
             ).props('dark outlined dense option-dark w-full clearable')
 
-            obs_in = ui.textarea('Observações / Briefing', value=str(tarefa.get('observacoes_execucao', '') or '')).props('dark outlined dense w-full rows=3')
+            obs_in = ui.textarea('Observações / Briefing', value=str(tarefa.get('observacoes_execucao', '') or '')).props('dark outlined dense w-full rows=3 stack-label')
 
             def salvar_edicao():
                 db = get_service_db_connection() or get_db_connection()
@@ -314,7 +316,9 @@ def open_editar_tarefa_dialog(tarefa: dict, efetivo_options: dict, callback_refr
                     if obs_val: aut_parts.append(f"Obs: {obs_val}")
                     full_aut = " | ".join(aut_parts)
 
-                    dt_evento_def = (prazo_in.value or '').strip() or str(datetime.now().date())
+                    dt_evento_def = str(prazo_in.value or '').strip()
+                    if not dt_evento_def or dt_evento_def.lower() in ('none', 'null', 'dd / mm / aaaa'):
+                        dt_evento_def = str(date.today().isoformat())
 
                     payload_clean = {
                         'titulo_evento': titulo_in.value.strip().upper(),
