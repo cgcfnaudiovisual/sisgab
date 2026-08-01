@@ -445,28 +445,28 @@ def render_page():
                                     try: cobs = json.loads(cobs)
                                     except: cobs = [cobs]
                                 
-                                 obs_text = ev.get('observacoes_execucao') or ''
-                                 aut_text = ev.get('autoridades') or ''
-                                 full_aut = f"{aut_text} | Obs: {obs_text}".strip(' |') if obs_text else aut_text
+                                obs_text = ev.get('observacoes_execucao') or ''
+                                aut_text = ev.get('autoridades') or ''
+                                full_aut = f"{aut_text} | Obs: {obs_text}".strip(' |') if obs_text else aut_text
 
-                                 payloads.append({
-                                     'solicitante_nome': ev.get('solicitante_nome') or 'COMSOC / GABINETE',
-                                     'setor': ev.get('setor') or 'Gabinete',
-                                     'contato': ev.get('contato') or 'Interno',
-                                     'titulo_evento': str(ev.get('titulo_evento', '')).upper(),
-                                     'categoria_demanda': 'audiovisual',
-                                     'data_evento': ev.get('data_evento'),
-                                     'data_fim': ev.get('data_evento'),
-                                     'hora_evento': ev.get('hora_evento') or '09:00',
-                                     'local_evento': ev.get('local_evento') or 'Quartel / Gabinete',
-                                     'tipo_cobertura': json.dumps(cobs),
-                                     'autoridades': full_aut,
-                                     'score_esforco': 1.0,
-                                     'sigiloso': int(ev.get('sigiloso', 0)),
-                                     'status': 'aprovado',  # Inserção direta aprovada
-                                     'captacao_entrega': 'captacao_e_edicao',
-                                     'notificar_militar_ids': '[]'
-                                 })
+                                payloads.append({
+                                    'solicitante_nome': ev.get('solicitante_nome') or 'COMSOC / GABINETE',
+                                    'setor': ev.get('setor') or 'Gabinete',
+                                    'contato': ev.get('contato') or 'Interno',
+                                    'titulo_evento': str(ev.get('titulo_evento', '')).upper(),
+                                    'categoria_demanda': 'audiovisual',
+                                    'data_evento': ev.get('data_evento'),
+                                    'data_fim': ev.get('data_evento'),
+                                    'hora_evento': ev.get('hora_evento') or '09:00',
+                                    'local_evento': ev.get('local_evento') or 'Quartel / Gabinete',
+                                    'tipo_cobertura': json.dumps(cobs),
+                                    'autoridades': full_aut,
+                                    'score_esforco': 1.0,
+                                    'sigiloso': int(ev.get('sigiloso', 0)),
+                                    'status': 'aprovado',  # Inserção direta aprovada
+                                    'captacao_entrega': 'captacao_e_edicao',
+                                    'notificar_militar_ids': '[]'
+                                })
                             
                             if not payloads:
                                 ui.notify('Nenhum evento na lista para salvar.', color='warning')
