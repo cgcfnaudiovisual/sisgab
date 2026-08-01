@@ -204,12 +204,21 @@ def render_page(autofill: str = None):
     def render_content():
         # Busca efetivo militar do banco para notificação / designação de equipe
         efetivo_options = {}
-        db = get_db_connection() or get_service_db_connection()
-        if db:
+        db_ef = get_service_db_connection() or get_db_connection()
+        if db_ef:
             try:
-                res_ef = db.table('efetivo').select('id, nome_guerra, role').execute()
+                res_ef = db_ef.table('efetivo').select('id, nome_guerra, role, posto_grad').execute()
                 if res_ef.data:
-                    efetivo_options = {item['id']: f"{item['nome_guerra']} ({item['role'].upper()})" for item in res_ef.data}
+                    try:
+                        from database import sort_efetivo_list
+                        sorted_ef = sort_efetivo_list(res_ef.data)
+                    except Exception:
+                        sorted_ef = res_ef.data
+                    
+                    efetivo_options = {
+                        str(item['id']): f"{(item.get('posto_grad') or '').strip()} {(item.get('nome_guerra') or '').strip()} ({(item.get('role') or 'membro').upper()})".strip()
+                        for item in sorted_ef if item.get('nome_guerra')
+                    }
             except Exception as e:
                 print(f"[EFETIVO LOAD ERR] {e}")
 
@@ -218,9 +227,12 @@ def render_page(autofill: str = None):
             try:
                 from sqlite_adapter import SQLiteDatabaseAdapter
                 local_db = SQLiteDatabaseAdapter()
-                res_ef = local_db.table('efetivo').select('id, nome_guerra, role').execute()
+                res_ef = local_db.table('efetivo').select('id, nome_guerra, role, posto_grad').execute()
                 if res_ef.data:
-                    efetivo_options = {item['id']: f"{item['nome_guerra']} ({item['role'].upper()})" for item in res_ef.data}
+                    efetivo_options = {
+                        str(item['id']): f"{(item.get('posto_grad') or '').strip()} {(item.get('nome_guerra') or '').strip()} ({(item.get('role') or 'membro').upper()})".strip()
+                        for item in res_ef.data if item.get('nome_guerra')
+                    }
             except Exception as loc_err:
                 print(f"[EFETIVO LOCAL LOAD ERR] {loc_err}")
 
@@ -393,6 +405,44 @@ def render_page(autofill: str = None):
                                                 
                                                 a = ui.input('Autoridades', value=ev.get('autoridades', '')).props('dark outlined dense').classes('w-full text-[11px]')
                                                 a.bind_value(ev, 'autoridades')
+
+                                                # 📂 Categoria da Demanda
+                                                cat_val = ev.get('categoria_demanda') or 'audiovisual'
+                                                cat_sel = ui.select(
+                                                    options={
+                                                        'audiovisual': '📸 Cobertura Audiovisual',
+                                                        'design_arte': '🎨 Design / Gráficas',
+                                                        'impressos_albuns': '📕 Impressos & Encadernação',
+                                                        'brindes_lembrancas': '🎁 Brindes & Lembranças',
+                                                        'redacao_textos': '✍️ Redação & Discursos',
+                                                        'suporte_evento': '📦 Suporte Logístico',
+                                                        'outra_tarefa': '⚡ Outra Tarefa'
+                                                    },
+                                                    value=cat_val,
+                                                    label='📂 Categoria'
+                                                ).props('dark outlined dense option-dark').classes('w-full text-[11px]')
+                                                cat_sel.bind_value(ev, 'categoria_demanda')
+
+                                                # 📷 Serviços / Tipo de Cobertura (Multi-Seleção)
+                                                cob_val = ev.get('tipo_cobertura', ['foto'])
+                                                if isinstance(cob_val, str):
+                                                    try: cob_val = json.loads(cob_val)
+                                                    except: cob_val = [cob_val]
+                                                if not isinstance(cob_val, list):
+                                                    cob_val = ['foto']
+
+                                                cob_sel = ui.select(
+                                                    options={
+                                                        'foto': '📸 Foto',
+                                                        'video': '🎥 Vídeo',
+                                                        'redes': '📱 Redes Sociais'
+                                                    },
+                                                    value=cob_val,
+                                                    label='📷 Serviços (Múltiplos)',
+                                                    multiple=True,
+                                                    clearable=True
+                                                ).props('dark outlined dense option-dark').classes('w-full text-[11px]')
+                                                cob_sel.bind_value(ev, 'tipo_cobertura')
 
                                                 # 🎯 Tenta associar o militar designado extraído pela IA
                                                 raw_mil = str(ev.get('militar_designado') or '').strip()
