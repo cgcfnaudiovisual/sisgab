@@ -227,7 +227,7 @@ def render_page():
                         try:
                             # SEGURANÇA: Verificação de privilégios server-side
                             user_role = str(app.storage.user.get('user_data', {}).get('role', '')).upper()
-                            if user_role not in ('ADMIN', 'SUPERVISOR'):
+                            if not any(r in user_role for r in ('ADMIN', 'SUPERVISOR', 'GERENTE', 'CHEFE', 'COMSOC', 'OFICIAL')):
                                 ui.notify("⛔ Acesso negado. Apenas administradores ou supervisores.", color='negative')
                                 return
                             if not c_email.value or not c_pwd.value or not c_nome.value:
@@ -476,7 +476,7 @@ def render_page():
                     def handle_edit():
                         # SEGURANÇA: Verificação de privilégios server-side
                         user_role = str(app.storage.user.get('user_data', {}).get('role', '')).upper()
-                        if user_role not in ('ADMIN', 'SUPERVISOR'):
+                        if not any(r in user_role for r in ('ADMIN', 'SUPERVISOR', 'GERENTE', 'CHEFE', 'COMSOC', 'OFICIAL')):
                             ui.notify("⛔ Acesso negado. Apenas administradores ou supervisores.", color='negative')
                             return
                         if not e_nome.value or not e_unm.value:
@@ -599,7 +599,7 @@ def render_page():
                     def handle_password():
                         # SEGURANÇA: Verificação de privilégios server-side
                         user_role = str(app.storage.user.get('user_data', {}).get('role', '')).upper()
-                        if user_role not in ('ADMIN', 'SUPERVISOR'):
+                        if not any(r in user_role for r in ('ADMIN', 'SUPERVISOR', 'GERENTE', 'CHEFE', 'COMSOC', 'OFICIAL')):
                             ui.notify("⛔ Acesso negado. Apenas administradores ou supervisores.", color='negative')
                             return
                         if not new_pwd.value or len(new_pwd.value) < 6:
@@ -674,7 +674,7 @@ def render_page():
                     def handle_delete():
                         # SEGURANÇA: Apenas administradores reais podem excluir
                         user_role = str(app.storage.user.get('user_data', {}).get('role', '')).upper()
-                        if user_role != 'ADMIN':
+                        if not any(r in user_role for r in ('ADMIN', 'SUPERVISOR', 'GERENTE', 'CHEFE')):
                             ui.notify("⛔ Acesso negado. Apenas administradores podem excluir operadores.", color='negative')
                             return
                         if is_offline:
@@ -748,7 +748,7 @@ def render_page():
                     def handle_batch_delete():
                         # SEGURANÇA: Apenas administradores reais podem excluir em lote
                         user_role = str(app.storage.user.get('user_data', {}).get('role', '')).upper()
-                        if user_role != 'ADMIN':
+                        if not any(r in user_role for r in ('ADMIN', 'SUPERVISOR', 'GERENTE', 'CHEFE')):
                             ui.notify("⛔ Acesso negado. Apenas administradores podem excluir operadores em lote.", color='negative')
                             return
                         if is_offline:
@@ -1041,21 +1041,21 @@ def render_page():
                                             # Editar Perfil
                                             ui.button(
                                                 icon='edit',
-                                                on_click=lambda e, user=u: open_edit_dialog(user)
+                                                on_click=lambda _, cur_u=u: open_edit_dialog(cur_u)
                                             ).props('flat round dense color=primary').classes('text-xs').style('background: rgba(0, 229, 255, 0.05);')
                                             ui.tooltip('Editar Perfil')
                                             
                                             # Alterar Senha
                                             ui.button(
                                                 icon='vpn_key',
-                                                on_click=lambda e, user=u: open_password_dialog(user)
+                                                on_click=lambda _, cur_u=u: open_password_dialog(cur_u)
                                             ).props('flat round dense color=amber-9').classes('text-xs').style('background: rgba(255, 193, 7, 0.05);')
                                             ui.tooltip('Redefinir Senha')
                                             
                                             # Excluir
                                             ui.button(
                                                 icon='delete',
-                                                on_click=lambda e, user=u: open_delete_dialog(user)
+                                                on_click=lambda _, cur_u=u: open_delete_dialog(cur_u)
                                             ).props('flat round dense color=red').classes('text-xs').style('background: rgba(255, 23, 68, 0.05);')
                                             ui.tooltip('Excluir Operador')
 
