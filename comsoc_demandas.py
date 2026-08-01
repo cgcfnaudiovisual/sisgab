@@ -239,43 +239,51 @@ def render_page(autofill: str = None):
         with ui.column().classes('w-full gap-4'):
 
 
-            # ⚡ BARRA SUPERIOR DE ATALHOS RÁPIDOS EM 1 CLIQUE
+            # ⚡ BARRA SUPERIOR DE ATALHOS RÁPIDOS EM 1 CLIQUE (PACOTES TEMÁTICOS)
             with ui.card().classes('w-full q-pa-sm px-4 no-shadow rounded-xl bg-black/40 border border-cyan-500/30 q-mb-xs'):
                 with ui.row().classes('w-full items-center justify-between wrap gap-2'):
-                    ui.label('⚡ MODELOS DE ATALHO RÁPIDO (1 Clique):').classes('text-xs font-bold text-amber tracking-wider')
+                    ui.label('⚡ PACOTES DE ATALHO RÁPIDO (1 Clique):').classes('text-xs font-bold text-amber tracking-wider')
                     with ui.row().classes('items-center gap-2 wrap'):
-                        def aplicar_template_cardapio():
-                            categoria_demanda.value = 'design_arte'
-                            produto_especifico.value = 'Cardápio de Almoço de Autoridade'
-                            ev_entrega_tipo.value = 'impressao_fisica'
-                            ev_titulo.value = 'CARDÁPIO - ALMOÇO OFICIAL'
-                            ui.notify('🍽️ Modelo Cardápio Aplicado! Preencha apenas o Prazo e Detalhes.', color='info')
-
-                        def aplicar_template_paspatur():
-                            categoria_demanda.value = 'impressos_albuns'
-                            produto_especifico.value = 'Paspatur / Moldura de Quadro A4'
-                            ev_entrega_tipo.value = 'impressao_fisica'
-                            ev_titulo.value = 'PASPATUR PARA SOLENIDADE'
-                            ui.notify('🖼️ Modelo Paspatur Aplicado!', color='info')
-
-                        def aplicar_template_redacao():
-                            categoria_demanda.value = 'redacao_textos'
-                            produto_especifico.value = 'Discurso / Ordem do Dia'
+                        def aplicar_pacote_solenidade_vip():
+                            categoria_demanda.value = ['audiovisual', 'design_arte', 'redacao_textos']
+                            tipo_cobertura.value = ['foto', 'video', 'drone', 'cardapio_design', 'discurso']
                             ev_entrega_tipo.value = 'captacao_e_edicao'
-                            ev_titulo.value = 'DISCURSO DE POSSE / NOTA OFICIAL'
-                            ui.notify('📜 Modelo Redação Aplicado!', color='info')
+                            ev_titulo.value = 'SOLENIDADE MILITAR / PASSAGEM DE COMANDO'
+                            ui.notify('🌟 Pacote Solenidade VIP Aplicado! (Foto + Vídeo + Drone + Cardápio + Discurso)', color='info')
 
-                        def aplicar_template_audiovisual():
-                            categoria_demanda.value = 'audiovisual'
-                            produto_especifico.value = 'Cobertura Completa (Foto + Vídeo)'
+                        def aplicar_pacote_almoco():
+                            categoria_demanda.value = ['design_arte', 'impressos_albuns', 'brindes_lembrancas']
+                            tipo_cobertura.value = ['cardapio_design', 'impressao_cardapio', 'kit_lembranca']
+                            ev_entrega_tipo.value = 'impressao_fisica'
+                            ev_titulo.value = 'ALMOÇO OFICIAL DE AUTORIDADES'
+                            ui.notify('🍽️ Pacote Almoço Aplicado! (Cardápio + Paspatur + Brindes RP)', color='info')
+
+                        def aplicar_pacote_reels():
+                            categoria_demanda.value = ['audiovisual', 'redacao_textos']
+                            tipo_cobertura.value = ['video', 'redes', 'release_prensa']
                             ev_entrega_tipo.value = 'captacao_e_edicao'
-                            ev_titulo.value = 'COBERTURA FOTOGRÁFICA E VÍDEO'
-                            ui.notify('📸 Modelo Cobertura Audiovisual Aplicado!', color='info')
+                            ev_titulo.value = 'COBERTURA REELS & REDES SOCIAIS'
+                            ui.notify('📱 Pacote Mídias & Reels Aplicado! (Vídeo + Reels + Release)', color='info')
 
-                        ui.button('🍽️ Cardápio Almoço', on_click=aplicar_template_cardapio).props('unelevated color=amber text-color=black dense').classes('text-xs font-bold q-px-sm')
-                        ui.button('🖼️ Paspatur / Moldura', on_click=aplicar_template_paspatur).props('unelevated color=cyan text-color=black dense').classes('text-xs font-bold q-px-sm')
-                        ui.button('📜 Discurso / Nota', on_click=aplicar_template_redacao).props('unelevated color=purple-9 text-color=white dense').classes('text-xs font-bold q-px-sm')
-                        ui.button('📸 Foto & Vídeo', on_click=aplicar_template_audiovisual).props('unelevated color=green-9 text-color=white dense').classes('text-xs font-bold q-px-sm')
+                        def aplicar_pacote_paspatur():
+                            categoria_demanda.value = ['impressos_albuns', 'design_arte']
+                            tipo_cobertura.value = ['quadro_paspatur', 'placa_paspatur_design']
+                            ev_entrega_tipo.value = 'impressao_fisica'
+                            ev_titulo.value = 'PASPATUR E MOLDURAS PARA HOMENAGEM'
+                            ui.notify('🖼️ Pacote Paspatur Aplicado!', color='info')
+
+                        def aplicar_pacote_discurso():
+                            categoria_demanda.value = ['redacao_textos']
+                            tipo_cobertura.value = ['discurso', 'materia_noticia']
+                            ev_entrega_tipo.value = 'captacao_e_edicao'
+                            ev_titulo.value = 'DISCURSO DE POSSE / ORDEM DO DIA'
+                            ui.notify('📜 Pacote Redação Aplicado!', color='info')
+
+                        ui.button('🌟 Solenidade VIP', on_click=aplicar_pacote_solenidade_vip).props('unelevated color=amber-9 text-color=black dense').classes('text-xs font-bold q-px-sm')
+                        ui.button('🍽️ Almoço Oficial', on_click=aplicar_pacote_almoco).props('unelevated color=orange-9 text-color=white dense').classes('text-xs font-bold q-px-sm')
+                        ui.button('📱 Mídias & Reels', on_click=aplicar_pacote_reels).props('unelevated color=pink-9 text-color=white dense').classes('text-xs font-bold q-px-sm')
+                        ui.button('🖼️ Paspatur / Quadro', on_click=aplicar_pacote_paspatur).props('unelevated color=cyan-9 text-color=black dense').classes('text-xs font-bold q-px-sm')
+                        ui.button('📜 Discurso', on_click=aplicar_pacote_discurso).props('unelevated color=purple-9 text-color=white dense').classes('text-xs font-bold q-px-sm')
 
             # 🤖 CARD 1: Assistente de Entrada & Triagem com IA (2 Modos)
             with ui.card().classes('w-full q-pa-sm no-shadow rounded-xl bg-black/40 border border-cyan-500/20 q-mb-xs'):
@@ -742,43 +750,37 @@ def render_page(autofill: str = None):
                         
                         ui.label('🎯 Detalhes do Serviço').classes('text-xs font-bold text-amber')
                         
-                        # Categoria e Produto
-                        with ui.row().classes('w-full gap-2 no-wrap'):
-                            campos_audiovisual_container = None
-
-                            def ao_mudar_categoria(e):
-                                eh_audiovisual = e.value == 'audiovisual'
-                                if campos_audiovisual_container:
-                                    campos_audiovisual_container.set_visibility(eh_audiovisual)
-
+                        # Categoria Múltipla e Produto Específico
+                        with ui.row().classes('w-full gap-2 wrap sm:no-wrap'):
                             categoria_demanda = ui.select(
                                 {
+                                    'audiovisual': '📸 Cobertura Audiovisual',
                                     'design_arte': '🎨 Design / Arte Visual',
                                     'impressos_albuns': '📕 Impressos & Encadernação',
-                                    'brindes_lembrancas': '🎁 Brindes & Lembranças',
-                                    'audiovisual': '📸 Cobertura Audiovisual',
                                     'redacao_textos': '✍️ Redação & Discursos',
+                                    'brindes_lembrancas': '🎁 Brindes & Lembranças',
                                     'suporte_evento': '📦 Suporte Logístico / Receptivo',
                                     'outra_tarefa': '⚡ Outra Tarefa Especial'
                                 },
-                                value='design_arte',
-                                label='Categoria do Serviço',
-                                on_change=ao_mudar_categoria
-                            ).props('dark outlined dense option-dark').classes('w-1/2 font-bold text-cyan')
+                                value=['design_arte'],
+                                label='Categoria(s) da Demanda',
+                                multiple=True,
+                                clearable=True
+                            ).props('dark outlined dense option-dark use-chips').classes('w-full sm:w-1/2 font-bold text-cyan')
 
-                            produto_especifico = ui.input('Especificação da Peça', placeholder='Ex: Cardápio Almoço, Banner A4').props('dark outlined dense').classes('w-1/2')
+                            produto_especifico = ui.input('Especificação da Peça / Produto', placeholder='Ex: Cardápio Almoço, Paspatur A4, Vídeo Reels').props('dark outlined dense').classes('w-full sm:w-1/2')
 
                         # Título da demanda
                         ev_titulo = ui.input('Título Geral da Tarefa / Solenidade').props('dark outlined dense w-full')
 
                         # Solicitante + Setor + Contato
-                        with ui.row().classes('w-full gap-2 no-wrap'):
-                            sol_nome = ui.input('Solicitante', value='CGCFN / GABINETE').props('dark outlined dense').classes('w-1/3')
-                            sol_setor = ui.input('Setor / OM', value='CGCFN').props('dark outlined dense').classes('w-1/3')
-                            sol_contato = ui.input('Contato / Ramal', value='Interno').props('dark outlined dense').classes('w-1/3')
+                        with ui.row().classes('w-full gap-2 wrap sm:no-wrap'):
+                            sol_nome = ui.input('Solicitante', value='CGCFN / GABINETE').props('dark outlined dense').classes('w-full sm:w-1/3')
+                            sol_setor = ui.input('Setor / OM', value='CGCFN').props('dark outlined dense').classes('w-full sm:w-1/3')
+                            sol_contato = ui.input('Contato / Ramal', value='Interno').props('dark outlined dense').classes('w-full sm:w-1/3')
 
                         # Prioridade + Deadline + Formato Entrega
-                        with ui.row().classes('w-full gap-2 no-wrap'):
+                        with ui.row().classes('w-full gap-2 wrap sm:no-wrap'):
                             prioridade_select = ui.select(
                                 {
                                     'normal': '🟢 Normal',
@@ -787,9 +789,9 @@ def render_page(autofill: str = None):
                                 },
                                 value='normal',
                                 label='Prioridade'
-                            ).props('dark outlined dense option-dark').classes('w-1/3')
+                            ).props('dark outlined dense option-dark').classes('w-full sm:w-1/3')
 
-                            prazo_limite = ui.input('Prazo / Deadline', value=datetime.now().strftime('%Y-%m-%d')).props('type=date dark outlined dense').classes('w-1/3')
+                            prazo_limite = ui.input('Prazo / Deadline', value=datetime.now().strftime('%Y-%m-%d')).props('type=date dark outlined dense').classes('w-full sm:w-1/3')
 
                             ev_entrega_tipo = ui.select(
                                 {
@@ -799,23 +801,109 @@ def render_page(autofill: str = None):
                                 },
                                 value='captacao_e_edicao',
                                 label='Formato Entrega'
-                            ).props('dark outlined dense option-dark').classes('w-1/3')
+                            ).props('dark outlined dense option-dark').classes('w-full sm:w-1/3')
 
                         # Sigilo Checkbox
                         chk_sigilo = ui.checkbox('Pauta Sigilosa / Reservada (Gabinete)').classes('text-xs text-amber-5')
 
-                        # CONTAINER DE CAMPOS EXCLUSIVOS DE COBERTURA AUDIOVISUAL
-                        with ui.column().classes('w-full gap-2 p-2 bg-black/20 rounded-lg border border-cyan-500/10 q-my-xs') as campos_audiovisual_container:
+                        # 📷 SELETOR DE SERVIÇOS & SUBCATEGORIAS MULTIPLAS
+                        def get_service_options_for_categories(cats):
+                            if isinstance(cats, str): cats = [cats]
+                            if not cats: cats = ['design_arte']
+                            servs_map = {
+                                'audiovisual': {
+                                    'foto': '📸 Cobertura Fotográfica',
+                                    'video': '🎥 Gravação de Vídeo',
+                                    'redes': '📱 Redes Sociais / Reels',
+                                    'drone': '🛸 Imagens Aéreas (Drone)',
+                                    'transmissao': '📡 Transmissão ao Vivo'
+                                },
+                                'design_arte': {
+                                    'cardapio_design': '🍽️ Layout de Cardápio',
+                                    'banner_digital': '🖼️ Banner / Cartaz Digital',
+                                    'convite_artes': '✉️ Convite Digital / Panfleto',
+                                    'redes_design': '📲 Arte para Redes Sociais',
+                                    'placa_paspatur_design': '🏆 Layout Placa / Paspatur'
+                                },
+                                'impressos_albuns': {
+                                    'impressao_banner': '🖨️ Impressão de Banner / Lona',
+                                    'impressao_cardapio': '✂️ Impressão de Cardápio',
+                                    'quadro_paspatur': '🖼️ Moldura / Paspatur A4',
+                                    'album_fotografico': '📘 Álbum Fotográfico'
+                                },
+                                'redacao_textos': {
+                                    'discurso': '📜 Discurso / Ordem do Dia',
+                                    'materia_noticia': '📰 Matéria para Portal',
+                                    'release_prensa': '📢 Release para Imprensa'
+                                },
+                                'brindes_lembrancas': {
+                                    'coin': '🪙 Moeda Comemorativa',
+                                    'kit_lembranca': '🎁 Kit Brinde Oficial RP'
+                                },
+                                'suporte_evento': {
+                                    'credenciamento': '📇 Credenciamento Imprensa',
+                                    'som_audiovisual': '🎤 Sonorização / Evento'
+                                }
+                            }
+                            res = {}
+                            for c in cats:
+                                if c in servs_map: res.update(servs_map[c])
+                            return res if res else servs_map['design_arte']
+
+                        tipo_cobertura = ui.select(
+                            options=get_service_options_for_categories(['design_arte']),
+                            value=['cardapio_design'],
+                            label='📷 Serviços & Pecas Específicas',
+                            multiple=True,
+                            clearable=True
+                        ).props('dark outlined dense option-dark use-chips').classes('w-full font-bold text-cyan q-my-xs')
+
+                        # ── SEÇÕES DINÂMICAS GRADUAIS POR CATEGORIA ──
+                        
+                        # 1. Seção Audiovisual
+                        with ui.column().classes('w-full gap-2 p-3 bg-black/30 rounded-lg border border-cyan-500/20 q-my-xs') as campos_audiovisual_container:
                             campos_audiovisual_container.set_visibility(False)
-                            ui.label('📸 Detalhes do Evento (Exclusivo Audiovisual):').classes('text-xs font-bold text-cyan')
+                            ui.label('📸 Detalhes do Evento (Audiovisual):').classes('text-xs font-bold text-cyan')
                             
-                            with ui.row().classes('w-full gap-2 no-wrap'):
-                                ev_data = ui.input('Data Início').props('type=date dark outlined dense').classes('w-1/3')
-                                ev_data_fim = ui.input('Data Término').props('type=date dark outlined dense').classes('w-1/3')
-                                ev_hora = ui.input('Hora Início').props('type=time dark outlined dense').classes('w-1/3')
+                            with ui.row().classes('w-full gap-2 wrap sm:no-wrap'):
+                                ev_data = ui.input('Data Início').props('type=date dark outlined dense').classes('w-full sm:w-1/3')
+                                ev_data_fim = ui.input('Data Término').props('type=date dark outlined dense').classes('w-full sm:w-1/3')
+                                ev_hora = ui.input('Hora Início').props('type=time dark outlined dense').classes('w-full sm:w-1/3')
                                 
                             ev_local = ui.input('Local Exato do Evento').props('dark outlined dense w-full')
                             ev_aut = ui.input('Autoridades Presentes').props('dark outlined dense w-full')
+
+                        # 2. Seção Design & Impressos
+                        with ui.column().classes('w-full gap-2 p-3 bg-black/30 rounded-lg border border-purple-500/20 q-my-xs') as container_sec_design:
+                            container_sec_design.set_visibility(False)
+                            ui.label('🎨 Especificações de Design & Gráfica:').classes('text-xs font-bold text-purple-4')
+                            ui.label('Indique observações sobre dimensões, formato de impressão, cores e padrão visual.').classes('text-[11px] text-grey-4')
+
+                        # 3. Seção Redação & Texto
+                        with ui.column().classes('w-full gap-2 p-3 bg-black/30 rounded-lg border border-emerald-500/20 q-my-xs') as container_sec_redacao:
+                            container_sec_redacao.set_visibility(False)
+                            ui.label('✍️ Diretrizes de Redação & Discurso:').classes('text-xs font-bold text-emerald-4')
+                            ui.label('Informe a pauta do discurso, ordem do dia, tom do texto e trechos indispensáveis.').classes('text-[11px] text-grey-4')
+
+                        # Reação de Abertura Gradual ao mudar Categorias
+                        def ao_mudar_categorias(e):
+                            cats = e.value or []
+                            if isinstance(cats, str): cats = [cats]
+                            
+                            campos_audiovisual_container.set_visibility('audiovisual' in cats)
+                            container_sec_design.set_visibility('design_arte' in cats or 'impressos_albuns' in cats)
+                            container_sec_redacao.set_visibility('redacao_textos' in cats)
+                            
+                            novas_opts = get_service_options_for_categories(cats)
+                            cur_vals = tipo_cobertura.value or []
+                            if isinstance(cur_vals, str): cur_vals = [cur_vals]
+                            for cv in cur_vals:
+                                if cv and cv not in novas_opts:
+                                    novas_opts[cv] = f"📌 {str(cv).capitalize()}"
+                            tipo_cobertura.options = novas_opts
+                            tipo_cobertura.update()
+
+                        categoria_demanda.on_value_change(ao_mudar_categorias)
 
                     # COLUNA DA DIREITA (Execução, Anexos e Checklist)
                     with ui.column().classes('col-12 col-md gap-3').style('flex: 1; min-width: 320px;'):
@@ -886,7 +974,10 @@ def render_page(autofill: str = None):
                             score_label = ui.label('🟢 Score: 1.0 (Baixo Esforço)').classes('text-xs font-bold text-center w-full q-py-xs bg-black/30 rounded-md q-mt-xs')
                             atualizar_score_ui()
 
-                        checklist_card.bind_visibility_from(categoria_demanda, 'value', value='audiovisual')
+                        def checar_vis_checklist(v):
+                            if isinstance(v, list): return 'audiovisual' in v
+                            return v == 'audiovisual'
+                        checklist_card.bind_visibility_from(categoria_demanda, 'value', backward=checar_vis_checklist)
 
                         # Botões de Ação
                         async def salvar_demanda(status_inicial='pendente', eh_evento_interno=False):
@@ -895,7 +986,10 @@ def render_page(autofill: str = None):
                                 ui.notify('Por favor, preencha os campos obrigatórios (Título e Solicitante).', color='warning')
                                 return
                                 
-                            if categoria_demanda.value == 'audiovisual':
+                            cat_selected = categoria_demanda.value or ['design_arte']
+                            if isinstance(cat_selected, str): cat_selected = [cat_selected]
+
+                            if 'audiovisual' in cat_selected:
                                 if not ev_data.value or not ev_local.value:
                                     ui.notify('Para Cobertura Audiovisual, a Data de Início e o Local Exato são obrigatórios!', color='warning')
                                     return
@@ -903,12 +997,13 @@ def render_page(autofill: str = None):
                             db = get_service_db_connection() or get_db_connection()
                             if db:
                                 try:
-                                    coberturas = []
-                                    if form_state['cobertura_foto']: coberturas.append('foto')
-                                    if form_state['cobertura_video']: coberturas.append('video')
-                                    if form_state['cobertura_redes']: coberturas.append('redes')
+                                    coberturas = tipo_cobertura.value or []
+                                    if isinstance(coberturas, str): coberturas = [coberturas]
+                                    if form_state['cobertura_foto'] and 'foto' not in coberturas: coberturas.append('foto')
+                                    if form_state['cobertura_video'] and 'video' not in coberturas: coberturas.append('video')
+                                    if form_state['cobertura_redes'] and 'redes' not in coberturas: coberturas.append('redes')
                                     
-                                    dt_ev = (ev_data.value if hasattr(ev_data, 'value') and ev_data.value else None) or prazo_limite.value
+                                    dt_ev = (ev_data.value if hasattr(ev_data, 'value') and ev_data.value else None) or prazo_limite.value or str(datetime.now().date())
                                     loc_ev = (ev_local.value if hasattr(ev_local, 'value') and ev_local.value else None) or 'Gabinete / CGCFN'
 
                                     aut_single = (ev_aut.value if hasattr(ev_aut, 'value') and ev_aut.value else '') or ''
@@ -919,12 +1014,14 @@ def render_page(autofill: str = None):
                                         else:
                                             aut_single = f"Obs: {obs_single}"
 
+                                    cat_final_db = json.dumps(cat_selected) if len(cat_selected) > 1 else (cat_selected[0] if cat_selected else 'design_arte')
+
                                     registro = {
                                         'solicitante_nome': nome_sol,
                                         'setor': sol_setor.value or ('GABINETE / QUARTEL' if eh_evento_interno else 'Gabinete'),
                                         'contato': sol_contato.value or 'Interno',
                                         'titulo_evento': ev_titulo.value.upper(),
-                                        'categoria_demanda': categoria_demanda.value or 'design_arte',
+                                        'categoria_demanda': cat_final_db,
                                         'produto_especifico': produto_especifico.value or '',
                                         'prioridade': prioridade_select.value or 'normal',
                                         'prazo_limite': prazo_limite.value or '',
@@ -938,7 +1035,7 @@ def render_page(autofill: str = None):
                                         'sigiloso': 1 if chk_sigilo.value else 0,
                                         'status': 'aprovado' if eh_evento_interno else status_inicial,
                                         'captacao_entrega': ev_entrega_tipo.value or 'captacao_e_edicao',
-                                        'notificar_militar_ids': json.dumps(militar_select.value) if militar_select.value else '[]',
+                                        'notificar_militar_ids': json.dumps(militar_select.value) if (militar_select and militar_select.value) else '[]',
                                         'arquivo_url': uploaded_file_url,
                                         'arquivo_nome': uploaded_file_name
                                     }
