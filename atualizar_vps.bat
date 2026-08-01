@@ -17,8 +17,8 @@ if not exist "%USERPROFILE%\.ssh\sisgab_key.pem" (
     icacls "%USERPROFILE%\.ssh\sisgab_key.pem" /grant:r "%USERNAME%:(F)" >nul
 )
 
-:: Executa git pull + docker compose build --no-cache + force-recreate
-ssh -t -i "%USERPROFILE%\.ssh\sisgab_key.pem" ubuntu@193.122.207.129 "cd ~/sisgab 2>/dev/null || cd /home/ubuntu/sisgab 2>/dev/null || cd /app 2>/dev/null ; echo '>>> 1/3 Baixando arquivos atualizados do GitHub...' ; git pull ; echo '>>> 2/3 Reconstruindo container SEM CACHE...' ; sudo docker compose build --no-cache ; echo '>>> 3/3 Reiniciando container...' ; sudo docker compose up -d --force-recreate ; exec bash -l"
+:: Executa git fetch + git reset --hard + docker compose build --no-cache
+ssh -t -i "%USERPROFILE%\.ssh\sisgab_key.pem" ubuntu@193.122.207.129 "cd ~/sisgab 2>/dev/null || cd /home/ubuntu/sisgab 2>/dev/null || cd /app 2>/dev/null ; echo '>>> 1/3 Sincronizando 100% com GitHub...' ; git fetch origin main ; git reset --hard origin/main ; git pull origin main ; echo '>>> 2/3 Reconstruindo container SEM CACHE...' ; sudo docker compose build --no-cache ; echo '>>> 3/3 Reiniciando container...' ; sudo docker compose up -d --force-recreate ; exec bash -l"
 
 echo.
 echo Atualizacao concluida com sucesso!

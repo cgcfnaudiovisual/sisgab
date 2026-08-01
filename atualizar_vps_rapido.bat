@@ -17,8 +17,8 @@ if not exist "%USERPROFILE%\.ssh\sisgab_key.pem" (
     icacls "%USERPROFILE%\.ssh\sisgab_key.pem" /grant:r "%USERNAME%:(F)" >nul
 )
 
-:: Conecta na VPS, força git pull e recria o container limpo
-ssh -t -i "%USERPROFILE%\.ssh\sisgab_key.pem" ubuntu@193.122.207.129 "cd ~/sisgab 2>/dev/null || cd /home/ubuntu/sisgab 2>/dev/null || cd /app 2>/dev/null ; echo '>>> 1/3 Baixando atualizacoes do GitHub...' ; git pull ; echo '>>> 2/3 Limpando container antigo...' ; sudo docker rm -f comsoc-c2 2>/dev/null ; echo '>>> 3/3 Subindo container atualizado...' ; sudo docker compose up -d --build ; exec bash -l"
+:: Conecta na VPS, descarta conflitos locais na VPS, sincroniza 100% com GitHub e recria o container
+ssh -t -i "%USERPROFILE%\.ssh\sisgab_key.pem" ubuntu@193.122.207.129 "cd ~/sisgab 2>/dev/null || cd /home/ubuntu/sisgab 2>/dev/null || cd /app 2>/dev/null ; echo '>>> 1/3 Sincronizando com o GitHub...' ; git fetch origin main ; git reset --hard origin/main ; git pull origin main ; echo '>>> 2/3 Limpando container antigo...' ; sudo docker rm -f comsoc-c2 2>/dev/null ; echo '>>> 3/3 Subindo container atualizado...' ; sudo docker compose up -d --build ; exec bash -l"
 
 echo.
 echo Atualizacao rapida concluida com sucesso!
