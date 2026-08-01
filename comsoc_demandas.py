@@ -431,7 +431,7 @@ def render_page(autofill: str = None):
                                                 ).props('dark outlined dense option-dark').classes('w-full text-[11px]')
                                                 cat_sel.bind_value(ev, 'categoria_demanda')
 
-                                                # 📷 Serviços / Tipo de Cobertura (Multi-Seleção)
+                                                # 📷 Serviços / Subcategorias (Multi-Seleção Dinâmica)
                                                 cob_val = ev.get('tipo_cobertura', ['foto'])
                                                 if isinstance(cob_val, str):
                                                     try: cob_val = json.loads(cob_val)
@@ -439,18 +439,84 @@ def render_page(autofill: str = None):
                                                 if not isinstance(cob_val, list):
                                                     cob_val = ['foto']
 
+                                                def get_service_options_for_categories(cats):
+                                                    if isinstance(cats, str): cats = [cats]
+                                                    if not cats: cats = ['audiovisual']
+                                                    servs_map = {
+                                                        'audiovisual': {
+                                                            'foto': '📸 Cobertura Fotográfica',
+                                                            'video': '🎥 Gravação de Vídeo',
+                                                            'redes': '📱 Redes Sociais / Reels',
+                                                            'drone': '🛸 Imagens Aéreas (Drone)',
+                                                            'transmissao': '📡 Transmissão ao Vivo'
+                                                        },
+                                                        'design_arte': {
+                                                            'cardapio_design': '🍽️ Layout de Cardápio',
+                                                            'banner_digital': '🖼️ Banner / Cartaz Digital',
+                                                            'convite_artes': '✉️ Convite Digital / Panfleto',
+                                                            'redes_design': '📲 Arte para Redes Sociais',
+                                                            'placa_paspatur_design': '🏆 Layout Placa / Paspatur',
+                                                            'brasao_selo': '🛡️ Brasão / Selo / Logotipo'
+                                                        },
+                                                        'impressos_albuns': {
+                                                            'impressao_banner': '🖨️ Impressão de Banner / Lona',
+                                                            'impressao_cardapio': '✂️ Impressão e Corte de Cardápio',
+                                                            'quadro_paspatur': '🖼️ Moldura de Quadro / Paspatur',
+                                                            'placa_homenagem': '🏅 Placa Acrílico / Metal',
+                                                            'album_fotografico': '📘 Álbum Fotográfico'
+                                                        },
+                                                        'redacao_textos': {
+                                                            'discurso': '📜 Discurso / Ordem do Dia',
+                                                            'materia_noticia': '📰 Matéria Noticiário / Portal',
+                                                            'release_prensa': '📢 Release para Imprensa',
+                                                            'roteiro_video': '🎙️ Roteiro de Locução'
+                                                        },
+                                                        'brindes_lembrancas': {
+                                                            'coin': '🪙 Coin / Moeda Comemorativa',
+                                                            'kit_lembranca': '🎁 Kit Brinde Oficial',
+                                                            'certificado': '📜 Certificados & Diplomas'
+                                                        },
+                                                        'suporte_evento': {
+                                                            'credenciamento': '📇 Credenciamento Imprensa',
+                                                            'som_audiovisual': '🎤 Sonorização / Microfones',
+                                                            'receptivo': '🤝 Receptivo de Autoridades'
+                                                        },
+                                                        'outra_tarefa': {
+                                                            'outra': '⚡ Outra Tarefa Especial'
+                                                        }
+                                                    }
+                                                    res_opts = {}
+                                                    for c in cats:
+                                                        if c in servs_map:
+                                                            res_opts.update(servs_map[c])
+                                                    if not res_opts:
+                                                        res_opts = dict(servs_map['audiovisual'])
+                                                    return res_opts
+
+                                                initial_cob_opts = get_service_options_for_categories(cat_val)
+                                                for c_item in cob_val:
+                                                    if c_item and c_item not in initial_cob_opts:
+                                                        initial_cob_opts[c_item] = f"📌 {str(c_item).capitalize()}"
+
                                                 cob_sel = ui.select(
-                                                    options={
-                                                        'foto': '📸 Foto',
-                                                        'video': '🎥 Vídeo',
-                                                        'redes': '📱 Redes Sociais'
-                                                    },
+                                                    options=initial_cob_opts,
                                                     value=cob_val,
-                                                    label='📷 Serviços (Múltiplos)',
+                                                    label='📷 Serviços / Subcategorias',
                                                     multiple=True,
                                                     clearable=True
                                                 ).props('dark outlined dense option-dark').classes('w-full text-[11px]')
                                                 cob_sel.bind_value(ev, 'tipo_cobertura')
+
+                                                def ao_mudar_categoria_card(e):
+                                                    novas_opts = get_service_options_for_categories(e.value)
+                                                    cur_vals = cob_sel.value or []
+                                                    for c_item in cur_vals:
+                                                        if c_item and c_item not in novas_opts:
+                                                            novas_opts[c_item] = f"📌 {str(c_item).capitalize()}"
+                                                    cob_sel.options = novas_opts
+                                                    cob_sel.update()
+
+                                                cat_sel.on_value_change(ao_mudar_categoria_card)
 
                                                 # 🎯 Militar(es) Responsável(is) (Multi-Seleção)
                                                 raw_mil = ev.get('militar_designado')
