@@ -12,6 +12,15 @@ def get_om_keyboard():
     markup.row(types.KeyboardButton("❌ Cancelar"))
     return markup
 
+def get_categoria_keyboard():
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    markup.row(types.KeyboardButton("📸 Cobertura Audiovisual"), types.KeyboardButton("🎨 Design / Arte Visual"))
+    markup.row(types.KeyboardButton("📕 Impressos & Encadernação"), types.KeyboardButton("✍️ Redação & Discursos"))
+    markup.row(types.KeyboardButton("🎁 Brindes & Lembranças"), types.KeyboardButton("📦 Suporte Logístico"))
+    markup.row(types.KeyboardButton("⚡ Outra Tarefa Especial"), types.KeyboardButton("❌ Cancelar"))
+    return markup
+
+
 
 def get_main_menu_keyboard(is_operator=False):
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)

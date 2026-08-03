@@ -1107,8 +1107,39 @@ def register_common_handlers(bot):
             step = state.get('step')
             if step == 'input_titulo':
                 state['titulo'] = text.strip()
+                state['step'] = 'select_categoria'
+                await bot.reply_to(
+                    message,
+                    f"⚡ **MISSÃO RÁPIDA:** *{state['titulo']}*\n\n"
+                    f"Selecione o **Tipo / Categoria** da demanda nos botões abaixo:",
+                    reply_markup=get_categoria_keyboard(),
+                    parse_mode='Markdown'
+                )
+            elif step == 'select_categoria':
+                cat_text = text.strip()
+                cat_code = 'audiovisual'
+                cat_label = '📸 Cobertura Audiovisual'
+                
+                cat_map = [
+                    ('cobertura audiovisual', 'audiovisual', '📸 Cobertura Audiovisual'),
+                    ('design / arte visual', 'design_arte', '🎨 Design / Arte Visual'),
+                    ('impressos & encadernação', 'impressos_albuns', '📕 Impressos & Encadernação'),
+                    ('redação & discursos', 'redacao_textos', '✍️ Redação & Discursos'),
+                    ('brindes & lembranças', 'brindes_lembrancas', '🎁 Brindes & Lembranças'),
+                    ('suporte logístico', 'suporte_evento', '📦 Suporte Logístico'),
+                    ('outra tarefa especial', 'outra_tarefa', '⚡ Outra Tarefa Especial')
+                ]
+                
+                for key, code, lbl in cat_map:
+                    if key in cat_text.lower() or code in cat_text.lower():
+                        cat_code = code
+                        cat_label = lbl
+                        break
+                        
+                state['categoria_code'] = cat_code
+                state['categoria_label'] = cat_label
                 state['step'] = 'select_militares'
-                from database import get_bot_db_connection as get_db_connection
+
                 db = get_db_connection()
                 efetivo_list = []
                 if db:
@@ -1120,10 +1151,11 @@ def register_common_handlers(bot):
                 from .utils import sort_efetivo_by_rank
                 sorted_ef = sort_efetivo_by_rank(efetivo_list)
                 state['efetivo_list'] = sorted_ef
-                from .keyboards import get_efetivo_linking_keyboard
+                
                 await bot.reply_to(
                     message,
-                    f"⚡ **MISSÃO RÁPIDA:** *{state['titulo']}*\n\n"
+                    f"⚡ **MISSÃO RÁPIDA:** *{state['titulo']}*\n"
+                    f"🎯 **Categoria:** *{cat_label}*\n\n"
                     f"Selecione o militar escalado no teclado de resposta rápida no rodapé:",
                     reply_markup=get_efetivo_linking_keyboard(sorted_ef),
                     parse_mode='Markdown'
@@ -1132,6 +1164,8 @@ def register_common_handlers(bot):
                 user_name = profile.get('nome_guerra') or profile.get('nome') or 'Operador' if profile else 'Operador'
                 user_name = str(user_name).replace('None ', '').replace('None', '').strip().upper()
                 titulo_m = state.get('titulo', 'Missão Rápida')
+                cat_code = state.get('categoria_code', 'audiovisual')
+                cat_label = state.get('categoria_label', '📸 Cobertura Audiovisual')
                 efetivo_list = state.get('efetivo_list', [])
                 nome_digitado = text.replace('🎖️', '').strip().upper()
 
@@ -1144,15 +1178,12 @@ def register_common_handlers(bot):
                         militar_encontrado = ef
                         break
 
-                from database import get_bot_db_connection as get_db_connection
                 db = get_db_connection()
 
                 if militar_encontrado and db:
                     m_id = militar_encontrado.get('id')
                     m_nome = f"{militar_encontrado.get('posto_grad') or ''} {militar_encontrado.get('nome_guerra', '')}".strip()
                     try:
-                        import json
-                        from datetime import datetime
                         now_str = datetime.now().strftime('%Y-%m-%d')
                         novo_registro = {
                             'titulo_evento': f"⚡ {titulo_m}",
@@ -1163,7 +1194,7 @@ def register_common_handlers(bot):
                             'hora_evento': datetime.now().strftime('%H:%M'),
                             'local_evento': 'Gabinete / COMSOC',
                             'status': 'aprovada',
-                            'categoria_demanda': 'audiovisual',
+                            'categoria_demanda': cat_code,
                             'notificar_militar_ids': json.dumps([int(m_id)] if str(m_id).isdigit() else [])
                         }
                         db.table('demandas_comunicacao').insert(novo_registro).execute()
@@ -1172,6 +1203,7 @@ def register_common_handlers(bot):
                         notify_telegram(
                             f"⚡ **NOVA MISSÃO RÁPIDA REGISTRADA!**\n"
                             f"📌 {titulo_m}\n"
+                            f"🎯 Categoria: {cat_label}\n"
                             f"👨‍✈️ Criada por: {user_name}\n"
                             f"👥 Escalado: {m_nome}",
                             "system"
@@ -1179,22 +1211,23 @@ def register_common_handlers(bot):
 
                         t_id = militar_encontrado.get('telegram_id')
                         if t_id:
-                            notify_telegram(f"⚡ **VOCÊ FOI ESCALADO PARA UMA MISSÃO RÁPIDA!**\n📌 {titulo_m}\nEscalado por: {user_name}", "system", custom_chat_id=t_id)
+                            notify_telegram(f"⚡ **VOCÊ FOI ESCALADO PARA UMA MISSÃO RÁPIDA!**\n📌 {titulo_m}\n🎯 Categoria: {cat_label}\nEscalado por: {user_name}", "system", custom_chat_id=t_id)
 
                         clear_state(chat_id)
                         await bot.reply_to(
                             message,
                             f"⚡ **MISSÃO RÁPIDA CRIADA E ENVIADA!**\n\n"
-                            f"📌 *{titulo_m}*\n"
+                            f"📌 *{escape_markdown(titulo_m)}*\n"
+                            f"🎯 Categoria: *{escape_markdown(cat_label)}*\n"
                             f"📅 Data: {now_str}\n"
-                            f"👨‍✈️ Militar Escalado: **{m_nome}**.",
+                            f"👨‍✈️ Militar Escalado: **{escape_markdown(m_nome)}**.",
                             reply_markup=get_main_menu_keyboard(is_operator),
                             parse_mode='Markdown'
                         )
                     except Exception as e:
-                        await bot.reply_to(message, f"❌ Erro ao criar missão rápida: {e}")
+                        clear_state(chat_id)
+                        await bot.reply_to(message, f"❌ Erro ao criar missão rápida: {e}", reply_markup=get_main_menu_keyboard(is_operator))
                 else:
-                    from .keyboards import get_efetivo_linking_keyboard
                     await bot.reply_to(
                         message,
                         f"⚠️ Militar **'{text}'** não encontrado.\nPor favor, escolha um militar no teclado no rodapé:",
