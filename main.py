@@ -159,6 +159,62 @@ async def api_photo_processed(payload: dict = Body(...)):
         return {"error": str(e)}, 500
 
 
+# --- ENDPOINTS DO ESTÚDIO GRÁFICO (yft-design) ---
+@app.get('/api/artes_graficas')
+def api_get_artes_graficas(criado_por: str = None):
+    from database import get_db_connection
+    db = get_db_connection()
+    if not db:
+        return {"error": "Database offline"}, 500
+    try:
+        query = db.table('artes_graficas').select('*').order('atualizado_em', desc=True)
+        if criado_por:
+            query = query.eq('criado_por', criado_por)
+        res = query.execute()
+        return res.data or []
+    except Exception as e:
+        return {"error": str(e)}, 500
+
+@app.post('/api/artes_graficas')
+async def api_save_arte_grafica(payload: dict = Body(...)):
+    from datetime import datetime
+    from database import get_db_connection
+    db = get_db_connection()
+    if not db:
+        return {"error": "Database offline"}, 500
+    try:
+        arte_id = payload.get('id')
+        arte_record = {
+            'titulo': payload.get('titulo', 'Sem Título'),
+            'criado_por': payload.get('criado_por', 'Operador'),
+            'tipo': payload.get('tipo', 'arte'),
+            'json_data': payload.get('json_data', {}),
+            'thumbnail_url': payload.get('thumbnail_url', ''),
+            'pdf_url': payload.get('pdf_url', ''),
+            'atualizado_em': datetime.now().isoformat()
+        }
+        if arte_id:
+            res = db.table('artes_graficas').update(arte_record).eq('id', arte_id).execute()
+        else:
+            arte_record['criado_em'] = datetime.now().isoformat()
+            res = db.table('artes_graficas').insert(arte_record).execute()
+        return {"status": "success", "data": res.data or []}
+    except Exception as e:
+        return {"error": str(e)}, 500
+
+@app.get('/api/templates_graficos')
+def api_get_templates_graficos():
+    from database import get_db_connection
+    db = get_db_connection()
+    if not db:
+        return {"error": "Database offline"}, 500
+    try:
+        res = db.table('templates_graficos').select('*').eq('publico', True).execute()
+        return res.data or []
+    except Exception as e:
+        return {"error": str(e)}, 500
+
+
 import theme
 from logo_base64 import LOGO_BASE64
 
@@ -211,6 +267,7 @@ import agenda_geral
 import painel_comando
 import modulo_presenca
 import comsoc_assentos
+import estudio_grafico
 from database import authenticate_user, get_user_by_id
 from services import data_service
 
@@ -242,7 +299,8 @@ sisgab_menu_categories = [
         'category': '📣 COMUNICAÇÃO & INTELIGÊNCIA',
         'items': [
             {'name': 'Central de IA', 'icon': 'psychology', 'path': '/assistente_ia', 'subtitle': 'Chat, redator e triagem de demandas'},
-            {'name': 'Smart Editor IA', 'icon': 'movie_filter', 'path': '/smart_editor', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'supervisor'], 'subtitle': 'Cortes com IA, SFX e FCPXML'},
+            {'name': 'Smart Editor IA', 'icon': 'movie_filter', 'path': '/smart_editor', 'roles': ['admin', 'oficial_gab', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'supervisor'], 'subtitle': 'Cortes com IA, SFX e FCPXML'},
+            {'name': 'Estúdio Gráfico (Canva)', 'icon': 'palette', 'path': '/estudio_grafico', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'supervisor'], 'subtitle': 'Editor visual de artes e impressos', 'new_tab': True},
             {'name': 'Entrega em Hot', 'icon': 'photo_library', 'path': '/comsoc_galeria', 'subtitle': 'Upload de fotos em campo'},
             {'name': 'Arquivo e Histórico', 'icon': 'history', 'path': '/comsoc_historico', 'subtitle': 'Busca e links de coberturas passadas'},
             {'name': 'Aniversariantes & Datas', 'icon': 'cake', 'path': '/comsoc_aniversariantes', 'subtitle': 'Mensagens com IA e impressão'},
