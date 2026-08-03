@@ -226,16 +226,20 @@ def render_page():
     # ══════════════════════════════════════════════════════════
     with ui.element('div').classes('w-full grid grid-cols-3 md:grid-cols-9 gap-2 q-mb-md q-px-md kpi-grid'):
         kpi_items = [
-            {'key': 'pendentes', 'label': 'PENDENTES', 'icon': 'hourglass_top', 'color': 'amber', 'bg': 'rgba(245,158,11,0.08)', 'border': 'rgba(245,158,11,0.3)', 'path': '/comsoc_homologar'},
-            {'key': 'execucao', 'label': 'EM EXECUÇÃO', 'icon': 'play_circle', 'color': 'cyan', 'bg': 'rgba(0,229,255,0.08)', 'border': 'rgba(0,229,255,0.3)', 'path': '/comsoc_tarefas'},
-            {'key': 'demandas_mes', 'label': 'DEMANDAS MÊS', 'icon': 'calendar_month', 'color': 'amber', 'bg': 'rgba(245,158,11,0.08)', 'border': 'rgba(245,158,11,0.3)', 'path': None},
-            {'key': 'concluidas', 'label': 'CONCLUÍDAS', 'icon': 'check_circle', 'color': 'green', 'bg': 'rgba(34,197,94,0.08)', 'border': 'rgba(34,197,94,0.3)', 'path': '/comsoc_historico'},
-            {'key': 'coberturas', 'label': 'COBERTURAS', 'icon': 'linked_camera', 'color': 'cyan', 'bg': 'rgba(0,229,255,0.08)', 'border': 'rgba(0,229,255,0.3)', 'path': '/agenda_geral'},
-            {'key': 'urgentes', 'label': '⚡ URGENTES', 'icon': 'bolt', 'color': 'orange', 'bg': 'rgba(251,146,60,0.08)', 'border': 'rgba(251,146,60,0.3)', 'path': '/comsoc_homologar'},
-            {'key': 'vencidas', 'label': 'VENCIDAS', 'icon': 'error', 'color': 'red', 'bg': 'rgba(255,23,68,0.08)', 'border': 'rgba(255,23,68,0.3)', 'path': '/comsoc_homologar'},
+            # ── Grupo 1: Tempo & Calendário ──
             {'key': 'hoje', 'label': 'HOJE', 'icon': 'today', 'color': 'primary', 'bg': 'rgba(197,160,89,0.08)', 'border': 'rgba(197,160,89,0.3)', 'path': None},
             {'key': 'amanha', 'label': 'AMANHÃ', 'icon': 'event', 'color': 'purple', 'bg': 'rgba(168,85,247,0.08)', 'border': 'rgba(168,85,247,0.3)', 'path': None},
+            {'key': 'demandas_mes', 'label': 'DEMANDAS MÊS', 'icon': 'calendar_month', 'color': 'amber', 'bg': 'rgba(245,158,11,0.08)', 'border': 'rgba(245,158,11,0.3)', 'path': None},
+            # ── Grupo 2: Fluxo de Produção ──
+            {'key': 'pendentes', 'label': 'PENDENTES', 'icon': 'hourglass_top', 'color': 'amber', 'bg': 'rgba(245,158,11,0.08)', 'border': 'rgba(245,158,11,0.3)', 'path': '/comsoc_homologar'},
+            {'key': 'execucao', 'label': 'EM EXECUÇÃO', 'icon': 'play_circle', 'color': 'cyan', 'bg': 'rgba(0,229,255,0.08)', 'border': 'rgba(0,229,255,0.3)', 'path': '/comsoc_tarefas'},
+            {'key': 'concluidas', 'label': 'CONCLUÍDAS', 'icon': 'check_circle', 'color': 'green', 'bg': 'rgba(34,197,94,0.08)', 'border': 'rgba(34,197,94,0.3)', 'path': '/comsoc_historico'},
+            # ── Grupo 3: Atenção & Campo ──
+            {'key': 'urgentes', 'label': '⚡ URGENTES', 'icon': 'bolt', 'color': 'orange', 'bg': 'rgba(251,146,60,0.08)', 'border': 'rgba(251,146,60,0.3)', 'path': '/comsoc_homologar'},
+            {'key': 'vencidas', 'label': 'VENCIDAS', 'icon': 'error', 'color': 'red', 'bg': 'rgba(255,23,68,0.08)', 'border': 'rgba(255,23,68,0.3)', 'path': '/comsoc_homologar'},
+            {'key': 'coberturas', 'label': 'COBERTURAS', 'icon': 'linked_camera', 'color': 'cyan', 'bg': 'rgba(0,229,255,0.08)', 'border': 'rgba(0,229,255,0.3)', 'path': '/agenda_geral'},
         ]
+
         for kpi in kpi_items:
             with ui.card().classes(
                 'q-pa-xs no-shadow rounded-xl cursor-pointer hover:scale-[1.02] transition-all kpi-card w-full h-[64px] justify-center'
