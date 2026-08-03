@@ -222,9 +222,9 @@ def render_page():
     kpi_elements = {}
 
     # ══════════════════════════════════════════════════════════
-    #  KPIs — Barra de Métricas Clicáveis (Sincronizadas com o Mês)
+    #  KPIs — Barra de Métricas Clicáveis (Grid Responsiva 3x3 no Mobile / 9x1 no Desktop)
     # ══════════════════════════════════════════════════════════
-    with ui.row().classes('w-full gap-2 q-mb-md q-px-md kpi-row'):
+    with ui.element('div').classes('w-full grid grid-cols-3 md:grid-cols-9 gap-2 q-mb-md q-px-md kpi-grid'):
         kpi_items = [
             {'key': 'pendentes', 'label': 'PENDENTES', 'icon': 'hourglass_top', 'color': 'amber', 'bg': 'rgba(245,158,11,0.08)', 'border': 'rgba(245,158,11,0.3)', 'path': '/comsoc_homologar'},
             {'key': 'execucao', 'label': 'EM EXECUÇÃO', 'icon': 'play_circle', 'color': 'cyan', 'bg': 'rgba(0,229,255,0.08)', 'border': 'rgba(0,229,255,0.3)', 'path': '/comsoc_tarefas'},
@@ -234,12 +234,13 @@ def render_page():
             {'key': 'urgentes', 'label': '⚡ URGENTES', 'icon': 'bolt', 'color': 'orange', 'bg': 'rgba(251,146,60,0.08)', 'border': 'rgba(251,146,60,0.3)', 'path': '/comsoc_homologar'},
             {'key': 'vencidas', 'label': 'VENCIDAS', 'icon': 'error', 'color': 'red', 'bg': 'rgba(255,23,68,0.08)', 'border': 'rgba(255,23,68,0.3)', 'path': '/comsoc_homologar'},
             {'key': 'hoje', 'label': 'HOJE', 'icon': 'today', 'color': 'primary', 'bg': 'rgba(197,160,89,0.08)', 'border': 'rgba(197,160,89,0.3)', 'path': None},
+            {'key': 'amanha', 'label': 'AMANHÃ', 'icon': 'event', 'color': 'purple', 'bg': 'rgba(168,85,247,0.08)', 'border': 'rgba(168,85,247,0.3)', 'path': None},
         ]
         for kpi in kpi_items:
             with ui.card().classes(
-                'q-pa-xs no-shadow rounded-xl cursor-pointer hover:scale-[1.02] transition-all kpi-card'
+                'q-pa-xs no-shadow rounded-xl cursor-pointer hover:scale-[1.02] transition-all kpi-card w-full h-[64px] justify-center'
             ).style(
-                f"background: {kpi['bg']}; border: 1px solid {kpi['border']}; flex: 1; min-width: 90px;"
+                f"background: {kpi['bg']}; border: 1px solid {kpi['border']};"
             ).on('click', lambda p=kpi['path']: ui.navigate.to(p) if p else None):
                 with ui.row().classes('items-center gap-1 justify-center no-wrap q-py-xs'):
                     ui.icon(kpi['icon'], color=kpi['color'], size='1.2rem')
@@ -247,6 +248,7 @@ def render_page():
                         lbl_v = ui.label('0').classes(f"text-base font-black text-{kpi['color']}")
                         kpi_elements[kpi['key']] = lbl_v
                         ui.label(kpi['label']).classes('text-[8px] font-bold text-grey-5 tracking-tighter leading-tight')
+
 
     # ══════════════════════════════════════════════════════════
     #  CALENDÁRIO MENSAL NATIVO
@@ -317,6 +319,8 @@ def render_page():
         k_urg = 0
         k_venc = 0
         k_hoje = 0
+        k_amanha = 0
+        amanha = hoje + timedelta(days=1)
 
         for d in todas_demandas:
             st = str(d.get('status', '')).strip().lower()
@@ -352,6 +356,8 @@ def render_page():
 
                 if dt_e == hoje:
                     k_hoje += 1
+                if dt_e == amanha:
+                    k_amanha += 1
             except Exception:
                 pass
 
@@ -363,6 +369,8 @@ def render_page():
         if kpi_elements.get('urgentes'): kpi_elements['urgentes'].text = str(k_urg)
         if kpi_elements.get('vencidas'): kpi_elements['vencidas'].text = str(k_venc)
         if kpi_elements.get('hoje'): kpi_elements['hoje'].text = str(k_hoje)
+        if kpi_elements.get('amanha'): kpi_elements['amanha'].text = str(k_amanha)
+
 
         # Dias do mês (calendar.monthcalendar já respeita firstweekday=MONDAY)
         cal_weeks = calendar.monthcalendar(y, m)
