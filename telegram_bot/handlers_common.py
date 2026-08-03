@@ -1,9 +1,13 @@
 import json
-from telebot import types
 from datetime import datetime, timedelta
+from telebot import types
 from .client import chat_states
 from .utils import check_authorized_user, clear_state, USER_PERMISSIONS_CACHE
-from .keyboards import get_main_menu_keyboard, get_cancel_keyboard, get_unauthorized_keyboard
+from .keyboards import *
+from database import get_bot_db_connection as get_db_connection
+
+
+
 
 
 async def finalizar_solicitacao_acesso(bot, message, chat_id, state):

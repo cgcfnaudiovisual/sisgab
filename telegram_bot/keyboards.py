@@ -6,6 +6,13 @@ def get_unauthorized_keyboard():
     markup.row(types.KeyboardButton("🔗 Vincular Meu Nome"), types.KeyboardButton("📝 Solicitar Acesso"))
     return markup
 
+def get_om_keyboard():
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    markup.row(types.KeyboardButton("⚓ CGCFN (Gabinete / ComSOC)"), types.KeyboardButton("🏢 Outra OM / Organização Militar"))
+    markup.row(types.KeyboardButton("❌ Cancelar"))
+    return markup
+
+
 def get_main_menu_keyboard(is_operator=False):
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     if is_operator:
