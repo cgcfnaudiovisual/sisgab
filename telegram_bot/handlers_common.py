@@ -656,6 +656,37 @@ def register_common_handlers(bot):
                 except Exception as e_j:
                     await bot.reply_to(message, f"❌ Erro ao consultar placas JADE: {e_j}")
 
+            elif text in ("🔌 Cautelas Ativas", "/cautelas", "/cautela"):
+                from database import get_bot_db_connection as get_db_connection
+                db = get_db_connection()
+                if not db:
+                    await bot.reply_to(message, "⚠️ Banco de dados indisponível.")
+                    return
+                try:
+                    res_caut = db.table('cautela_equipamentos').select('*').eq('status', 'retirado').order('created_at', desc=True).execute()
+                    cautelas = res_caut.data if res_caut and res_caut.data else []
+                    
+                    if not cautelas:
+                        msg_c = (
+                            "🔌 **CAUTELAS DE EQUIPAMENTOS ATIVAS**\n"
+                            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            "🟢 **Nenhum equipamento encontra-se cautelado no momento.** Todos os itens estão disponíveis no acervo."
+                        )
+                    else:
+                        msg_c = (
+                            f"🔌 **EQUIPAMENTOS EM CAUTELAS ATIVAS ({len(cautelas)})**\n"
+                            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        )
+                        for c in cautelas:
+                            eq = c.get('equipamento') or c.get('equipamento_nome') or 'Equipamento'
+                            militar = c.get('retirado_por') or c.get('militar_nome') or 'N/I'
+                            dt = c.get('data_retirada') or (c.get('created_at', '')[:10] if c.get('created_at') else 'N/I')
+                            msg_c += f"📦 **{eq}**\n   👤 Cautelado por: *{militar}*\n   📅 Data de Retirada: _{dt}_\n\n"
+                    
+                    await bot.reply_to(message, msg_c, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
+                except Exception as e_caut:
+                    await bot.reply_to(message, f"❌ Erro ao consultar cautelas: {e_caut}", reply_markup=get_main_menu_keyboard(is_operator))
+
             elif text in ("⚡ Missão Rápida", "/missaorapida", "/missao_rapida"):
                 chat_states[chat_id] = {
                     'action': 'missao_rapida',
