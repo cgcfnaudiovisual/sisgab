@@ -357,17 +357,20 @@ def render_page():
 
                             ui.button('💾 Download do Backup (JSON)', icon='download', on_click=baixar_backup_json).props('unelevated color=cyan text-color=black bold dense').classes('text-xs')
 
-                    # Card Atalho Permissões
-                    with theme.card_base().classes('w-full q-pa-md'):
-                        with ui.column().classes('w-full gap-4'):
-                            with ui.row().classes('items-center gap-2'):
-                                ui.icon('admin_panel_settings', size='2rem').style(f'color: {THEME["accent"]}')
-                                ui.label('Usuários & Permissões').classes('text-lg font-bold').style(f'color: {THEME["text_main"]}')
-                            ui.separator().style('background-color: rgba(0, 229, 255, 0.15);')
+                    # Card Atalho Permissões (Apenas para Administrador)
+                    user_data_cfg = app.storage.user.get('user_data', {})
+                    if str(user_data_cfg.get('role', '')).strip().lower() == 'admin':
+                        with theme.card_base().classes('w-full q-pa-md'):
+                            with ui.column().classes('w-full gap-4'):
+                                with ui.row().classes('items-center gap-2'):
+                                    ui.icon('admin_panel_settings', size='2rem').style(f'color: {THEME["accent"]}')
+                                    ui.label('Usuários & Permissões').classes('text-lg font-bold').style(f'color: {THEME["text_main"]}')
+                                ui.separator().style('background-color: rgba(0, 229, 255, 0.15);')
 
-                            ui.label('O gerenciamento de usuários, aprovação de novos cadastros e níveis de acesso foi unificado na central dedicada:').classes('text-xs text-grey-4')
+                                ui.label('O gerenciamento de usuários, aprovação de novos cadastros e níveis de acesso foi unificado na central dedicada:').classes('text-xs text-grey-4')
 
-                            ui.button('🛡️ Abrir Gerenciador de Usuários', icon='launch', on_click=lambda: ui.navigate.to('/admin_panel')).props('unelevated color=primary text-color=black bold dense').classes('text-xs')
+                                ui.button('🛡️ Abrir Gerenciador de Usuários', icon='launch', on_click=lambda: ui.navigate.to('/admin_panel')).props('unelevated color=primary text-color=black bold dense').classes('text-xs')
+
 
         # ── BOTÃO GLOBAL DE SALVAMENTO DE CONFIGURAÇÕES ──
         async def salvar_configs():

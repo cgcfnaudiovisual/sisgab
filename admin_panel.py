@@ -73,11 +73,24 @@ ROLE_DESCRIPTIONS = {
 }
 
 def render_page():
-    # Container principal com refresh/carregamento dinâmico
+    user_data = app.storage.user.get('user_data', {})
+    user_role = str(user_data.get('role', '')).strip().lower()
+
     container = ui.column().classes('w-full q-pa-lg gap-6')
+
+    if user_role != 'admin':
+        with container:
+            with theme.card_base().classes('w-full q-pa-lg items-center justify-center text-center gap-4'):
+                ui.icon('gpp_bad', size='4rem').classes('text-red-5')
+                ui.label('Acesso Restrito ao Administrador').classes('text-xl font-bold text-red-4')
+                ui.label('O gerenciamento de usuários, permissões e aprovação de novos cadastros é exclusivo para Administradores.').classes('text-sm text-grey-4')
+                ui.button('⬅️ Voltar ao Início', on_click=lambda: ui.navigate.to('/')).props('unelevated color=primary text-color=black bold').classes('q-mt-sm')
+        return
+
     selected_user_ids = set()
 
     def reload_admin_data():
+
         container.clear()
         
         # Carregar solicitações pendentes e usuários

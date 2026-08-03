@@ -253,7 +253,7 @@ sisgab_menu_categories = [
         'category': '⚙️ SISTEMA & ADMINISTRAÇÃO',
         'items': [
             {'name': 'Configurações', 'icon': 'settings', 'path': '/config', 'roles': ['admin', 'oficial_gab'], 'subtitle': 'Parâmetros do sistema'},
-            {'name': 'Usuários e Permissões', 'icon': 'admin_panel_settings', 'path': '/admin_panel', 'roles': ['admin', 'supervisor', 'oficial_gab', 'praca_gab', 'comsoc'], 'subtitle': 'Controle de acesso e aprovação'},
+            {'name': 'Usuários e Permissões', 'icon': 'admin_panel_settings', 'path': '/admin_panel', 'roles': ['admin'], 'subtitle': 'Controle de acesso e aprovação'},
             {'name': 'Ajuda / Sobre', 'icon': 'help_outline', 'path': '/ajuda_sobre', 'subtitle': 'Manuais e suporte'},
         ]
     }
@@ -1249,8 +1249,15 @@ def sync_menu_permissions_db():
         if new_permissions:
             db.table('permissions').insert(new_permissions).execute()
             print(f"[DB] Sincronizados {len(new_permissions)} novos menus com a tabela Permissions.")
+        
+        # Garante estritamente que 'Usuários e Permissões' (menu_admin_panel) seja restrito apenas a 'admin'
+        try:
+            db.table('permissions').update({'allowed_roles': 'admin'}).eq('feature_key', 'menu_admin_panel').execute()
+        except Exception:
+            pass
     except Exception as e:
         print(f"[ERRO sync_menu_permissions_db] {e}")
+
 
 # Inicializa o Bot do Telegram concorrente ao servidor
 from alerts_manager import AlertsManager
