@@ -10,54 +10,44 @@ import ai_helper
 THEME = theme.colors
 
 # Questionário padrão do Checklist para enviar aos solicitantes
-CHECKLIST_TEMPLATE = """📋 QUESTIONÁRIO DE SOLICITAÇÃO DE PAUTA E COBERTURA - COMSOC/CGCFN
-Por favor, responda as perguntas abaixo com o máximo de detalhes possível para o agendamento da equipe de Audiovisual:
+CHECKLIST_TEMPLATE = """📋 QUESTIONÁRIO DE SOLICITAÇÃO DE PAUTA E DEMANDA — COMSOC/CGCFN
+Por favor, responda o formulário abaixo com os detalhes da solicitação:
 
-1. Dados do Solicitante
-1. Posto/Graduação e Nome Completo do Solicitante?
+1. DADOS DO SOLICITANTE
+• Posto/Graduação e Nome Completo:
+• OM Solicitante: ( ) CGCFN  ( ) Outra OM: ________
+• Telefone / Ramal de contato:
 
-2. Organização Militar (OM) solicitante?
-( ) CGCFN
-( ) Outra OM. (Se outra, digite qual: _______________)
+2. DETALHES DA DEMANDA
+• Título do Evento ou Pauta:
+• Categoria da Demanda:
+  ( ) 📸 Cobertura Audiovisual (Foto/Vídeo/Drone/Reels)
+  ( ) 🎨 Design / Arte Visual (Cartazes/Artes/Banners)
+  ( ) 📕 Impressos & Encadernação (Diplomas/Álbuns/Placas)
+  ( ) 🎁 Brindes & Lembranças (Moedas/Pins/Kits RP)
+  ( ) ✍️ Redação & Discursos (Notas/Discursos/Clipping)
+  ( ) 📦 Suporte Logístico / Cerimonial (Assentos Jade/Receptivo)
+  ( ) ⚡ Outra Tarefa Especial
 
-3. Ramal ou Telefone de contato?
+• Data de Início e Data de Término (DD/MM/AAAA):
+• Horário de Início (HH:MM) e Término previsto:
+• Local do Evento / Destino:
+• Uniforme / Traje do evento:
+• Autoridades Presentes (se houver):
 
-2. Detalhes do Evento
-4. Título do Evento ou Pauta?
+3. ESPECIFICAÇÃO DO SERVIÇO / PRODUTO
+• Se Cobertura Audiovisual:
+  ( ) Fotografia  ( ) Vídeo/Filmagem  ( ) Imagens Aéreas/Drone  ( ) Reels/Mídias Sociais
+  Formato desejado: ( ) Melhores Momentos (Reels/Resumo)  ( ) Registro Íntegra  ( ) Material Bruto
+• Se Arte / Impresso / Brinde / Redação:
+  Descreva as especificações (ex: dimensões, quantidade, papel, discursante, tipo de arte):
 
-5. Data de Início e Data de Término (DD/MM/AAAA)?
+• Há transporte e viabilidade logística assegurados para a equipe/equipamentos? (Sim/Não):
 
-6. Horário de Início (HH:MM) e Horário de Término previsto?
-
-7. Local exato do Evento?
-
-8. Uniforme do evento?
-
-9. Quais autoridades estarão presentes? (Opcional)
-
-10. O roteiro, VOGAL ou documento de produção da cobertura está disponível?
-(Nota: Favor encaminhar o arquivo de roteiro para o e-mail: cgcfnaudiovisual@gmail.com)
-
-3. Escopo do Audiovisual e Logística
-11. Tipo de cobertura requerida?
-( ) Fotografia
-( ) Vídeo
-( ) Ambos (Fotografia e Vídeo)
-
-12. Formato de entrega do vídeo desejado?
-( ) Cobertura Íntegra (registro completo do evento)
-( ) Melhores Momentos (vídeo curto resumo / Reels / Shorts)
-( ) Apenas Material Bruto
-
-13. Há transporte assegurado para a equipe de cobertura e seus equipamentos?
-
-14. O local do evento possui estrutura ou viabilidade de espaço adequado para a equipe descarregar (fazer o backup) do material captado?
-
-⚠️ INFORMAÇÃO IMPORTANTE:
-Após o envio das respostas, esta solicitação será encaminhada para a avaliação do Oficial responsável pela ComSoc para verificação de viabilidade técnica, prioridade institucional e escala da equipe.
-
-Por favor, aguarde o retorno com a confirmação da pauta.
+⚠️ As solicitações passam por homologação e análise de viabilidade técnica/escala da COMSOC.
+(Se possuir VOGAL, Roteiro ou arquivos de apoio, encaminhe para: cgcfnaudiovisual@gmail.com)
 """
+
 
 def render_page(autofill: str = None):
     ui.label('📋 FLUXO BILATERAL DE DEMANDAS').classes('text-2xl font-bold text-white cyber-title gt-xs q-mb-md q-ml-md')
@@ -184,8 +174,32 @@ def render_page(autofill: str = None):
             ui.notify(f'Erro ao preencher dados da IA: {e}', color='red')
 
     def copiar_checklist_whatsapp():
-        ui.run_javascript(f"navigator.clipboard.writeText({repr(CHECKLIST_TEMPLATE)})")
-        ui.notify("📋 Questionário copiado! Envie ao solicitante.", color="success")
+        js_code = f"""
+        (function() {{
+            const text = {json.dumps(CHECKLIST_TEMPLATE)};
+            function fallbackCopy(str) {{
+                const el = document.createElement('textarea');
+                el.value = str;
+                el.setAttribute('readonly', '');
+                el.style.position = 'absolute';
+                el.style.left = '-9999px';
+                document.body.appendChild(el);
+                el.select();
+                try {{
+                    document.execCommand('copy');
+                }} catch (err) {{}}
+                document.body.removeChild(el);
+            }}
+            if (navigator.clipboard && window.isSecureContext) {{
+                navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+            }} else {{
+                fallbackCopy(text);
+            }}
+        }})();
+        """
+        ui.run_javascript(js_code)
+        ui.notify("📋 Questionário copiado com sucesso! Pode colar no WhatsApp.", color="positive", icon="content_copy")
+
 
     def gerar_link_google_calendar(d):
         """Gera URL para adicionar o evento ao Google Calendar."""
