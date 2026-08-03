@@ -93,13 +93,29 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                     in_contato = ui.input('Telefone / Contato', value=str(demanda.get('contato','') or '')).props('dark outlined dense').classes('w-1/2')
                     in_local = ui.input('Local do Evento', value=str(demanda.get('local_evento','') or '')).props('dark outlined dense').classes('w-1/2')
 
+                # Formata a hora de entrada estritamente em HH:MM (ex: 09:00) sem segundos extras
+                raw_hora = str(demanda.get('hora_evento', '09:00') or '09:00').strip()
+                if len(raw_hora) >= 5 and ':' in raw_hora:
+                    parts = raw_hora.split(':')
+                    formatted_hora = f"{parts[0].zfill(2)}:{parts[1].zfill(2)}"
+                else:
+                    formatted_hora = "09:00"
+
                 with ui.row().classes('w-full gap-2 no-wrap'):
                     in_data_inicio = ui.input('Data Início', value=str(demanda.get('data_evento','') or '')).props('type=date dark outlined dense').classes('w-1/3')
                     in_data_fim = ui.input('Data Término (Opcional)', value=str(demanda.get('data_fim', demanda.get('data_evento','')) or '')).props('type=date dark outlined dense').classes('w-1/3')
-                    in_hora = ui.input('Hora', value=str(demanda.get('hora_evento','09:00') or '09:00')).props('type=time dark outlined dense').classes('w-1/3')
+                    in_hora = ui.input('Hora', value=formatted_hora).props('type=time step=60 dark outlined dense').classes('w-1/3')
 
-                in_autoridades = ui.input('Autoridades Presentes', value=str(demanda.get('autoridades','') or '')).props('dark outlined dense w-full')
+                container_autoridades = ui.column().classes('w-full gap-0')
+                with container_autoridades:
+                    in_autoridades = ui.input('Autoridades Presentes', value=str(demanda.get('autoridades','') or '')).props('dark outlined dense w-full')
                 
+                # Dinamiza visibilidade do campo autoridades (foco em eventos/audiovisual/suporte)
+                container_autoridades.bind_visibility_from(
+                    in_categoria, 'value', 
+                    backward=lambda cat: cat in ('audiovisual', 'suporte_evento', 'outra_tarefa')
+                )
+
                 st_val = str(demanda.get('status', 'pendente') or 'pendente').lower()
                 if st_val not in ('pendente', 'aprovada', 'aprovado', 'ajustes', 'concluida', 'rejeitado', 'rejeitada'):
                     st_val = 'pendente'
@@ -113,6 +129,25 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                     value=st_val,
                     label='Status da Pauta'
                 ).props('dark outlined dense w-full option-dark')
+
+                # Reatividade dinâmica das labels e especificações conforme a Categoria da Demanda
+                def atualizar_especificacoes_categoria(cat):
+                    if cat == 'design_arte':
+                        in_produto.props('label="Especificação da Peça / Dimensões (ex: 1080x1920, A4)"')
+                    elif cat == 'impressos_albuns':
+                        in_produto.props('label="Tiragem, Tipo de Papel / Encadernação"')
+                    elif cat == 'brindes_lembrancas':
+                        in_produto.props('label="Tipo e Quantidade de Brindes / Lembranças"')
+                    elif cat == 'redacao_textos':
+                        in_produto.props('label="Tipo de Texto / Discurso / Publicação"')
+                    elif cat == 'suporte_evento':
+                        in_produto.props('label="Especificação do Receptivo / Assentos Jade"')
+                    else:
+                        in_produto.props('label="Especificação do Produto / Peça"')
+                    in_produto.update()
+
+                in_categoria.on_value_change(lambda e: atualizar_especificacoes_categoria(e.value))
+                atualizar_especificacoes_categoria(in_categoria.value)
 
                  # Carrega opções do efetivo para designação de militares
                 efetivo_options = {}
@@ -183,13 +218,22 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                         clearable=True
                     ).props('dark outlined dense option-dark new-value-mode=add').classes('w-1/2')
 
-                ui.label('📸 Tipos de Serviço Requeridos').classes('text-xs font-bold text-cyan q-mt-xs')
-                
-                chk_foto = ui.checkbox('Fotografia', value='foto' in cob_list)
-                chk_video = ui.checkbox('Vídeo / Filmagem', value='video' in cob_list)
-                chk_grafico = ui.checkbox('🎨 Serviço Gráfico / Design', value='grafico' in cob_list)
-                chk_drone = ui.checkbox('🚁 Imagens Aéreas / Drone', value='drone' in cob_list)
-                chk_redes = ui.checkbox('📱 Mídias Sociais / Reels', value='redes' in cob_list)
+                # Container Dinâmico para Tipos de Serviço Requeridos (exibido para Coberturas Audiovisuais)
+                container_servicos = ui.column().classes('w-full gap-1 q-mt-xs')
+                with container_servicos:
+                    ui.label('📸 Tipos de Serviço Requeridos').classes('text-xs font-bold text-cyan')
+                    chk_foto = ui.checkbox('Fotografia', value='foto' in cob_list)
+                    chk_video = ui.checkbox('Vídeo / Filmagem', value='video' in cob_list)
+                    chk_grafico = ui.checkbox('🎨 Serviço Gráfico / Design', value='grafico' in cob_list)
+                    chk_drone = ui.checkbox('🚁 Imagens Aéreas / Drone', value='drone' in cob_list)
+                    chk_redes = ui.checkbox('📱 Mídias Sociais / Reels', value='redes' in cob_list)
+
+                # Liga a visibilidade da caixa de serviços requeridos à categoria selecionada
+                container_servicos.bind_visibility_from(
+                    in_categoria, 'value',
+                    backward=lambda cat: cat in ('audiovisual', 'outra_tarefa')
+                )
+
 
                 def excluir_pauta():
                     with ui.dialog() as confirm_dlg, ui.card().classes('q-pa-md bg-slate-900 border border-red-500 rounded-xl').style('max-width: 440px;'):
