@@ -418,13 +418,11 @@ def register_common_handlers(bot):
                     await bot.reply_to(message, "⚠️ Banco de dados indisponível.")
                     return
                 try:
-                    res_dem = db.table('demandas_comunicacao').select('*').in_('status', ['aprovada', 'aprovado', 'pendente', 'em_ajuste', 'ajustes']).order('data_evento', desc=False).limit(15).execute()
+                    res_dem = db.table('demandas_comunicacao').select('*').in_('status', ['aprovada', 'aprovado', 'pendente', 'em_ajuste', 'ajustes']).order('data_evento', desc=False).order('hora_evento', desc=False).limit(15).execute()
                     demandas = res_dem.data if res_dem.data else []
                     if not demandas:
                         await bot.reply_to(message, "🟢 Nenhuma demanda ativa pendente de gestão no momento.", reply_markup=get_main_menu_keyboard(is_operator))
                         return
-                    
-                    from .keyboards import get_demandas_list_reply_keyboard
                     
                     status_emoji = {
                         'pendente': '🟡 PENDENTE',
@@ -434,48 +432,112 @@ def register_common_handlers(bot):
                         'ajustes': '🟠 EM AJUSTE'
                     }
                     
+                    demandas_map = {}
                     list_msg = f"📋 **GERENCIAMENTO DE PAUTAS ATIVAS ({len(demandas)})**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     for d in demandas:
                         d_id = d.get('id')
                         tit = d.get('titulo_evento', 'Sem Título')
-                        dt = d.get('data_evento', 'N/I')
-                        hr = d.get('hora_evento', '09:00')
+                        dt_raw = d.get('data_evento', 'N/I')
+                        dt_formatted = dt_raw
+                        dt_short = ""
+                        try:
+                            parts = str(dt_raw).split('T')[0].split(' ')[0].split('-')
+                            if len(parts) == 3:
+                                dt_formatted = f"{parts[2]}/{parts[1]}/{parts[0]}"
+                                dt_short = f"{parts[2]}/{parts[1]}"
+                        except Exception:
+                            pass
+
+                        hr_raw = str(d.get('hora_evento', '09:00'))[:5]
                         raw_st = str(d.get('status', 'pendente')).lower()
                         st_display = status_emoji.get(raw_st, f'⚪ {raw_st.upper()}')
                         loc = d.get('local_evento', 'N/I')
-                        
-                        resp_txt = _format_militar_responsavel(d, db)
-                        list_msg += f"📌 **#{d_id} — {tit}**\n   📅 {dt} às {hr} | 📍 {loc}\n   ⚡ {st_display} | 👨‍✈️ Equipe: {resp_txt}\n\n"
+                        resp_txt = escape_markdown(str(_format_militar_responsavel(d, db)))
+                        tit_esc = escape_markdown(str(tit))
+                        loc_esc = escape_markdown(str(loc))
+
+                        dt_hdr = f"({dt_short}) " if dt_short else ""
+                        list_msg += f"📌 **{dt_hdr}{tit_esc}**\n   📅 {dt_formatted} às {hr_raw} | 📍 {loc_esc}\n   ⚡ {st_display} | 👨‍✈️ Equipe: {resp_txt}\n\n"
+
+                        btn_label = f"⚙️ {dt_hdr}{(tit or 'Pauta')[:20]}".strip()
+                        demandas_map[btn_label] = d_id
+
+                    chat_states[chat_id] = {
+                        'action': 'gerenciar_demandas',
+                        'user': profile,
+                        'demandas_map': demandas_map
+                    }
 
                     list_msg += "👇 **Selecione a pauta no teclado de resposta rápida abaixo para gerenciar:**"
                     try:
                         await bot.send_message(chat_id, list_msg, reply_markup=get_demandas_list_reply_keyboard(demandas), parse_mode='Markdown')
                     except Exception:
-                        clean_list = list_msg.replace('**', '').replace('__', '')
+                        clean_list = list_msg.replace('**', '').replace('__', '').replace('*', '').replace('_', '')
                         await bot.send_message(chat_id, clean_list, reply_markup=get_demandas_list_reply_keyboard(demandas))
                 except Exception as e_dem:
                     await bot.reply_to(message, f"❌ Erro ao listar demandas: {e_dem}")
 
-            elif text.startswith("⚙️ #"):
+            elif (text.startswith("⚙️ ") and text != "⚙️ Configurações") or text.startswith("⚙️ #"):
                 try:
-                    dem_id = text.split('#')[1].split(' ')[0].split('—')[0].strip()
-                    from database import get_bot_db_connection as get_db_connection
-                    db = get_db_connection()
-                    res_d = db.table('demandas_comunicacao').select('*').eq('id', dem_id).execute()
-                    if res_d and res_d.data:
-                        d = res_d.data[0]
-                        tit = d.get('titulo_evento', 'Sem Título')
-                        raw_st = str(d.get('status', 'pendente')).lower()
-                        from .keyboards import get_demanda_actions_reply_keyboard
-                        txt = (
-                            f"⚙️ **PAUTA SELECIONADA: #{dem_id} — {tit}**\n"
-                            f"Status atual: **{raw_st.upper()}**\n\n"
-                            f"Escolha a ação desejada no teclado de resposta rápida no rodapé:"
-                        )
+                    dem_id = None
+                    if chat_id in chat_states and chat_states[chat_id].get('demandas_map'):
+                        dem_id = chat_states[chat_id]['demandas_map'].get(text)
+                    
+                    if not dem_id:
+                        db = get_db_connection()
+                        if db:
+                            res_dem = db.table('demandas_comunicacao').select('*').in_('status', ['aprovada', 'aprovado', 'pendente', 'em_ajuste', 'ajustes']).order('data_evento', desc=False).order('hora_evento', desc=False).limit(20).execute()
+                            for d in (res_dem.data or []):
+                                dt_raw = d.get('data_evento', '')
+                                dt_short = ""
+                                try:
+                                    parts = str(dt_raw).split('T')[0].split(' ')[0].split('-')
+                                    if len(parts) == 3:
+                                        dt_short = f"{parts[2]}/{parts[1]}"
+                                except Exception:
+                                    pass
+                                dt_prefix = f"({dt_short}) " if dt_short else ""
+                                tit_short = (d.get('titulo_evento') or 'Pauta')[:20]
+                                label = f"⚙️ {dt_prefix}{tit_short}".strip()
+                                old_label_prefix = f"⚙️ #{d.get('id')}"
+                                if label == text or text.startswith(old_label_prefix):
+                                    dem_id = d.get('id')
+                                    break
+                    
+                    if not dem_id and "#" in text:
                         try:
-                            await bot.send_message(chat_id, txt, reply_markup=get_demanda_actions_reply_keyboard(dem_id, status=raw_st), parse_mode='Markdown')
+                            dem_id = text.split('#')[1].split(' ')[0].split('—')[0].strip()
                         except Exception:
-                            await bot.send_message(chat_id, txt.replace('*', ''), reply_markup=get_demanda_actions_reply_keyboard(dem_id, status=raw_st))
+                            pass
+
+                    if dem_id:
+                        db = get_db_connection()
+                        res_d = db.table('demandas_comunicacao').select('*').eq('id', dem_id).execute()
+                        if res_d and res_d.data:
+                            d = res_d.data[0]
+                            tit = d.get('titulo_evento', 'Sem Título')
+                            raw_st = str(d.get('status', 'pendente')).lower()
+                            dt_raw = d.get('data_evento', '')
+                            dt_short = ""
+                            try:
+                                parts = str(dt_raw).split('T')[0].split(' ')[0].split('-')
+                                if len(parts) == 3:
+                                    dt_short = f"{parts[2]}/{parts[1]}"
+                            except Exception:
+                                pass
+                            dt_hdr = f"({dt_short}) " if dt_short else ""
+                            
+                            txt = (
+                                f"⚙️ **PAUTA SELECIONADA: {dt_hdr}{escape_markdown(tit)}**\n"
+                                f"Status atual: **{raw_st.upper()}**\n\n"
+                                f"Escolha a ação desejada no teclado de resposta rápida no rodapé:"
+                            )
+                            try:
+                                await bot.send_message(chat_id, txt, reply_markup=get_demanda_actions_reply_keyboard(dem_id, status=raw_st), parse_mode='Markdown')
+                            except Exception:
+                                await bot.send_message(chat_id, txt.replace('*', '').replace('_', ''), reply_markup=get_demanda_actions_reply_keyboard(dem_id, status=raw_st))
+                    else:
+                        await bot.reply_to(message, "⚠️ Não foi possível identificar a pauta selecionada.")
                 except Exception as e:
                     await bot.reply_to(message, f"❌ Erro ao selecionar demanda: {e}")
 

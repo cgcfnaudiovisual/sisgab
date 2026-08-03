@@ -239,13 +239,23 @@ def get_observations_keyboard():
     return markup
 
 def get_demandas_list_reply_keyboard(demandas_list):
-    """Gera teclado de resposta rápida no rodapé para selecionar qual demanda gerenciar."""
+    """Gera teclado de resposta rápida no rodapé para selecionar qual demanda gerenciar por data e título."""
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     row = []
     for d in demandas_list:
-        d_id = d.get('id')
-        tit = (d.get('titulo_evento') or 'Pauta')[:22]
-        row.append(types.KeyboardButton(f"⚙️ #{d_id} — {tit}"))
+        dt_raw = d.get('data_evento', '')
+        dt_short = ""
+        try:
+            parts = str(dt_raw).split('T')[0].split(' ')[0].split('-')
+            if len(parts) == 3:
+                dt_short = f"{parts[2]}/{parts[1]}"
+        except Exception:
+            pass
+        
+        dt_prefix = f"({dt_short}) " if dt_short else ""
+        tit = (d.get('titulo_evento') or 'Pauta')[:20]
+        btn_label = f"⚙️ {dt_prefix}{tit}".strip()
+        row.append(types.KeyboardButton(btn_label))
         if len(row) == 2:
             markup.row(*row)
             row = []
@@ -253,6 +263,7 @@ def get_demandas_list_reply_keyboard(demandas_list):
         markup.row(*row)
     markup.row(types.KeyboardButton("⬅️ Voltar ao Menu Principal"))
     return markup
+
 
 
 def get_demanda_actions_reply_keyboard(demanda_id, status='aprovada'):
