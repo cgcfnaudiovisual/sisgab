@@ -2,7 +2,8 @@ import json
 from datetime import datetime, timedelta
 from telebot import types
 from .client import chat_states
-from .utils import check_authorized_user, clear_state, USER_PERMISSIONS_CACHE
+from .utils import check_authorized_user, clear_state, USER_PERMISSIONS_CACHE, escape_markdown
+
 from .keyboards import *
 from database import get_bot_db_connection as get_db_connection
 
@@ -215,12 +216,16 @@ def _get_weekly_events_text():
                 st_val = str(ev.get('status', '')).strip().lower()
                 st_icon = '🟢' if st_val in ('aprovado', 'aprovada', 'aprovadas') else '🟡' if st_val in ('pendente', 'pendentes') else '🛠️'
                 hora = str(ev.get('hora_evento', '09:00'))[:5]
-                resp_txt = _format_militar_responsavel(ev, db)
+                resp_txt = escape_markdown(str(_format_militar_responsavel(ev, db)))
+                titulo = escape_markdown(str(ev.get('titulo_evento', 'Sem Título')))
+                local = escape_markdown(str(ev.get('local_evento', 'N/I')))
+                solicitante = escape_markdown(str(ev.get('solicitante_nome', 'N/I')))
+                setor = escape_markdown(str(ev.get('setor', 'CGCFN')))
                 
                 msg += (
-                    f"   {st_icon} **{hora}** — **{ev.get('titulo_evento', 'Sem Título')}**\n"
-                    f"      📍 Local: {ev.get('local_evento', 'N/I')}\n"
-                    f"      👤 Solicitante: {ev.get('solicitante_nome', 'N/I')} ({ev.get('setor', 'CGCFN')})\n"
+                    f"   {st_icon} **{hora}** — **{titulo}**\n"
+                    f"      📍 Local: {local}\n"
+                    f"      👤 Solicitante: {solicitante} ({setor})\n"
                     f"      👨‍✈️ Equipe: {resp_txt}\n\n"
                 )
         
@@ -723,9 +728,18 @@ def register_common_handlers(bot):
                     parse_mode='Markdown'
                 )
 
-            elif text == "📋 Pautas COMSOC" or text == "📅 Agenda Semanal":
-                txt = _get_weekly_events_text()
-                await bot.reply_to(message, txt, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
+            elif text in ("📋 Pautas COMSOC", "📅 Agenda Semanal", "/agenda", "/semana"):
+                try:
+                    txt = _get_weekly_events_text()
+                    try:
+                        await bot.reply_to(message, txt, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
+                    except Exception as md_err:
+                        print(f"[AGENDA MD ERR] {md_err}")
+                        clean_txt = txt.replace('**', '').replace('__', '').replace('*', '').replace('_', '')
+                        await bot.reply_to(message, clean_txt, reply_markup=get_main_menu_keyboard(is_operator))
+                except Exception as err_ag:
+                    await bot.reply_to(message, f"❌ Erro ao carregar agenda: {err_ag}", reply_markup=get_main_menu_keyboard(is_operator))
+
 
             elif text == "📋 Dar Presença" or text == "🟢 Dar Presença" or text == "/presenca":
                 chat_states[chat_id] = {
