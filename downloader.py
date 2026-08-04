@@ -17,57 +17,76 @@ class YouTubeDownloader:
         ydl_opts = {
             'extract_flat': 'in_playlist',
             'skip_download': True,
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                info = ydl.extract_info(url, download=False)
-                if not info:
-                    raise Exception("Não foi possível obter informações do vídeo.")
-                
-                if 'entries' in info:
-                    entries = []
-                    for entry in info['entries']:
-                        if entry:
-                            entries.append({
-                                'title': entry.get('title') or 'Vídeo sem título',
-                                'url': entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={entry.get('id')}",
-                                'id': entry.get('id'),
-                                'duration': entry.get('duration'),
-                                'thumbnail': entry.get('thumbnail') or (f"https://img.youtube.com/vi/{entry.get('id')}/0.jpg" if entry.get('id') else None)
-                            })
-                    return {
-                        'title': info.get('title') or 'Playlist sem título',
-                        'is_playlist': True,
-                        'entries': entries,
-                        'url': url
-                    }
-                
-                formats = []
-                for f in info.get('formats', []):
-                    if f.get('vcodec') != 'none' and f.get('acodec') != 'none':
-                        resolution = f.get('height')
-                        if resolution and resolution not in [fmt['height'] for fmt in formats]:
-                            formats.append({
-                                'format_id': f.get('format_id'),
-                                'ext': f.get('ext'),
-                                'height': resolution,
-                                'resolution': f"{resolution}p ({f.get('ext')})",
-                                'filesize': f.get('filesize')
-                            })
-                
-                formats = sorted(formats, key=lambda x: x['height'], reverse=True)
-                
-                return {
-                    'title': info.get('title'),
-                    'thumbnail': info.get('thumbnail'),
-                    'duration': info.get('duration'),
-                    'author': info.get('uploader'),
-                    'formats': formats,
-                    'is_playlist': False,
-                    'url': url
+            'quiet': True,
+            'no_warnings': True,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['ios', 'android', 'web_creator', 'mweb']
                 }
-            except Exception as e:
-                raise Exception(f"Erro: {str(e)}")
+            },
+            'nocheckcertificate': True
+        }
+        
+        info = None
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+        except Exception as first_err:
+            print(f"[YT-DLP WARN] Tentativa primária de extração falhou: {first_err}. Tentando fallback de cliente...")
+            # Fallback com clientes alternativos se o primário falhar
+            fallback_opts = dict(ydl_opts)
+            fallback_opts['extractor_args'] = {'youtube': {'player_client': ['android', 'mweb', 'web']}}
+            with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+
+        if not info:
+            raise Exception("Não foi possível obter informações do vídeo.")
+
+        if 'entries' in info:
+            entries = []
+            for entry in info['entries']:
+                if entry:
+                    entries.append({
+                        'title': entry.get('title') or 'Vídeo sem título',
+                        'url': entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={entry.get('id')}",
+                        'id': entry.get('id'),
+                        'duration': entry.get('duration'),
+                        'thumbnail': entry.get('thumbnail') or (f"https://img.youtube.com/vi/{entry.get('id')}/0.jpg" if entry.get('id') else None)
+                    })
+            return {
+                'title': info.get('title') or 'Playlist sem título',
+                'is_playlist': True,
+                'entries': entries,
+                'url': url
+            }
+        
+        formats = []
+        for f in info.get('formats', []):
+            if f.get('vcodec') != 'none' and f.get('acodec') != 'none':
+                resolution = f.get('height')
+                if resolution and resolution not in [fmt['height'] for fmt in formats]:
+                    formats.append({
+                        'format_id': f.get('format_id'),
+                        'ext': f.get('ext'),
+                        'height': resolution,
+                        'resolution': f"{resolution}p ({f.get('ext')})",
+                        'filesize': f.get('filesize')
+                    })
+        
+        formats = sorted(formats, key=lambda x: x['height'], reverse=True)
+        
+        return {
+            'title': info.get('title'),
+            'thumbnail': info.get('thumbnail'),
+            'duration': info.get('duration'),
+            'author': info.get('uploader'),
+            'formats': formats,
+            'is_playlist': False,
+            'url': url
+        }
+
+
 
     def download(self, url, download_id, output_path, is_audio=False, quality='best', custom_filename=None, progress_callback=None):
         def run():
@@ -124,7 +143,15 @@ class YouTubeDownloader:
             
             ydl_opts = {
                 'progress_hooks': [ydl_hook],
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['ios', 'android', 'web_creator', 'mweb']
+                    }
+                },
+                'nocheckcertificate': True
             }
+
             
             if custom_filename:
                 safe_name = re.sub(r'[\\/*?:"<>|]', "", custom_filename)
