@@ -193,16 +193,29 @@ def render_page():
                                             if email_dest and token:
                                                 link_rsvp = f"{base_url}/rsvp/{token}"
                                                 body_html = f"""
-                                                <div style="font-family: Arial, sans-serif; background-color: #0b0f19; color: #ffffff; padding: 24px; border-radius: 12px;">
-                                                    <h2 style="color: #00e5ff;">Convite Oficial de Cerimonial</h2>
-                                                    <p>Prezado(a) <strong>{posto_aut} {nome_aut}</strong>,</p>
-                                                    <p>Vossa Excelência foi convidado(a) para participar da solenidade oficial do Corpo de Fuzileiros Navais.</p>
-                                                    <p style="margin: 20px 0;">
-                                                        <a href="{link_rsvp}" style="background-color: #00e5ff; color: #000000; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 6px; display: inline-block;">
-                                                            CONFIRMAR PRESENÇA OU JUSTIFICAR
-                                                        </a>
+                                                <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #0b0f19; color: #ffffff; padding: 32px 24px; border-radius: 16px; max-width: 600px; margin: 0 auto; border: 1px solid rgba(0, 229, 255, 0.3); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+                                                    <div style="text-align: center; border-bottom: 1px solid rgba(0, 229, 255, 0.2); padding-bottom: 16px; margin-bottom: 24px;">
+                                                        <p style="color: #00e5ff; font-size: 12px; font-weight: bold; letter-spacing: 3px; margin: 0;">MARINHA DO BRASIL</p>
+                                                        <p style="color: #fbbf24; font-size: 14px; font-weight: bold; letter-spacing: 2px; margin: 4px 0 0 0;">GABINETE DO COMANDANTE GERAL DO CFN</p>
+                                                    </div>
+                                                    
+                                                    <h2 style="color: #ffffff; font-size: 20px; font-weight: 800; margin-top: 0; text-align: center;">Convite Oficial de Cerimonial</h2>
+                                                    
+                                                    <p style="font-size: 15px; color: #e2e8f0; line-height: 1.6;">Prezado(a) <strong style="color: #00e5ff;">{posto_aut} {nome_aut}</strong>,</p>
+                                                    
+                                                    <p style="font-size: 14px; color: #cbd5e1; line-height: 1.6;">
+                                                        O Comandante-Geral do Corpo de Fuzileiros Navais tem a honra de convidar Vossa Excelência para participar da Solenidade Oficial do Corpo de Fuzileiros Navais.
                                                     </p>
-                                                    <p style="font-size: 12px; color: #94a3b8;">Link seguro: {link_rsvp}</p>
+                                                    
+                                                    <div style="text-align: center; margin: 32px 0;">
+                                                        <a href="{link_rsvp}" style="background: linear-gradient(135deg, #00e5ff 0%, #00b0ff 100%); color: #000000; padding: 14px 28px; text-decoration: none; font-weight: 900; font-size: 14px; border-radius: 8px; display: inline-block; box-shadow: 0 4px 15px rgba(0, 229, 255, 0.4); text-transform: uppercase; letter-spacing: 1px;">
+                                                            ✅ CONFIRMAR PRESENÇA OU JUSTIFICAR
+                                                        </a>
+                                                    </div>
+                                                    
+                                                    <div style="background-color: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; text-align: center; margin-top: 24px;">
+                                                        <p style="font-size: 11px; color: #94a3b8; margin: 0; word-break: break-all;">Link de confirmação individual seguro:<br><a href="{link_rsvp}" style="color: #38bdf8;">{link_rsvp}</a></p>
+                                                    </div>
                                                 </div>
                                                 """
                                                 try:

@@ -896,27 +896,27 @@ def rsvp_public_page(token: str, request: Request):
     posto_aut = convite.get('posto_graduacao', '')
     status_atual = convite.get('status', 'enviado')
 
-    with ui.column().classes('w-full min-h-screen items-center justify-center p-2 sm:p-6').style('background: radial-gradient(circle, #0f172a 0%, #0b0f19 100%); font-family: "Outfit", sans-serif;'):
-        with ui.card().classes('w-full max-w-xl q-pa-md bg-slate-900 border border-cyan-500/40 rounded-2xl shadow-2xl').style('box-shadow: 0 0 50px rgba(0, 229, 255, 0.15);'):
+    with ui.column().classes('w-full min-h-screen items-center justify-center p-3 sm:p-6').style('background: radial-gradient(circle, #0f172a 0%, #0b0f19 100%); font-family: "Outfit", sans-serif;'):
+        with ui.card().classes('w-full max-w-xl q-pa-lg bg-slate-900 border border-cyan-500/40 rounded-2xl shadow-2xl').style('box-shadow: 0 0 50px rgba(0, 229, 255, 0.15);'):
             with ui.column().classes('w-full items-center text-center gap-3'):
                 ui.icon('mark_email_read', size='3.5rem', color='cyan-4')
-                ui.label('MARINHA DO BRASIL').classes('text-[11px] font-black text-cyan tracking-[3px]')
-                ui.label('GABINETE DO COMANDANTE GERAL').classes('text-xs font-bold text-amber-4 tracking-[2px]')
+                ui.label('MARINHA DO BRASIL').classes('text-xs font-black text-cyan tracking-[3px]')
+                ui.label('GABINETE DO COMANDANTE GERAL DO CFN').classes('text-xs font-bold text-amber-4 tracking-[2px]')
                 ui.separator().style('background-color: rgba(0, 229, 255, 0.2);')
 
-                ui.label(f"Prezado(a) {posto_aut} {nome_aut}".strip()).classes('text-lg font-black text-white q-my-xs')
+                ui.label(f"Prezado(a) {posto_aut} {nome_aut}".strip()).classes('text-xl font-black text-white q-my-xs')
 
                 if evento:
-                    ui.label(f"Vossa Excelência está convidado(a) para {evento.get('nome_evento','a Solenidade Institucional')}.").classes('text-sm text-grey-3 leading-relaxed')
+                    ui.label(f"Vossa Excelência está cordialmente convidado(a) para {evento.get('nome_evento','a Solenidade Institucional')}.").classes('text-sm text-grey-3 leading-relaxed')
                     
-                    with ui.card().classes('w-full q-pa-sm bg-black/40 border border-cyan-500/20 rounded-lg text-left q-my-xs'):
-                        ui.label(f"📅 Data: {evento.get('data_evento','')} às {evento.get('hora_evento','')}").classes('text-xs font-bold text-cyan')
-                        ui.label(f"📍 Local: {evento.get('local_evento','')}").classes('text-xs text-white')
-                        ui.label(f"👔 Traje / Fardamento: {evento.get('traje_exigido','')}").classes('text-xs text-amber-4 font-bold')
+                    with ui.card().classes('w-full q-pa-md bg-black/50 border border-cyan-500/30 rounded-xl text-left q-my-xs gap-1.5'):
+                        ui.label(f"📅 Data e Horário: {evento.get('data_evento','')} às {evento.get('hora_evento','')}").classes('text-xs font-bold text-cyan')
+                        ui.label(f"📍 Local: {evento.get('local_evento','')}").classes('text-xs font-semibold text-white')
+                        ui.label(f"👔 Traje / Fardamento Exigido: {evento.get('traje_exigido','')}").classes('text-xs text-amber-4 font-black')
 
                 ui.separator().style('background-color: rgba(0, 229, 255, 0.2);')
 
-                status_label = ui.label('').classes('text-xs font-bold text-center w-full')
+                status_label = ui.label('').classes('text-sm font-black text-center w-full')
                 if status_atual == 'confirmado':
                     status_label.text = '✅ PRESENÇA CONFIRMADA ANTERIORMENTE'
                     status_label.classes('text-emerald-4')
@@ -924,34 +924,47 @@ def rsvp_public_page(token: str, request: Request):
                     status_label.text = '❌ AUSÊNCIA JUSTIFICADA ANTERIORMENTE'
                     status_label.classes('text-red-4')
 
-                acomp_chk = ui.checkbox('Irei acompanhado(a)', value=bool(convite.get('acompanhantes_count'))).props('dark dense').classes('text-xs text-white')
-                acomp_input = ui.input('Nome e Posto do Acompanhante', value=convite.get('acompanhantes_nomes','') or '').props('dark outlined dense w-full')
-                acomp_input.bind_visibility_from(acomp_chk, 'value')
+                # CAMPO DE ACOMPANHANTES COM QUANTITATIVO
+                with ui.column().classes('w-full gap-2 text-left bg-black/30 q-pa-sm rounded-xl border border-white/10'):
+                    acomp_chk = ui.checkbox('Irei acompanhado(a)', value=bool(convite.get('acompanhantes_count'))).props('dark dense').classes('text-xs text-amber-4 font-bold')
+                    
+                    with ui.row().classes('w-full gap-2 items-center').bind_visibility_from(acomp_chk, 'value'):
+                        acomp_num = ui.number('Quant. Acompanhantes', value=int(convite.get('acompanhantes_count', 1) or 1), min=1, max=10).props('dark outlined dense').classes('w-1/3 text-xs')
+                        acomp_input = ui.input('Nome(s) Completo(s) / Posto do(s) Acompanhante(s)', value=convite.get('acompanhantes_nomes','') or '', placeholder='Ex: Sra. Maria Silva (Esposa)').props('dark outlined dense').classes('w-2/3 text-xs')
 
-                obs_input = ui.input('Observações / Restrições (Opcional)', value=convite.get('observacoes','') or '').props('dark outlined dense w-full')
+                obs_input = ui.input('Observações / Restrições (Opcional)', value=convite.get('observacoes','') or '', placeholder='Ex: Restrição alimentar, necessidade de acessibilidade').props('dark outlined dense w-full').classes('text-xs')
 
                 def responder(status_choice):
                     try:
                         client_ip = request.client.host if request.client else ''
-                        ac_count = 1 if acomp_chk.value else 0
+                        ac_count = int(acomp_num.value or 0) if acomp_chk.value else 0
                         ac_nome = acomp_input.value if acomp_chk.value else ''
                         
                         update_rsvp_response(token, status_choice, ac_count, ac_nome, obs_input.value, client_ip)
                         
                         if status_choice == 'confirmado':
-                            ui.notify('🟢 Presença confirmada com sucesso! Muito obrigado.', color='success', duration=6)
+                            ui.notify('🟢 Presença confirmada com sucesso! O Gabinete agradece.', color='success', duration=6)
                             status_label.text = '✅ PRESENÇA CONFIRMADA COM SUCESSO!'
                             status_label.classes('text-emerald-4')
-                        else:
+                        elif status_choice in ('recusado', 'justificado'):
                             ui.notify('Justificativa de ausência registrada com sucesso.', color='warning', duration=6)
                             status_label.text = '❌ AUSÊNCIA JUSTIFICADA COM SUCESSO'
                             status_label.classes('text-red-4')
+                        else:
+                            ui.notify('⏳ Resposta pendente. Seu link continuará ativo!', color='info', duration=6)
+                            status_label.text = '⏳ DECISÃO PENDENTE — O LINK PERMANECE ATIVO'
+                            status_label.classes('text-amber-4')
                     except Exception as err:
                         ui.notify(f"Erro ao registrar resposta: {err}", color='red')
 
-                with ui.row().classes('w-full justify-center gap-3 q-mt-sm wrap'):
-                    ui.button('✅ CONFIRMAR PRESENÇA', on_click=lambda: responder('confirmado')).props('unelevated color=emerald text-color=black bold icon=check_circle').classes('cyber-glow text-xs')
-                    ui.button('❌ JUSTIFICAR AUSÊNCIA', on_click=lambda: responder('justificado')).props('outline color=red text-color=white bold icon=cancel').classes('text-xs')
+                # BOTOES ELEGANTES COM ALTA VISIBILIDADE
+                with ui.column().classes('w-full gap-2 q-mt-sm items-center'):
+                    ui.button('✅ CONFIRMAR PRESENÇA', on_click=lambda: responder('confirmado')).props('unelevated color=emerald text-color=black bold icon=check_circle').style('font-size: 0.95rem; font-weight: 900; padding: 12px 32px; width: 100%; box-shadow: 0 0 25px rgba(0, 230, 118, 0.4);')
+                    
+                    with ui.row().classes('w-full justify-between gap-2'):
+                        ui.button('❌ JUSTIFICAR AUSÊNCIA', on_click=lambda: responder('justificado')).props('unelevated color=red-9 text-color=white bold icon=cancel').classes('w-1/2 text-xs').style('padding: 10px;')
+                        ui.button('⏳ RESPONDER MAIS TARDE', on_click=lambda: responder('pendente')).props('outline color=amber-9 text-color=amber-4 bold icon=schedule').classes('w-1/2 text-xs').style('padding: 10px;')
+
 
 
 @ui.page('/sisgab_tv')
