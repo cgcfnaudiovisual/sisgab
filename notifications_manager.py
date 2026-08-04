@@ -268,3 +268,107 @@ def notify_jade_production(event_name: str, count_new: int, count_total_pending:
     )
     notify_telegram(msg, "system")
 
+
+def send_recovery_pin_email(to_email: str, pin: str) -> bool:
+    """Envia um e-mail formatado em HTML com o código PIN de 6 dígitos para o e-mail do destinatário via SMTP."""
+    if not to_email or '@' not in to_email or not pin:
+        return False
+        
+    import smtplib
+    import ssl
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    
+    try:
+        from database import get_service_db_connection, get_db_connection
+        db = get_service_db_connection() or get_db_connection()
+        
+        smtp_host = 'smtp.gmail.com'
+        smtp_port = 587
+        smtp_user = os.getenv("SMTP_USER", "")
+        smtp_pass = os.getenv("SMTP_PASS", "") or os.getenv("SMTP_PASSWORD", "")
+        from_name = "SisGAB - Recuperação de Acesso"
+        
+        if db:
+            try:
+                res_host = db.table('config').select('valor').eq('chave', 'smtp_host').execute()
+                if res_host.data and res_host.data[0].get('valor'):
+                    smtp_host = str(res_host.data[0]['valor'])
+                    
+                res_port = db.table('config').select('valor').eq('chave', 'smtp_port').execute()
+                if res_port.data and res_port.data[0].get('valor'):
+                    smtp_port = int(res_port.data[0]['valor'])
+                    
+                res_u = db.table('config').select('valor').eq('chave', 'smtp_user').execute()
+                if res_u.data and res_u.data[0].get('valor'):
+                    smtp_user = str(res_u.data[0]['valor'])
+                    
+                res_p = db.table('config').select('valor').eq('chave', 'smtp_password').execute()
+                if res_p.data and res_p.data[0].get('valor'):
+                    smtp_pass = str(res_p.data[0]['valor'])
+            except Exception as cfg_err:
+                print(f"[SMTP CONFIG READ ERR] {cfg_err}")
+                
+        if not smtp_user or not smtp_pass:
+            print("[SMTP] Credenciais SMTP não configuradas. O PIN foi gerado e notificado pelo Telegram.")
+            return False
+            
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = f"🔑 Código PIN de Recuperação: {pin} - SisGAB"
+        msg['From'] = f"{from_name} <{smtp_user}>"
+        msg['To'] = to_email
+        
+        text_body = f"Seu código PIN de recuperação do SisGAB é: {pin}\n\nVálido por 15 minutos."
+        
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+        </head>
+        <body style="margin:0; padding:0; background-color:#0f0f17; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color:#ffffff;">
+          <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#0f0f17; padding:40px 10px;">
+            <tr>
+              <td align="center">
+                <table width="100%" max-width="500" border="0" cellspacing="0" cellpadding="0" style="max-width:500px; background-color:#1a1a2e; border:1px solid #c5a059; border-radius:12px; padding:30px; text-align:center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+                  <tr>
+                    <td>
+                      <h1 style="color:#c5a059; font-size:24px; margin:0 0 10px 0; letter-spacing:2px;">SisGAB</h1>
+                      <p style="color:#a0a0b0; font-size:14px; margin:0 0 25px 0;">Recuperação de Senha de Acesso</p>
+                      <hr style="border:0; border-top:1px solid rgba(197,160,89,0.2); margin:0 0 25px 0;">
+                      
+                      <p style="color:#e0e0e0; font-size:14px; margin-bottom:15px;">Utilize o código PIN de 6 dígitos abaixo para redefinir a sua senha no site:</p>
+                      
+                      <div style="background-color:#0f0f17; border:2px dashed #c5a059; border-radius:8px; padding:15px; margin:20px 0; display:inline-block; width:80%;">
+                        <span style="font-size:36px; font-weight:bold; color:#ffb300; letter-spacing:8px; font-family:monospace;">{pin}</span>
+                      </div>
+                      
+                      <p style="color:#8888a0; font-size:12px; margin-top:20px;">⏱️ Este código é válido por <strong>15 minutos</strong>.</p>
+                      <p style="color:#666680; font-size:11px; margin-top:25px; border-top:1px solid #2a2a3e; padding-top:15px;">Se você não solicitou este código, desconsidere este e-mail.</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+        """
+        
+        msg.attach(MIMEText(text_body, 'plain', 'utf-8'))
+        msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+        
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
+            server.ehlo()
+            server.starttls(context=ctx)
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(smtp_user, to_email, msg.as_string())
+            
+        print(f"[SMTP SUCCESS] Código PIN {pin} enviado para {to_email}!")
+        return True
+    except Exception as e:
+        print(f"[SMTP ERROR] Falha ao enviar e-mail com PIN: {e}")
+        return False
+
+

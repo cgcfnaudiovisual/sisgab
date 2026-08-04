@@ -1038,8 +1038,14 @@ def login_page(request: Request):
                         return
                         
                     sent_email = False
+                    try:
+                        from notifications_manager import send_recovery_pin_email
+                        sent_email = send_recovery_pin_email(rec_email.value, pin_generated)
+                    except Exception as email_err:
+                        print(f"[RECOVERY DIRECT MAIL ERR] {email_err}")
+                        
                     db_conn = get_db_connection()
-                    if db_conn:
+                    if db_conn and not sent_email:
                         try:
                             proto = request.headers.get('x-forwarded-proto', request.url.scheme)
                             host = request.headers.get('x-forwarded-host') or request.headers.get('host') or request.url.netloc
@@ -1048,6 +1054,7 @@ def login_page(request: Request):
                             sent_email = True
                         except Exception as mail_err:
                             print(f"[RECOVERY MAIL ERR] {mail_err}")
+
                             
                     # Notificação segura no Telegram:
                     try:
