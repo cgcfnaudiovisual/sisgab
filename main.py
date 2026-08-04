@@ -438,10 +438,11 @@ def build_layout_base():
             # LADO ESQUERDO: Botão de Menu + Logo + Título SISGAB
             with ui.row().classes('items-center gap-2 no-wrap shrink-0'):
                 ui.button(on_click=lambda: left_drawer.toggle(), icon='menu').props('flat color=white dense')
-                ui.image(LOGO_BASE64).style('width: 28px; height: 28px; filter: drop-shadow(0 0 4px rgba(197, 160, 89, 0.85));').classes('shrink-0')
+                ui.image(LOGO_BASE64).style('width: 32px; height: 32px; filter: drop-shadow(0 0 6px rgba(197, 160, 89, 0.9));').classes('shrink-0')
                 with ui.column().classes('gap-0 items-start'):
                     ui.label('SISGAB').style(f'color: {theme.colors["primary"]}; font-weight: bold; line-height: 1.1; letter-spacing: 1px; font-size: 0.95rem;').classes('cyber-title text-left no-wrap')
                     ui.label('Comunicação Social • Gabinete').style('font-size: 0.65rem; color: #64748b;').classes('text-left no-wrap gt-xs')
+
 
 
             # LADO DIREITO: Rádio Marinha + Avatar do Usuário
@@ -1067,11 +1068,12 @@ def login_page(request: Request):
         ):
             with ui.column().classes('w-full items-center gap-2'):
                 
-                # ── TOPO: LOGO COMPACTO E TÍTULO ──
-                ui.image(LOGO_BASE64).style('width: 110px; height: 110px; filter: drop-shadow(0 0 12px rgba(197, 160, 89, 0.85));')
+                # ── TOPO: LOGO IMPONENTE E TÍTULO ──
+                ui.image(LOGO_BASE64).style('width: 165px; height: 165px; filter: drop-shadow(0 0 16px rgba(197, 160, 89, 0.9));').classes('q-my-xs')
                 ui.label('SisGAB').classes('cyber-title').style(
                     f'color: {theme.colors["primary"]}; font-size: 2.2rem; font-weight: 700; letter-spacing: 2px; line-height: 1;'
                 )
+
                 
                 ui.separator().style('background-color: rgba(197, 160, 89, 0.15); height: 1px;').classes('w-3/4 q-my-xs')
                 
