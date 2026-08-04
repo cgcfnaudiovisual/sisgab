@@ -284,22 +284,31 @@ PUBLIC_ROUTES = {'/login'}
 
 sisgab_menu_categories = [
     {
-        'category': '🏛️ GABINETE & OPERAÇÕES',
+        'category': '🏛️ GABINETE & OPERAÇÕES DIÁRIAS',
         'items': [
             {'name': 'Painel de Comando', 'icon': 'dashboard', 'path': '/', 'subtitle': 'Agenda, KPIs e panorama geral'},
-            {'name': 'Nova Solicitação / Demanda', 'icon': 'add_box', 'path': '/comsoc_demandas', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar'], 'subtitle': 'Formulário de pautas e tarefas'},
-            {'name': 'Tarefas COMSOC', 'icon': 'task_alt', 'path': '/comsoc_tarefas', 'roles': ['admin', 'supervisor', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'operador'], 'subtitle': 'Kanban de tarefas criativas e internas'},
-            {'name': 'Gestão de Demandas', 'icon': 'gavel', 'path': '/comsoc_homologar', 'roles': ['admin', 'supervisor', 'oficial_gab', 'comsoc', 'praca_gab'], 'subtitle': 'Parecer e aprovação de pautas'},
             {'name': 'Chamada & Presença Diária', 'icon': 'assignment_ind', 'path': '/presenca', 'subtitle': 'Chamada matutina e Pronto do CheGab'},
+            {'name': 'Nova Solicitação / Demanda', 'icon': 'add_box', 'path': '/comsoc_demandas', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar'], 'subtitle': 'Formulário de pautas e tarefas'},
+            {'name': 'Gestão de Demandas', 'icon': 'gavel', 'path': '/comsoc_homologar', 'roles': ['admin', 'supervisor', 'oficial_gab', 'comsoc', 'praca_gab'], 'subtitle': 'Parecer e aprovação de pautas'},
+        ]
+    },
+    {
+        'category': '🎯 TAREFAS & CERIMONIAL',
+        'items': [
+            {'name': 'Tarefas COMSOC', 'icon': 'task_alt', 'path': '/comsoc_tarefas', 'roles': ['admin', 'supervisor', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'operador'], 'subtitle': 'Kanban de tarefas criativas e internas'},
             {'name': 'Placas de Assento (Jade)', 'icon': 'event_seat', 'path': '/comsoc_assentos', 'subtitle': 'Mapeamento e alocação de auditório'},
             {'name': 'Gestão de Convites & RSVP', 'icon': 'mark_email_read', 'path': '/comsoc_rsvp', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Convites formais e confirmação de presença'},
+        ]
+    },
+    {
+        'category': '📦 LOGÍSTICA & MATERIAL',
+        'items': [
             {'name': 'Estoque de Brindes', 'icon': 'card_giftcard', 'path': '/comsoc_brindes', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Controle de brindes do RP'},
-
             {'name': 'Cautela de Material', 'icon': 'battery_charging_full', 'path': '/comsoc_cautela', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Empréstimos de equipamentos'},
         ]
     },
     {
-        'category': '📣 COMUNICAÇÃO & INTELIGÊNCIA',
+        'category': '📣 COMUNICAÇÃO & MÍDIA',
         'items': [
             {'name': 'Central de IA', 'icon': 'psychology', 'path': '/assistente_ia', 'subtitle': 'Chat, redator e triagem de demandas'},
             {'name': 'Smart Editor IA', 'icon': 'movie_filter', 'path': '/smart_editor', 'roles': ['admin', 'oficial_gab', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'supervisor'], 'subtitle': 'Cortes com IA, SFX e FCPXML'},
@@ -554,8 +563,8 @@ def build_layout_base():
                             # Ordena dinamicamente os itens permitidos da categoria com base no número de cliques (decrescente)
                             allowed_items.sort(key=lambda x: click_counts.get(x['path'], 0), reverse=True)
                                 
-                            with ui.row().classes('w-full items-center gap-2 q-mt-sm q-mb-xs px-1 no-wrap'):
-                                ui.label(cat['category']).classes('text-[9.2px] text-primary/80 font-bold tracking-widest cyber-title no-wrap').style('white-space: nowrap;')
+                            with ui.row().classes('w-full items-center gap-2 q-mt-md q-mb-xs px-1 no-wrap').style('border-bottom: 1px solid rgba(197, 160, 89, 0.12); padding-bottom: 4px;'):
+                                ui.label(cat['category']).classes('text-xs font-bold tracking-wider cyber-title no-wrap').style('font-size: 11.5px; color: #c5a059; white-space: nowrap;')
                             
                             for item in allowed_items:
                                 is_active = app.storage.user.get('current_path') == item['path']
