@@ -109,18 +109,23 @@ def render_page():
                 users_res = db_conn.table('users').select('*').execute()
                 users_data = users_res.data if users_res.data else []
                 
-                # Conjuntos para desduplicação robusta
+                def clean_militar_name(name_str):
+                    if not name_str:
+                        return ""
+                    words = str(name_str).strip().upper().split()
+                    stopwords = {
+                        'SO', 'SG', 'CB', 'SD', 'MN', 'CMG', 'CF', 'CC', 'CT', '1TEN', '2TEN', 'GM',
+                        'SARGENTO', 'CABO', 'SOLDADO', 'SUBOFICIAL', 'ADMIN', 'ADMINISTRADOR', 'OPERADOR',
+                        'NONE', '1º', '2º', '3º', 'OFICIAL'
+                    }
+                    cleaned = [w for w in words if w not in stopwords and not w.isdigit()]
+                    return " ".join(cleaned) if cleaned else " ".join(words)
+
+                # Conjuntos para deduplicação robusta
                 existing_emails = {str(u.get('email', '')).strip().lower() for u in users_data if u.get('email')}
                 existing_tgs = {str(u.get('telegram_id', '')).strip() for u in users_data if u.get('telegram_id')}
-
-                existing_names = set()
-                for u in users_data:
-                    n = str(u.get('nome', '')).strip().upper()
-                    if n:
-                        existing_names.add(n)
-                        for part in n.split():
-                            if len(part) > 2 and part not in ('SO', 'SG', 'CB', 'SD', 'MN', 'CMG', 'CF', 'CC', 'CT', '1TEN', '2TEN', 'GM', 'NONE'):
-                                existing_names.add(part)
+                existing_clean_names = {clean_militar_name(u.get('nome')) for u in users_data if u.get('nome')}
+                existing_usernames = {str(u.get('username', '')).strip().lower() for u in users_data if u.get('username')}
 
                 efetivo_res = db_conn.table('efetivo').select('*').execute()
                 posto_map = {}
@@ -129,6 +134,7 @@ def render_page():
                         pg = ef.get('posto_grad') or ''
                         email = str(ef.get('email') or '').strip().lower()
                         guerra = str(ef.get('nome_guerra') or '').strip().upper()
+                        guerra_clean = clean_militar_name(guerra)
                         tg_id = str(ef.get('telegram_id') or '').strip()
 
                         if email: posto_map[email] = pg
@@ -140,22 +146,25 @@ def render_page():
                             is_dup = True
                         elif tg_id and tg_id in existing_tgs:
                             is_dup = True
-                        elif guerra and guerra in existing_names:
+                        elif guerra_clean and guerra_clean in existing_clean_names:
+                            is_dup = True
+                        elif guerra and guerra.lower() in existing_usernames:
                             is_dup = True
 
                         if not is_dup:
                             users_data.append({
                                 'id': str(ef.get('id')),
                                 'username': guerra.lower() if guerra else 'militar',
-                                'nome': f"{pg} {guerra}".strip(),
-                                'role': ef.get('role', 'operador'),
+                                'nome': f"{pg} {guerra}".strip() if pg else guerra,
+                                'role': ef.get('role', 'praca_gab'),
                                 'telegram_id': ef.get('telegram_id', ''),
                                 'url_foto': ef.get('url_foto', ''),
                                 'posto_grad': pg
                             })
                             if email: existing_emails.add(email)
                             if tg_id: existing_tgs.add(tg_id)
-                            if guerra: existing_names.add(guerra)
+                            if guerra_clean: existing_clean_names.add(guerra_clean)
+
 
                 # Preenche posto_grad para os usuários da tabela users
                 for u in users_data:
@@ -726,34 +735,48 @@ def render_page():
                             return
                         
                         try:
-                            # Se for um ID numérico (inteiro vindo de efetivo), deleta direto de efetivo pelo ID
-                            is_numeric_id = str(user['id']).isdigit()
+                            u_id = str(user['id'])
+                            raw_nome = str(user.get('nome') or user.get('username') or '').upper()
                             
-                            if is_numeric_id:
-                                conn.table('efetivo').delete().eq('id', int(user['id'])).execute()
-                            else:
-                                # Se for UUID, deleta do Auth e das tabelas públicas
-                                from database import get_bot_db_connection
-                                admin_conn = None
+                            clean_words = [w for w in raw_nome.split() if w not in ('SO', 'SG', 'CB', 'SD', 'MN', 'CMG', 'CF', 'CC', 'CT', '1TEN', '2TEN', 'GM', 'ADMIN', 'ADMINISTRADOR', 'OPERADOR', 'NONE', '1º', '2º', '3º', 'OFICIAL') and not w.isdigit()]
+                            clean_name = " ".join(clean_words) if clean_words else raw_nome
+
+                            # 1. Tenta deletar via Supabase Auth Admin (se for UUID)
+                            if not u_id.isdigit():
                                 try:
+                                    from database import get_bot_db_connection
                                     admin_conn = get_bot_db_connection()
-                                except Exception:
-                                    pass
-                                
-                                if admin_conn and hasattr(admin_conn, 'auth') and hasattr(admin_conn.auth, 'admin'):
-                                    try:
-                                        admin_conn.auth.admin.delete_user(user['id'])
-                                    except Exception as auth_err:
-                                        print(f"[AUTH DELETE ERROR] {auth_err}")
-                                
-                                conn.table('users').delete().eq('id', user['id']).execute()
-                                try:
-                                    if user.get('nome'):
-                                        conn.table('efetivo').delete().eq('nome_guerra', user['nome'].upper()).execute()
-                                except Exception:
-                                    pass
-                            
-                            ui.notify(f"Operador {user['nome']} removido!", color='success')
+                                    if admin_conn and hasattr(admin_conn, 'auth') and hasattr(admin_conn.auth, 'admin'):
+                                        admin_conn.auth.admin.delete_user(u_id)
+                                except Exception as auth_err:
+                                    print(f"[AUTH DELETE WARN] {auth_err}")
+
+                            # 2. Deleta da tabela users
+                            try:
+                                conn.table('users').delete().or_(f"id.eq.{u_id},username.ilike.{user.get('username')},nome.ilike.%{clean_name}%").execute()
+                            except Exception as u_err:
+                                print(f"[USERS DELETE WARN] {u_err}")
+
+                            # 3. Deleta da tabela efetivo por ID ou por Nome de Guerra
+                            try:
+                                if u_id.isdigit():
+                                    conn.table('efetivo').delete().eq('id', int(u_id)).execute()
+                                if clean_name:
+                                    conn.table('efetivo').delete().ilike('nome_guerra', f"%{clean_name}%").execute()
+                                if user.get('email'):
+                                    conn.table('efetivo').delete().eq('email', user['email']).execute()
+                            except Exception as ef_err:
+                                print(f"[EFETIVO DELETE WARN] {ef_err}")
+
+                            # 4. Deleta da tabela registration_requests
+                            try:
+                                if clean_name:
+                                    conn.table('registration_requests').delete().ilike('nome_guerra', f"%{clean_name}%").execute()
+                            except Exception:
+                                pass
+
+                            ui.notify(f"Operador {user.get('nome', '')} removido definitivamente!", color='success')
+
                             data_service.clear_cache()
                             del_dialog.close()
                             reload_admin_data()
@@ -803,41 +826,48 @@ def render_page():
                             return
                         
                         try:
-                            # Divide em IDs numéricos (tabela efetivo) e UUIDs (users/auth)
-                            numeric_ids = [int(uid) for uid in uids if str(uid).isdigit()]
-                            uuid_ids = [str(uid) for uid in uids if not str(uid).isdigit()]
-                            
-                            # 1. Processa deleção de registros puramente de efetivo (IDs inteiros)
-                            if numeric_ids:
-                                conn.table('efetivo').delete().in_('id', numeric_ids).execute()
-                                
-                            # 2. Processa deleção de registros com UUID (Auth e users)
-                            if uuid_ids:
-                                from database import get_bot_db_connection
-                                admin_conn = None
+                            for u in selected_users_objs:
+                                u_id = str(u['id'])
+                                raw_nome = str(u.get('nome') or u.get('username') or '').upper()
+                                clean_words = [w for w in raw_nome.split() if w not in ('SO', 'SG', 'CB', 'SD', 'MN', 'CMG', 'CF', 'CC', 'CT', '1TEN', '2TEN', 'GM', 'ADMIN', 'ADMINISTRADOR', 'OPERADOR', 'NONE', '1º', '2º', '3º', 'OFICIAL') and not w.isdigit()]
+                                clean_name = " ".join(clean_words) if clean_words else raw_nome
+
+                                # 1. Supabase Auth (se UUID)
+                                if not u_id.isdigit():
+                                    try:
+                                        from database import get_bot_db_connection
+                                        admin_conn = get_bot_db_connection()
+                                        if admin_conn and hasattr(admin_conn, 'auth') and hasattr(admin_conn.auth, 'admin'):
+                                            admin_conn.auth.admin.delete_user(u_id)
+                                    except Exception as auth_err:
+                                        print(f"[AUTH BATCH DELETE WARN] {auth_err}")
+
+                                # 2. Users
                                 try:
-                                    admin_conn = get_bot_db_connection()
+                                    conn.table('users').delete().or_(f"id.eq.{u_id},username.ilike.{u.get('username')},nome.ilike.%{clean_name}%").execute()
                                 except Exception:
                                     pass
-                                
-                                for uid in uuid_ids:
-                                    if admin_conn and hasattr(admin_conn, 'auth') and hasattr(admin_conn.auth, 'admin'):
-                                        try:
-                                            admin_conn.auth.admin.delete_user(uid)
-                                        except Exception as auth_err:
-                                            print(f"[AUTH BATCH DELETE ERROR] {auth_err} for uid {uid}")
-                                
-                                conn.table('users').delete().in_('id', uuid_ids).execute()
-                                
-                                # Remove do efetivo associado usando os nomes de guerra
-                                for u in selected_users_objs:
-                                    if u['id'] in uuid_ids and u.get('nome'):
-                                        try:
-                                            conn.table('efetivo').delete().eq('nome_guerra', u['nome'].upper()).execute()
-                                        except Exception:
-                                            pass
-                            
-                            ui.notify(f"{len(uids)} operadores removidos com sucesso!", color='success')
+
+                                # 3. Efetivo
+                                try:
+                                    if u_id.isdigit():
+                                        conn.table('efetivo').delete().eq('id', int(u_id)).execute()
+                                    if clean_name:
+                                        conn.table('efetivo').delete().ilike('nome_guerra', f"%{clean_name}%").execute()
+                                    if u.get('email'):
+                                        conn.table('efetivo').delete().eq('email', u['email']).execute()
+                                except Exception:
+                                    pass
+
+                                # 4. RegistrationRequests
+                                try:
+                                    if clean_name:
+                                        conn.table('registration_requests').delete().ilike('nome_guerra', f"%{clean_name}%").execute()
+                                except Exception:
+                                    pass
+
+                            ui.notify(f"{len(selected_users_objs)} operadores removidos com sucesso!", color='success')
+
                             uids.clear()
                             data_service.clear_cache()
                             batch_del_dialog.close()
