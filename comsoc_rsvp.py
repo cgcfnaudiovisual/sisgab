@@ -424,7 +424,9 @@ def render_page():
                                                 'status': 'pendente'
                                             }).execute()
                                             vinculadas += 1
-                                    ui.notify(f"⚡ {vinculadas} autoridades vinculadas ao evento!", color='success')
+                                    from database import sync_rsvp_with_jade
+                                    sync_rsvp_with_jade()
+                                    ui.notify(f"⚡ {vinculadas} autoridades vinculadas e sincronizadas com Placas JADE!", color='success')
                                     render_lista_evento()
                                 except Exception as v_err:
                                     ui.notify(f"Erro ao vincular autoridades: {v_err}", color='red')

@@ -1658,56 +1658,67 @@ def get_rsvp_by_token(token: str):
 
 
 def update_rsvp_response(token: str, status: str, acompanhantes_count: int, acompanhantes_nomes: str, observacoes: str, user_ip: str = ''):
-    """Registra a resposta de confirmação/justificativa da autoridade via token."""
+    """Registra a resposta de confirmação/justificativa da autoridade via token e sincroniza com Placas JADE."""
     if not token:
         raise Exception("Dados de confirmação inválidos")
     import datetime
     now_iso = datetime.datetime.utcnow().isoformat()
-    
+
     update_data = {
-        'status': status, # 'confirmado', 'recusado', 'justificado'
+        'status': status,
         'acompanhantes_count': acompanhantes_count,
         'acompanhantes_nomes': acompanhantes_nomes,
         'observacoes': observacoes,
         'respondido_em': now_iso,
         'ip_resposta': user_ip
     }
-    
+
     conn = get_service_db_connection() or get_db_connection()
     updated = False
+    convite_id = None
+    evento_id = None
+
     if conn:
         try:
             conn.table('rsvp_convites').update(update_data).eq('token', token).execute()
             updated = True
+            # Busca o ID do convite para sinc JADE
+            res = conn.table('rsvp_convites').select('id,evento_id,nome_autoridade,posto_graduacao').eq('token', token).execute()
+            if res.data:
+                convite_id = str(res.data[0]['id'])
+                evento_id = str(res.data[0]['evento_id'])
+                nome_aut = f"{res.data[0].get('posto_graduacao','')} {res.data[0].get('nome_autoridade','')}".strip()
         except Exception as err:
             print(f"[RSVP UPDATE RESPONSE FALLBACK] {err}")
-            
+
     if not updated:
         local_db = get_local_db_connection()
         local_db.table('rsvp_convites').update(update_data).eq('token', token).execute()
-    
-    # Sincronização automática com a lista do JADE
-    try:
-        convite = get_rsvp_by_token(token)
-        if convite and convite.get('evento') and convite['evento'].get('jade_evento_id'):
-            jade_id = convite['evento']['jade_evento_id']
-            autoridade_nome = convite.get('nome_autoridade')
-            posto_val = convite.get('posto_graduacao')
-            
-            if status == 'confirmado':
-                conn.table('eventos_convidados').upsert({
-                    'evento_id': jade_id,
-                    'nome': autoridade_nome,
-                    'posto_graduacao': posto_val,
-                    'status': 'confirmado',
-                    'categoria': 'Autoridade Militar'
-                }, on_conflict='evento_id,nome').execute()
-            elif status in ('recusado', 'justificado'):
-                conn.table('eventos_convidados').delete().eq('evento_id', jade_id).ilike('nome', f"%{autoridade_nome}%").execute()
-    except Exception as jade_err:
-        print(f"[RSVP JADE SYNC ERR] {jade_err}")
+
+    # ── Sincronização em Tempo Real com Placas JADE ──────────────────
+    if convite_id and evento_id:
+        try:
+            status_jade = (
+                'confirmado' if status == 'confirmado'
+                else 'recusado' if status in ('recusado', 'justificado')
+                else 'provavel'
+            )
+            jade_update = {
+                'status_confirmacao': status_jade,
+                'max_acompanhantes': acompanhantes_count or 0,
+            }
+            if conn:
+                conn.table('jade_convidados').update(jade_update).eq('id', convite_id).execute()
+            try:
+                local_db = get_local_db_connection()
+                local_db.table('jade_convidados').update(jade_update).eq('id', convite_id).execute()
+            except Exception:
+                pass
+        except Exception as jade_err:
+            print(f"[RSVP→JADE SYNC ERR] {jade_err}")
 
     return True
+
 
 
 def delete_autoridade_base(aut_id: str):
