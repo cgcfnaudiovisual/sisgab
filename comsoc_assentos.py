@@ -3634,13 +3634,26 @@ def render_page():
             (function() {
                 var area = document.querySelector('.print-area');
                 if (!area) { window.print(); return; }
-                var win = window.open('', '_blank', 'width=1080,height=850');
-                if (!win) { window.print(); return; }
-                
+
+                var oldIframe = document.getElementById('jade_print_iframe');
+                if (oldIframe) { oldIframe.remove(); }
+
+                var iframe = document.createElement('iframe');
+                iframe.id = 'jade_print_iframe';
+                iframe.style.position = 'fixed';
+                iframe.style.right = '0';
+                iframe.style.bottom = '0';
+                iframe.style.width = '0';
+                iframe.style.height = '0';
+                iframe.style.border = '0';
+                document.body.appendChild(iframe);
+
+                var doc = iframe.contentWindow.document;
                 var cssStyles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
                                      .map(s => s.outerHTML).join('\\n');
-                                     
-                win.document.write(`
+
+                doc.open();
+                doc.write(`
                     <!DOCTYPE html>
                     <html>
                     <head>
@@ -3668,117 +3681,20 @@ def render_page():
                         <div class="print-area">
                             ${area.innerHTML}
                         </div>
-                        <script>
-                            window.onload = function() {
-                                var imgs = Array.from(document.querySelectorAll('img'));
-                                function triggerPrint() {
-                                    setTimeout(function() {
-                                        window.print();
-                                        setTimeout(function() { window.close(); }, 500);
-                                    }, 800);
-                                }
-                                if (imgs.length === 0) {
-                                    triggerPrint();
-                                    return;
-                                }
-                                var loaded = 0;
-                                function checkAll() {
-                                    loaded++;
-                                    if (loaded >= imgs.length) {
-                                        triggerPrint();
-                                    }
-                                }
-                                imgs.forEach(function(img) {
-                                    if (img.complete && img.naturalWidth !== 0) {
-                                        checkAll();
-                                    } else {
-                                        img.onload = checkAll;
-                                        img.onerror = checkAll;
-                                    }
-                                });
-                            };
-                        <\\/script>
                     </body>
                     </html>
                 `);
-                win.document.close();
+                doc.close();
+
+                setTimeout(function() {
+                    iframe.contentWindow.focus();
+                    iframe.contentWindow.print();
+                }, 600);
             })();
             """
 
-            js_pdf_export_cards = """
-            (function() {
-                var area = document.querySelector('.print-area');
-                if (!area) return;
-                var win = window.open('', '_blank', 'width=1080,height=850');
-                if (!win) return;
-                
-                var cssStyles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
-                                     .map(s => s.outerHTML).join('\\n');
-                                     
-                win.document.write(`
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <title>JADE - Placas de Assento (Documento PDF Oficial)</title>
-                        ${cssStyles}
-                        <style>
-                            @page { size: A4 portrait; margin: 0mm !important; }
-                            * {
-                                -webkit-print-color-adjust: exact !important;
-                                print-color-adjust: exact !important;
-                                color-adjust: exact !important;
-                            }
-                            body { margin: 0 !important; padding: 4mm 6mm !important; background: #ffffff !important; color: #000000 !important; font-family: Arial, sans-serif !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                            .print-hide, .q-header, .q-drawer, .q-footer { display: none !important; }
-                            .print-area { display: block !important; position: static !important; width: 100% !important; visibility: visible !important; }
-                            .prisma-card-a4-slot { height: 66mm !important; max-height: 66mm !important; border: 1.5pt solid #1a1a1a !important; outline: 0.5pt solid #1a1a1a !important; outline-offset: -2.5mm !important; margin-bottom: 4.5mm !important; page-break-inside: avoid !important; background: #ffffff !important; color: #000000 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; position: relative !important; box-sizing: border-box !important; }
-                            .prisma-conteudo-central { display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; text-align: center !important; width: 100% !important; }
-                            .prisma-texto-reservado { font-weight: bold !important; letter-spacing: 2px !important; text-transform: uppercase !important; color: #1f4e79 !important; font-size: 14pt !important; }
-                            .prisma-posto-extenso { font-weight: bold !important; text-transform: uppercase !important; letter-spacing: 1px !important; font-size: 14pt !important; }
-                            .prisma-nome-autoridade { font-weight: 900 !important; text-transform: uppercase !important; font-size: 22pt !important; line-height: 1.1 !important; }
-                            img { max-width: 100% !important; display: inline-block !important; visibility: visible !important; opacity: 1 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                        </style>
-                    </head>
-                    <body>
-                        <div class="print-area">
-                            ${area.innerHTML}
-                        </div>
-                        <script>
-                            window.onload = function() {
-                                document.title = "placas_jade_oficial.pdf";
-                                var imgs = Array.from(document.querySelectorAll('img'));
-                                function triggerPrint() {
-                                    setTimeout(function() {
-                                        window.print();
-                                    }, 800);
-                                }
-                                if (imgs.length === 0) {
-                                    triggerPrint();
-                                    return;
-                                }
-                                var loaded = 0;
-                                function checkAll() {
-                                    loaded++;
-                                    if (loaded >= imgs.length) {
-                                        triggerPrint();
-                                    }
-                                }
-                                imgs.forEach(function(img) {
-                                    if (img.complete && img.naturalWidth !== 0) {
-                                        checkAll();
-                                    } else {
-                                        img.onload = checkAll;
-                                        img.onerror = checkAll;
-                                    }
-                                });
-                            };
-                        <\\/script>
-                    </body>
-                    </html>
-                `);
-                win.document.close();
-            })();
-            """
+            js_pdf_export_cards = js_clean_print_cards
+
 
             def on_trigger_print():
                 save_print_config_to_event(notify_user=False)
