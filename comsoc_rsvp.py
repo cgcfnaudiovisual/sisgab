@@ -500,8 +500,145 @@ def render_page():
                                 except Exception as v_err:
                                     ui.notify(f"Erro ao vincular autoridades: {v_err}", color='red')
 
+                            def gerar_relatorio_pdf():
+                                ev_id = selected_event_id['value']
+                                current_ev = next((ev for ev in ev_list if str(ev['id']) == str(ev_id)), None) if ev_list else None
+                                if not current_ev:
+                                    ui.notify('Selecione um evento válido para gerar o relatório.', color='warning')
+                                    return
+                                try:
+                                    conn = fresh_db()
+                                    res = conn.table('rsvp_convites').select('*').eq('evento_id', ev_id).execute()
+                                    convites_rel = res.data or []
+                                except Exception as r_err:
+                                    ui.notify(f"Erro ao buscar convites: {r_err}", color='red')
+                                    return
+
+                                if not convites_rel:
+                                    ui.notify('Nenhum convidado vinculado a este evento.', color='warning')
+                                    return
+
+                                # Métricas
+                                total_c = len(convites_rel)
+                                conf_c = sum(1 for c in convites_rel if c.get('status') == 'confirmado')
+                                rec_c = sum(1 for c in convites_rel if c.get('status') in ('recusado', 'justificado'))
+                                pend_c = total_c - conf_c - rec_c
+                                total_acomp = sum(int(c.get('acompanhantes_count') or 0) for c in convites_rel if c.get('status') == 'confirmado')
+
+                                # Tabela HTML de Impressão Solene
+                                rows_html = ""
+                                for idx, c in enumerate(convites_rel, 1):
+                                    st = c.get('status', 'pendente')
+                                    st_label = "✅ CONFIRMADO" if st == 'confirmado' else "❌ JUSTIFICADO" if st in ('recusado', 'justificado') else "⏳ PENDENTE"
+                                    st_color = "#00c853" if st == 'confirmado' else "#d50000" if st in ('recusado', 'justificado') else "#d97706"
+                                    acomp_info = f"{c.get('acompanhantes_count', 0)} ({c.get('acompanhantes_nomes','')})" if c.get('acompanhantes_count') else "0"
+                                    obs = c.get('observacoes', '—') or '—'
+
+                                    rows_html += f"""
+                                    <tr style="background: { '#f8fafc' if idx % 2 == 0 else '#ffffff' };">
+                                        <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: center;">{idx}</td>
+                                        <td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold;">{c.get('posto_graduacao','')} {c.get('nome_autoridade','')}</td>
+                                        <td style="padding: 8px; border: 1px solid #cbd5e1; color: {st_color}; font-weight: 900; text-align: center;">{st_label}</td>
+                                        <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: center;">{acomp_info}</td>
+                                        <td style="padding: 8px; border: 1px solid #cbd5e1; font-size: 11px;">{obs}</td>
+                                    </tr>
+                                    """
+
+                                print_html = f"""
+                                <!DOCTYPE html>
+                                <html>
+                                <head>
+                                    <title>Relatório Cerimonial de Presenças - {current_ev.get('nome_evento','')}</title>
+                                    <style>
+                                        @page {{ size: A4 portrait; margin: 12mm; }}
+                                        body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; color: #0f172a; }}
+                                        .header {{ text-align: center; border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 16px; }}
+                                        .header h2 {{ margin: 0; font-size: 16pt; color: #0f172a; text-transform: uppercase; }}
+                                        .header h4 {{ margin: 4px 0 0 0; font-size: 11pt; color: #0284c7; text-transform: uppercase; }}
+                                        .info-card {{ background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 11px; display: flex; justify-content: space-between; }}
+                                        .metrics {{ display: flex; gap: 12px; margin-bottom: 16px; }}
+                                        .metric-box {{ flex: 1; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; text-align: center; }}
+                                        .metric-num {{ font-size: 16pt; font-weight: 900; }}
+                                        table {{ width: 100%; border-collapse: collapse; font-size: 11px; }}
+                                        th {{ background: #0f172a; color: #ffffff; padding: 8px; text-align: left; border: 1px solid #0f172a; text-transform: uppercase; }}
+                                        .footer {{ margin-top: 24px; text-align: right; font-size: 9px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 8px; }}
+                                    </style>
+                                </head>
+                                <body>
+                                    <div class="header">
+                                        <h2>MARINHA DO BRASIL</h2>
+                                        <h4>GABINETE DO COMANDANTE-GERAL DO CORPO DE FUZILEIROS NAVAIS</h4>
+                                        <p style="margin: 6px 0 0 0; font-size: 10pt; font-weight: bold;">RELATÓRIO CERIMONIAL DE PRESENÇAS & PROTOCOLO DE RSVP</p>
+                                    </div>
+
+                                    <div class="info-card">
+                                        <div><strong>Solenidade:</strong> {current_ev.get('nome_evento','')}</div>
+                                        <div><strong>Data/Hora:</strong> {current_ev.get('data_evento','')} às {current_ev.get('hora_evento','')}</div>
+                                        <div><strong>Local:</strong> {current_ev.get('local_evento','')}</div>
+                                    </div>
+
+                                    <div class="metrics">
+                                        <div class="metric-box">
+                                            <div class="metric-num" style="color: #0284c7;">{total_c}</div>
+                                            <div>TOTAL CONVIDADOS</div>
+                                        </div>
+                                        <div class="metric-box">
+                                            <div class="metric-num" style="color: #16a34a;">{conf_c}</div>
+                                            <div>CONFIRMADOS</div>
+                                        </div>
+                                        <div class="metric-box">
+                                            <div class="metric-num" style="color: #0284c7;">{total_acomp}</div>
+                                            <div>ACOMPANHANTES</div>
+                                        </div>
+                                        <div class="metric-box">
+                                            <div class="metric-num" style="color: #dc2626;">{rec_c}</div>
+                                            <div>JUSTIFICADOS</div>
+                                        </div>
+                                        <div class="metric-box">
+                                            <div class="metric-num" style="color: #d97706;">{pend_c}</div>
+                                            <div>PENDENTES</div>
+                                        </div>
+                                    </div>
+
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th style="width: 30px; text-align: center;">#</th>
+                                                <th>Autoridade / Convidado</th>
+                                                <th style="width: 110px; text-align: center;">Status RSVP</th>
+                                                <th style="width: 110px; text-align: center;">Acompanhantes</th>
+                                                <th>Observações / Restrições</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {rows_html}
+                                        </tbody>
+                                    </table>
+
+                                    <div class="footer">
+                                        Documento gerado automaticamente pelo SisGAB em {datetime.datetime.now().strftime('%d/%m/%Y às %H:%M:%S')} · Gabinete do Comandante-Geral do CFN
+                                    </div>
+
+                                    <script>
+                                        window.onload = function() {{
+                                            setTimeout(function() {{ window.print(); }}, 500);
+                                        }};
+                                    </script>
+                                </body>
+                                </html>
+                                """
+                                js_print = f"""
+                                (function() {{
+                                    var win = window.open('', '_blank');
+                                    win.document.write({json.dumps(print_html)});
+                                    win.document.close();
+                                }})();
+                                """
+                                ui.run_javascript(js_print)
+
                             ui.button('⚡ Vincular Todas Autoridades', icon='bolt', on_click=vincular_todas_autoridades).props('unelevated color=cyan text-color=black bold').classes('text-xs')
-                            ui.button('🖨️ Imprimir Lista (PDF)', icon='print', on_click=lambda: ui.run_javascript('window.print()')).props('unelevated color=amber-9 text-color=black bold').classes('text-xs')
+                            ui.button('📄 Relatório de Presenças (PDF)', icon='picture_as_pdf', on_click=gerar_relatorio_pdf).props('unelevated color=amber-9 text-color=black bold').classes('text-xs')
+
 
                     lista_container = ui.column().classes('w-full gap-2')
 
@@ -549,28 +686,48 @@ def render_page():
                                                 # BOTÃO 2: ABRIR LINK RSVP
                                                 ui.button('👁️ Abrir', on_click=lambda l=link_rsvp: ui.navigate.to(l, new_tab=True)).props('flat dense color=cyan').classes('text-xs')
 
-                                                # BOTÃO 3: ENVIAR CONVITE VIA WHATSAPP (COM TEMPLATE PRÉ-MONTADO)
+                                                # BOTÃO 3: ENVIAR CONVITE VIA WHATSAPP (TEMPLATE SOLENE DIRETO)
                                                 def enviar_whatsapp(conv_item=c, url_rsvp=link_rsvp):
                                                     wsp_num = ''
                                                     # Busca whatsapp no acervo master
                                                     auts = get_autoridades_base()
                                                     for a in auts:
                                                         if a.get('nome_completo') == conv_item.get('nome_autoridade'):
-                                                            wsp_num = a.get('whatsapp_celular', '')
+                                                            wsp_num = a.get('whatsapp_celular', '') or a.get('telefone_oficial', '')
                                                             break
-                                                    
-                                                    msg_text = f"Prezado(a) {conv_item.get('posto_graduacao','')} {conv_item.get('nome_autoridade','')},\n\nO Comandante-Geral do Corpo de Fuzileiros Navais tem a honra de convidar Vossa Excelência para a solenidade militar.\n\nFavor confirmar presença no link seguro: {url_rsvp}"
+
+                                                    ev_nome = current_ev.get('nome_evento', 'a Solenidade Cerimonial') if 'current_ev' in locals() and current_ev else 'a Solenidade Cerimonial'
+                                                    ev_data = current_ev.get('data_evento', '') if 'current_ev' in locals() and current_ev else ''
+                                                    ev_hora = current_ev.get('hora_evento', '') if 'current_ev' in locals() and current_ev else ''
+                                                    ev_local = current_ev.get('local_evento', '') if 'current_ev' in locals() and current_ev else ''
+                                                    ev_traje = current_ev.get('traje_exigido', '') if 'current_ev' in locals() and current_ev else ''
+
+                                                    msg_text = (
+                                                        f"MARINHA DO BRASIL\n"
+                                                        f"GABINETE DO COMANDANTE-GERAL DO CFN\n\n"
+                                                        f"Prezado(a) {conv_item.get('posto_graduacao','')} {conv_item.get('nome_autoridade','')},\n\n"
+                                                        f"O Comandante-Geral do Corpo de Fuzileiros Navais tem a honra de convidar Vossa Excelência para {ev_nome}.\n\n"
+                                                        f"📅 Data: {ev_data} às {ev_hora}\n"
+                                                        f"📍 Local: {ev_local}\n"
+                                                        f"👔 Traje: {ev_traje}\n\n"
+                                                        f"Favor confirmar presença através do link seguro:\n{url_rsvp}"
+                                                    )
                                                     msg_encoded = urllib.parse.quote(msg_text)
-                                                    
+
                                                     clean_num = ''.join(filter(str.isdigit, wsp_num))
-                                                    if not clean_num:
-                                                        clean_num = '5521999998888'
-                                                    
-                                                    wsp_url = f"https://wa.me/{clean_num}?text={msg_encoded}"
+                                                    if not clean_num.startswith('55') and len(clean_num) in (10, 11):
+                                                        clean_num = '55' + clean_num
+
+                                                    if clean_num:
+                                                        wsp_url = f"https://wa.me/{clean_num}?text={msg_encoded}"
+                                                    else:
+                                                        wsp_url = f"https://wa.me/?text={msg_encoded}"
+
                                                     ui.navigate.to(wsp_url, new_tab=True)
                                                     ui.notify(f"📱 Abrindo WhatsApp para envio...", color='info')
 
                                                 ui.button('📱 WhatsApp', on_click=enviar_whatsapp).props('flat dense color=emerald').classes('text-xs')
+
 
                                                 # BOTÃO 4: REMOVER DA LISTA DO EVENTO
                                                 def remover_convite(conv_item=c):
