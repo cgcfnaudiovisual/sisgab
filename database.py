@@ -1434,7 +1434,8 @@ def get_app_base_url() -> str:
                 return str(res.data[0]['valor']).rstrip('/')
         except Exception:
             pass
-    return "http://193.122.207.129:8080"
+    return "https://sisgab-cgcfn.ddns.net"
+
 
 
 def get_autoridades_base():
