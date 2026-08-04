@@ -21,14 +21,41 @@ SIGLAS_MILITARES = {
     'OUTRO': {'nome': 'Outra Situação', 'icone': '✏️', 'badge_color': 'indigo'},
 }
 
-def gerar_texto_pronto_chegab(data_str, presencas_dict, efetivo_lista):
+def find_presence_for_militar(ef, presencas_list, presencas_dict=None):
+    """Localiza o registro de presença de um militar usando nome_guerra, telegram_id, user_id ou busca por sub-string."""
+    if not ef:
+        return {}
+        
+    ef_nome = str(ef.get('nome_guerra', '')).upper().strip()
+    ef_tg = str(ef.get('telegram_id', '')).strip()
+    ef_id = str(ef.get('id', '')).strip()
+    
+    if presencas_dict and ef_nome in presencas_dict:
+        return presencas_dict[ef_nome]
+        
+    for p in (presencas_list or []):
+        p_tg = str(p.get('telegram_id', '')).strip()
+        p_uid = str(p.get('user_id', '')).strip()
+        p_nome = str(p.get('nome_guerra', '')).upper().strip()
+        
+        if ef_tg and p_tg and ef_tg == p_tg:
+            return p
+        if ef_id and p_uid and ef_id == p_uid:
+            return p
+        if ef_nome and p_nome and (ef_nome == p_nome or ef_nome in p_nome or p_nome in ef_nome):
+            return p
+            
+    return {}
+
+
+def gerar_texto_pronto_chegab(data_str, presencas_dict, efetivo_lista, presencas_list=None):
     """Gera o texto oficial formatado no padrão da Sargenteação para o Chefe de Gabinete."""
     data_br = datetime.strptime(data_str, '%Y-%m-%d').strftime('%d/%m/%Y') if '-' in data_str else data_str
     
     linhas_militares = []
     for ef in efetivo_lista:
         nome_g = ef.get('nome_guerra', '').upper()
-        p = presencas_dict.get(nome_g, {})
+        p = find_presence_for_militar(ef, presencas_list, presencas_dict)
         sigla = p.get('status', 'PENDENTE').upper()
         obs = p.get('observacao', '').strip()
         
@@ -132,15 +159,15 @@ def render_page():
         efetivo_lista, presencas_list = fetch_efetivo_and_presencas(dt_str)
 
         # Mapeia presencas por nome_guerra
-        presencas_dict = {p['nome_guerra'].upper(): p for p in presencas_list}
+        presencas_dict = {p['nome_guerra'].upper(): p for p in presencas_list if p.get('nome_guerra')}
         
         # Contadores de estatísticas
         tot_efetivo = len(efetivo_lista)
-        contadores = {'P': 0, 'MA': 0, 'MT': 0, 'FE': 0, 'L': 0, 'H': 0, 'DM': 0, 'S': 0, 'PENDENTE': 0}
+        contadores = {'P': 0, 'MA': 0, 'MT': 0, 'FE': 0, 'L': 0, 'H': 0, 'DM': 0, 'S': 0, 'OUTRO': 0, 'PENDENTE': 0}
         
         for ef in efetivo_lista:
-            nome_g = ef.get('nome_guerra', '').upper()
-            st = presencas_dict.get(nome_g, {}).get('status', 'PENDENTE').upper()
+            p_ef = find_presence_for_militar(ef, presencas_list, presencas_dict)
+            st = p_ef.get('status', 'PENDENTE').upper()
             if st in contadores:
                 contadores[st] += 1
             else:
@@ -158,7 +185,7 @@ def render_page():
                     
                     # Botão para copiar texto do Pronto para o CheGab
                     def copiar_pronto():
-                        txt = gerar_texto_pronto_chegab(dt_str, presencas_dict, efetivo_lista)
+                        txt = gerar_texto_pronto_chegab(dt_str, presencas_dict, efetivo_lista, presencas_list=presencas_list)
                         ui.run_javascript(f'navigator.clipboard.writeText({json.dumps(txt)})')
                         ui.notify('📋 Pronto do CheGab copiado com sucesso! Envie no WhatsApp/Telegram.', color='positive', duration=5)
                         
@@ -296,7 +323,7 @@ def render_page():
                 with ui.column().classes('w-full gap-1'):
                     for ef in efetivo_lista:
                         nome_g = ef.get('nome_guerra', '').upper()
-                        pres = presencas_dict.get(nome_g, {})
+                        pres = find_presence_for_militar(ef, presencas_list, presencas_dict)
                         status_atual = pres.get('status', 'PENDENTE').upper()
                         obs_atual = pres.get('observacao', '')
                         hora_reg = pres.get('hora_presenca', '--:--')

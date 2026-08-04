@@ -896,22 +896,55 @@ def register_common_handlers(bot):
                 )
 
             elif any(sigla_key in text.upper() for sigla_key in ("(P)", "(MA)", "(MT)", "(FE)", "(L)", "(H)", "(DM)", "(S)", "(OUTRO)", "OUTRA SITUAÇÃO")):
-                chat_states[chat_id] = {
-                    'action': 'presenca_diaria',
-                    'step': 'choose_sigla',
-                    'user': profile,
-                    'data': {}
-                }
-                # Prossegue para processar a escolha imediatamente no bloco action == 'presenca_diaria' abaixo
+                sigla_txt = text.upper()
+                sigla_code = None
+                
+                if '(P)' in sigla_txt or sigla_txt == 'P' or 'PRESENTE' in sigla_txt: sigla_code = 'P'
+                elif '(MA)' in sigla_txt or sigla_txt == 'MA' or 'MISSÃO ADM' in sigla_txt: sigla_code = 'MA'
+                elif '(MT)' in sigla_txt or sigla_txt == 'MT' or 'MAIS TARDE' in sigla_txt: sigla_code = 'MT'
+                elif '(FE)' in sigla_txt or sigla_txt == 'FE' or 'FÉRIAS' in sigla_txt or 'FERIAS' in sigla_txt: sigla_code = 'FE'
+                elif '(L)' in sigla_txt or sigla_txt == 'L' or 'LICENÇA' in sigla_txt or 'LICENCA' in sigla_txt: sigla_code = 'L'
+                elif '(H)' in sigla_txt or sigla_txt == 'H' or 'HOSPITAL' in sigla_txt: sigla_code = 'H'
+                elif '(DM)' in sigla_txt or sigla_txt == 'DM' or 'DISPENSA' in sigla_txt: sigla_code = 'DM'
+                elif '(S)' in sigla_txt or sigla_txt == 'S' or 'SERVIÇO' in sigla_txt or 'SERVICO' in sigla_txt: sigla_code = 'S'
+                elif '(OUTRO)' in sigla_txt or 'OUTRA SITUAÇÃO' in sigla_txt or 'OUTRO' in sigla_txt: sigla_code = 'OUTRO'
+
+                if sigla_code:
+                    state = {
+                        'action': 'presenca_diaria',
+                        'step': 'choose_sigla',
+                        'user': profile,
+                        'data': {'status': sigla_code}
+                    }
+                    chat_states[chat_id] = state
+                    
+                    if sigla_code in ('MA', 'MT', 'H', 'OUTRO'):
+                        state['step'] = 'input_obs'
+                        prompts = {
+                            'MA': "✍️ Por favor, digite o motivo/local da **Missão Administrativa (MA)**:",
+                            'MT': "✍️ Por favor, digite o horário previsto de chegada ou motivo para **(MT) Mais Tarde**:",
+                            'H': "✍️ Por favor, digite o hospital ou motivo para **(H) Hospital**:",
+                            'OUTRO': "✍️ Por favor, descreva a sua situação/rotina de hoje:"
+                        }
+                        from .keyboards import get_cancel_keyboard
+                        await bot.reply_to(message, prompts.get(sigla_code, f"✍️ Por favor, digite a observação para **({sigla_code})**:"), reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                    elif sigla_code in ('FE', 'L', 'DM'):
+                        state['step'] = 'input_data_fim'
+                        from .keyboards import get_cancel_keyboard
+                        await bot.reply_to(message, "🏖️ Por favor, informe a **data de término** das suas férias/licença\n(ex: `20/08`, `20/08/2026` ou número de dias ex: `10`):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
+                    else:
+                        from .utils import _salvar_presenca_bot
+                        await _salvar_presenca_bot(bot, message, chat_id, state, sigla_code, "")
+                    return
 
             elif text == "/pronto" or text == "📋 Pronto CheGab":
                 dt_str = datetime.now().strftime('%Y-%m-%d')
                 try:
                     from modulo_presenca import fetch_efetivo_and_presencas, gerar_texto_pronto_chegab
                     efetivo_lista, presencas_list = fetch_efetivo_and_presencas(dt_str)
-                    presencas_dict = {p['nome_guerra'].upper(): p for p in presencas_list}
+                    presencas_dict = {p['nome_guerra'].upper(): p for p in presencas_list if p.get('nome_guerra')}
                     
-                    relatorio_txt = gerar_texto_pronto_chegab(dt_str, presencas_dict, efetivo_lista)
+                    relatorio_txt = gerar_texto_pronto_chegab(dt_str, presencas_dict, efetivo_lista, presencas_list=presencas_list)
                     await bot.reply_to(message, relatorio_txt, parse_mode='Markdown')
                 except Exception as pr_err:
                     await bot.reply_to(message, f"❌ Erro ao gerar pronto: {pr_err}")

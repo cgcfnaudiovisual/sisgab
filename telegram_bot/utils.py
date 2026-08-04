@@ -293,7 +293,24 @@ async def _salvar_presenca_bot(bot, message, chat_id, state, sigla_code, obs_txt
     import uuid
     profile = state.get('user') or {}
     user_id = profile.get('id') or str(chat_id)
-    nome_g = profile.get('nome_guerra') or profile.get('nome') or 'MILITAR'
+    nome_g = None
+    
+    # 1. Tenta buscar o nome_guerra e id oficial na tabela efetivo via telegram_id
+    try:
+        from database import get_bot_db_connection
+        db_chk = get_bot_db_connection()
+        if db_chk:
+            res_ef = db_chk.table('efetivo').select('id, nome_guerra').eq('telegram_id', str(chat_id)).execute()
+            if res_ef and res_ef.data:
+                nome_g = res_ef.data[0].get('nome_guerra')
+                if res_ef.data[0].get('id'):
+                    user_id = res_ef.data[0].get('id')
+    except Exception as ef_chk_err:
+        print(f"[PRESENCA CHECK EFETIVO ERR] {ef_chk_err}")
+        
+    if not nome_g:
+        nome_g = profile.get('nome_guerra') or profile.get('nome') or 'MILITAR'
+        
     nome_g = str(nome_g).replace('None ', '').replace('None', '').strip().upper()
     now = datetime.now()
     dt_str = now.strftime('%Y-%m-%d')
