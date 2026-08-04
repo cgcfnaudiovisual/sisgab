@@ -1394,10 +1394,19 @@ def init_local_rsvp_tables():
             hora_evento TEXT,
             local_evento TEXT,
             traje_exigido TEXT,
+            banner_url TEXT,
+            descricao TEXT,
             jade_evento_id TEXT,
             created_at TEXT
         )
         ''')
+
+        for col in ['banner_url', 'descricao']:
+            try:
+                cursor.execute(f"ALTER TABLE rsvp_eventos ADD COLUMN {col} TEXT")
+            except Exception:
+                pass
+
         
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS rsvp_convites (
@@ -1604,7 +1613,6 @@ def update_rsvp_evento(evento_id: str, nome: str, data: str, hora: str, local: s
         'descricao': descricao.strip()
     }
 
-
     conn = get_service_db_connection() or get_db_connection()
     if conn:
         try:
@@ -1614,13 +1622,15 @@ def update_rsvp_evento(evento_id: str, nome: str, data: str, hora: str, local: s
 
     try:
         local_db = get_local_db_connection()
-        local_db.table('rsvp_eventos').update(ev_data).eq('id', evento_id).execute()
-    except Exception:
-        pass
+        if local_db:
+            local_db.table('rsvp_eventos').update(ev_data).eq('id', evento_id).execute()
+    except Exception as loc_err:
+        print(f"[RSVP UPDATE EVENTO LOCAL ERR] {loc_err}")
 
-    # Atualiza sincronização no JADE
+    # Força atualização no JADE
     sync_rsvp_with_jade()
     return True
+
 
 
 def delete_rsvp_evento(evento_id: str):
