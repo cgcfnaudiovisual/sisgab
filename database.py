@@ -215,6 +215,121 @@ def authenticate_user(username: str, password: str) -> Optional[dict]:
         return None
 
 
+# ── GERENCIADOR DE CÓDIGO PIN DE RECUPERAÇÃO DE SENHA (6 DÍGITOS) ──
+
+RECOVERY_PINS_CACHE: Dict[str, dict] = {}
+
+def generate_recovery_pin_for_email(email_or_user: str) -> Optional[str]:
+    """Gera um PIN numérico aleatório de 6 dígitos para o e-mail/usuário informado e o armazena por 15 minutos."""
+    import random
+    import time
+    email_clean = email_or_user.strip().lower()
+    if not email_clean:
+        return None
+        
+    pin = f"{random.randint(100000, 999999)}"
+    expires_at = time.time() + 900  # Válido por 15 minutos
+    
+    RECOVERY_PINS_CACHE[email_clean] = {
+        'pin': pin,
+        'expires_at': expires_at
+    }
+    
+    try:
+        db = get_service_db_connection() or get_db_connection()
+        if db:
+            db.table('config').upsert({
+                'chave': f"recovery_pin_{email_clean}",
+                'valor': f"{pin}:{int(expires_at)}"
+            }).execute()
+    except Exception as e_cfg:
+        print(f"[RECOVERY PIN DB CACHE ERR] {e_cfg}")
+        
+    return pin
+
+
+def verify_and_reset_password_with_pin(email_or_user: str, input_pin: str, new_password: str) -> tuple:
+    """Verifica se o PIN de 6 dígitos é válido para o e-mail e aplica a nova senha no banco."""
+    import time
+    email_clean = email_or_user.strip().lower()
+    input_pin_clean = input_pin.strip()
+    
+    if not email_clean or not input_pin_clean or not new_password:
+        return False, "Preencha todos os campos."
+        
+    if len(new_password) < 6:
+        return False, "A nova senha deve ter no mínimo 6 caracteres."
+        
+    current_time = time.time()
+    pin_valid = False
+    
+    # 1. Checa no cache em memória
+    if email_clean in RECOVERY_PINS_CACHE:
+        cached = RECOVERY_PINS_CACHE[email_clean]
+        if cached['pin'] == input_pin_clean and current_time <= cached['expires_at']:
+            pin_valid = True
+            
+    # 2. Se não achou no cache, busca no banco config
+    if not pin_valid:
+        try:
+            db = get_service_db_connection() or get_db_connection()
+            if db:
+                res = db.table('config').select('*').eq('chave', f"recovery_pin_{email_clean}").execute()
+                if res.data and res.data[0].get('valor'):
+                    val = str(res.data[0]['valor'])
+                    if ':' in val:
+                        p_code, exp_ts = val.split(':', 1)
+                        if p_code == input_pin_clean and current_time <= float(exp_ts):
+                            pin_valid = True
+        except Exception as db_err:
+            print(f"[VERIFY PIN DB ERR] {db_err}")
+            
+    if not pin_valid:
+        return False, "Código PIN inválido ou expirado. Solicite um novo código."
+        
+    # Atualiza a senha no banco (Bcrypt hash)
+    try:
+        import bcrypt
+        pwd_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
+        
+        db_conn = get_service_db_connection() or get_db_connection()
+        if not db_conn:
+            return False, "Sem conexão com o banco de dados."
+            
+        updated = False
+        
+        # Atualiza na tabela efetivo
+        try:
+            res_ef = db_conn.table('efetivo').update({'senha_hash': pwd_hash}).or_(
+                f"email.ilike.{email_clean},nome_guerra.ilike.{email_clean}"
+            ).execute()
+            if res_ef.data:
+                updated = True
+        except Exception as e_ef:
+            print(f"[RESET PWD EFETIVO ERR] {e_ef}")
+            
+        # Atualiza na tabela users
+        try:
+            res_u = db_conn.table('users').update({'senha_hash': pwd_hash}).or_(
+                f"email.ilike.{email_clean},username.ilike.{email_clean}"
+            ).execute()
+            if res_u.data:
+                updated = True
+        except Exception as e_u:
+            print(f"[RESET PWD USERS ERR] {e_u}")
+            
+        # Limpa o PIN usado
+        RECOVERY_PINS_CACHE.pop(email_clean, None)
+        
+        if updated:
+            return True, "Senha redefinida com sucesso! Você já pode efetuar o login."
+        else:
+            return False, "Usuário não localizado no banco para atualização da senha."
+    except Exception as reset_err:
+        return False, f"Erro ao redefinir senha: {reset_err}"
+
+
+
 def get_user_by_id(user_id: int) -> Optional[dict]:
     """Busca usuário pelo ID (telegram_id)"""
     db = get_db_connection()

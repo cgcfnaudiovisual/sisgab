@@ -658,61 +658,75 @@ def open_change_password_dialog(user):
             ui.separator().style('background-color: rgba(255, 179, 0, 0.15);')
             
             ui.label(f"Militar: {user.get('nome_guerra', '').upper()}").classes('text-xs text-grey-4')
+            current_pwd = ui.input('Senha Atual', password=True).props('dark outlined dense w-full')
             new_pwd = ui.input('Nova Senha', password=True).props('dark outlined dense w-full')
             confirm_pwd = ui.input('Confirmar Nova Senha', password=True).props('dark outlined dense w-full')
             pwd_error = ui.label('').classes('text-xs text-red w-full text-center')
             
             def handle_password_change():
+                if not current_pwd.value:
+                    pwd_error.text = 'Informe a sua senha atual.'
+                    return
                 if not new_pwd.value or len(new_pwd.value) < 6:
-                    pwd_error.text = 'A senha deve conter no mínimo 6 caracteres.'
+                    pwd_error.text = 'A nova senha deve conter no mínimo 6 caracteres.'
                     return
                 if new_pwd.value != confirm_pwd.value:
-                    pwd_error.text = 'As senhas digitadas não coincidem.'
+                    pwd_error.text = 'As novas senhas digitadas não coincidem.'
                     return
                 
                 from database import get_db_connection, get_service_db_connection
-                db_conn = get_db_connection()
+                db_conn = get_service_db_connection() or get_db_connection()
                 if not db_conn:
                     ui.notify('Sem conexão com banco de dados', color='red')
                     return
                 
                 try:
                     import bcrypt
-                    pwd_hash = bcrypt.hashpw(new_pwd.value.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
+                    user_email = user.get('email')
+                    nome_guerra = user.get('nome_guerra')
+                    user_id = user.get('id')
                     
-                    svc_conn = get_service_db_connection() or db_conn
+                    # 1. Valida a senha atual no banco
+                    res_m = None
+                    if user_id:
+                        res_m = db_conn.table('efetivo').select('senha_hash').eq('id', user_id).execute()
+                    if (not res_m or not res_m.data) and user_email:
+                        res_m = db_conn.table('efetivo').select('senha_hash').eq('email', user_email).execute()
+                    if (not res_m or not res_m.data) and nome_guerra:
+                        res_m = db_conn.table('efetivo').select('senha_hash').eq('nome_guerra', nome_guerra.upper()).execute()
+                        
+                    stored_hash = res_m.data[0].get('senha_hash', '') if (res_m and res_m.data) else ''
+                    
+                    if stored_hash and (stored_hash.startswith('$2b$') or stored_hash.startswith('$2a$')):
+                        if not bcrypt.checkpw(current_pwd.value.encode('utf-8'), stored_hash.encode('utf-8')):
+                            pwd_error.text = 'Senha atual incorreta.'
+                            return
+
+                    # 2. Gera novo hash e atualiza
+                    pwd_hash = bcrypt.hashpw(new_pwd.value.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
                     updated_in_db = False
 
-                    if svc_conn:
-                        user_email = user.get('email')
-                        nome_guerra = user.get('nome_guerra')
-                        user_id = user.get('id')
+                    # Atualiza na tabela efetivo
+                    try:
+                        if user_id:
+                            db_conn.table('efetivo').update({'senha_hash': pwd_hash}).eq('id', user_id).execute()
+                            updated_in_db = True
+                        elif user_email:
+                            db_conn.table('efetivo').update({'senha_hash': pwd_hash}).eq('email', user_email).execute()
+                            updated_in_db = True
+                        elif nome_guerra:
+                            db_conn.table('efetivo').update({'senha_hash': pwd_hash}).eq('nome_guerra', nome_guerra.upper()).execute()
+                            updated_in_db = True
+                    except Exception as ef_err:
+                        print(f"[EFETIVO PWD UPDATE ERR] {ef_err}")
 
-                        # 1. Atualiza na tabela efetivo
-                        try:
-                            if user_email:
-                                svc_conn.table('efetivo').update({'senha_hash': pwd_hash}).eq('email', user_email).execute()
-                                updated_in_db = True
-                            elif nome_guerra:
-                                svc_conn.table('efetivo').update({'senha_hash': pwd_hash}).eq('nome_guerra', nome_guerra.upper()).execute()
-                                updated_in_db = True
-                        except Exception as ef_err:
-                            print(f"[EFETIVO PWD UPDATE ERR] {ef_err}")
-
-                        # 2. Atualiza na tabela users se existir id
-                        try:
-                            if user_id:
-                                svc_conn.table('users').update({'senha_hash': pwd_hash}).eq('id', user_id).execute()
-                                updated_in_db = True
-                        except Exception as u_err:
-                            print(f"[USERS PWD UPDATE ERR] {u_err}")
-
-                        # 3. Tenta atualizar no Supabase Auth em segundo plano (se configurado)
-                        try:
-                            if hasattr(db_conn, 'auth') and hasattr(db_conn.auth, 'update_user'):
-                                db_conn.auth.update_user({"password": new_pwd.value})
-                        except Exception:
-                            pass
+                    # Atualiza na tabela users se existir id
+                    try:
+                        if user_id:
+                            db_conn.table('users').update({'senha_hash': pwd_hash}).eq('id', user_id).execute()
+                            updated_in_db = True
+                    except Exception as u_err:
+                        print(f"[USERS PWD UPDATE ERR] {u_err}")
 
                     if updated_in_db:
                         ui.notify('Sua senha foi alterada com sucesso!', color='success')
@@ -721,6 +735,7 @@ def open_change_password_dialog(user):
                         pwd_error.text = "Erro ao localizar registro do usuário para atualização."
                 except Exception as err:
                     pwd_error.text = f"Erro ao atualizar: {err}"
+
             
             with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
                 ui.button('Cancelar', on_click=pwd_dialog.close).props('flat color=grey')
@@ -992,72 +1007,98 @@ def login_page(request: Request):
                 ui.button('Cancelar', on_click=reg_dialog.close).props('flat color=grey')
                 ui.button('Enviar', on_click=submit_registration).props('unelevated color=amber-9 text-color=black')
 
-    # Dialog de Recuperação de Senha
+    # Dialog de Recuperação de Senha por Código PIN (6 Dígitos)
     with ui.dialog() as rec_pwd_dialog, ui.card().classes('w-96 q-pa-md').style(
         f'background: {theme.colors["bg_panel"]}; border: 1px solid {theme.colors["border"]};'
     ):
-        with ui.column().classes('w-full items-center gap-4'):
-            ui.label('🔑 Recuperar Senha').classes('text-white text-lg font-bold')
-            ui.label('Insira seu e-mail cadastrado para solicitar a recuperação da senha.').classes('text-grey-5 text-xs text-center')
+        with ui.column().classes('w-full items-center gap-3'):
+            ui.label('🔑 RECUPERAR MINHA SENHA').classes('text-white text-md font-bold cyber-title')
             
-            rec_email = ui.input('E-mail').props('dark dense outlined w-full')
-            rec_error = ui.label('').classes('text-caption text-red')
+            # Container do Passo 1: Solicitar Código PIN
+            step1_container = ui.column().classes('w-full gap-2 items-center')
+            # Container do Passo 2: Inserir PIN e Nova Senha
+            step2_container = ui.column().classes('w-full gap-2 items-center').style('display: none;')
             
-            def submit_recovery():
-                if not rec_email.value:
-                    rec_error.text = 'Preencha o campo de e-mail'
-                    return
+            rec_error = ui.label('').classes('text-xs text-red text-center w-full')
+            
+            with step1_container:
+                ui.label('Insira seu e-mail cadastrado para receber o código PIN de 6 dígitos.').classes('text-grey-5 text-xs text-center q-mb-xs')
+                rec_email = ui.input('E-mail Cadastrado').props('dark dense outlined w-full')
                 
-                from database import get_db_connection
-                db_conn = get_db_connection()
-                if db_conn:
-                    try:
-                        sent_email = False
+                def request_pin():
+                    if not rec_email.value or '@' not in rec_email.value:
+                        rec_error.text = 'Insira um e-mail válido'
+                        return
+                    
+                    from database import generate_recovery_pin_for_email, get_db_connection
+                    pin_generated = generate_recovery_pin_for_email(rec_email.value)
+                    
+                    if not pin_generated:
+                        rec_error.text = 'Erro ao gerar código PIN.'
+                        return
+                        
+                    sent_email = False
+                    db_conn = get_db_connection()
+                    if db_conn:
                         try:
-                            # Reconstrói a URL pública usando os cabeçalhos de proxy do Render (evita localhost e portas internas)
                             proto = request.headers.get('x-forwarded-proto', request.url.scheme)
                             host = request.headers.get('x-forwarded-host') or request.headers.get('host') or request.url.netloc
                             redirect_url = f"{proto}://{host}/"
-                            # 1. Envia link de recuperação pelo Supabase Auth
                             db_conn.auth.reset_password_for_email(rec_email.value, options={"redirect_to": redirect_url})
                             sent_email = True
                         except Exception as mail_err:
-                            err_str = str(mail_err).lower()
-                            if 'rate limit' in err_str or 'exceeded' in err_str or 'smtp' in err_str or 'over' in err_str:
-                                print(f"[RECOVERY SMTP RATE LIMIT] {mail_err}")
-                            else:
-                                raise mail_err # Relança outros erros legítimos
+                            print(f"[RECOVERY MAIL ERR] {mail_err}")
+                            
+                    # Alerta o administrador no Telegram com o código PIN (servindo como canal de contingência oficial)
+                    try:
+                        from notifications_manager import notify_telegram
+                        alert_txt = (
+                            f"🔑 **RECUPERAÇÃO DE SENHA SOLICITADA**\n\n"
+                            f"📧 E-mail: `{rec_email.value}`\n"
+                            f"🔢 **CÓDIGO PIN TEMPORÁRIO:** `{pin_generated}` (Válido por 15 min)\n"
+                            f"📊 Status E-mail: {'✅ Enviado' if sent_email else '⚠️ SMTP Limitado'}\n\n"
+                            f"💡 Caso o e-mail não chegue, você pode informar o código PIN `{pin_generated}` ao militar."
+                        )
+                        notify_telegram(alert_txt, "saude", role_required="admin")
+                    except Exception as e_notif:
+                        print(f"[RECOVERY TELEGRAM ERR] {e_notif}")
                         
-                        # 2. Alerta o administrador no Telegram (sempre, servindo como canal oficial ou de contingência se o e-mail falhar)
-                        try:
-                            from notifications_manager import notify_telegram
-                            status_txt = "✅ ENVIADO POR E-MAIL" if sent_email else "⚠️ SMTP BLOQUEADO (LIMITE EXCEDIDO)"
-                            alert_txt = (
-                                f"🔑 **SOLICITAÇÃO DE RECUPERAÇÃO DE SENHA**\n\n"
-                                f"📧 E-mail: `{rec_email.value}`\n"
-                                f"📊 Status do E-mail: {status_txt}\n\n"
-                                f"⚡ Ação: Caso o e-mail automático tenha falhado ou atingido o limite, "
-                                f"você pode redefinir a senha deste militar manualmente no painel web em *Usuários e Permissões*."
-                            )
-                            notify_telegram(alert_txt, "saude", role_required="admin")
-                        except Exception as e_notif:
-                            print(f"[RECOVERY NOTIFY ERROR] {e_notif}")
+                    rec_error.text = ''
+                    step1_container.style('display: none;')
+                    step2_container.style('display: flex;')
+                    ui.notify(f'Código PIN de 6 dígitos gerado! Verifique seu e-mail.', color='success')
+
+                with ui.row().classes('w-full justify-end gap-2 q-mt-sm'):
+                    ui.button('Cancelar', on_click=rec_pwd_dialog.close).props('flat color=grey')
+                    ui.button('Enviar Código', on_click=request_pin).props('unelevated color=amber-9 text-color=black')
+
+            with step2_container:
+                ui.label('Digite o código de 6 dígitos enviado e a nova senha:').classes('text-grey-5 text-xs text-center q-mb-xs')
+                input_pin = ui.input('Código PIN (6 dígitos)').props('dark dense outlined w-full placeholder=123456')
+                new_pwd = ui.input('Nova Senha', password=True).props('dark dense outlined w-full')
+                confirm_new_pwd = ui.input('Confirmar Nova Senha', password=True).props('dark dense outlined w-full')
+
+                def submit_pin_reset():
+                    if not input_pin.value or not new_pwd.value:
+                        rec_error.text = 'Preencha o código PIN e a nova senha'
+                        return
+                    if new_pwd.value != confirm_new_pwd.value:
+                        rec_error.text = 'As senhas digitadas não coincidem'
+                        return
                         
-                        if sent_email:
-                            ui.notify('Solicitação enviada! Verifique seu e-mail ou fale com o administrador.', color='success')
-                        else:
-                            ui.notify('Limite de e-mails excedido no servidor. Sua solicitação foi enviada diretamente ao Administrador via Telegram!', color='warning', duration=8)
-                        
+                    from database import verify_and_reset_password_with_pin
+                    success, msg = verify_and_reset_password_with_pin(rec_email.value, input_pin.value, new_pwd.value)
+                    
+                    if success:
+                        ui.notify(msg, color='success', duration=6)
                         rec_pwd_dialog.close()
-                    except Exception as err:
-                        rec_error.text = f'Erro: {err}'
-                else:
-                    ui.notify('Solicitação simulada com sucesso (modo offline)', color='warning')
-                    rec_pwd_dialog.close()
-            
-            with ui.row().classes('w-full justify-end gap-2'):
-                ui.button('Cancelar', on_click=rec_pwd_dialog.close).props('flat color=grey')
-                ui.button('Enviar', on_click=submit_recovery).props('unelevated color=amber-9 text-color=black')
+                    else:
+                        rec_error.text = msg
+
+                with ui.row().classes('w-full justify-end gap-2 q-mt-sm'):
+                    ui.button('Voltar', on_click=lambda: (step2_container.style('display: none;'), step1_container.style('display: flex;'))).props('flat color=grey')
+                    ui.button('Redefinir Senha', on_click=submit_pin_reset).props('unelevated color=amber-9 text-color=black')
+
 
     # Fundo do login
     with ui.column().classes('w-full min-h-screen items-center justify-center p-2 sm:p-4 gap-2').style(
@@ -1085,6 +1126,19 @@ def login_page(request: Request):
                     
                     user = ui.input('E-mail ou Usuário', value=app.storage.user.get('last_username', '')).props('dark outlined w-full autocomplete=username name=username dense').classes('w-full text-xs')
                     pwd = ui.input('Senha', password=True).props('dark outlined w-full autocomplete=current-password name=password dense').classes('w-full text-xs')
+                    with pwd:
+                        pwd_visible = {'show': False}
+                        def toggle_pwd_vis(btn):
+                            pwd_visible['show'] = not pwd_visible['show']
+                            if pwd_visible['show']:
+                                pwd.props('password=false')
+                                btn.props('icon=visibility_off color=amber-9')
+                            else:
+                                pwd.props('password=true')
+                                btn.props('icon=visibility color=grey-5')
+                        btn_vis = ui.button(icon='visibility').props('flat round dense color=grey-5')
+                        btn_vis.on_click(lambda: toggle_pwd_vis(btn_vis))
+
                     
                     session_type = ui.radio(
                         {0: 'Manter conectado (Sempre)', 7200: 'Sessão temporária (2 horas)'}, 
