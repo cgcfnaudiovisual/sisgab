@@ -1360,7 +1360,7 @@ def confirm_supabase_user(user_id: str) -> bool:
     return False
 
 # =========================================================================
-# MÓDULO DE GESTÃO DE CONVITES & RSVP
+# MÓDULO DE GESTÃO DE CONVITES & RSVP (COM FALLBACK EM BANCO LOCAL)
 # =========================================================================
 
 def get_app_base_url() -> str:
@@ -1371,68 +1371,144 @@ def get_app_base_url() -> str:
             res = conn.table('config').select('valor').eq('chave', 'app_base_url').execute()
             if res.data and res.data[0].get('valor'):
                 return str(res.data[0]['valor']).rstrip('/')
-        except Exception as e:
-            print(f"[APP BASE URL ERR] {e}")
+        except Exception:
+            pass
     return "http://193.122.207.129:8080"
 
 
 def get_autoridades_base():
-    """Retorna o cadastro master de autoridades do Supabase."""
+    """Retorna o cadastro master de autoridades."""
     conn = get_service_db_connection() or get_db_connection()
-    if not conn:
-        return []
+    if conn:
+        try:
+            res = conn.table('autoridades_base').select('*').order('precedencia_ordem', desc=False).execute()
+            return res.data or []
+        except Exception as e:
+            print(f"[AUTORIDADES BASE SUPABASE FALLBACK] {e}")
+    
+    # Fallback no banco SQLite local gabinete.db
     try:
-        res = conn.table('autoridades_base').select('*').order('precedencia_ordem', desc=False).execute()
-        return res.data or []
-    except Exception as e:
-        print(f"[AUTORIDADES BASE ERR] {e}")
+        local_db = get_local_db_connection()
+        return local_db.table('autoridades_base').select('*').execute().data or []
+    except Exception as loc_e:
+        print(f"[AUTORIDADES BASE LOCAL ERR] {loc_e}")
         return []
 
 
 def upsert_autoridade_base(data: dict):
     """Insere ou atualiza uma autoridade no acervo master."""
     conn = get_service_db_connection() or get_db_connection()
-    if not conn:
-        raise Exception("Sem conexão com o banco de dados")
-    return conn.table('autoridades_base').upsert(data).execute()
+    if conn:
+        try:
+            return conn.table('autoridades_base').upsert(data).execute()
+        except Exception as e:
+            print(f"[AUTORIDADES BASE UPSERT FALLBACK] {e}")
+    
+    # Fallback no banco SQLite local gabinete.db
+    local_db = get_local_db_connection()
+    if 'id' not in data:
+        import uuid
+        data['id'] = str(uuid.uuid4())
+    return local_db.table('autoridades_base').upsert(data).execute()
+
+
+def create_rsvp_evento(nome: str, data: str, hora: str, local: str, traje: str):
+    """Cria um novo evento ceremonial de RSVP com fallback gracioso em banco local."""
+    import uuid, datetime
+    ev_id = str(uuid.uuid4())
+    ev_data = {
+        'id': ev_id,
+        'nome_evento': nome.strip(),
+        'data_evento': data,
+        'hora_evento': hora,
+        'local_evento': local,
+        'traje_exigido': traje,
+        'created_at': datetime.datetime.utcnow().isoformat()
+    }
+    
+    conn = get_service_db_connection() or get_db_connection()
+    if conn:
+        try:
+            res = conn.table('rsvp_eventos').insert(ev_data).execute()
+            return res
+        except Exception as err:
+            print(f"[RSVP CREATE EVENTO SUPABASE FALLBACK] {err}")
+    
+    # Fallback SQLite local
+    local_db = get_local_db_connection()
+    return local_db.table('rsvp_eventos').insert(ev_data).execute()
+
+
+def get_rsvp_eventos_list():
+    """Lista todos os eventos de RSVP cadastrados."""
+    conn = get_service_db_connection() or get_db_connection()
+    if conn:
+        try:
+            res = conn.table('rsvp_eventos').select('*').order('created_at', desc=True).execute()
+            if res.data:
+                return res.data
+        except Exception as err:
+            print(f"[RSVP LIST EVENTOS FALLBACK] {err}")
+    
+    try:
+        local_db = get_local_db_connection()
+        return local_db.table('rsvp_eventos').select('*').execute().data or []
+    except Exception:
+        return []
 
 
 def get_rsvp_evento_by_id(evento_id: str):
     """Retorna os dados de um evento ceremonial de RSVP."""
     conn = get_service_db_connection() or get_db_connection()
-    if not conn:
-        return None
+    if conn:
+        try:
+            res = conn.table('rsvp_eventos').select('*').eq('id', evento_id).execute()
+            if res.data:
+                return res.data[0]
+        except Exception as e:
+            print(f"[RSVP EVENTO GET ERR] {e}")
+    
     try:
-        res = conn.table('rsvp_eventos').select('*').eq('id', evento_id).execute()
+        local_db = get_local_db_connection()
+        res = local_db.table('rsvp_eventos').select('*').eq('id', evento_id).execute()
         return res.data[0] if res.data else None
-    except Exception as e:
-        print(f"[RSVP EVENTO GET ERR] {e}")
+    except Exception:
         return None
 
 
 def get_rsvp_by_token(token: str):
     """Busca os dados do convite seguro através do token UUID v4."""
-    conn = get_service_db_connection() or get_db_connection()
-    if not conn or not token:
+    if not token:
         return None
-    try:
-        res = conn.table('rsvp_convites').select('*').eq('token', token).execute()
-        if not res.data:
-            return None
-        convite = res.data[0]
-        # Carrega dados do evento vinculado
+    conn = get_service_db_connection() or get_db_connection()
+    convite = None
+    if conn:
+        try:
+            res = conn.table('rsvp_convites').select('*').eq('token', token).execute()
+            if res.data:
+                convite = res.data[0]
+        except Exception as e:
+            print(f"[RSVP GET BY TOKEN ERR] {e}")
+    
+    if not convite:
+        try:
+            local_db = get_local_db_connection()
+            res = local_db.table('rsvp_convites').select('*').eq('token', token).execute()
+            if res.data:
+                convite = res.data[0]
+        except Exception:
+            pass
+            
+    if convite:
         evento = get_rsvp_evento_by_id(convite.get('evento_id'))
         convite['evento'] = evento
         return convite
-    except Exception as e:
-        print(f"[RSVP GET BY TOKEN ERR] {e}")
-        return None
+    return None
 
 
 def update_rsvp_response(token: str, status: str, acompanhantes_count: int, acompanhantes_nomes: str, observacoes: str, user_ip: str = ''):
     """Registra a resposta de confirmação/justificativa da autoridade via token."""
-    conn = get_service_db_connection() or get_db_connection()
-    if not conn or not token:
+    if not token:
         raise Exception("Dados de confirmação inválidos")
     import datetime
     now_iso = datetime.datetime.utcnow().isoformat()
@@ -1446,9 +1522,20 @@ def update_rsvp_response(token: str, status: str, acompanhantes_count: int, acom
         'ip_resposta': user_ip
     }
     
-    res = conn.table('rsvp_convites').update(update_data).eq('token', token).execute()
+    conn = get_service_db_connection() or get_db_connection()
+    updated = False
+    if conn:
+        try:
+            conn.table('rsvp_convites').update(update_data).eq('token', token).execute()
+            updated = True
+        except Exception as err:
+            print(f"[RSVP UPDATE RESPONSE FALLBACK] {err}")
+            
+    if not updated:
+        local_db = get_local_db_connection()
+        local_db.table('rsvp_convites').update(update_data).eq('token', token).execute()
     
-    # Se for confirmado, atualiza/insere na lista de convidados do JADE se houver evento_id do JADE
+    # Sincronização automática com a lista do JADE
     try:
         convite = get_rsvp_by_token(token)
         if convite and convite.get('evento') and convite['evento'].get('jade_evento_id'):
@@ -1456,7 +1543,6 @@ def update_rsvp_response(token: str, status: str, acompanhantes_count: int, acom
             autoridade_nome = convite.get('nome_autoridade')
             posto_val = convite.get('posto_graduacao')
             
-            # Insere/Atualiza autoridade no JADE
             if status == 'confirmado':
                 conn.table('eventos_convidados').upsert({
                     'evento_id': jade_id,
@@ -1466,11 +1552,11 @@ def update_rsvp_response(token: str, status: str, acompanhantes_count: int, acom
                     'categoria': 'Autoridade Militar'
                 }, on_conflict='evento_id,nome').execute()
             elif status in ('recusado', 'justificado'):
-                # Se cancelou, remove do JADE
                 conn.table('eventos_convidados').delete().eq('evento_id', jade_id).ilike('nome', f"%{autoridade_nome}%").execute()
     except Exception as jade_err:
         print(f"[RSVP JADE SYNC ERR] {jade_err}")
 
-    return res
+    return True
+
 
 
