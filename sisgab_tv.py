@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from nicegui import ui, app
 import theme
 from database import get_db_connection
+from logo_base64 import LOGO_BASE64
 
 THEME = theme.colors
 
@@ -43,13 +44,13 @@ def render_page():
     # Layout de tela cheia para a TV
     with ui.column().classes('w-full min-h-screen q-pa-md gap-4 overflow-hidden').style(
         'background: radial-gradient(circle, #0c1020 0%, #05070e 100%); font-family: "Outfit", sans-serif;'
-    ):        # ── CABEÇALHO TÁTICO (Fixo) ──
+    ):        # ── CABEÇALHO TÁTICO (Fixo) ──
         with ui.row().classes('w-full justify-between items-center q-pb-xs border-b border-cyan-500/40').style('background: rgba(5, 10, 25, 0.4); backdrop-filter: blur(10px); border-radius: 12px; padding: 8px 16px;'):
             with ui.row().classes('items-center gap-4'):
-                # Logo Institucional Tático da Marinha em Destaque Grande
-                ui.label('⚓').style('font-size: 2.8rem; color: #00e5ff; filter: drop-shadow(0 0 12px rgba(0,229,255,0.7)); line-height: 1;')
+                # Logo Oficial da Tela Inicial do SisGAB
+                ui.image(LOGO_BASE64).style('height: 55px; width: auto; object-fit: contain; filter: drop-shadow(0 0 14px rgba(197, 160, 89, 0.9));')
                 with ui.column().classes('gap-0'):
-                    ui.label('MONITOR TÁTICO COMSOC').style('font-size: 1.8rem; font-weight: 900; color: #ffffff; letter-spacing: 3px; line-height: 1.1;')
+                    ui.label('SISGAB - MONITOR').style('font-size: 1.8rem; font-weight: 900; color: #ffffff; letter-spacing: 3px; line-height: 1.1;')
                     ui.label('CENTRAL DE OPERAÇÕES E COMUNICAÇÃO SOCIAL').style('font-size: 0.8rem; color: #00e5ff; font-weight: 800; letter-spacing: 1.5px;')
             
             with ui.row().classes('items-center gap-3'):
