@@ -914,9 +914,13 @@ def rsvp_public_page(token: str, request: Request):
 
             
             # HERO BANNER / CABEÇALHO DE PRESTÍGIO
-            banner_bg = f'linear-gradient(180deg, rgba(15, 23, 42, 0.4) 0%, rgba(15, 23, 42, 0.95) 100%), url("{banner_url}") center/cover no-repeat;' if (banner_url and banner_url != 'assets/brasao_cgcfn.png') else 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%);'
+            if banner_url and len(banner_url) > 10 and banner_url != 'assets/brasao_cgcfn.png':
+                banner_bg = f'background: linear-gradient(180deg, rgba(15, 23, 42, 0.5) 0%, rgba(15, 23, 42, 0.95) 100%), url("{banner_url}") center/cover no-repeat;'
+            else:
+                banner_bg = 'background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);'
 
-            with ui.element('div').classes('w-full relative min-h-[160px] flex items-center justify-center text-center p-6').style(banner_bg):
+            with ui.element('div').classes('w-full relative min-h-[180px] flex items-center justify-center text-center p-6').style(banner_bg):
+
                 with ui.column().classes('w-full items-center gap-1.5 z-10'):
                     ui.image('assets/brasao_cgcfn.png').style('width: 72px; height: auto; filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.5));')
                     ui.label('MARINHA DO BRASIL').classes('text-xs font-black text-amber-4 tracking-[4px] uppercase q-mt-xs')
