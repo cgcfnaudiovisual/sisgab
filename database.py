@@ -1363,6 +1363,67 @@ def confirm_supabase_user(user_id: str) -> bool:
 # MÓDULO DE GESTÃO DE CONVITES & RSVP (COM FALLBACK EM BANCO LOCAL)
 # =========================================================================
 
+def init_local_rsvp_tables():
+    """Garante que as tabelas de RSVP e Autoridades existam no banco SQLite local gabinete.db caso o Supabase não as tenha."""
+    try:
+        import sqlite3
+        conn = sqlite3.connect('gabinete.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS autoridades_base (
+            id TEXT PRIMARY KEY,
+            posto_graduacao TEXT,
+            nome_completo TEXT,
+            nome_guerra_ou_tratamento TEXT,
+            cargo_funcao TEXT,
+            orgao_om TEXT,
+            email_oficial TEXT,
+            email_ajudancia TEXT,
+            whatsapp_celular TEXT,
+            precedencia_ordem INTEGER DEFAULT 1,
+            created_at TEXT
+        )
+        ''')
+        
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS rsvp_eventos (
+            id TEXT PRIMARY KEY,
+            nome_evento TEXT,
+            data_evento TEXT,
+            hora_evento TEXT,
+            local_evento TEXT,
+            traje_exigido TEXT,
+            jade_evento_id TEXT,
+            created_at TEXT
+        )
+        ''')
+        
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS rsvp_convites (
+            id TEXT PRIMARY KEY,
+            evento_id TEXT,
+            autoridade_id TEXT,
+            nome_autoridade TEXT,
+            posto_graduacao TEXT,
+            email TEXT,
+            token TEXT UNIQUE,
+            status TEXT DEFAULT 'pendente',
+            acompanhantes_count INTEGER DEFAULT 0,
+            acompanhantes_nomes TEXT,
+            observacoes TEXT,
+            respondido_em TEXT,
+            ip_resposta TEXT,
+            created_at TEXT
+        )
+        ''')
+        
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[INIT LOCAL RSVP TABLES ERR] {e}")
+
+
 def get_app_base_url() -> str:
     """Retorna a URL base do SisGAB para montagem dos links de RSVP."""
     conn = get_service_db_connection() or get_db_connection()
@@ -1378,6 +1439,7 @@ def get_app_base_url() -> str:
 
 def get_autoridades_base():
     """Retorna o cadastro master de autoridades."""
+    init_local_rsvp_tables()
     conn = get_service_db_connection() or get_db_connection()
     if conn:
         try:
@@ -1397,6 +1459,7 @@ def get_autoridades_base():
 
 def upsert_autoridade_base(data: dict):
     """Insere ou atualiza uma autoridade no acervo master."""
+    init_local_rsvp_tables()
     conn = get_service_db_connection() or get_db_connection()
     if conn:
         try:
@@ -1414,6 +1477,7 @@ def upsert_autoridade_base(data: dict):
 
 def create_rsvp_evento(nome: str, data: str, hora: str, local: str, traje: str):
     """Cria um novo evento ceremonial de RSVP com fallback gracioso em banco local."""
+    init_local_rsvp_tables()
     import uuid, datetime
     ev_id = str(uuid.uuid4())
     ev_data = {
@@ -1439,8 +1503,10 @@ def create_rsvp_evento(nome: str, data: str, hora: str, local: str, traje: str):
     return local_db.table('rsvp_eventos').insert(ev_data).execute()
 
 
+
 def get_rsvp_eventos_list():
     """Lista todos os eventos de RSVP cadastrados."""
+    init_local_rsvp_tables()
     conn = get_service_db_connection() or get_db_connection()
     if conn:
         try:
@@ -1459,6 +1525,7 @@ def get_rsvp_eventos_list():
 
 def get_rsvp_evento_by_id(evento_id: str):
     """Retorna os dados de um evento ceremonial de RSVP."""
+    init_local_rsvp_tables()
     conn = get_service_db_connection() or get_db_connection()
     if conn:
         try:
