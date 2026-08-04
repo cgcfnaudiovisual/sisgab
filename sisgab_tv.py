@@ -489,10 +489,10 @@ def render_page():
                             ui.badge(f"🎖️ {enc_nome.upper()}", color='green-9').classes('text-xs font-bold')
                         ui.label(f"👤 {pauta_alerta.get('solicitante_nome', 'COMSOC').upper()}").classes('text-grey-3 text-xs')
 
-            # ── GRIDS PRINCIPAIS DO MONITOR (COLUNAS REORDENADAS & GLASSMORPHISM TRANSLÚCIDO) ──
-            card_col_style = 'background: rgba(10, 16, 32, 0.45); backdrop-filter: blur(14px); border: 1px solid rgba(0, 229, 255, 0.25); border-radius: 16px;'
+            # ── COLUNAS PRINCIPAIS DO MONITOR (FLEXBOX RESPONSIVO SEM OVERFLOW) ──
+            card_col_style = 'background: rgba(10, 16, 32, 0.45); backdrop-filter: blur(14px); border: 1px solid rgba(0, 229, 255, 0.25); border-radius: 16px; box-sizing: border-border;'
 
-            with ui.grid(columns=1).classes('w-full gap-4 flex-grow gt-xs items-stretch').style('grid-template-columns: 1.2fr 1.1fr 1fr; margin-top: 6px; min-height: calc(100vh - 230px);'):
+            with ui.row().classes('w-full gap-3 flex-grow items-stretch no-wrap box-border').style('margin-top: 4px; min-height: calc(100vh - 220px); overflow: hidden;'):
                 
                 # pautas gerais reutilizadas nas colunas
                 pautas = []
@@ -504,16 +504,17 @@ def render_page():
                     except Exception as e:
                         print(f"[TV CALENDAR DB ERR] {e}")
 
+
                 # =========================================================================
                 # COLUNA 1 (ESQUERDA - PRIORIDADE): PAUTAS HOJE & AMANHÃ (PRONTIDÃO 48H)
                 # =========================================================================
-                with ui.card().classes('q-pa-md no-shadow flex-col justify-between').style(card_col_style):
-                    with ui.column().classes('w-full gap-2'):
-                        with ui.row().classes('w-full items-center justify-between q-mb-xs border-b border-cyan-500/30 q-pb-xs'):
-                            with ui.row().classes('items-center gap-2'):
-                                ui.icon('today', color='amber-4', size='sm')
-                                ui.label('PAUTAS: HOJE & AMANHÃ').classes('text-base font-black text-white tracking-wider')
-                            ui.badge('PRONTIDÃO 48H', color='amber-9').classes('text-xs font-mono font-bold')
+                with ui.card().classes('q-pa-sm no-shadow flex-col justify-between box-border overflow-hidden').style(card_col_style + ' flex: 1.1 1 0%; min-width: 0;'):
+                    with ui.column().classes('w-full gap-2 box-border overflow-hidden'):
+                        with ui.row().classes('w-full items-center justify-between q-mb-xs border-b border-cyan-500/30 q-pb-xs no-wrap'):
+                            with ui.row().classes('items-center gap-2 no-wrap overflow-hidden'):
+                                ui.icon('today', color='amber-4', size='sm').classes('shrink-0')
+                                ui.label('PAUTAS: HOJE & AMANHÃ').classes('text-sm font-black text-white tracking-wider truncate')
+                            ui.badge('PRONTIDÃO 48H', color='amber-9').classes('text-xs font-mono font-bold shrink-0')
 
                         pautas_hoje_amanha = []
                         hoje_obj = (datetime.utcnow() - timedelta(hours=3)).date()
@@ -530,7 +531,7 @@ def render_page():
                             pautas_hoje_amanha.sort(key=lambda x: (x[1] if isinstance(x, (tuple, list)) and len(x) > 1 else '', x[0].get('hora_evento', '') if isinstance(x, (tuple, list)) and len(x) > 0 and isinstance(x[0], dict) else ''))
 
                         if pautas_hoje_amanha:
-                            with ui.column().classes('w-full gap-2 max-h-[580px] overflow-y-auto q-pr-xs'):
+                            with ui.column().classes('w-full gap-2 max-h-[580px] overflow-y-auto q-pr-xs box-border'):
                                 for item in pautas_hoje_amanha:
                                     if not (isinstance(item, (tuple, list)) and len(item) == 2):
                                         continue
@@ -541,7 +542,7 @@ def render_page():
                                     border_tag = "#f59e0b" if is_hoje else "#00e5ff"
                                     st_val = str(p.get('status', '')).strip().lower()
 
-                                    with ui.card().classes('w-full q-pa-sm no-shadow rounded-xl').style(
+                                    with ui.card().classes('w-full q-pa-sm no-shadow rounded-xl box-border overflow-hidden').style(
                                         f'background: {tag_bg}; border: 1.5px solid {border_tag}; backdrop-filter: blur(8px);'
                                     ):
                                         hr_txt = str(p.get('hora_evento', '09:00'))[:5]
@@ -549,23 +550,23 @@ def render_page():
                                         enc_nome = get_militar_nome(enc_id)
 
                                         with ui.row().classes('w-full justify-between items-start no-wrap gap-2'):
-                                            with ui.row().classes('items-start gap-2 col-grow'):
+                                            with ui.row().classes('items-start gap-2 col-grow overflow-hidden'):
                                                 ui.badge(tag_dia, color='amber-9' if is_hoje else 'cyan-9').classes('text-xs font-black shrink-0 q-mt-xs q-px-sm')
-                                                ui.label(p.get('titulo_evento', 'Sem Título').upper()).classes('text-sm font-black text-white leading-tight break-words col-grow')
+                                                ui.label(p.get('titulo_evento', 'Sem Título').upper()).classes('text-xs font-black text-white leading-tight break-words col-grow')
                                             
                                             if st_val in ('pendente', 'pendentes'):
                                                 ui.badge('PENDENTE', color='amber-9').classes('text-xs font-bold shrink-0 q-mt-xs')
                                             else:
                                                 ui.badge('APROVADA', color='green-9').classes('text-xs font-bold shrink-0 q-mt-xs')
 
-                                        with ui.row().classes('w-full justify-between items-center q-mt-xs text-xs text-slate-200'):
-                                            with ui.row().classes('items-center gap-2 wrap col-grow'):
+                                        with ui.row().classes('w-full justify-between items-center q-mt-xs text-xs text-slate-200 no-wrap'):
+                                            with ui.row().classes('items-center gap-1.5 wrap col-grow overflow-hidden'):
                                                 ui.label(f"🕒 {hr_txt}").classes('text-amber-4 font-black')
                                                 ui.label('|').classes('text-white/20')
-                                                ui.label(f"📍 {p.get('local_evento', 'Gabinete').upper()}").classes('text-cyan-4 font-bold')
+                                                ui.label(f"📍 {p.get('local_evento', 'Gabinete').upper()}").classes('text-cyan-4 font-bold truncate max-w-[120px]')
                                                 if enc_nome:
                                                     ui.label('|').classes('text-white/20')
-                                                    ui.label(f"🎖️ {enc_nome.upper()}").classes('text-green-4 font-black')
+                                                    ui.label(f"🎖️ {enc_nome.upper()}").classes('text-green-4 font-black truncate max-w-[120px]')
                                             ui.label(f"👤 {p.get('solicitante_nome', 'CGCFN').upper()}").classes('text-grey-3 text-xs shrink-0 font-semibold')
                         else:
                             with ui.column().classes('w-full h-64 items-center justify-center gap-2 text-grey-4'):
@@ -575,12 +576,13 @@ def render_page():
                 # =========================================================================
                 # COLUNA 2 (CENTRO): CRONOGRAMA DE PRODUÇÃO & FILTRO MULTI-PAINEL
                 # =========================================================================
-                with ui.card().classes('q-pa-md no-shadow flex-col justify-between').style(card_col_style):
-                    with ui.column().classes('w-full gap-2'):
-                        with ui.row().classes('w-full items-center justify-between q-mb-xs border-b border-cyan-500/30 q-pb-xs'):
-                            with ui.row().classes('items-center gap-2'):
-                                ui.icon('calendar_month', color='cyan-4', size='sm')
-                                ui.label('CRONOGRAMA DE PRODUÇÃO').classes('text-base font-black text-white tracking-wider')
+                with ui.card().classes('q-pa-sm no-shadow flex-col justify-between box-border overflow-hidden').style(card_col_style + ' flex: 1.2 1 0%; min-width: 0;'):
+                    with ui.column().classes('w-full gap-2 box-border overflow-hidden'):
+                        with ui.row().classes('w-full items-center justify-between q-mb-xs border-b border-cyan-500/30 q-pb-xs no-wrap'):
+                            with ui.row().classes('items-center gap-2 no-wrap overflow-hidden'):
+                                ui.icon('calendar_month', color='cyan-4', size='sm').classes('shrink-0')
+                                ui.label('CRONOGRAMA DE PRODUÇÃO').classes('text-sm font-black text-white tracking-wider truncate')
+
                             
                             def on_view_change(e):
                                 view_state['active'] = e.value
@@ -734,7 +736,7 @@ def render_page():
                 # =========================================================================
                 # COLUNA 3 (DIREITA): PLACAS JADE PENDENTES & BOLETINS COMSOC (TRANSLÚCIDO)
                 # =========================================================================
-                with ui.column().classes('w-full gap-3 flex-grow q-pa-none'):
+                with ui.column().classes('gap-3 flex-grow q-pa-none box-border overflow-hidden').style('flex: 0.9 1 0%; min-width: 0;'):
                     
                     # ALERTA TÁTICO DE PLACAS JADE PENDENTES
                     count_jade_pending = 0
