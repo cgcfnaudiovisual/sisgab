@@ -1066,17 +1066,19 @@ def login_page(request: Request):
                     rec_error.text = ''
                     step1_container.style('display: none;')
                     step2_container.style('display: flex;')
-                    ui.notify(f'Código PIN de 6 dígitos gerado! Verifique seu e-mail.', color='success')
+                    ui.notify(f'Código PIN de 6 dígitos gerado com sucesso! Digite o PIN e a nova senha abaixo.', color='success', duration=8)
 
                 with ui.row().classes('w-full justify-end gap-2 q-mt-sm'):
                     ui.button('Cancelar', on_click=rec_pwd_dialog.close).props('flat color=grey')
-                    ui.button('Enviar Código', on_click=request_pin).props('unelevated color=amber-9 text-color=black')
+                    ui.button('Enviar Código PIN', on_click=request_pin).props('unelevated color=amber-9 text-color=black')
 
             with step2_container:
-                ui.label('Digite o código de 6 dígitos enviado e a nova senha:').classes('text-grey-5 text-xs text-center q-mb-xs')
+                ui.label('Insira o código PIN de 6 dígitos e defina sua nova senha:').classes('text-grey-5 text-xs text-center q-mb-xs')
+                ui.label('💡 Caso precise do código PIN, você também pode solicitá-lo ao Administrador.').classes('text-amber-4 text-[11px] text-center bg-black/30 q-pa-xs rounded w-full')
                 input_pin = ui.input('Código PIN (6 dígitos)').props('dark dense outlined w-full placeholder=123456')
                 new_pwd = ui.input('Nova Senha', password=True).props('dark dense outlined w-full')
                 confirm_new_pwd = ui.input('Confirmar Nova Senha', password=True).props('dark dense outlined w-full')
+
 
                 def submit_pin_reset():
                     if not input_pin.value or not new_pwd.value:
