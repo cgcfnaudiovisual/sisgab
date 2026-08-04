@@ -50,42 +50,111 @@ def render_page():
                     else:
                         ui.label('Nenhum evento RSVP cadastrado. Clique em Novo Evento ao lado.').classes('text-xs text-amber-4 italic font-bold')
 
-            def open_novo_evento_dialog():
-                with ui.dialog() as diag, ui.card().classes('w-[520px] max-w-[95vw] q-pa-md bg-slate-900 border border-cyan-500/40 rounded-2xl shadow-2xl'):
-                    ui.label('➕ CRIAR NOVO EVENTO CERIMONIAL (RSVP)').classes('text-white font-black text-md cyber-title')
+            def open_evento_dialog(is_edit=False):
+                current_ev = None
+                if is_edit:
+                    ev_id = selected_event_id['value']
+                    if ev_id and ev_list:
+                        current_ev = next((ev for ev in ev_list if str(ev['id']) == str(ev_id)), None)
+                    if not current_ev:
+                        ui.notify('Selecione um evento válido para editar.', color='warning')
+                        return
+
+                with ui.dialog() as diag, ui.card().classes('w-[600px] max-w-[95vw] q-pa-md bg-slate-900 border border-cyan-500/40 rounded-2xl shadow-2xl'):
+                    title_text = '✏️ EDITAR EVENTO CERIMONIAL (RSVP)' if is_edit else '➕ CRIAR NOVO EVENTO CERIMONIAL (RSVP)'
+                    ui.label(title_text).classes('text-white font-black text-md cyber-title')
                     ui.separator().style('background: rgba(0, 229, 255, 0.2);')
 
-                    e_nome = ui.input('Nome do Evento', placeholder='Ex: Solenidade de Passagem de Comando').props('dark outlined dense w-full')
+                    e_nome = ui.input('Nome do Evento / Solenidade', value=current_ev.get('nome_evento','') if current_ev else '', placeholder='Ex: Solenidade de Passagem de Comando').props('dark outlined dense w-full')
                     with ui.row().classes('w-full gap-2'):
-                        e_data = ui.input('Data do Evento', value=datetime.datetime.now().strftime('%Y-%m-%d')).props('dark outlined dense type=date').classes('w-1/2')
-                        e_hora = ui.input('Horário', value='10:00').props('dark outlined dense type=time').classes('w-1/2')
-                    e_local = ui.input('Local da Cerimônia', value='Fortaleza de São José - Ilha das Cobras').props('dark outlined dense w-full')
-                    e_traje = ui.input('Traje / Fardamento Exigido', value='3ºA (Com condecorações)').props('dark outlined dense w-full')
+                        e_data = ui.input('Data do Evento', value=current_ev.get('data_evento', datetime.datetime.now().strftime('%Y-%m-%d')) if current_ev else datetime.datetime.now().strftime('%Y-%m-%d')).props('dark outlined dense type=date').classes('w-1/2')
+                        e_hora = ui.input('Horário', value=current_ev.get('hora_evento', '10:00') if current_ev else '10:00').props('dark outlined dense type=time').classes('w-1/2')
+                    e_local = ui.input('Local da Cerimônia', value=current_ev.get('local_evento', 'Fortaleza de São José - Ilha das Cobras') if current_ev else 'Fortaleza de São José - Ilha das Cobras').props('dark outlined dense w-full')
+                    e_traje = ui.input('Traje / Fardamento Exigido', value=current_ev.get('traje_exigido', '3ºA (Com condecorações)') if current_ev else '3ºA (Com condecorações)').props('dark outlined dense w-full')
+
+                    banner_state = {'url': current_ev.get('banner_url','') if current_ev else ''}
+                    
+                    with ui.column().classes('w-full gap-1 q-mt-xs p-3 bg-black/40 border border-amber-500/30 rounded-xl'):
+                        ui.label('🖼️ BANNER / IMAGEM DE CAPA DO EVENTO (OPCIONAL)').classes('text-xs font-bold text-amber-4')
+                        ui.label('Imagem exibida no topo da página de confirmação do convidado').classes('text-[11px] text-grey-4 q-mb-xs')
+                        
+                        banner_input = ui.input('URL da Imagem ou Upload', value=banner_state['url'], placeholder='https://.../banner.png ou faça o upload abaixo').props('dark outlined dense w-full')
+                        
+                        async def handle_banner_upload(e):
+                            try:
+                                from database import upload_file_to_supabase_storage
+                                content = await e.file.read()
+                                fname = f"banner_{uuid.uuid4().hex[:8]}_{e.file.name}"
+                                public_url = await asyncio.to_thread(upload_file_to_supabase_storage, content, fname, e.file.content_type, 'logos')
+                                if public_url:
+                                    banner_state['url'] = public_url
+                                    banner_input.value = public_url
+                                    ui.notify('🖼️ Banner enviado com sucesso para o Supabase Storage!', color='positive')
+                                else:
+                                    ui.notify('Falha ao enviar banner.', color='negative')
+                            except Exception as up_err:
+                                ui.notify(f"Erro no upload: {up_err}", color='negative')
+
+                        ui.upload(on_upload=handle_banner_upload, auto_upload=True).props('dark flat dense label="📁 Fazer Upload de Imagem de Capa" accept="image/*"').classes('w-full text-xs')
 
                     def salvar_evento():
                         if not e_nome.value:
                             ui.notify('Digite o nome do evento.', color='warning')
                             return
                         try:
-                            create_rsvp_evento(
-                                e_nome.value.strip(),
-                                e_data.value,
-                                e_hora.value,
-                                e_local.value,
-                                e_traje.value
-                            )
-                            ui.notify('✅ Evento criado com sucesso!', color='success')
+                            from database import update_rsvp_evento
+                            b_url = banner_input.value or banner_state['url']
+                            if is_edit and current_ev:
+                                update_rsvp_evento(
+                                    str(current_ev['id']),
+                                    e_nome.value.strip(),
+                                    e_data.value,
+                                    e_hora.value,
+                                    e_local.value,
+                                    e_traje.value,
+                                    b_url
+                                )
+                                ui.notify('✅ Evento atualizado com sucesso!', color='success')
+                            else:
+                                create_rsvp_evento(
+                                    e_nome.value.strip(),
+                                    e_data.value,
+                                    e_hora.value,
+                                    e_local.value,
+                                    e_traje.value,
+                                    b_url
+                                )
+                                ui.notify('✅ Evento criado com sucesso!', color='success')
                             diag.close()
                             ui.navigate.reload()
                         except Exception as err:
-                            ui.notify(f'Erro ao criar evento: {err}', color='red')
+                            ui.notify(f'Erro ao salvar evento: {err}', color='red')
 
-                    with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
-                        ui.button('Cancelar', on_click=diag.close).props('flat color=grey text-color=white')
-                        ui.button('Salvar Evento', on_click=salvar_evento).props('unelevated color=cyan text-color=black bold icon=save')
+                    with ui.row().classes('w-full justify-between items-center q-mt-md'):
+                        if is_edit and current_ev:
+                            def excluir_evento():
+                                try:
+                                    from database import delete_rsvp_evento
+                                    delete_rsvp_evento(str(current_ev['id']))
+                                    ui.notify('🗑️ Evento excluído com sucesso!', color='positive')
+                                    diag.close()
+                                    ui.navigate.reload()
+                                except Exception as d_err:
+                                    ui.notify(f'Erro ao excluir: {d_err}', color='red')
+                            ui.button('Excluir Evento', icon='delete', on_click=excluir_evento).props('flat color=negative text-color=red dense').classes('text-xs')
+                        else:
+                            ui.space()
+
+                        with ui.row().classes('gap-2'):
+                            ui.button('Cancelar', on_click=diag.close).props('flat color=grey text-color=white')
+                            ui.button('Salvar Evento', on_click=salvar_evento).props('unelevated color=cyan text-color=black bold icon=save')
                 diag.open()
 
-            ui.button('➕ NOVO EVENTO CERIMONIAL', on_click=open_novo_evento_dialog).props('unelevated color=cyan text-color=black bold icon=add').classes('text-xs cyber-glow')
+            with ui.row().classes('items-center gap-2'):
+                ui.button('➕ NOVO EVENTO', on_click=lambda: open_evento_dialog(is_edit=False)).props('unelevated color=cyan text-color=black bold icon=add').classes('text-xs cyber-glow')
+                if event_options and selected_event_id['value']:
+                    ui.button('✏️ EDITAR EVENTO', on_click=lambda: open_evento_dialog(is_edit=True)).props('unelevated color=amber text-color=black bold icon=edit').classes('text-xs')
+
 
         # ── ABAS TÁTICAS DO PAINEL DE CONVITES ──
         with ui.tabs().classes('w-full text-cyan') as rsvp_tabs:

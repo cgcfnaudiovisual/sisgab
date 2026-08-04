@@ -1556,8 +1556,8 @@ def sync_rsvp_with_jade():
         except Exception: pass
 
 
-def create_rsvp_evento(nome: str, data: str, hora: str, local: str, traje: str):
-    """Cria um novo evento ceremonial de RSVP e sincroniza automaticamente no Mapeamento de Assentos."""
+def create_rsvp_evento(nome: str, data: str, hora: str, local: str, traje: str, banner_url: str = ''):
+    """Cria um novo evento cerimonial de RSVP e sincroniza automaticamente no Mapeamento de Assentos."""
     init_local_rsvp_tables()
     import uuid, datetime
     ev_id = str(uuid.uuid4())
@@ -1568,16 +1568,17 @@ def create_rsvp_evento(nome: str, data: str, hora: str, local: str, traje: str):
         'hora_evento': hora,
         'local_evento': local,
         'traje_exigido': traje,
+        'banner_url': banner_url,
         'created_at': datetime.datetime.utcnow().isoformat()
     }
-    
+
     conn = get_service_db_connection() or get_db_connection()
     if conn:
         try:
             conn.table('rsvp_eventos').insert(ev_data).execute()
         except Exception as err:
             print(f"[RSVP CREATE EVENTO SUPABASE FALLBACK] {err}")
-    
+
     # Fallback SQLite local
     local_db = get_local_db_connection()
     local_db.table('rsvp_eventos').insert(ev_data).execute()
@@ -1585,6 +1586,61 @@ def create_rsvp_evento(nome: str, data: str, hora: str, local: str, traje: str):
     # Sincroniza imediatamente com as Placas JADE
     sync_rsvp_with_jade()
     return ev_id
+
+
+def update_rsvp_evento(evento_id: str, nome: str, data: str, hora: str, local: str, traje: str, banner_url: str = ''):
+    """Atualiza as informações completas de um evento de RSVP cerimonial."""
+    if not evento_id:
+        return False
+    init_local_rsvp_tables()
+    ev_data = {
+        'nome_evento': nome.strip(),
+        'data_evento': data,
+        'hora_evento': hora,
+        'local_evento': local,
+        'traje_exigido': traje,
+        'banner_url': banner_url
+    }
+
+    conn = get_service_db_connection() or get_db_connection()
+    if conn:
+        try:
+            conn.table('rsvp_eventos').update(ev_data).eq('id', evento_id).execute()
+        except Exception as err:
+            print(f"[RSVP UPDATE EVENTO SUPABASE ERR] {err}")
+
+    try:
+        local_db = get_local_db_connection()
+        local_db.table('rsvp_eventos').update(ev_data).eq('id', evento_id).execute()
+    except Exception:
+        pass
+
+    # Atualiza sincronização no JADE
+    sync_rsvp_with_jade()
+    return True
+
+
+def delete_rsvp_evento(evento_id: str):
+    """Exclui um evento de RSVP e seus convites vinculados."""
+    if not evento_id:
+        return False
+    conn = get_service_db_connection() or get_db_connection()
+    if conn:
+        try:
+            conn.table('rsvp_convites').delete().eq('evento_id', evento_id).execute()
+            conn.table('rsvp_eventos').delete().eq('id', evento_id).execute()
+        except Exception as err:
+            print(f"[RSVP DELETE EVENTO SUPABASE ERR] {err}")
+
+    try:
+        local_db = get_local_db_connection()
+        local_db.table('rsvp_convites').delete().eq('evento_id', evento_id).execute()
+        local_db.table('rsvp_eventos').delete().eq('id', evento_id).execute()
+    except Exception:
+        pass
+
+    return True
+
 
 
 
