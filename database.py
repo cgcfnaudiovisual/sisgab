@@ -217,7 +217,8 @@ def authenticate_user(username: str, password: str) -> Optional[dict]:
 
 # ── GERENCIADOR DE CÓDIGO PIN DE RECUPERAÇÃO DE SENHA (6 DÍGITOS) ──
 
-RECOVERY_PINS_CACHE: Dict[str, dict] = {}
+RECOVERY_PINS_CACHE: dict = {}
+
 
 def generate_recovery_pin_for_email(email_or_user: str) -> Optional[str]:
     """Gera um PIN numérico aleatório de 6 dígitos para o e-mail/usuário informado e o armazena por 15 minutos."""
