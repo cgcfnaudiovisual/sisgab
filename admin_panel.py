@@ -881,7 +881,94 @@ def render_page():
                         ui.button('Confirmar Exclusão em Lote', on_click=handle_batch_delete).props('unelevated color=red text-color=white')
             batch_del_dialog.open()
 
+        # 6. Diálogo de Configurações SMTP de E-mail
+        def open_smtp_dialog():
+
+            with ui.dialog() as smtp_dialog, ui.card().classes('w-[450px] q-pa-md bg-slate-900 border').style(f'border-color: {THEME["accent"]};'):
+                with ui.column().classes('w-full gap-4'):
+                    with ui.row().classes('items-center gap-2 w-full justify-between'):
+                        ui.label('📧 CONFIGURAR E-MAIL (SMTP)').classes('text-white text-md font-black cyber-title')
+                        ui.icon('mark_email_read', size='1.5rem').style(f'color: {THEME["accent"]}')
+                    ui.separator().style('background-color: rgba(0, 229, 255, 0.15);')
+
+                    ui.label('Insira as credenciais SMTP (Gmail ou Servidor Institucional) para envio de PINs de recuperação, alertas e aniversariantes.').classes('text-grey-4 text-xs')
+
+                    conn = get_service_db_connection() or get_db_connection()
+                    cur_host = 'smtp.gmail.com'
+                    cur_port = '587'
+                    cur_user = 'CGCFNaudiovisual@gmail.com'
+                    cur_pass = ''
+                    cur_name = 'SisGAB - Gabinete'
+
+                    if conn:
+                        try:
+                            res_h = conn.table('config').select('valor').eq('chave', 'smtp_host').execute()
+                            if res_h.data and res_h.data[0].get('valor'): cur_host = str(res_h.data[0]['valor'])
+                            res_p = conn.table('config').select('valor').eq('chave', 'smtp_port').execute()
+                            if res_p.data and res_p.data[0].get('valor'): cur_port = str(res_p.data[0]['valor'])
+                            res_u = conn.table('config').select('valor').eq('chave', 'smtp_user').execute()
+                            if res_u.data and res_u.data[0].get('valor'): cur_user = str(res_u.data[0]['valor'])
+                            res_pw = conn.table('config').select('valor').eq('chave', 'smtp_password').execute()
+                            if res_pw.data and res_pw.data[0].get('valor'): cur_pass = str(res_pw.data[0]['valor'])
+                            res_n = conn.table('config').select('valor').eq('chave', 'smtp_from_name').execute()
+                            if res_n.data and res_n.data[0].get('valor'): cur_name = str(res_n.data[0]['valor'])
+                        except Exception as e_cfg:
+                            print(f"[SMTP LOAD ERR] {e_cfg}")
+
+                    s_host = ui.input('Servidor SMTP (Host)', value=cur_host).props('dark outlined dense w-full')
+                    s_port = ui.input('Porta SMTP', value=cur_port).props('dark outlined dense w-full')
+                    s_user = ui.input('E-mail Remetente (Usuário)', value=cur_user).props('dark outlined dense w-full')
+                    s_pass = ui.input('Senha de App (16 caracteres do Google)', value=cur_pass, password=True).props('dark outlined dense w-full')
+                    s_name = ui.input('Nome do Remetente', value=cur_name).props('dark outlined dense w-full')
+
+                    smtp_status = ui.label('').classes('text-xs text-amber-4 text-center w-full')
+
+                    def test_smtp():
+                        if not s_user.value or not s_pass.value:
+                            smtp_status.text = 'Preencha o e-mail e a senha de app para testar.'
+                            return
+                        smtp_status.text = 'Conectando ao servidor SMTP...'
+                        try:
+                            import smtplib, ssl
+                            ctx = ssl.create_default_context()
+                            with smtplib.SMTP(s_host.value.strip(), int(s_port.value.strip()), timeout=8) as server:
+                                server.ehlo()
+                                server.starttls(context=ctx)
+                                server.login(s_user.value.strip(), s_pass.value.strip())
+                            smtp_status.text = ''
+                            ui.notify('🟢 Conexão SMTP estabelecida com sucesso!', color='success')
+                        except Exception as err:
+                            smtp_status.text = f'❌ Falha na conexão: {err}'
+
+                    def save_smtp():
+                        if not conn:
+                            ui.notify('Sem conexão com o banco', color='red')
+                            return
+                        try:
+                            configs = [
+                                {'chave': 'smtp_host', 'valor': s_host.value.strip()},
+                                {'chave': 'smtp_port', 'valor': s_port.value.strip()},
+                                {'chave': 'smtp_user', 'valor': s_user.value.strip()},
+                                {'chave': 'smtp_password', 'valor': s_pass.value.strip()},
+                                {'chave': 'smtp_from_name', 'valor': s_name.value.strip()},
+                            ]
+                            for item in configs:
+                                conn.table('config').upsert(item).execute()
+                            ui.notify('✅ Configurações SMTP salvas com sucesso!', color='success')
+                            smtp_dialog.close()
+                        except Exception as err:
+                            smtp_status.text = f'Erro ao salvar: {err}'
+
+                    with ui.row().classes('w-full justify-between items-center q-mt-md'):
+                        ui.button('🧪 Testar Conexão', on_click=test_smtp).props('outline dense color=amber-9')
+                        with ui.row().classes('gap-2'):
+                            ui.button('Cancelar', on_click=smtp_dialog.close).props('flat color=grey')
+                            ui.button('💾 Salvar', on_click=save_smtp).props('unelevated color=cyan-9 text-color=white')
+
+            smtp_dialog.open()
+
         # --- FIM DIÁLOGOS ---
+
 
         with container:
             theme.section_header('Usuários e Permissões', 'Gestão de Usuários e Aprovação de Credenciais')
@@ -1043,13 +1130,18 @@ def render_page():
                                 f'🗑️ EXCLUIR SELECIONADOS ({batch_count})',
                                 on_click=lambda: open_batch_delete_dialog(selected_user_ids)
                             ).props('unelevated dense color=red').classes('text-xs px-3 py-1.5')
-                            batch_del_btn.set_visibility(batch_count > 0)
-                            
+                            # Botão de configuração SMTP de e-mail
+                            ui.button(
+                                '📧 CONFIGURAÇÕES SMTP',
+                                on_click=open_smtp_dialog
+                            ).props('unelevated dense color=amber-9 text-color=black').classes('text-xs px-3 py-1.5 font-bold')
+
                             # Botão administrativo para novo cadastro direto
                             ui.button(
                                 '➕ CADASTRAR OPERADOR',
                                 on_click=open_create_dialog
                             ).props('unelevated dense').style(f'background: {THEME["accent"]}; color: #0b0f19; font-weight: bold;').classes('cyber-glow text-xs px-3 py-1.5')
+
 
                     ui.separator().style('background-color: rgba(0, 229, 255, 0.15);')
 
