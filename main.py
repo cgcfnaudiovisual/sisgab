@@ -265,10 +265,11 @@ import comsoc_aniversariantes
 import smart_editor
 import agenda_geral
 import painel_comando
-import modulo_presenca
 import comsoc_assentos
 import estudio_grafico
+import comsoc_rsvp
 from database import authenticate_user, get_user_by_id
+
 from services import data_service
 
 # Carrega o .env a partir do diretório absoluto do arquivo
@@ -291,7 +292,9 @@ sisgab_menu_categories = [
             {'name': 'Gestão de Demandas', 'icon': 'gavel', 'path': '/comsoc_homologar', 'roles': ['admin', 'supervisor', 'oficial_gab', 'comsoc', 'praca_gab'], 'subtitle': 'Parecer e aprovação de pautas'},
             {'name': 'Chamada & Presença Diária', 'icon': 'assignment_ind', 'path': '/presenca', 'subtitle': 'Chamada matutina e Pronto do CheGab'},
             {'name': 'Placas de Assento (Jade)', 'icon': 'event_seat', 'path': '/comsoc_assentos', 'subtitle': 'Mapeamento e alocação de auditório'},
+            {'name': 'Gestão de Convites & RSVP', 'icon': 'mark_email_read', 'path': '/comsoc_rsvp', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Convites formais e confirmação de presença'},
             {'name': 'Estoque de Brindes', 'icon': 'card_giftcard', 'path': '/comsoc_brindes', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Controle de brindes do RP'},
+
             {'name': 'Cautela de Material', 'icon': 'battery_charging_full', 'path': '/comsoc_cautela', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Empréstimos de equipamentos'},
         ]
     },
@@ -868,6 +871,89 @@ def smart_editor_page():
     build_layout(smart_editor.render_page)()
 
 
+@ui.page('/comsoc_rsvp')
+def comsoc_rsvp_page():
+    app.storage.user['current_path'] = '/comsoc_rsvp'
+    build_layout(comsoc_rsvp.render_page)()
+
+
+@ui.page('/rsvp/{token}')
+def rsvp_public_page(token: str, request: Request):
+    """Página pública e responsiva para confirmação de presença via Token seguro."""
+    theme.apply_global_styles()
+    from database import get_rsvp_by_token, update_rsvp_response
+    convite = get_rsvp_by_token(token)
+
+    if not convite:
+        with ui.column().classes('w-full min-h-screen items-center justify-center q-pa-md text-center').style('background-color: #0b0f19;'):
+            ui.icon('gavel', size='4rem', color='red-5')
+            ui.label('CONVITE INVÁLIDO OU EXPIRADO').classes('cyber-title text-xl font-bold text-red-4 q-mt-md')
+            ui.label('O link de confirmação acessado não foi encontrado no sistema do Gabinete.').classes('text-xs text-grey-4')
+        return
+
+    evento = convite.get('evento') or {}
+    nome_aut = convite.get('nome_autoridade', 'Excelentíssimo(a) Convidado(a)')
+    posto_aut = convite.get('posto_graduacao', '')
+    status_atual = convite.get('status', 'enviado')
+
+    with ui.column().classes('w-full min-h-screen items-center justify-center p-2 sm:p-6').style('background: radial-gradient(circle, #0f172a 0%, #0b0f19 100%); font-family: "Outfit", sans-serif;'):
+        with ui.card().classes('w-full max-w-xl q-pa-md bg-slate-900 border border-cyan-500/40 rounded-2xl shadow-2xl').style('box-shadow: 0 0 50px rgba(0, 229, 255, 0.15);'):
+            with ui.column().classes('w-full items-center text-center gap-3'):
+                ui.icon('mark_email_read', size='3.5rem', color='cyan-4')
+                ui.label('MARINHA DO BRASIL').classes('text-[11px] font-black text-cyan tracking-[3px]')
+                ui.label('GABINETE DO COMANDANTE GERAL').classes('text-xs font-bold text-amber-4 tracking-[2px]')
+                ui.separator().style('background-color: rgba(0, 229, 255, 0.2);')
+
+                ui.label(f"Prezado(a) {posto_aut} {nome_aut}".strip()).classes('text-lg font-black text-white q-my-xs')
+
+                if evento:
+                    ui.label(f"Vossa Excelência está convidado(a) para {evento.get('nome_evento','a Solenidade Institucional')}.").classes('text-sm text-grey-3 leading-relaxed')
+                    
+                    with ui.card().classes('w-full q-pa-sm bg-black/40 border border-cyan-500/20 rounded-lg text-left q-my-xs'):
+                        ui.label(f"📅 Data: {evento.get('data_evento','')} às {evento.get('hora_evento','')}").classes('text-xs font-bold text-cyan')
+                        ui.label(f"📍 Local: {evento.get('local_evento','')}").classes('text-xs text-white')
+                        ui.label(f"👔 Traje / Fardamento: {evento.get('traje_exigido','')}").classes('text-xs text-amber-4 font-bold')
+
+                ui.separator().style('background-color: rgba(0, 229, 255, 0.2);')
+
+                status_label = ui.label('').classes('text-xs font-bold text-center w-full')
+                if status_atual == 'confirmado':
+                    status_label.text = '✅ PRESENÇA CONFIRMADA ANTERIORMENTE'
+                    status_label.classes('text-emerald-4')
+                elif status_atual in ('recusado', 'justificado'):
+                    status_label.text = '❌ AUSÊNCIA JUSTIFICADA ANTERIORMENTE'
+                    status_label.classes('text-red-4')
+
+                acomp_chk = ui.checkbox('Irei acompanhado(a)', value=bool(convite.get('acompanhantes_count'))).props('dark dense').classes('text-xs text-white')
+                acomp_input = ui.input('Nome e Posto do Acompanhante', value=convite.get('acompanhantes_nomes','') or '').props('dark outlined dense w-full')
+                acomp_input.bind_visibility_from(acomp_chk, 'value')
+
+                obs_input = ui.input('Observações / Restrições (Opcional)', value=convite.get('observacoes','') or '').props('dark outlined dense w-full')
+
+                def responder(status_choice):
+                    try:
+                        client_ip = request.client.host if request.client else ''
+                        ac_count = 1 if acomp_chk.value else 0
+                        ac_nome = acomp_input.value if acomp_chk.value else ''
+                        
+                        update_rsvp_response(token, status_choice, ac_count, ac_nome, obs_input.value, client_ip)
+                        
+                        if status_choice == 'confirmado':
+                            ui.notify('🟢 Presença confirmada com sucesso! Muito obrigado.', color='success', duration=6)
+                            status_label.text = '✅ PRESENÇA CONFIRMADA COM SUCESSO!'
+                            status_label.classes('text-emerald-4')
+                        else:
+                            ui.notify('Justificativa de ausência registrada com sucesso.', color='warning', duration=6)
+                            status_label.text = '❌ AUSÊNCIA JUSTIFICADA COM SUCESSO'
+                            status_label.classes('text-red-4')
+                    except Exception as err:
+                        ui.notify(f"Erro ao registrar resposta: {err}", color='red')
+
+                with ui.row().classes('w-full justify-center gap-3 q-mt-sm wrap'):
+                    ui.button('✅ CONFIRMAR PRESENÇA', on_click=lambda: responder('confirmado')).props('unelevated color=emerald text-color=black bold icon=check_circle').classes('cyber-glow text-xs')
+                    ui.button('❌ JUSTIFICAR AUSÊNCIA', on_click=lambda: responder('justificado')).props('outline color=red text-color=white bold icon=cancel').classes('text-xs')
+
+
 @ui.page('/sisgab_tv')
 def sisgab_tv_page():
     """Modo TV/Monitor do SisGAB — sem barra lateral, tela cheia."""
@@ -878,6 +964,7 @@ def sisgab_tv_page():
     app.storage.user['tv_lock_active'] = True
     theme.apply_global_styles()
     sisgab_tv.render_page()
+
 
 
 @ui.page('/login')

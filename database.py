@@ -1358,4 +1358,119 @@ def confirm_supabase_user(user_id: str) -> bool:
         except Exception as e:
             print(f"[AUTH CONFIRMATION ERROR] Erro ao confirmar usuário {user_id}: {e}")
     return False
+
+# =========================================================================
+# MÓDULO DE GESTÃO DE CONVITES & RSVP
+# =========================================================================
+
+def get_app_base_url() -> str:
+    """Retorna a URL base do SisGAB para montagem dos links de RSVP."""
+    conn = get_service_db_connection() or get_db_connection()
+    if conn:
+        try:
+            res = conn.table('config').select('valor').eq('chave', 'app_base_url').execute()
+            if res.data and res.data[0].get('valor'):
+                return str(res.data[0]['valor']).rstrip('/')
+        except Exception as e:
+            print(f"[APP BASE URL ERR] {e}")
+    return "http://193.122.207.129:8080"
+
+
+def get_autoridades_base():
+    """Retorna o cadastro master de autoridades do Supabase."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn:
+        return []
+    try:
+        res = conn.table('autoridades_base').select('*').order('precedencia_ordem', desc=False).execute()
+        return res.data or []
+    except Exception as e:
+        print(f"[AUTORIDADES BASE ERR] {e}")
+        return []
+
+
+def upsert_autoridade_base(data: dict):
+    """Insere ou atualiza uma autoridade no acervo master."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn:
+        raise Exception("Sem conexão com o banco de dados")
+    return conn.table('autoridades_base').upsert(data).execute()
+
+
+def get_rsvp_evento_by_id(evento_id: str):
+    """Retorna os dados de um evento ceremonial de RSVP."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn:
+        return None
+    try:
+        res = conn.table('rsvp_eventos').select('*').eq('id', evento_id).execute()
+        return res.data[0] if res.data else None
+    except Exception as e:
+        print(f"[RSVP EVENTO GET ERR] {e}")
+        return None
+
+
+def get_rsvp_by_token(token: str):
+    """Busca os dados do convite seguro através do token UUID v4."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn or not token:
+        return None
+    try:
+        res = conn.table('rsvp_convites').select('*').eq('token', token).execute()
+        if not res.data:
+            return None
+        convite = res.data[0]
+        # Carrega dados do evento vinculado
+        evento = get_rsvp_evento_by_id(convite.get('evento_id'))
+        convite['evento'] = evento
+        return convite
+    except Exception as e:
+        print(f"[RSVP GET BY TOKEN ERR] {e}")
+        return None
+
+
+def update_rsvp_response(token: str, status: str, acompanhantes_count: int, acompanhantes_nomes: str, observacoes: str, user_ip: str = ''):
+    """Registra a resposta de confirmação/justificativa da autoridade via token."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn or not token:
+        raise Exception("Dados de confirmação inválidos")
+    import datetime
+    now_iso = datetime.datetime.utcnow().isoformat()
+    
+    update_data = {
+        'status': status, # 'confirmado', 'recusado', 'justificado'
+        'acompanhantes_count': acompanhantes_count,
+        'acompanhantes_nomes': acompanhantes_nomes,
+        'observacoes': observacoes,
+        'respondido_em': now_iso,
+        'ip_resposta': user_ip
+    }
+    
+    res = conn.table('rsvp_convites').update(update_data).eq('token', token).execute()
+    
+    # Se for confirmado, atualiza/insere na lista de convidados do JADE se houver evento_id do JADE
+    try:
+        convite = get_rsvp_by_token(token)
+        if convite and convite.get('evento') and convite['evento'].get('jade_evento_id'):
+            jade_id = convite['evento']['jade_evento_id']
+            autoridade_nome = convite.get('nome_autoridade')
+            posto_val = convite.get('posto_graduacao')
+            
+            # Insere/Atualiza autoridade no JADE
+            if status == 'confirmado':
+                conn.table('eventos_convidados').upsert({
+                    'evento_id': jade_id,
+                    'nome': autoridade_nome,
+                    'posto_graduacao': posto_val,
+                    'status': 'confirmado',
+                    'categoria': 'Autoridade Militar'
+                }, on_conflict='evento_id,nome').execute()
+            elif status in ('recusado', 'justificado'):
+                # Se cancelou, remove do JADE
+                conn.table('eventos_convidados').delete().eq('evento_id', jade_id).ilike('nome', f"%{autoridade_nome}%").execute()
+    except Exception as jade_err:
+        print(f"[RSVP JADE SYNC ERR] {jade_err}")
+
+    return res
+
 
