@@ -68,46 +68,74 @@ def render_page():
                     except Exception as e_ef:
                         print(f"[TV EFETIVO ERR] {e_ef}")
 
-                    with ui.dialog() as diag, ui.card().classes('w-[520px] max-w-full q-pa-md bg-slate-900 border border-deep-orange-500/50 rounded-xl').style('box-shadow: 0 0 35px rgba(255, 87, 34, 0.25);'):
+                    with ui.dialog() as diag, ui.card().classes('w-[920px] max-w-[95vw] q-pa-md bg-slate-900 border border-deep-orange-500/50 rounded-xl').style('box-shadow: 0 0 45px rgba(255, 87, 34, 0.25);'):
                         with ui.column().classes('w-full gap-3'):
                             with ui.row().classes('w-full items-center justify-between'):
-                                ui.label('⚡ LANÇAR MISSÃO RÁPIDA (TV)').classes('text-deep-orange font-black text-md cyber-title')
-                                ui.icon('flash_on', size='1.5rem', color='deep-orange-5')
+                                ui.label('⚡ LANÇAR MISSÃO RÁPIDA (PAUTA / DEMANDA)').classes('text-deep-orange font-black text-md cyber-title')
+                                ui.icon('assignment_late', size='1.5rem', color='deep-orange-5')
                             ui.separator().style('background-color: rgba(255, 87, 34, 0.3);')
 
-                            ui.label('Cadastre a cobertura tática militar com prontidão, equipe e equipamentos.').classes('text-xs text-grey-4')
+                            # LAYOUT DE 2 COLUNAS IDÊNTICO AO COMSOC_DEMANDAS
+                            with ui.row().classes('w-full gap-4 items-start wrap-mobile'):
+                                # --- COLUNA 1: DETALHES DO SERVIÇO & PAUTA ---
+                                with ui.column().classes('flex-1 w-full gap-2'):
+                                    ui.label('📌 Detalhes do Serviço').classes('text-xs font-bold text-amber-4 cyber-title')
 
-                            tit_inp = ui.input('Título / Objetivo da Missão', placeholder='Ex: Cobertura Urgente Chegada do Comandante').props('dark outlined dense w-full')
-                            
-                            with ui.row().classes('w-full gap-2wrap'):
-                                loc_inp = ui.input('Local do Evento', value='Gabinete / COMSOC').props('dark outlined dense').classes('flex-grow')
-                                prio_select = ui.select(
-                                    options={'urgente': '🔥 PRONTIDÃO IMEDIATA', 'cobertura': '⚡ COBERTURA URGENTE', 'rotina': '📌 ROTINA DE CAMPO'},
-                                    value='urgente',
-                                    label='Prioridade'
-                                ).props('dark outlined dense').classes('w-48')
+                                    cat_select = ui.select(
+                                        options={
+                                            'audiovisual': '📷 Cobertura Fotográfica & Vídeo',
+                                            'prensa': '🎥 Imprensa & Cobertura de Autoridades',
+                                            'design': '🎨 Design / Arte / Placa JADE',
+                                            'cerimonial': '📜 Cerimonial & Solenidade'
+                                        },
+                                        value='audiovisual',
+                                        label='Categoria da Demanda'
+                                    ).props('dark outlined dense w-full')
 
-                            with ui.row().classes('w-full gap-2'):
-                                now_date = datetime.now().strftime('%Y-%m-%d')
-                                now_time = datetime.now().strftime('%H:%M')
-                                data_inp = ui.input('Data', value=now_date).props('dark outlined dense type=date').classes('w-1/2')
-                                hora_inp = ui.input('Horário de Saída', value=now_time).props('dark outlined dense type=time').classes('w-1/2')
+                                    tit_inp = ui.input('Título Geral da Tarefa / Solenidade', placeholder='Ex: Cobertura Fotográfica da Passagem de Comando').props('dark outlined dense w-full')
 
-                            militar_select = ui.select(
-                                options=efetivo_options,
-                                value='0',
-                                label='Militar / Fotógrafo Designado'
-                            ).props('dark outlined dense w-full')
+                                    with ui.row().classes('w-full gap-2'):
+                                        sol_inp = ui.input('Solicitante', value='CGCFN / GABINETE').props('dark outlined dense').classes('w-1/2')
+                                        setor_inp = ui.input('Setor / OM', value='CGCFN').props('dark outlined dense').classes('w-1/2')
 
-                            eqp_inp = ui.input(
-                                'Equipamentos / Cautela Recomendada',
-                                value='Câmera 4K, Cartão SD, Bateria Extra, Microfone Lapela',
-                                placeholder='Ex: Drone, Câmera 4K, Tripé'
-                            ).props('dark outlined dense w-full')
+                                    with ui.row().classes('w-full gap-2'):
+                                        ramal_inp = ui.input('Contato / Ramal', value='Interno').props('dark outlined dense').classes('w-1/2')
+                                        prio_select = ui.select(
+                                            options={'urgente': '🔥 Alta / Urgente', 'normal': '🟢 Normal', 'prontidao': '⚡ Prontidão 24h'},
+                                            value='urgente',
+                                            label='Prioridade'
+                                        ).props('dark outlined dense').classes('w-1/2')
 
-                            obs_inp = ui.input('Observações de Campo / Pauta', placeholder='Ex: Fardamento 3ºA, Ponto de Encontro na COMSOC').props('dark outlined dense w-full')
+                                    with ui.row().classes('w-full gap-2'):
+                                        now_date = datetime.now().strftime('%Y-%m-%d')
+                                        now_time = datetime.now().strftime('%H:%M')
+                                        data_inp = ui.input('Prazo / Data do Evento', value=now_date).props('dark outlined dense type=date').classes('w-1/2')
+                                        hora_inp = ui.input('Horário de Saída', value=now_time).props('dark outlined dense type=time').classes('w-1/2')
 
-                            def salvar_missao():
+                                    sigilo_chk = ui.checkbox('🔒 Pauta Sigilosa / Reservada (Gabinete)', value=False).props('dark dense').classes('text-xs text-amber-3')
+
+                                # --- COLUNA 2: OPERACIONAL & EXECUÇÃO ---
+                                with ui.column().classes('flex-1 w-full gap-2'):
+                                    ui.label('⚙️ Operacional & Execução').classes('text-xs font-bold text-cyan cyber-title')
+
+                                    militar_select = ui.select(
+                                        options=efetivo_options,
+                                        value='0',
+                                        label='Designar Militar Responsável'
+                                    ).props('dark outlined dense w-full')
+
+                                    loc_inp = ui.input('Local do Evento / Ponto de Encontro', value='Gabinete / COMSOC').props('dark outlined dense w-full')
+
+                                    obs_inp = ui.textarea('Briefing / Instruções de Execução', placeholder='Digite aqui orientações de fardamento, pauta ou detalhes da autoridade...').props('dark outlined dense w-full rows=3')
+
+                                    eqp_inp = ui.input(
+                                        'Cautela de Equipamentos Recomendados',
+                                        value='Câmera 4K, Cartão SD, Bateria Extra, Microfone Lapela',
+                                        placeholder='Ex: Drone, Kit Câmera, Tripé'
+                                    ).props('dark outlined dense w-full')
+
+                            # BOTÕES DE AÇÃO NA BASE
+                            def salvar_missao(aprovar_direto=True):
                                 t = tit_inp.value.strip()
                                 if not t:
                                     ui.notify('Digite o título da missão.', color='warning')
@@ -118,50 +146,55 @@ def render_page():
                                         militar_id_val = militar_select.value if militar_select.value != '0' else None
                                         militar_nome_val = efetivo_options.get(str(militar_id_val), 'COMSOC / Monitor TV') if militar_id_val else 'COMSOC / Monitor TV'
 
-                                        prio_prefix = "🔥 " if prio_select.value == 'urgente' else ("⚡ " if prio_select.value == 'cobertura' else "📌 ")
+                                        prio_prefix = "🔒 " if sigilo_chk.value else ("🔥 " if prio_select.value == 'urgente' else "⚡ ")
                                         titulo_final = f"{prio_prefix}{t.upper()}"
+                                        status_val = 'aprovada' if aprovar_direto else 'pendente'
 
-                                        ins_res = db.table('demandas_comunicacao').insert({
+                                        db.table('demandas_comunicacao').insert({
                                             'titulo_evento': titulo_final,
-                                            'solicitante_nome': 'MONITOR TV',
-                                            'contato': 'COMSOC / Monitor TV',
-                                            'setor': loc_inp.value or 'Gabinete',
+                                            'solicitante_nome': sol_inp.value or 'MONITOR TV',
+                                            'contato': ramal_inp.value or 'Interno',
+                                            'setor': setor_inp.value or 'Gabinete',
                                             'data_evento': data_inp.value or now_date,
                                             'hora_evento': hora_inp.value or now_time,
                                             'local_evento': loc_inp.value or 'Gabinete',
-                                            'status': 'aprovada',
-                                            'categoria_demanda': 'audiovisual',
+                                            'status': status_val,
+                                            'categoria_demanda': cat_select.value or 'audiovisual',
                                             'responsavel_id': militar_id_val,
-                                            'observacoes': f"Equipamentos: {eqp_inp.value} | Obs: {obs_inp.value}"
+                                            'observacoes': f"Equipamentos: {eqp_inp.value} | Briefing: {obs_inp.value}"
                                         }).execute()
 
-                                        # Enviar alerta instantâneo para o Telegram
+                                        # Enviar notificação Telegram
                                         try:
                                             from notifications_manager import notify_telegram
                                             msg_tg = (
-                                                f"🚨 *NOVA MISSÃO RÁPIDA LANÇADA NA TV*\n\n"
-                                                f"📌 *Objetivo:* {t}\n"
+                                                f"🚨 *NOVA DEMANDA RÁPIDA LANÇADA NA TV*\n\n"
+                                                f"📌 *Título:* {t}\n"
+                                                f"📂 *Categoria:* {cat_select.value.upper()}\n"
                                                 f"📍 *Local:* {loc_inp.value}\n"
                                                 f"⏰ *Horário:* {hora_inp.value} ({data_inp.value})\n"
-                                                f"🎖️ *Equipe:* {militar_nome_val}\n"
+                                                f"🎖️ *Responsável:* {militar_nome_val}\n"
                                                 f"🎒 *Equipamentos:* {eqp_inp.value}\n"
-                                                f"📝 *Obs:* {obs_inp.value or 'Nenhuma'}\n\n"
-                                                f"⚡ *Status:* APROVADA / PRONTIDÃO"
+                                                f"🔒 *Sigilo:* {'SIM (Reservada)' if sigilo_chk.value else 'NÃO'}\n\n"
+                                                f"⚡ *Status:* {status_val.upper()}"
                                             )
                                             notify_telegram(msg_tg, "demandas")
                                         except Exception as tg_err:
                                             print(f"[TV TG ERR] {tg_err}")
 
-                                        ui.notify(f"⚡ Missão Rápida '{t}' lançada com sucesso!", color='positive')
+                                        ui.notify(f"⚡ Missão '{t}' cadastrada como {status_val.upper()}!", color='positive')
                                         diag.close()
                                         render_tv_dashboard.refresh()
                                 except Exception as e:
                                     ui.notify(f'Erro ao lançar missão: {e}', color='negative')
 
-                            with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
+                            with ui.row().classes('w-full justify-between items-center q-mt-sm wrap gap-2'):
                                 ui.button('Cancelar', on_click=diag.close).props('flat color=grey text-color=white')
-                                ui.button('⚡ Lançar Missão Agora', on_click=salvar_missao).props('unelevated color=deep-orange text-color=white bold icon=flash_on')
+                                with ui.row().classes('gap-2'):
+                                    ui.button('⭐ SALVAR & APROVAR DIRETO (QUARTEL)', on_click=lambda: salvar_missao(True)).props('unelevated color=amber-9 text-color=black bold icon=star')
+                                    ui.button('➢ ENVIAR PARA AVALIAÇÃO', on_click=lambda: salvar_missao(False)).props('unelevated color=cyan text-color=black bold icon=send')
                     diag.open()
+
 
                 def toggle_fullscreen():
                     ui.run_javascript('''
