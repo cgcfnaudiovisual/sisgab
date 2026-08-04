@@ -1132,10 +1132,11 @@ def login_page(request: Request):
                     ui.button('Redefinir Senha', on_click=submit_pin_reset).props('unelevated color=amber-9 text-color=black')
 
 
-    # Fundo do login
+    # Fundo do login com transparência para o efeito de Partículas Antigravidade
     with ui.column().classes('w-full min-h-screen items-center justify-center p-2 sm:p-4 gap-2').style(
-        'background: linear-gradient(135deg, #121212 0%, #1e1e2f 100%);'
+        'background: transparent; position: relative; z-index: 1;'
     ):
+
         with ui.card().classes('w-full max-w-sm no-shadow rounded-xl q-pa-md').style(
             f'background: {theme.colors["bg_panel"]}; border: 1px solid {theme.colors["border"]}; box-shadow: 0 10px 40px rgba(0,0,0,0.6) !important;'
         ):

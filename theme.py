@@ -157,7 +157,7 @@ body {
 }
 </style>
 
-<canvas id="antigravity-canvas" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 0; opacity: 0.65;"></canvas>
+<canvas id="antigravity-canvas" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 0; opacity: 0.9;"></canvas>
 
 <script>
 (function() {
@@ -169,7 +169,7 @@ body {
     if (!canvas) {
       canvas = document.createElement('canvas');
       canvas.id = 'antigravity-canvas';
-      canvas.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 0; opacity: 0.65;';
+      canvas.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 0; opacity: 0.9;';
       document.body.prepend(canvas);
     }
     const ctx = canvas.getContext('2d');
@@ -182,9 +182,9 @@ body {
     });
 
     const isMobile = window.innerWidth < 768;
-    const particleCount = isMobile ? 18 : 45;
+    const particleCount = isMobile ? 22 : 65;
     const particles = [];
-    const mouse = { x: -1000, y: -1000, radius: 140 };
+    const mouse = { x: -1000, y: -1000, radius: 160 };
 
     window.addEventListener('mousemove', function(e) {
       mouse.x = e.clientX;
@@ -203,11 +203,11 @@ body {
       reset() {
         this.x = Math.random() * width;
         this.y = height + Math.random() * 100;
-        this.size = Math.random() * 2 + 1.2;
-        this.speedY = Math.random() * 0.7 + 0.3; // Física Antigravidade (sobe)
-        this.speedX = (Math.random() - 0.5) * 0.4;
-        this.alpha = Math.random() * 0.6 + 0.3;
-        this.color = Math.random() > 0.3 ? '197, 160, 89' : '212, 175, 55';
+        this.size = Math.random() * 2.5 + 1.5;
+        this.speedY = Math.random() * 0.8 + 0.4;
+        this.speedX = (Math.random() - 0.5) * 0.5;
+        this.alpha = Math.random() * 0.7 + 0.35;
+        this.color = Math.random() > 0.3 ? '212, 175, 55' : '255, 193, 7';
       }
       update() {
         this.y -= this.speedY;
@@ -220,8 +220,8 @@ body {
         if (dist < mouse.radius) {
           const force = (mouse.radius - dist) / mouse.radius;
           const angle = Math.atan2(dy, dx);
-          this.x -= Math.cos(angle) * force * 3;
-          this.y -= Math.sin(angle) * force * 3;
+          this.x -= Math.cos(angle) * force * 4;
+          this.y -= Math.sin(angle) * force * 4;
         }
 
         if (this.y < -20 || this.x < -20 || this.x > width + 20) {
@@ -232,11 +232,12 @@ body {
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(${this.color}, ${this.alpha})`;
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = `rgba(${this.color}, 0.8)`;
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = `rgba(${this.color}, 0.95)`;
         ctx.fill();
       }
     }
+
 
     for (let i = 0; i < particleCount; i++) {
       particles.push(new Particle());
