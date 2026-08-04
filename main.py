@@ -890,7 +890,8 @@ def comsoc_rsvp_page():
 def rsvp_public_page(token: str, request: Request):
     """Página pública e solene de RSVP com design VIP/Institucional, Hero Banner e alta acessibilidade."""
     theme.apply_global_styles()
-    from database import get_rsvp_by_token, update_rsvp_response, parse_almirantado_stars
+    from database import get_rsvp_by_token, update_rsvp_response
+    from comsoc_assentos import parse_almirantado_stars
     convite = get_rsvp_by_token(token)
 
     if not convite:
