@@ -1049,19 +1049,42 @@ def login_page(request: Request):
                         except Exception as mail_err:
                             print(f"[RECOVERY MAIL ERR] {mail_err}")
                             
-                    # Alerta o administrador no Telegram com o código PIN (servindo como canal de contingência oficial)
+                    # Notificação segura no Telegram:
                     try:
-                        from notifications_manager import notify_telegram
-                        alert_txt = (
-                            f"🔑 **RECUPERAÇÃO DE SENHA SOLICITADA**\n\n"
-                            f"📧 E-mail: `{rec_email.value}`\n"
-                            f"🔢 **CÓDIGO PIN TEMPORÁRIO:** `{pin_generated}` (Válido por 15 min)\n"
-                            f"📊 Status E-mail: {'✅ Enviado' if sent_email else '⚠️ SMTP Limitado'}\n\n"
-                            f"💡 Caso o e-mail não chegue, você pode informar o código PIN `{pin_generated}` ao militar."
+                        from notifications_manager import notify_telegram, send_notification_to_user
+                        user_tg_id = None
+                        
+                        # Tenta buscar o Telegram ID do próprio usuário que solicitou
+                        if db_conn:
+                            res_m = db_conn.table('efetivo').select('telegram_id').ilike('email', rec_email.value).execute()
+                            if res_m.data and res_m.data[0].get('telegram_id'):
+                                user_tg_id = res_m.data[0]['telegram_id']
+                            else:
+                                res_u = db_conn.table('users').select('telegram_id').ilike('email', rec_email.value).execute()
+                                if res_u.data and res_u.data[0].get('telegram_id'):
+                                    user_tg_id = res_u.data[0]['telegram_id']
+
+                        # 1. Se o próprio militar tiver Telegram ID associado, envia o PIN EXCLUSIVAMENTE para ele em mensagem privada
+                        if user_tg_id:
+                            user_msg = (
+                                f"🔑 **RECUPERAÇÃO DE SENHA DO SISGAB**\n\n"
+                                f"Seu código PIN de recuperação é: `{pin_generated}`\n\n"
+                                f"⏱️ Válido por 15 minutos. Insira este código no site para redefinir sua senha."
+                            )
+                            import asyncio
+                            asyncio.run(send_notification_to_user(user_tg_id, user_msg))
+
+                        # 2. Para os Administradores, envia apenas o ALERTA DE AUDITORIA (SEM EXPOR O PIN)
+                        admin_alert = (
+                            f"🛡️ **AUDITORIA DE SEGURANÇA - RECUPERAÇÃO DE SENHA**\n\n"
+                            f"📧 Usuário/E-mail: `{rec_email.value}`\n"
+                            f"⚡ Ação: O militar solicitou o PIN de redefinição de senha no site.\n"
+                            f"📱 Telegram Privado do Usuário: {'✅ Enviado' if user_tg_id else '⚠️ Não associado ao perfil'}"
                         )
-                        notify_telegram(alert_txt, "saude", role_required="admin")
+                        notify_telegram(admin_alert, "saude", role_required="admin")
                     except Exception as e_notif:
-                        print(f"[RECOVERY TELEGRAM ERR] {e_notif}")
+                        print(f"[RECOVERY TELEGRAM SECURE ERR] {e_notif}")
+
                         
                     rec_error.text = ''
                     step1_container.style('display: none;')
