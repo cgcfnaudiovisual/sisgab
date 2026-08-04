@@ -161,25 +161,28 @@ def _get_weekly_events_text():
         from database import get_bot_db_connection as get_db_connection
         db = get_db_connection()
         if not db:
-            return "⚠️ Banco de dados indisponível."
+            return "⚠️ Banco de dados indisponível no momento."
         
         hoje = datetime.now().date()
         fim_semana = hoje + timedelta(days=7)
         
-        res = db.table('demandas_comunicacao').select('*').gte(
-            'data_evento', hoje.isoformat()
-        ).lte(
-            'data_evento', fim_semana.isoformat()
-        ).order('data_evento', desc=False).execute()
-        
-        events = res.data if res.data else []
+        try:
+            res = db.table('demandas_comunicacao').select('*').gte(
+                'data_evento', hoje.isoformat()
+            ).lte(
+                'data_evento', fim_semana.isoformat()
+            ).order('data_evento', desc=False).execute()
+            events = res.data if (res and res.data) else []
+        except Exception as e_db:
+            print(f"[BOT AGENDA DB ERR] {e_db}")
+            events = []
         
         if not events:
             return (
                 f"📅 **AGENDA SEMANAL — COMSOC/CGCFN**\n"
                 f"Período: {hoje.strftime('%d/%m/%Y')} a {fim_semana.strftime('%d/%m/%Y')}\n\n"
                 f"🟢 Nenhum evento ou pauta agendada para os próximos 7 dias.\n\n"
-                f"Use **➕ Criar Demanda** para adicionar uma nova pauta."
+                f"Use a opção **➕ Criar Demanda** no menu para cadastrar."
             )
         
         DIAS_SEMANA_PT = {
@@ -189,7 +192,9 @@ def _get_weekly_events_text():
 
         events_by_date = {}
         for ev in events:
-            dt_str = str(ev.get('data_evento', ''))
+            dt_str = str(ev.get('data_evento', '')).strip()
+            if not dt_str:
+                continue
             if dt_str not in events_by_date:
                 events_by_date[dt_str] = []
             events_by_date[dt_str].append(ev)
@@ -205,7 +210,7 @@ def _get_weekly_events_text():
             day_events.sort(key=lambda x: str(x.get('hora_evento', '00:00')))
             
             try:
-                dt_obj = datetime.strptime(dt_str, '%Y-%m-%d')
+                dt_obj = datetime.strptime(dt_str[:10], '%Y-%m-%d')
                 weekday_name = DIAS_SEMANA_PT.get(dt_obj.weekday(), '')
                 date_header = f"📅 **{weekday_name} — {dt_obj.strftime('%d/%m/%Y')}**"
             except Exception:
@@ -216,11 +221,12 @@ def _get_weekly_events_text():
                 st_val = str(ev.get('status', '')).strip().lower()
                 st_icon = '🟢' if st_val in ('aprovado', 'aprovada', 'aprovadas') else '🟡' if st_val in ('pendente', 'pendentes') else '🛠️'
                 hora = str(ev.get('hora_evento', '09:00'))[:5]
-                resp_txt = escape_markdown(str(_format_militar_responsavel(ev, db)))
-                titulo = escape_markdown(str(ev.get('titulo_evento', 'Sem Título')))
-                local = escape_markdown(str(ev.get('local_evento', 'N/I')))
-                solicitante = escape_markdown(str(ev.get('solicitante_nome', 'N/I')))
-                setor = escape_markdown(str(ev.get('setor', 'CGCFN')))
+                
+                resp_txt = str(_format_militar_responsavel(ev, db)).replace('*', '').replace('_', '')
+                titulo = str(ev.get('titulo_evento', 'Sem Título')).replace('*', '').replace('_', '')
+                local = str(ev.get('local_evento', 'N/I')).replace('*', '').replace('_', '')
+                solicitante = str(ev.get('solicitante_nome', 'N/I')).replace('*', '').replace('_', '')
+                setor = str(ev.get('setor', 'CGCFN')).replace('*', '').replace('_', '')
                 
                 msg += (
                     f"   {st_icon} **{hora}** — **{titulo}**\n"
@@ -232,7 +238,9 @@ def _get_weekly_events_text():
         msg += f"📊 Total: **{len(events)} evento(s)** na semana.\n⚓ _SisGAB — Gestão de Gabinete_"
         return msg
     except Exception as e:
-        return f"❌ Erro ao buscar agenda: {e}"
+        print(f"[CRITICAL BOT AGENDA ERR] {e}")
+        return f"❌ Erro ao buscar agenda semanal: {e}"
+
 
 
 def register_common_handlers(bot):
@@ -797,10 +805,12 @@ def register_common_handlers(bot):
                         await bot.reply_to(message, txt, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
                     except Exception as md_err:
                         print(f"[AGENDA MD ERR] {md_err}")
-                        clean_txt = txt.replace('**', '').replace('__', '').replace('*', '').replace('_', '')
+                        clean_txt = txt.replace('**', '').replace('__', '').replace('*', '').replace('_', '').replace('\\', '')
                         await bot.reply_to(message, clean_txt, reply_markup=get_main_menu_keyboard(is_operator))
                 except Exception as err_ag:
+                    print(f"[AGENDA HANDLER ERR] {err_ag}")
                     await bot.reply_to(message, f"❌ Erro ao carregar agenda: {err_ag}", reply_markup=get_main_menu_keyboard(is_operator))
+
 
 
             elif text == "📋 Dar Presença" or text == "🟢 Dar Presença" or text == "/presenca":
