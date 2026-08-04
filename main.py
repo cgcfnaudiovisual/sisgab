@@ -879,7 +879,7 @@ def comsoc_rsvp_page():
 
 @ui.page('/rsvp/{token}')
 def rsvp_public_page(token: str, request: Request):
-    """Página pública e responsiva para confirmação de presença via Token seguro."""
+    """Página pública e responsiva com foco em acessibilidade para veteranos/idosos (alta legibilidade)."""
     theme.apply_global_styles()
     from database import get_rsvp_by_token, update_rsvp_response
     convite = get_rsvp_by_token(token)
@@ -897,26 +897,26 @@ def rsvp_public_page(token: str, request: Request):
     status_atual = convite.get('status', 'enviado')
 
     with ui.column().classes('w-full min-h-screen items-center justify-center p-3 sm:p-6').style('background: radial-gradient(circle, #0f172a 0%, #0b0f19 100%); font-family: "Outfit", sans-serif;'):
-        with ui.card().classes('w-full max-w-xl q-pa-lg bg-slate-900 border border-cyan-500/40 rounded-2xl shadow-2xl').style('box-shadow: 0 0 50px rgba(0, 229, 255, 0.15);'):
+        with ui.card().classes('w-full max-w-xl q-pa-lg bg-slate-900 border-2 border-cyan-400/50 rounded-2xl shadow-2xl').style('box-shadow: 0 0 50px rgba(0, 229, 255, 0.2);'):
             with ui.column().classes('w-full items-center text-center gap-3'):
-                ui.icon('mark_email_read', size='3.5rem', color='cyan-4')
-                ui.label('MARINHA DO BRASIL').classes('text-xs font-black text-cyan tracking-[3px]')
+                ui.icon('mark_email_read', size='4rem', color='cyan-4')
+                ui.label('MARINHA DO BRASIL').classes('text-sm font-black text-cyan tracking-[3px]')
                 ui.label('GABINETE DO COMANDANTE GERAL DO CFN').classes('text-xs font-bold text-amber-4 tracking-[2px]')
-                ui.separator().style('background-color: rgba(0, 229, 255, 0.2);')
+                ui.separator().style('background-color: rgba(0, 229, 255, 0.3);')
 
-                ui.label(f"Prezado(a) {posto_aut} {nome_aut}".strip()).classes('text-xl font-black text-white q-my-xs')
+                ui.label(f"Prezado(a) {posto_aut} {nome_aut}".strip()).classes('text-2xl font-black text-white q-my-xs')
 
                 if evento:
-                    ui.label(f"Vossa Excelência está cordialmente convidado(a) para {evento.get('nome_evento','a Solenidade Institucional')}.").classes('text-sm text-grey-3 leading-relaxed')
+                    ui.label(f"Vossa Excelência está cordialmente convidado(a) para {evento.get('nome_evento','a Solenidade Institucional')}.").classes('text-base text-grey-2 leading-relaxed')
                     
-                    with ui.card().classes('w-full q-pa-md bg-black/50 border border-cyan-500/30 rounded-xl text-left q-my-xs gap-1.5'):
-                        ui.label(f"📅 Data e Horário: {evento.get('data_evento','')} às {evento.get('hora_evento','')}").classes('text-xs font-bold text-cyan')
-                        ui.label(f"📍 Local: {evento.get('local_evento','')}").classes('text-xs font-semibold text-white')
-                        ui.label(f"👔 Traje / Fardamento Exigido: {evento.get('traje_exigido','')}").classes('text-xs text-amber-4 font-black')
+                    with ui.card().classes('w-full q-pa-md bg-black/60 border border-cyan-500/40 rounded-xl text-left q-my-xs gap-2'):
+                        ui.label(f"📅 Data e Horário: {evento.get('data_evento','')} às {evento.get('hora_evento','')}").classes('text-sm font-bold text-cyan-3')
+                        ui.label(f"📍 Local: {evento.get('local_evento','')}").classes('text-sm font-semibold text-white')
+                        ui.label(f"👔 Traje / Fardamento Exigido: {evento.get('traje_exigido','')}").classes('text-sm text-amber-4 font-black')
 
-                ui.separator().style('background-color: rgba(0, 229, 255, 0.2);')
+                ui.separator().style('background-color: rgba(0, 229, 255, 0.3);')
 
-                dynamic_area = ui.column().classes('w-full items-center text-center gap-3')
+                dynamic_area = ui.column().classes('w-full items-center text-center gap-4')
 
                 def render_content(show_conclusion=False, final_status=None):
                     dynamic_area.clear()
@@ -925,47 +925,49 @@ def rsvp_public_page(token: str, request: Request):
                     with dynamic_area:
                         if show_conclusion or (st in ('confirmado', 'justificado', 'recusado') and not show_conclusion):
                             # =========================================================================
-                            # TELA SOLENE DE CONCLUSÃO DE SESSÃO DO PROTOCOLO
+                            # TELA SOLENE DE CONCLUSÃO DE SESSÃO DO PROTOCOLO (SENIOR FRIENDLY)
                             # =========================================================================
-                            with ui.column().classes('w-full items-center text-center gap-3 q-py-md'):
+                            with ui.column().classes('w-full items-center text-center gap-4 q-py-md'):
                                 if st == 'confirmado':
-                                    ui.icon('check_circle', size='4.5rem', color='emerald-4').classes('q-mb-xs')
-                                    ui.label('PRESENÇA REGISTRADA COM SUCESSO!').classes('text-lg font-black text-emerald-4 cyber-title')
-                                    ui.label('O Gabinete do Comandante-Geral agradece a confirmação de Vossa Excelência.').classes('text-xs text-grey-2 leading-relaxed')
+                                    ui.icon('check_circle', size='5rem', color='emerald-4').classes('q-mb-xs')
+                                    ui.label('PRESENÇA REGISTRADA COM SUCESSO!').classes('text-xl font-black text-emerald-4 cyber-title')
+                                    ui.label('O Gabinete do Comandante-Geral agradece a confirmação de Vossa Excelência.').classes('text-sm text-white leading-relaxed font-bold')
                                     
-                                    with ui.card().classes('w-full q-pa-md bg-black/40 border border-emerald-500/30 rounded-xl text-left q-my-xs gap-1'):
-                                        ui.label('📧 COMPROVANTE & RETORNO POR E-MAIL:').classes('text-[11px] font-bold text-emerald-4')
-                                        ui.label('Um comprovante com todas as orientações do evento foi direcionado para a sua caixa de entrada. Vossa Excelência pode fechar esta página ou reacessá-la através do e-mail recebido a qualquer momento.').classes('text-xs text-grey-3 leading-relaxed')
+                                    with ui.card().classes('w-full q-pa-md bg-black/50 border border-emerald-500/40 rounded-xl text-left q-my-xs gap-1.5'):
+                                        ui.label('📧 COMPROVANTE ENVIADO AO SEU E-MAIL:').classes('text-xs font-bold text-emerald-4')
+                                        ui.label('Um e-mail de confirmação contendo todas as orientações do evento foi enviado para Vossa Excelência. Pode fechar esta página ou reabri-la através do e-mail quando desejar.').classes('text-xs text-grey-2 leading-relaxed')
                                 
                                 elif st in ('justificado', 'recusado'):
-                                    ui.icon('cancel', size='4.5rem', color='red-4').classes('q-mb-xs')
-                                    ui.label('JUSTIFICATIVA REGISTRADA NO PROTOCOLO').classes('text-lg font-black text-red-4 cyber-title')
-                                    ui.label('A ausência de Vossa Excelência foi comunicada e arquivada formalmente no protocolo do Gabinete. Agradecemos o retorno.').classes('text-xs text-grey-3 leading-relaxed')
+                                    ui.icon('cancel', size='5rem', color='red-4').classes('q-mb-xs')
+                                    ui.label('JUSTIFICATIVA REGISTRADA NO PROTOCOLO').classes('text-xl font-black text-red-4 cyber-title')
+                                    ui.label('A ausência de Vossa Excelência foi comunicada e arquivada formalmente no protocolo do Gabinete. Agradecemos o retorno.').classes('text-sm text-white leading-relaxed font-bold')
                                 
                                 else:
-                                    ui.icon('schedule', size='4.5rem', color='amber-4').classes('q-mb-xs')
-                                    ui.label('RESPOSTA MANTIDA EM ABERTO').classes('text-lg font-black text-amber-4 cyber-title')
-                                    ui.label('Entendido! A solicitação continuará pendente no sistema do Gabinete. Vossa Excelência poderá retornar e responder a qualquer momento através do link recebido em seu e-mail.').classes('text-xs text-grey-3 leading-relaxed')
+                                    ui.icon('schedule', size='5rem', color='amber-4').classes('q-mb-xs')
+                                    ui.label('RESPOSTA MANTIDA EM ABERTO').classes('text-xl font-black text-amber-4 cyber-title')
+                                    ui.label('Entendido! A solicitação continuará pendente no sistema do Gabinete. Vossa Excelência poderá retornar e responder a qualquer momento através do link recebido em seu e-mail.').classes('text-sm text-white leading-relaxed font-bold')
 
-                                ui.separator().style('background-color: rgba(0, 229, 255, 0.15);').classes('w-full q-my-xs')
+                                ui.separator().style('background-color: rgba(0, 229, 255, 0.2);').classes('w-full q-my-xs')
 
                                 with ui.row().classes('w-full justify-center gap-3 q-mt-xs wrap'):
-                                    ui.button('✏️ ALTERAR OU REVISAR RESPOSTA', on_click=lambda: render_content(show_conclusion=False, final_status='pendente')).props('outline color=cyan text-color=white dense bold icon=edit').classes('text-xs')
-                                    ui.button('📧 FECHAR PÁGINA', on_click=lambda: ui.run_javascript('window.close()')).props('unelevated color=grey-8 text-color=white dense bold icon=close').classes('text-xs')
+                                    ui.button('✏️ ALTERAR MINHA RESPOSTA', on_click=lambda: render_content(show_conclusion=False, final_status='pendente')).props('outline color=cyan text-color=white bold icon=edit').style('font-size: 0.85rem; padding: 10px 20px;')
+                                    ui.button('📧 FECHAR ESTA PÁGINA', on_click=lambda: ui.run_javascript('window.close()')).props('unelevated color=grey-8 text-color=white bold icon=close').style('font-size: 0.85rem; padding: 10px 20px;')
 
                         else:
                             # =========================================================================
-                            # FORMULÁRIO ATIVO DE RESPOSTA
+                            # FORMULÁRIO ATIVO DE RESPOSTA (SENIOR ACCESSIBILITY - ALTO CONTRASTE E TEXTOS GRANDES)
                             # =========================================================================
-                            with ui.column().classes('w-full gap-3 items-center'):
-                                with ui.column().classes('w-full gap-2 text-left bg-black/30 q-pa-sm rounded-xl border border-white/10'):
-                                    acomp_chk = ui.checkbox('Irei acompanhado(a)', value=bool(convite.get('acompanhantes_count'))).props('dark dense').classes('text-xs text-amber-4 font-bold')
+                            with ui.column().classes('w-full gap-4 items-center'):
+                                # PAINEL DE ACOMPANHANTES
+                                with ui.column().classes('w-full gap-3 text-left bg-black/40 q-pa-md rounded-xl border border-cyan-500/30'):
+                                    acomp_chk = ui.checkbox('Irei acompanhado(a) a este evento', value=bool(convite.get('acompanhantes_count'))).props('dark').style('font-size: 0.95rem; font-weight: 800; color: #fbbf24;')
                                     
-                                    with ui.row().classes('w-full gap-2 items-center').bind_visibility_from(acomp_chk, 'value'):
-                                        acomp_num = ui.number('Quant. Acompanhantes', value=int(convite.get('acompanhantes_count', 1) or 1), min=1, max=10).props('dark outlined dense').classes('w-1/3 text-xs')
-                                        acomp_input = ui.input('Nome(s) Completo(s) / Posto do(s) Acompanhante(s)', value=convite.get('acompanhantes_nomes','') or '', placeholder='Ex: Sra. Maria Silva (Esposa)').props('dark outlined dense').classes('w-2/3 text-xs')
+                                    with ui.column().classes('w-full gap-3 q-mt-xs').bind_visibility_from(acomp_chk, 'value'):
+                                        with ui.row().classes('w-full gap-3 items-center wrap'):
+                                            acomp_num = ui.number('Quantos acompanhantes?', value=int(convite.get('acompanhantes_count', 1) or 1), min=1, max=10).props('dark outlined').classes('w-full sm:w-1/3').style('font-size: 0.9rem;')
+                                            acomp_input = ui.input('Nome(s) Completo(s) do(s) Acompanhante(s)', value=convite.get('acompanhantes_nomes','') or '', placeholder='Ex: Sra. Maria Silva (Esposa)').props('dark outlined').classes('w-full sm:w-2/3').style('font-size: 0.9rem;')
 
-                                obs_input = ui.input('Observações / Restrições (Opcional)', value=convite.get('observacoes','') or '', placeholder='Ex: Restrição alimentar, necessidade de acessibilidade').props('dark outlined dense w-full').classes('text-xs')
+                                obs_input = ui.input('Observações / Restrições (Opcional)', value=convite.get('observacoes','') or '', placeholder='Ex: Restrição de mobilidade ou de alimentação').props('dark outlined w-full').style('font-size: 0.9rem;')
 
                                 def submit_resposta(choice):
                                     try:
@@ -979,14 +981,42 @@ def rsvp_public_page(token: str, request: Request):
                                     except Exception as err:
                                         ui.notify(f"Erro ao registrar resposta: {err}", color='red')
 
-                                with ui.column().classes('w-full gap-2 q-mt-xs items-center'):
-                                    ui.button('✅ CONFIRMAR PRESENÇA', on_click=lambda: submit_resposta('confirmado')).props('unelevated color=emerald text-color=black bold icon=check_circle').style('font-size: 0.95rem; font-weight: 900; padding: 12px 32px; width: 100%; box-shadow: 0 0 25px rgba(0, 230, 118, 0.4);')
-                                    
-                                    with ui.row().classes('w-full justify-between gap-2'):
-                                        ui.button('❌ JUSTIFICAR AUSÊNCIA', on_click=lambda: submit_resposta('justificado')).props('unelevated color=red-9 text-color=white bold icon=cancel').classes('w-1/2 text-xs').style('padding: 10px;')
-                                        ui.button('⏳ RESPONDER MAIS TARDE', on_click=lambda: submit_resposta('pendente')).props('outline color=amber-9 text-color=amber-4 bold icon=schedule').classes('w-1/2 text-xs').style('padding: 10px;')
+                                # BOTOES DE ALTO CONTRASTE, FONTE GRANDE E CORES VIBRANTES
+                                with ui.column().classes('w-full gap-3 q-mt-sm items-center'):
+                                    # BOTÃO 1: CONFIRMAR (VERDE LÍMPIDO NEON COM TEXTO PRETO INTENSO)
+                                    ui.button(
+                                        '✅ CONFIRMAR MINHA PRESENÇA',
+                                        on_click=lambda: submit_resposta('confirmado')
+                                    ).style(
+                                        'background-color: #00c853 !important; color: #000000 !important; '
+                                        'font-size: 1.05rem !important; font-weight: 900 !important; '
+                                        'padding: 14px 24px !important; width: 100% !important; border-radius: 10px !important; '
+                                        'box-shadow: 0 4px 20px rgba(0, 200, 83, 0.5) !important;'
+                                    )
+
+                                    with ui.row().classes('w-full justify-between gap-3 wrap-mobile'):
+                                        # BOTÃO 2: JUSTIFICAR (VERMELHO VIBRANTE COM TEXTO BRANCO)
+                                        ui.button(
+                                            '❌ JUSTIFICAR AUSÊNCIA',
+                                            on_click=lambda: submit_resposta('justificado')
+                                        ).classes('w-full sm:w-[48%]').style(
+                                            'background-color: #d50000 !important; color: #ffffff !important; '
+                                            'font-size: 0.9rem !important; font-weight: 900 !important; '
+                                            'padding: 12px 16px !important; border-radius: 8px !important;'
+                                        )
+
+                                        # BOTÃO 3: DECIDIR MAIS TARDE (DOURADO VIBRANTE COM TEXTO PRETO)
+                                        ui.button(
+                                            '⏳ DECIDIR MAIS TARDE',
+                                            on_click=lambda: submit_resposta('pendente')
+                                        ).classes('w-full sm:w-[48%]').style(
+                                            'background-color: #ffab00 !important; color: #000000 !important; '
+                                            'font-size: 0.9rem !important; font-weight: 900 !important; '
+                                            'padding: 12px 16px !important; border-radius: 8px !important;'
+                                        )
 
                 render_content()
+
 
 
 
