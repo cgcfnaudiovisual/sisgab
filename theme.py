@@ -147,13 +147,148 @@ body {
         align-items: stretch !important;
         gap: 16px !important;
     }
-    .wrap-mobile > div {
-        width: 100% !important;
-        max-width: 100% !important;
-    }
+/* Efeito de Hover com Brilho Tático Antigravidade nos Cards */
+.q-card, .nicegui-card {
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s ease, border-color 0.25s ease !important;
+}
+.q-card:hover, .nicegui-card:hover {
+    border-color: rgba(197, 160, 89, 0.45) !important;
+    box-shadow: 0 8px 30px rgba(197, 160, 89, 0.18), 0 0 15px rgba(197, 160, 89, 0.1) !important;
 }
 </style>
+
+<canvas id="antigravity-canvas" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 0; opacity: 0.65;"></canvas>
+
+<script>
+(function() {
+  if (window.__antigravity_initialized) return;
+  window.__antigravity_initialized = true;
+
+  function initAntigravity() {
+    let canvas = document.getElementById('antigravity-canvas');
+    if (!canvas) {
+      canvas = document.createElement('canvas');
+      canvas.id = 'antigravity-canvas';
+      canvas.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 0; opacity: 0.65;';
+      document.body.prepend(canvas);
+    }
+    const ctx = canvas.getContext('2d');
+    let width = canvas.width = window.innerWidth;
+    let height = canvas.height = window.innerHeight;
+
+    window.addEventListener('resize', function() {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    });
+
+    const isMobile = window.innerWidth < 768;
+    const particleCount = isMobile ? 18 : 45;
+    const particles = [];
+    const mouse = { x: -1000, y: -1000, radius: 140 };
+
+    window.addEventListener('mousemove', function(e) {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+    });
+
+    window.addEventListener('mouseleave', function() {
+      mouse.x = -1000;
+      mouse.y = -1000;
+    });
+
+    class Particle {
+      constructor() {
+        this.reset();
+      }
+      reset() {
+        this.x = Math.random() * width;
+        this.y = height + Math.random() * 100;
+        this.size = Math.random() * 2 + 1.2;
+        this.speedY = Math.random() * 0.7 + 0.3; // Física Antigravidade (sobe)
+        this.speedX = (Math.random() - 0.5) * 0.4;
+        this.alpha = Math.random() * 0.6 + 0.3;
+        this.color = Math.random() > 0.3 ? '197, 160, 89' : '212, 175, 55';
+      }
+      update() {
+        this.y -= this.speedY;
+        this.x += this.speedX;
+
+        const dx = mouse.x - this.x;
+        const dy = mouse.y - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < mouse.radius) {
+          const force = (mouse.radius - dist) / mouse.radius;
+          const angle = Math.atan2(dy, dx);
+          this.x -= Math.cos(angle) * force * 3;
+          this.y -= Math.sin(angle) * force * 3;
+        }
+
+        if (this.y < -20 || this.x < -20 || this.x > width + 20) {
+          this.reset();
+        }
+      }
+      draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${this.color}, ${this.alpha})`;
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = `rgba(${this.color}, 0.8)`;
+        ctx.fill();
+      }
+    }
+
+    for (let i = 0; i < particleCount; i++) {
+      particles.push(new Particle());
+    }
+
+    function animate() {
+      ctx.clearRect(0, 0, width, height);
+
+      for (let i = 0; i < particles.length; i++) {
+        particles[i].update();
+        particles[i].draw();
+
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist < 110) {
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.strokeStyle = `rgba(197, 160, 89, ${0.15 * (1 - dist / 110)})`;
+            ctx.lineWidth = 0.6;
+            ctx.stroke();
+          }
+        }
+      }
+
+      if (mouse.x > 0 && mouse.y > 0) {
+        const gradient = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 160);
+        gradient.addColorStop(0, 'rgba(197, 160, 89, 0.08)');
+        gradient.addColorStop(0.5, 'rgba(197, 160, 89, 0.02)');
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, width, height);
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    animate();
+  }
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setTimeout(initAntigravity, 150);
+  } else {
+    window.addEventListener('DOMContentLoaded', initAntigravity);
+  }
+})();
+</script>
 """
+
 
 def apply_global_styles():
     """Aplica cores globais ao Quasar/NiceGUI"""
