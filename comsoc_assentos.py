@@ -3648,7 +3648,12 @@ def render_page():
                         ${cssStyles}
                         <style>
                             @page { size: A4 portrait; margin: 0mm !important; }
-                            body { margin: 0 !important; padding: 4mm 6mm !important; background: #ffffff !important; color: #000000 !important; font-family: Arial, sans-serif !important; }
+                            * {
+                                -webkit-print-color-adjust: exact !important;
+                                print-color-adjust: exact !important;
+                                color-adjust: exact !important;
+                            }
+                            body { margin: 0 !important; padding: 4mm 6mm !important; background: #ffffff !important; color: #000000 !important; font-family: Arial, sans-serif !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                             .print-hide, .q-header, .q-drawer, .q-footer { display: none !important; }
                             .print-area { display: block !important; position: static !important; width: 100% !important; visibility: visible !important; }
                             .prisma-card-a4-slot { height: 66mm !important; max-height: 66mm !important; border: 1.5pt solid #1a1a1a !important; outline: 0.5pt solid #1a1a1a !important; outline-offset: -2.5mm !important; margin-bottom: 4.5mm !important; page-break-inside: avoid !important; background: #ffffff !important; color: #000000 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; position: relative !important; box-sizing: border-box !important; }
@@ -3656,7 +3661,7 @@ def render_page():
                             .prisma-texto-reservado { font-weight: 900 !important; letter-spacing: 3px !important; text-transform: uppercase !important; color: #1f4e79 !important; font-size: 20pt !important; margin-bottom: 2px !important; }
                             .prisma-posto-extenso { font-weight: bold !important; text-transform: uppercase !important; letter-spacing: 1.5px !important; font-size: 18pt !important; margin-bottom: 2px !important; }
                             .prisma-nome-autoridade { font-weight: 900 !important; text-transform: uppercase !important; font-size: 32pt !important; line-height: 1.05 !important; }
-                            img { max-width: 100% !important; display: inline-block !important; }
+                            img { max-width: 100% !important; display: inline-block !important; visibility: visible !important; opacity: 1 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                         </style>
                     </head>
                     <body>
@@ -3666,23 +3671,29 @@ def render_page():
                         <script>
                             window.onload = function() {
                                 var imgs = Array.from(document.querySelectorAll('img'));
+                                function triggerPrint() {
+                                    setTimeout(function() {
+                                        window.print();
+                                        setTimeout(function() { window.close(); }, 500);
+                                    }, 800);
+                                }
                                 if (imgs.length === 0) {
-                                    setTimeout(function() { window.print(); window.close(); }, 400);
+                                    triggerPrint();
                                     return;
                                 }
                                 var loaded = 0;
-                                function checkAndPrint() {
+                                function checkAll() {
                                     loaded++;
                                     if (loaded >= imgs.length) {
-                                        setTimeout(function() { window.print(); window.close(); }, 450);
+                                        triggerPrint();
                                     }
                                 }
                                 imgs.forEach(function(img) {
                                     if (img.complete && img.naturalWidth !== 0) {
-                                        checkAndPrint();
+                                        checkAll();
                                     } else {
-                                        img.onload = checkAndPrint;
-                                        img.onerror = checkAndPrint;
+                                        img.onload = checkAll;
+                                        img.onerror = checkAll;
                                     }
                                 });
                             };
@@ -3712,7 +3723,12 @@ def render_page():
                         ${cssStyles}
                         <style>
                             @page { size: A4 portrait; margin: 0mm !important; }
-                            body { margin: 0 !important; padding: 4mm 6mm !important; background: #ffffff !important; color: #000000 !important; font-family: Arial, sans-serif !important; }
+                            * {
+                                -webkit-print-color-adjust: exact !important;
+                                print-color-adjust: exact !important;
+                                color-adjust: exact !important;
+                            }
+                            body { margin: 0 !important; padding: 4mm 6mm !important; background: #ffffff !important; color: #000000 !important; font-family: Arial, sans-serif !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                             .print-hide, .q-header, .q-drawer, .q-footer { display: none !important; }
                             .print-area { display: block !important; position: static !important; width: 100% !important; visibility: visible !important; }
                             .prisma-card-a4-slot { height: 66mm !important; max-height: 66mm !important; border: 1.5pt solid #1a1a1a !important; outline: 0.5pt solid #1a1a1a !important; outline-offset: -2.5mm !important; margin-bottom: 4.5mm !important; page-break-inside: avoid !important; background: #ffffff !important; color: #000000 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; position: relative !important; box-sizing: border-box !important; }
@@ -3720,6 +3736,7 @@ def render_page():
                             .prisma-texto-reservado { font-weight: bold !important; letter-spacing: 2px !important; text-transform: uppercase !important; color: #1f4e79 !important; font-size: 14pt !important; }
                             .prisma-posto-extenso { font-weight: bold !important; text-transform: uppercase !important; letter-spacing: 1px !important; font-size: 14pt !important; }
                             .prisma-nome-autoridade { font-weight: 900 !important; text-transform: uppercase !important; font-size: 22pt !important; line-height: 1.1 !important; }
+                            img { max-width: 100% !important; display: inline-block !important; visibility: visible !important; opacity: 1 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                         </style>
                     </head>
                     <body>
@@ -3729,7 +3746,31 @@ def render_page():
                         <script>
                             window.onload = function() {
                                 document.title = "placas_jade_oficial.pdf";
-                                setTimeout(function() { window.print(); }, 400);
+                                var imgs = Array.from(document.querySelectorAll('img'));
+                                function triggerPrint() {
+                                    setTimeout(function() {
+                                        window.print();
+                                    }, 800);
+                                }
+                                if (imgs.length === 0) {
+                                    triggerPrint();
+                                    return;
+                                }
+                                var loaded = 0;
+                                function checkAll() {
+                                    loaded++;
+                                    if (loaded >= imgs.length) {
+                                        triggerPrint();
+                                    }
+                                }
+                                imgs.forEach(function(img) {
+                                    if (img.complete && img.naturalWidth !== 0) {
+                                        checkAll();
+                                    } else {
+                                        img.onload = checkAll;
+                                        img.onerror = checkAll;
+                                    }
+                                });
                             };
                         <\\/script>
                     </body>
