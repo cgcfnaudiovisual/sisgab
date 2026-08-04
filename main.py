@@ -914,9 +914,9 @@ def rsvp_public_page(token: str, request: Request):
 
             
             # HERO BANNER / CABEÇALHO DE PRESTÍGIO
-            with ui.element('div').classes('w-full relative min-h-[160px] flex items-center justify-center text-center p-6').style(
-                f'background: linear-gradient(180deg, rgba(15, 23, 42, 0.4) 0%, rgba(15, 23, 42, 0.95) 100%), url("{banner_url}") center/cover no-repeat;'
-            ):
+            banner_bg = f'linear-gradient(180deg, rgba(15, 23, 42, 0.4) 0%, rgba(15, 23, 42, 0.95) 100%), url("{banner_url}") center/cover no-repeat;' if (banner_url and banner_url != 'assets/brasao_cgcfn.png') else 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%);'
+
+            with ui.element('div').classes('w-full relative min-h-[160px] flex items-center justify-center text-center p-6').style(banner_bg):
                 with ui.column().classes('w-full items-center gap-1.5 z-10'):
                     ui.image('assets/brasao_cgcfn.png').style('width: 72px; height: auto; filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.5));')
                     ui.label('MARINHA DO BRASIL').classes('text-xs font-black text-amber-4 tracking-[4px] uppercase q-mt-xs')
@@ -940,6 +940,10 @@ def rsvp_public_page(token: str, request: Request):
                 if evento:
                     with ui.card().classes('w-full p-4 sm:p-5 bg-black/60 border border-cyan-500/30 rounded-2xl text-left gap-3 shadow-inner'):
                         ui.label(evento.get('nome_evento', 'SOLENIDADE INSTITUCIONAL').upper()).classes('text-sm font-black text-cyan-4 tracking-wider')
+                        
+                        if evento.get('descricao'):
+                            ui.label(evento['descricao']).classes('text-xs text-grey-3 italic leading-relaxed')
+
                         ui.separator().style('background-color: rgba(6, 182, 212, 0.2);')
                         
                         with ui.column().classes('gap-2 text-xs sm:text-sm'):
@@ -954,9 +958,10 @@ def rsvp_public_page(token: str, request: Request):
                                 ui.label(f"{evento.get('local_evento','')}").classes('font-bold text-white')
 
                             with ui.row().classes('items-center gap-2 text-amber-4'):
-                                ui.icon('sticker_long', size='1.2rem', color='amber-4')
+                                ui.icon('checkroom', size='1.2rem', color='amber-4')
                                 ui.label(f"Traje Exigido: ").classes('font-bold text-grey-4')
                                 ui.label(f"{evento.get('traje_exigido','')}").classes('font-black text-amber-3')
+
 
                 ui.separator().style('background: linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.3), transparent);')
 

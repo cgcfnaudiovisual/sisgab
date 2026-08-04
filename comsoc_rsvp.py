@@ -71,6 +71,7 @@ def render_page():
                         e_hora = ui.input('Horário', value=current_ev.get('hora_evento', '10:00') if current_ev else '10:00').props('dark outlined dense type=time').classes('w-1/2')
                     e_local = ui.input('Local da Cerimônia', value=current_ev.get('local_evento', 'Fortaleza de São José - Ilha das Cobras') if current_ev else 'Fortaleza de São José - Ilha das Cobras').props('dark outlined dense w-full')
                     e_traje = ui.input('Traje / Fardamento Exigido', value=current_ev.get('traje_exigido', '3ºA (Com condecorações)') if current_ev else '3ºA (Com condecorações)').props('dark outlined dense w-full')
+                    e_desc = ui.textarea('Descrição / Informações Adicionais (Exibida no convite)', value=current_ev.get('descricao', '') if current_ev else '', placeholder='Ex: Recepção no Salão Nobre após a cerimônia militar. Estacionamento no local.').props('dark outlined dense w-full').style('font-size: 0.85rem;')
 
                     banner_state = {'url': current_ev.get('banner_url','') if current_ev else ''}
                     
@@ -112,7 +113,8 @@ def render_page():
                                     e_hora.value,
                                     e_local.value,
                                     e_traje.value,
-                                    b_url
+                                    b_url,
+                                    e_desc.value
                                 )
                                 ui.notify('✅ Evento atualizado com sucesso!', color='success')
                             else:
@@ -122,13 +124,15 @@ def render_page():
                                     e_hora.value,
                                     e_local.value,
                                     e_traje.value,
-                                    b_url
+                                    b_url,
+                                    e_desc.value
                                 )
                                 ui.notify('✅ Evento criado com sucesso!', color='success')
                             diag.close()
                             ui.navigate.reload()
                         except Exception as err:
                             ui.notify(f'Erro ao salvar evento: {err}', color='red')
+
 
                     with ui.row().classes('w-full justify-between items-center q-mt-md'):
                         if is_edit and current_ev:

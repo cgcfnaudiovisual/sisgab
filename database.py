@@ -1556,7 +1556,7 @@ def sync_rsvp_with_jade():
         except Exception: pass
 
 
-def create_rsvp_evento(nome: str, data: str, hora: str, local: str, traje: str, banner_url: str = ''):
+def create_rsvp_evento(nome: str, data: str, hora: str, local: str, traje: str, banner_url: str = '', descricao: str = ''):
     """Cria um novo evento cerimonial de RSVP e sincroniza automaticamente no Mapeamento de Assentos."""
     init_local_rsvp_tables()
     import uuid, datetime
@@ -1569,6 +1569,7 @@ def create_rsvp_evento(nome: str, data: str, hora: str, local: str, traje: str, 
         'local_evento': local,
         'traje_exigido': traje,
         'banner_url': banner_url,
+        'descricao': descricao.strip(),
         'created_at': datetime.datetime.utcnow().isoformat()
     }
 
@@ -1588,7 +1589,7 @@ def create_rsvp_evento(nome: str, data: str, hora: str, local: str, traje: str, 
     return ev_id
 
 
-def update_rsvp_evento(evento_id: str, nome: str, data: str, hora: str, local: str, traje: str, banner_url: str = ''):
+def update_rsvp_evento(evento_id: str, nome: str, data: str, hora: str, local: str, traje: str, banner_url: str = '', descricao: str = ''):
     """Atualiza as informações completas de um evento de RSVP cerimonial."""
     if not evento_id:
         return False
@@ -1599,8 +1600,10 @@ def update_rsvp_evento(evento_id: str, nome: str, data: str, hora: str, local: s
         'hora_evento': hora,
         'local_evento': local,
         'traje_exigido': traje,
-        'banner_url': banner_url
+        'banner_url': banner_url,
+        'descricao': descricao.strip()
     }
+
 
     conn = get_service_db_connection() or get_db_connection()
     if conn:
