@@ -102,7 +102,16 @@ async def send_weekly_summary_report(bot, chat_id=None):
 
 
 async def trigger_daily_attendance_call(bot):
-    """Envia a chamada matutina para todos os militares ativos com Telegram ID às 07:00h."""
+    """Envia a chamada matutina para todos os militares ativos com Telegram ID às 07:00h (excluindo os em férias/licença ativas)."""
+    try:
+        from timezone import timezone, timedelta
+    except Exception:
+        from datetime import timezone, timedelta
+        
+    tz_gmt3 = timezone(timedelta(hours=-3))
+    now = datetime.now(tz_gmt3)
+    hoje_str = now.strftime('%Y-%m-%d')
+    
     try:
         from database import get_bot_db_connection as get_db_connection
         conn = get_db_connection()
@@ -110,6 +119,18 @@ async def trigger_daily_attendance_call(bot):
         
         res_ef = conn.table('efetivo').select('telegram_id, nome_guerra').execute()
         if not res_ef.data: return
+
+        # Isenção por férias/licenças ativas
+        isentos = set()
+        try:
+            res_ext = conn.table('presenca_diaria').select('nome_guerra, data_fim').in_('status', ['FE', 'L', 'DM']).lte('data', hoje_str).execute()
+            if res_ext and res_ext.data:
+                for item in res_ext.data:
+                    df = item.get('data_fim')
+                    if df and df >= hoje_str:
+                        isentos.add(item.get('nome_guerra', '').upper())
+        except Exception as ext_err:
+            print(f"[ATTENDANCE CALL ISENTOS WARN] {ext_err}")
         
         from .keyboards import get_presenca_keyboard
         msg = (
@@ -121,8 +142,9 @@ async def trigger_daily_attendance_call(bot):
         )
         
         for m in res_ef.data:
+            nome_g = m.get('nome_guerra', '').upper()
             tg_id = m.get('telegram_id')
-            if tg_id:
+            if tg_id and nome_g not in isentos:
                 try:
                     await bot.send_message(tg_id, msg, reply_markup=get_presenca_keyboard(), parse_mode='Markdown')
                 except Exception as e_send:
@@ -132,9 +154,17 @@ async def trigger_daily_attendance_call(bot):
 
 
 async def trigger_10min_attendance_reminder(bot):
-    """Verifica militares pendentes de chamada no dia atual entre 07:30h e 08:00h e envia aviso a cada 10 min."""
-    now = datetime.now()
-    if not (7 <= now.hour <= 8):
+    """Verifica militares pendentes de chamada no dia atual (fuso GMT-3) e envia aviso a cada 10 min."""
+    try:
+        from timezone import timezone, timedelta
+    except Exception:
+        from datetime import timezone, timedelta
+
+    tz_gmt3 = timezone(timedelta(hours=-3))
+    now = datetime.now(tz_gmt3)
+    
+    # Executa entre 07:30h e 09:00h
+    if not (7 <= now.hour <= 9):
         return
         
     try:
@@ -150,6 +180,17 @@ async def trigger_10min_attendance_reminder(bot):
         res_pr = conn.table('presenca_diaria').select('nome_guerra').eq('data', hoje_str).execute()
         respondidos = {p['nome_guerra'].upper() for p in res_pr.data} if res_pr.data else set()
         
+        # Inclui militares com isenção ativa de férias/licença no conjunto de respondidos
+        try:
+            res_ext = conn.table('presenca_diaria').select('nome_guerra, data_fim').in_('status', ['FE', 'L', 'DM']).lte('data', hoje_str).execute()
+            if res_ext and res_ext.data:
+                for item in res_ext.data:
+                    df = item.get('data_fim')
+                    if df and df >= hoje_str:
+                        respondidos.add(item.get('nome_guerra', '').upper())
+        except Exception as ext_err:
+            print(f"[REMINDER ISENTOS WARN] {ext_err}")
+            
         from .keyboards import get_presenca_keyboard
         msg_remind = (
             "🚨 *LEMBRETE RECORRENTE DA SARGENTEAÇÃO*\n\n"

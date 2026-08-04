@@ -895,6 +895,15 @@ def register_common_handlers(bot):
                     parse_mode='Markdown'
                 )
 
+            elif any(sigla_key in text.upper() for sigla_key in ("(P)", "(MA)", "(MT)", "(FE)", "(L)", "(H)", "(DM)", "(S)", "(OUTRO)", "OUTRA SITUAÇÃO")):
+                chat_states[chat_id] = {
+                    'action': 'presenca_diaria',
+                    'step': 'choose_sigla',
+                    'user': profile,
+                    'data': {}
+                }
+                # Prossegue para processar a escolha imediatamente no bloco action == 'presenca_diaria' abaixo
+
             elif text == "/pronto" or text == "📋 Pronto CheGab":
                 dt_str = datetime.now().strftime('%Y-%m-%d')
                 try:
@@ -1319,24 +1328,61 @@ def register_common_handlers(bot):
 
         if action == 'presenca_diaria':
             step = state.get('step')
+            is_operator = str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'operador')
+            
+            if text.upper() in ("❌ CANCELAR", "CANCELAR", "❌"):
+                clear_state(chat_id)
+                await bot.reply_to(message, "❌ Lançamento de presença cancelado.", reply_markup=get_main_menu_keyboard(is_operator))
+                return
+
             if step == 'choose_sigla':
                 sigla_txt = text.upper()
-                sigla_code = 'P'
-                if '(MA)' in sigla_txt or 'MA' in sigla_txt: sigla_code = 'MA'
-                elif '(MT)' in sigla_txt or 'MT' in sigla_txt: sigla_code = 'MT'
-                elif '(FE)' in sigla_txt or 'FE' in sigla_txt: sigla_code = 'FE'
-                elif '(L)' in sigla_txt or 'L' in sigla_txt: sigla_code = 'L'
-                elif '(H)' in sigla_txt or 'H' in sigla_txt: sigla_code = 'H'
-                elif '(DM)' in sigla_txt or 'DM' in sigla_txt: sigla_code = 'DM'
-                elif '(S)' in sigla_txt or 'S' in sigla_txt: sigla_code = 'S'
+                sigla_code = None
+                
+                if '(P)' in sigla_txt or sigla_txt == 'P' or 'PRESENTE' in sigla_txt: sigla_code = 'P'
+                elif '(MA)' in sigla_txt or sigla_txt == 'MA' or 'MISSÃO ADM' in sigla_txt: sigla_code = 'MA'
+                elif '(MT)' in sigla_txt or sigla_txt == 'MT' or 'MAIS TARDE' in sigla_txt: sigla_code = 'MT'
+                elif '(FE)' in sigla_txt or sigla_txt == 'FE' or 'FÉRIAS' in sigla_txt or 'FERIAS' in sigla_txt: sigla_code = 'FE'
+                elif '(L)' in sigla_txt or sigla_txt == 'L' or 'LICENÇA' in sigla_txt or 'LICENCA' in sigla_txt: sigla_code = 'L'
+                elif '(H)' in sigla_txt or sigla_txt == 'H' or 'HOSPITAL' in sigla_txt: sigla_code = 'H'
+                elif '(DM)' in sigla_txt or sigla_txt == 'DM' or 'DISPENSA' in sigla_txt: sigla_code = 'DM'
+                elif '(S)' in sigla_txt or sigla_txt == 'S' or 'SERVIÇO' in sigla_txt or 'SERVICO' in sigla_txt: sigla_code = 'S'
+                elif '(OUTRO)' in sigla_txt or 'OUTRA SITUAÇÃO' in sigla_txt or 'OUTRO' in sigla_txt: sigla_code = 'OUTRO'
+
+                if not sigla_code:
+                    from .keyboards import get_presenca_keyboard
+                    await bot.reply_to(
+                        message,
+                        "⚠️ Não reconheci a sigla ou rotina informada.\n"
+                        "Por favor, selecione uma das opções de presença no teclado abaixo:",
+                        reply_markup=get_presenca_keyboard()
+                    )
+                    return
                 
                 state['data']['status'] = sigla_code
                 
-                if sigla_code in ('MA', 'MT', 'H'):
+                if sigla_code in ('MA', 'MT', 'H', 'OUTRO'):
                     state['step'] = 'input_obs'
+                    prompts = {
+                        'MA': "✍️ Por favor, digite o motivo/local da **Missão Administrativa (MA)**:",
+                        'MT': "✍️ Por favor, digite o horário previsto de chegada ou motivo para **(MT) Mais Tarde**:",
+                        'H': "✍️ Por favor, digite o hospital ou motivo para **(H) Hospital**:",
+                        'OUTRO': "✍️ Por favor, descreva a sua situação/rotina de hoje:"
+                    }
+                    from .keyboards import get_cancel_keyboard
                     await bot.reply_to(
                         message,
-                        f"✍️ Por favor, digite a localização/motivo para **({sigla_code})**:",
+                        prompts.get(sigla_code, f"✍️ Por favor, digite a observação para **({sigla_code})**:"),
+                        reply_markup=get_cancel_keyboard(),
+                        parse_mode='Markdown'
+                    )
+                elif sigla_code in ('FE', 'L', 'DM'):
+                    state['step'] = 'input_data_fim'
+                    from .keyboards import get_cancel_keyboard
+                    await bot.reply_to(
+                        message,
+                        f"🏖️ Por favor, informe a **data de término** das suas férias/licença\n"
+                        f"(ex: `20/08`, `20/08/2026` ou número de dias ex: `10`):",
                         reply_markup=get_cancel_keyboard(),
                         parse_mode='Markdown'
                     )
@@ -1348,6 +1394,16 @@ def register_common_handlers(bot):
                 sigla_code = state['data'].get('status', 'P')
                 from .utils import _salvar_presenca_bot
                 await _salvar_presenca_bot(bot, message, chat_id, state, sigla_code, text)
+
+            elif step == 'input_data_fim':
+                sigla_code = state['data'].get('status', 'FE')
+                from .utils import _salvar_presenca_bot, parse_date_or_days
+                dt_fim_iso, dt_fim_br = parse_date_or_days(text)
+                await _salvar_presenca_bot(
+                    bot, message, chat_id, state, sigla_code, 
+                    f"Término: {dt_fim_br}" if dt_fim_br else "", 
+                    data_fim=dt_fim_iso
+                )
             return
 
         if action == 'vincular_efetivo':

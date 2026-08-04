@@ -261,19 +261,58 @@ def set_user_active_year(profile, ano: str):
         print(f"[YEAR SAVE DB ERR] {e}")
 
 
-async def _salvar_presenca_bot(bot, message, chat_id, state, sigla_code, obs_txt):
-    """Salva a presença diária informada pelo Telegram no Supabase e no SQLite local."""
+def parse_date_or_days(text_input: str):
+    """Tenta converter a entrada (ex: '20/08', '20/08/2026' ou '10' dias) para data final (YYYY-MM-DD) e texto legível."""
+    if not text_input:
+        return "", ""
+    text_clean = text_input.strip()
+    now = datetime.now()
+    
+    if text_clean.isdigit():
+        dias = int(text_clean)
+        target_dt = now + timedelta(days=dias)
+        return target_dt.strftime('%Y-%m-%d'), target_dt.strftime('%d/%m/%Y')
+        
+    match_dt = re.search(r'(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?', text_clean)
+    if match_dt:
+        dia = int(match_dt.group(1))
+        mes = int(match_dt.group(2))
+        ano = int(match_dt.group(3)) if match_dt.group(3) else now.year
+        if ano < 100: ano += 2000
+        try:
+            target_dt = datetime(ano, mes, dia)
+            return target_dt.strftime('%Y-%m-%d'), target_dt.strftime('%d/%m/%Y')
+        except Exception:
+            pass
+            
+    return "", text_clean
+
+
+async def _salvar_presenca_bot(bot, message, chat_id, state, sigla_code, obs_txt, data_fim=""):
+    """Salva a presença diária informada pelo Telegram no Supabase e no SQLite local com esquema completo."""
+    import uuid
     profile = state.get('user') or {}
+    user_id = profile.get('id') or str(chat_id)
     nome_g = profile.get('nome_guerra') or profile.get('nome') or 'MILITAR'
     nome_g = str(nome_g).replace('None ', '').replace('None', '').strip().upper()
-    dt_str = datetime.now().strftime('%Y-%m-%d')
+    now = datetime.now()
+    dt_str = now.strftime('%Y-%m-%d')
+    hr_str = now.strftime('%H:%M:%S')
+    
+    pres_id = str(uuid.uuid4())
     
     payload = {
+        'id': pres_id,
+        'user_id': str(user_id),
+        'telegram_id': str(chat_id),
         'nome_guerra': nome_g,
         'data': dt_str,
+        'hora_presenca': hr_str,
         'status': sigla_code,
-        'observacao': obs_txt.strip(),
-        'updated_at': datetime.now().isoformat()
+        'observacao': obs_txt.strip() if obs_txt else '',
+        'data_fim': data_fim if data_fim else None,
+        'criado_em': now.isoformat(),
+        'updated_at': now.isoformat()
     }
     
     # 1. Salva no Supabase se disponível
@@ -281,22 +320,27 @@ async def _salvar_presenca_bot(bot, message, chat_id, state, sigla_code, obs_txt
         from database import get_bot_db_connection
         db = get_bot_db_connection()
         if db:
-            db.table('presenca_diaria').upsert(payload, on_conflict='nome_guerra,data').execute()
+            try:
+                db.table('presenca_diaria').upsert(payload, on_conflict='id').execute()
+            except Exception as e_up1:
+                print(f"[PRESENCA SUPABASE UPSERT ID ERR] {e_up1}")
+                db.table('presenca_diaria').upsert(payload).execute()
     except Exception as sp_err:
         print(f"[PRESENCA BOT SUPABASE WARN] {sp_err}")
         
-    # 2. Salva garantido no SQLite local
+    # 2. Salva no SQLite local
     try:
         from sqlite_adapter import SQLiteDatabaseAdapter
         local_db = SQLiteDatabaseAdapter()
-        local_db.table('presenca_diaria').upsert(payload, on_conflict='nome_guerra,data').execute()
+        local_db.table('presenca_diaria').upsert(payload, on_conflict='id').execute()
     except Exception as loc_err:
         print(f"[PRESENCA BOT LOCAL WARN] {loc_err}")
         
     is_operator = str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'operador')
     clear_state(chat_id)
     
-    obs_line = f"✍️ Obs: _{obs_txt}_\n" if obs_txt else ""
+    obs_line = f"✍️ Obs: _{obs_txt}_\n" if obs_txt and sigla_code not in ('FE', 'L', 'DM') else ""
+    info_fim = f"🏖️ Chamada suspensa até: *{data_fim}*\n" if data_fim and sigla_code in ('FE', 'L', 'DM') else ""
     from .keyboards import get_main_menu_keyboard
     await bot.reply_to(
         message,
@@ -304,7 +348,7 @@ async def _salvar_presenca_bot(bot, message, chat_id, state, sigla_code, obs_txt
         f"👤 Militar: *{nome_g}*\n"
         f"📌 Rotina: *({sigla_code})*\n"
         f"📅 Data: *{dt_str}*\n"
-        f"{obs_line}\n"
+        f"{obs_line}{info_fim}\n"
         f"Sua presença foi salva na Sargenteação!",
         reply_markup=get_main_menu_keyboard(is_operator),
         parse_mode='Markdown'

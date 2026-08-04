@@ -313,7 +313,7 @@ def render_page():
 
                         tpl_pronto = ui.textarea(
                             'Estrutura do Pronto ao CheGab (Chamada Matutina)',
-                            value=message_templates.get("Chamada Matutina", "Bom dia Equipe LANÇAMENTO 🚀, resumo das rotinas para hoje ({data}):\n\n🚨 *pronto da presença para o CheGab:*\n\n{linhas_militares}\n\nLegenda:\n(P) - Presente | (MA) - Missão Adm | (MT) - Missão Tática | (FE) - Férias | (L) - Licença | (H) - Hospital | (DM) - Dispensa Médica | (S) - Serviço\n\nAtenciosamente,\nSargenteante do Gabinete")
+                            value=message_templates.get("Chamada Matutina", "Bom dia Equipe LANÇAMENTO 🚀, resumo das rotinas para hoje ({data}):\n\n🚨 *pronto da presença para o CheGab:*\n\n{linhas_militares}\n\nLegenda:\n(P) - Presente | (MA) - Missão Adm | (MT) - Mais Tarde | (FE) - Férias | (L) - Licença | (H) - Hospital | (DM) - Dispensa Médica | (S) - Serviço | (OUTRO) - Outra Situação\n\nAtenciosamente,\nSargenteante do Gabinete")
                         ).props('dark outlined w-full').classes('text-xs')
 
                         tpl_demanda = ui.textarea(

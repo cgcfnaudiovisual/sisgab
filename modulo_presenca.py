@@ -12,12 +12,13 @@ THEME = theme.colors
 SIGLAS_MILITARES = {
     'P': {'nome': 'Presente', 'icone': '🟢', 'badge_color': 'green'},
     'MA': {'nome': 'Missão Administrativa', 'icone': '💼', 'badge_color': 'cyan'},
-    'MT': {'nome': 'Missão Tática / Operacional', 'icone': '⚔️', 'badge_color': 'deep-orange'},
+    'MT': {'nome': 'Mais Tarde', 'icone': '🕒', 'badge_color': 'deep-orange'},
     'FE': {'nome': 'Férias', 'icone': '🏖️', 'badge_color': 'blue'},
     'L': {'nome': 'Licença', 'icone': '📜', 'badge_color': 'purple'},
     'H': {'nome': 'Hospital', 'icone': '🏥', 'badge_color': 'red'},
     'DM': {'nome': 'Dispensa Médica', 'icone': '💊', 'badge_color': 'orange'},
     'S': {'nome': 'Serviço de Escala', 'icone': 'teal'},
+    'OUTRO': {'nome': 'Outra Situação', 'icone': '✏️', 'badge_color': 'indigo'},
 }
 
 def gerar_texto_pronto_chegab(data_str, presencas_dict, efetivo_lista):
@@ -32,7 +33,8 @@ def gerar_texto_pronto_chegab(data_str, presencas_dict, efetivo_lista):
         obs = p.get('observacao', '').strip()
         
         txt_linha = f"{nome_g} - {sigla}"
-        if obs:
+        # Para FE, L, DM não incluir sufixo de observação de datas para manter o relatório limpo
+        if obs and sigla not in ('FE', 'L', 'DM'):
             txt_linha += f" ({obs})"
         linhas_militares.append(txt_linha)
         
@@ -49,8 +51,9 @@ def gerar_texto_pronto_chegab(data_str, presencas_dict, efetivo_lista):
         "(H) - Hospital;\n"
         "(DM) - Dispensa Médica;\n"
         "(FE) - Férias;\n"
-        "(MT) - Missão Tática; e\n"
-        "(S) - Serviço.\n\n"
+        "(MT) - Mais Tarde;\n"
+        "(S) - Serviço; e\n"
+        "(OUTRO) - Outra Situação.\n\n"
         "Atenciosamente,\n"
         "Sargenteante do Gabinete"
     )
@@ -88,6 +91,30 @@ def fetch_efetivo_and_presencas(dt_str: str):
             presencas_list = res_pr_loc.data or []
     except Exception as loc_err:
         print(f"[PRESENCA LOCAL FALLBACK WARN] {loc_err}")
+
+    # Busca também por isenções ativas por período (Férias/Licença/DM que englobem a data consultada)
+    existing_militares = {p['nome_guerra'].upper() for p in presencas_list if p.get('nome_guerra')}
+    try:
+        # Busca registros recentes em presenca_diaria com data_fim
+        db_ref = get_service_db_connection() or get_db_connection()
+        if db_ref:
+            res_extended = db_ref.table('presenca_diaria').select('*').in_('status', ['FE', 'L', 'DM']).lte('data', dt_str).execute()
+            if res_extended and res_extended.data:
+                for item in res_extended.data:
+                    nome_g = item.get('nome_guerra', '').upper()
+                    if nome_g not in existing_militares:
+                        data_fim = item.get('data_fim')
+                        if data_fim and data_fim >= dt_str:
+                            presencas_list.append({
+                                'nome_guerra': nome_g,
+                                'data': dt_str,
+                                'status': item.get('status'),
+                                'observacao': item.get('observacao', ''),
+                                'data_fim': data_fim
+                            })
+                            existing_militares.add(nome_g)
+    except Exception as ext_err:
+        print(f"[EXTENDED PRESENCE FETCH WARN] {ext_err}")
         
     return efetivo_lista, presencas_list
 

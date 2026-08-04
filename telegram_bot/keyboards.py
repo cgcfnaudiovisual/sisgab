@@ -384,10 +384,10 @@ def get_confirm_demanda_keyboard():
 def get_presenca_keyboard():
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     markup.row(types.KeyboardButton("🟢 (P) Presente"), types.KeyboardButton("💼 (MA) Missão Adm"))
-    markup.row(types.KeyboardButton("⚔️ (MT) Missão Tática"), types.KeyboardButton("🏖️ (FE) Férias"))
+    markup.row(types.KeyboardButton("🕒 (MT) Mais Tarde"), types.KeyboardButton("🏖️ (FE) Férias"))
     markup.row(types.KeyboardButton("📜 (L) Licença"), types.KeyboardButton("🏥 (H) Hospital"))
     markup.row(types.KeyboardButton("💊 (DM) Disp. Médica"), types.KeyboardButton("🛡️ (S) Serviço"))
-    markup.row(types.KeyboardButton("❌ Cancelar"))
+    markup.row(types.KeyboardButton("✏️ (OUTRO) Outra Situação"), types.KeyboardButton("❌ Cancelar"))
     return markup
 
 
