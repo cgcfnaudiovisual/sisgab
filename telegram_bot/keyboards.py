@@ -252,6 +252,7 @@ def get_demandas_list_reply_keyboard(demandas_list):
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     row = []
     for d in demandas_list:
+        d_id = d.get('id')
         dt_raw = d.get('data_evento', '')
         dt_short = ""
         try:
@@ -262,8 +263,8 @@ def get_demandas_list_reply_keyboard(demandas_list):
             pass
         
         dt_prefix = f"({dt_short}) " if dt_short else ""
-        tit = (d.get('titulo_evento') or 'Pauta')[:20]
-        btn_label = f"⚙️ {dt_prefix}{tit}".strip()
+        tit = (d.get('titulo_evento') or 'Pauta')[:15]
+        btn_label = f"⚙️ #{d_id} — {dt_prefix}{tit}".strip()
         row.append(types.KeyboardButton(btn_label))
         if len(row) == 2:
             markup.row(*row)
@@ -272,6 +273,7 @@ def get_demandas_list_reply_keyboard(demandas_list):
         markup.row(*row)
     markup.row(types.KeyboardButton("⬅️ Voltar ao Menu Principal"))
     return markup
+
 
 
 

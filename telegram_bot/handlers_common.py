@@ -467,7 +467,7 @@ def register_common_handlers(bot):
                         dt_hdr = f"({dt_short}) " if dt_short else ""
                         list_msg += f"📌 **{dt_hdr}{tit_esc}**\n   📅 {dt_formatted} às {hr_raw} | 📍 {loc_esc}\n   ⚡ {st_display} | 👨‍✈️ Equipe: {resp_txt}\n\n"
 
-                        btn_label = f"⚙️ {dt_hdr}{(tit or 'Pauta')[:20]}".strip()
+                        btn_label = f"⚙️ #{d_id} — {dt_hdr}{(tit or 'Pauta')[:15]}".strip()
                         demandas_map[btn_label] = d_id
 
                     chat_states[chat_id] = {
@@ -487,36 +487,30 @@ def register_common_handlers(bot):
 
             elif (text.startswith("⚙️ ") and text != "⚙️ Configurações") or text.startswith("⚙️ #"):
                 try:
+                    import re
                     dem_id = None
-                    if chat_id in chat_states and chat_states[chat_id].get('demandas_map'):
+                    # 1. Extração direta de ID numérico via regex (ex: ⚙️ #14 — (03/08) FAINA DO CPROT)
+                    match_id = re.search(r'#(\d+)', text)
+                    if match_id:
+                        dem_id = match_id.group(1)
+
+                    # 2. Busca no mapa de estado da sessão
+                    if not dem_id and chat_id in chat_states and chat_states[chat_id].get('demandas_map'):
                         dem_id = chat_states[chat_id]['demandas_map'].get(text)
-                    
+
+                    # 3. Busca no banco por correspondência de título (para botões antigos sem #ID)
                     if not dem_id:
                         db = get_db_connection()
                         if db:
-                            res_dem = db.table('demandas_comunicacao').select('*').in_('status', ['aprovada', 'aprovado', 'pendente', 'em_ajuste', 'ajustes']).order('data_evento', desc=False).order('hora_evento', desc=False).limit(20).execute()
+                            res_dem = db.table('demandas_comunicacao').select('*').in_('status', ['aprovada', 'aprovado', 'pendente', 'em_ajuste', 'ajustes']).order('data_evento', desc=False).order('hora_evento', desc=False).limit(30).execute()
                             for d in (res_dem.data or []):
-                                dt_raw = d.get('data_evento', '')
-                                dt_short = ""
-                                try:
-                                    parts = str(dt_raw).split('T')[0].split(' ')[0].split('-')
-                                    if len(parts) == 3:
-                                        dt_short = f"{parts[2]}/{parts[1]}"
-                                except Exception:
-                                    pass
-                                dt_prefix = f"({dt_short}) " if dt_short else ""
-                                tit_short = (d.get('titulo_evento') or 'Pauta')[:20]
-                                label = f"⚙️ {dt_prefix}{tit_short}".strip()
-                                old_label_prefix = f"⚙️ #{d.get('id')}"
-                                if label == text or text.startswith(old_label_prefix):
+                                d_tit = str(d.get('titulo_evento', '')).strip().upper()
+                                text_clean = text.replace('⚙️', '').replace('(', '').replace(')', '').strip().upper()
+                                # Se o título do evento estiver contido no texto do botão clicado
+                                if d_tit and (d_tit in text_clean or text_clean in d_tit or d_tit[:10] in text_clean):
                                     dem_id = d.get('id')
                                     break
-                    
-                    if not dem_id and "#" in text:
-                        try:
-                            dem_id = text.split('#')[1].split(' ')[0].split('—')[0].strip()
-                        except Exception:
-                            pass
+
 
                     if dem_id:
                         db = get_db_connection()
