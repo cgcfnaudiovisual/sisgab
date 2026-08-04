@@ -168,3 +168,108 @@ async def trigger_10min_attendance_reminder(bot):
                     print(f"[ATTENDANCE REMIND ERR] {tg_id}: {e_send}")
     except Exception as e:
         print(f"[ATTENDANCE REMINDER LOOP ERR] {e}")
+
+
+SENT_2H_REMINDERS = set()
+
+async def send_tactical_2h_reminders(bot):
+    """Verifica pautas do dia que iniciam em aproximadamente 2 horas e envia um lembrete tático."""
+    try:
+        from database import get_bot_db_connection as get_db_connection
+        conn = get_db_connection()
+        if not conn:
+            return
+            
+        now = datetime.now()
+        hoje_str = now.strftime('%Y-%m-%d')
+        
+        res = conn.table('demandas_comunicacao').select('*').eq('data_evento', hoje_str).eq('status', 'aprovada').execute()
+        pautas = res.data if (res and res.data) else []
+        
+        for p in pautas:
+            p_id = p.get('id')
+            if not p_id or p_id in SENT_2H_REMINDERS:
+                continue
+                
+            hr_str = str(p.get('hora_evento', '09:00'))[:5]
+            try:
+                ev_time = datetime.strptime(f"{hoje_str} {hr_str}", "%Y-%m-%d %H:%M")
+                diff_min = (ev_time - now).total_seconds() / 60
+                
+                # Se faltar entre 10 min e 130 min (aprox 2 horas)
+                if 10 <= diff_min <= 130:
+                    SENT_2H_REMINDERS.add(p_id)
+                    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+                    
+                    titulo = str(p.get('titulo_evento', 'Sem Título')).replace('*', '').replace('_', '')
+                    local = str(p.get('local_evento', 'N/I')).replace('*', '').replace('_', '')
+                    
+                    msg = (
+                        f"⏰ **LEMBRETE DE COBERTURA EM 2 HORAS!**\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"📌 **Pauta:** {titulo}\n"
+                        f"🕒 **Horário:** {hr_str}h | 📍 **Local:** {local}\n\n"
+                        f"🔋 **Prontidão de Equipamentos:**\n"
+                        f"• Baterias das câmeras e drones carregadas\n"
+                        f"• Cartões de memória limpos e formatados\n"
+                        f"• Uniforme previsto para a missão\n\n"
+                        f"⚓ _SisGAB — Gestão de Gabinete_"
+                    )
+                    
+                    if chat_id:
+                        try:
+                            await bot.send_message(chat_id, msg, parse_mode='Markdown')
+                        except Exception as e_send:
+                            print(f"[TACTICAL 2H REMINDER ERR] {e_send}")
+            except Exception as e_t:
+                print(f"[TACTICAL 2H TIME PARSE ERR] {e_t}")
+    except Exception as e:
+        print(f"[TACTICAL 2H REMINDER CRITICAL ERR] {e}")
+
+
+async def generate_executive_report(bot, chat_id):
+    """Gera um relatório executivo resumido de KPIs de produção do mês."""
+    try:
+        from database import get_bot_db_connection as get_db_connection
+        conn = get_db_connection()
+        if not conn:
+            await bot.send_message(chat_id, "⚠️ Banco de dados indisponível no momento.")
+            return
+
+        now = datetime.now()
+        mes_ano_prefix = now.strftime('%Y-%m')
+        
+        # Pautas do mês
+        res_dem = conn.table('demandas_comunicacao').select('*').gte('data_evento', f"{mes_ano_prefix}-01").execute()
+        demandas = res_dem.data if (res_dem and res_dem.data) else []
+        
+        total = len(demandas)
+        concluidas = sum(1 for d in demandas if str(d.get('status')).lower() in ('concluida', 'concluido', 'concluídas'))
+        aprovadas = sum(1 for d in demandas if str(d.get('status')).lower() in ('aprovada', 'aprovado'))
+        pendentes = sum(1 for d in demandas if str(d.get('status')).lower() in ('pendente', 'pendentes'))
+        
+        # Categorias mais requisitadas
+        cats = {}
+        for d in demandas:
+            c = str(d.get('in_categoria') or d.get('categoria') or 'Geral').title()
+            cats[c] = cats.get(c, 0) + 1
+            
+        top_cat = sorted(cats.items(), key=lambda x: x[1], reverse=True)[:3]
+        top_cat_str = ", ".join([f"{k} ({v})" for k, v in top_cat]) if top_cat else "N/A"
+        
+        report_msg = (
+            f"📊 **RELATÓRIO EXECUTIVO COMSOC — {now.strftime('%m/%Y')}**\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📈 **INDICADORES DE PRODUÇÃO:**\n"
+            f"• Total de Demandas no Mês: **{total}**\n"
+            f"• ✅ Missões Concluídas: **{concluidas}**\n"
+            f"• 🟢 Pautas Aprovadas em Execução: **{aprovadas}**\n"
+            f"• 🟡 Pautas Aguardando Homologação: **{pendentes}**\n\n"
+            f"🎯 **Categorias Principais:** {top_cat_str}\n\n"
+            f"⚓ _Central de Inteligência Operacional SisGAB_"
+        )
+        await bot.send_message(chat_id, report_msg, parse_mode='Markdown')
+    except Exception as e:
+        print(f"[EXEC REPORT ERR] {e}")
+        await bot.send_message(chat_id, f"❌ Erro ao gerar relatório executivo: {e}")
+

@@ -305,6 +305,77 @@ def register_common_handlers(bot):
         except Exception:
             pass
 
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('confirm_ciente:'))
+    async def handle_confirm_ciente_callback(call):
+        try:
+            dem_id = call.data.split(':')[1]
+            user_id = call.from_user.id
+            user_name = call.from_user.first_name or "Militar"
+            await bot.answer_callback_query(call.id, "👍 Ciente registrado com sucesso!")
+            
+            try:
+                await bot.edit_message_text(
+                    f"✅ **CIÊNCIA CONFIRMADA!**\n"
+                    f"Militar *{user_name}* confirmou presença/ciência na missão ID #{dem_id}.",
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    parse_mode='Markdown'
+                )
+            except Exception:
+                pass
+                
+            from notifications_manager import notify_telegram
+            notify_telegram(f"👍 **Confirmação de Ciência**\nO militar {user_name} confirmou ciente na pauta ID #{dem_id}.", "system")
+        except Exception as e:
+            print(f"[CONFIRM CIENTE ERR] {e}")
+
+    @bot.callback_query_handler(func=lambda call: any(call.data.startswith(p) for p in ['appr_dem:', 'conc_dem:', 'rej_dem:', 'reopen_dem:', 'det_dem:']))
+    async def handle_inline_demanda_actions(call):
+        try:
+            parts = call.data.split(':')
+            action = parts[0]
+            dem_id = parts[1]
+            chat_id = call.message.chat.id
+            
+            from database import get_bot_db_connection as get_db_connection
+            db = get_db_connection()
+            if not db:
+                await bot.answer_callback_query(call.id, "Banco indisponível.")
+                return
+
+            if action == 'appr_dem':
+                db.table('demandas_comunicacao').update({'status': 'aprovada'}).eq('id', dem_id).execute()
+                await bot.answer_callback_query(call.id, "Pauta aprovada!")
+                await bot.send_message(chat_id, f"✅ **PAUTA #{dem_id} APROVADA COM SUCESSO!**", parse_mode='Markdown')
+            elif action == 'conc_dem':
+                db.table('demandas_comunicacao').update({'status': 'concluida'}).eq('id', dem_id).execute()
+                await bot.answer_callback_query(call.id, "Missão concluída!")
+                await bot.send_message(chat_id, f"🎯 **MISSÃO #{dem_id} CONCLUÍDA!**", parse_mode='Markdown')
+            elif action == 'rej_dem':
+                db.table('demandas_comunicacao').update({'status': 'rejeitado'}).eq('id', dem_id).execute()
+                await bot.answer_callback_query(call.id, "Pauta rejeitada.")
+                await bot.send_message(chat_id, f"❌ **PAUTA #{dem_id} MARCADA COMO REJEITADA.**", parse_mode='Markdown')
+            elif action == 'reopen_dem':
+                db.table('demandas_comunicacao').update({'status': 'aprovada'}).eq('id', dem_id).execute()
+                await bot.answer_callback_query(call.id, "Pauta reaberta.")
+                await bot.send_message(chat_id, f"🔄 **PAUTA #{dem_id} REABERTA COMO APROVADA.**", parse_mode='Markdown')
+            elif action == 'det_dem':
+                await bot.answer_callback_query(call.id, "Carregando detalhes...")
+                res_d = db.table('demandas_comunicacao').select('*').eq('id', dem_id).execute()
+                if res_d and res_d.data:
+                    d = res_d.data[0]
+                    det_txt = (
+                        f"🔎 **DETALHES DA PAUTA #{dem_id}**\n\n"
+                        f"📌 **Título:** {d.get('titulo_evento')}\n"
+                        f"📅 **Data/Hora:** {d.get('data_evento')} às {d.get('hora_evento')}\n"
+                        f"📍 **Local:** {d.get('local_evento')}\n"
+                        f"⚡ **Status:** {str(d.get('status')).upper()}\n"
+                        f"👤 **Solicitante:** {d.get('solicitante_nome')} ({d.get('setor', 'CGCFN')})"
+                    )
+                    await bot.send_message(chat_id, det_txt, parse_mode='Markdown')
+        except Exception as e:
+            print(f"[INLINE DEMANDA ACTION ERR] {e}")
+
     @bot.message_handler(func=lambda msg: True)
     async def handle_all_messages(message):
         chat_id = message.chat.id
@@ -314,6 +385,7 @@ def register_common_handlers(bot):
             return
         
         text = message.text.strip()
+
         
         # =====================================================================
         # SEÇÃO 1: Roteamento de Teclado Principal (usuário SEM estado ativo)
@@ -888,7 +960,13 @@ def register_common_handlers(bot):
                 except Exception as e:
                     await bot.reply_to(message, f"❌ Erro: {e}", reply_markup=get_main_menu_keyboard(is_operator))
 
+            elif text in ("/relatorio", "/resumo", "📊 Relatório Executivo"):
+                from .scheduled_jobs import generate_executive_report
+                await generate_executive_report(bot, chat_id)
+
             elif text == "ℹ️ Ajuda":
+
+
                 help_msg = (
                     "⚓ **AJUDA — SISGAB BOT**\n\n"
                     "Este é o assistente oficial do Sistema de Gestão de Gabinete (SisGAB) do CGCFN.\n\n"

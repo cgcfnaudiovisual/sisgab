@@ -28,7 +28,22 @@ def get_bot_token() -> str:
         token = DEFAULT_BOT_TOKEN
     return token
 
+async def _tactical_reminder_loop():
+    """Loop que executa a checagem de lembretes táticos a cada 10 minutos em segundo plano."""
+    from .scheduled_jobs import send_tactical_2h_reminders
+    while True:
+        try:
+            if bot:
+                await send_tactical_2h_reminders(bot)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"[TACTICAL REMINDER LOOP ERR] {e}")
+        await asyncio.sleep(600)  # Checa a cada 10 min
+
+
 async def _run_resilient_polling(bot_instance):
+    asyncio.create_task(_tactical_reminder_loop())
     while True:
         try:
             if not bot_instance or bot is not bot_instance:
@@ -52,6 +67,7 @@ async def _run_resilient_polling(bot_instance):
             else:
                 print(f"[TELEGRAM BOT POLLING ERR] {poll_err}. Reconectando em 5s...", flush=True)
                 await asyncio.sleep(5)
+
 
 async def init_bot():
     """Tarefa assíncrona inicializada no startup do NiceGUI para rodar o Telegram bot."""
@@ -97,9 +113,11 @@ async def init_bot():
             print("[TELEGRAM BOT] Configurando lista de comandos no menu do Telegram...", flush=True)
             await bot.set_my_commands([
                 types.BotCommand("menu", "Exibe o menu de comandos e teclado"),
+                types.BotCommand("relatorio", "Gera o Relatório Executivo do mês"),
                 types.BotCommand("settings", "Acessa as configurações e notificações"),
                 types.BotCommand("cancelar", "Cancela a operação atual")
             ])
+
             print("[TELEGRAM BOT] Lista de comandos configurada com sucesso!", flush=True)
         except Exception as cmd_err:
             print(f"[TELEGRAM BOT] Aviso ao configurar lista de comandos: {cmd_err}", flush=True)

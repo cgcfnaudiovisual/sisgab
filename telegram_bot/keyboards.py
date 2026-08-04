@@ -275,6 +275,57 @@ def get_demandas_list_reply_keyboard(demandas_list):
     return markup
 
 
+def get_main_menu_keyboard(is_operator=False):
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    if is_operator:
+        markup.row(types.KeyboardButton("🟢 Dar Presença"), types.KeyboardButton("📋 Pronto CheGab"))
+        markup.row(types.KeyboardButton("📋 Gerenciar Demandas"), types.KeyboardButton("📊 Relatório Executivo"))
+        markup.row(types.KeyboardButton("📅 Agenda Semanal"), types.KeyboardButton("➕ Criar Demanda"))
+        markup.row(types.KeyboardButton("🤖 Digerir Pauta (IA)"), types.KeyboardButton("🪑 Placas JADE"))
+        markup.row(types.KeyboardButton("🔌 Cautelas Ativas"), types.KeyboardButton("⚙️ Configurações"))
+        markup.row(types.KeyboardButton("❌ Cancelar"))
+    else:
+        markup.row(types.KeyboardButton("🟢 Dar Presença"), types.KeyboardButton("📅 Agenda Semanal"))
+        markup.row(types.KeyboardButton("➕ Criar Demanda"), types.KeyboardButton("📊 Relatório Executivo"))
+        markup.row(types.KeyboardButton("⚙️ Configurações"), types.KeyboardButton("ℹ️ Ajuda"))
+        markup.row(types.KeyboardButton("❌ Cancelar"))
+    return markup
+
+
+def get_confirm_ciente_inline_keyboard(demanda_id):
+    """Gera botão inline para o militar escalado confirmar ciente no Telegram."""
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("👍 Confirmar Ciente da Missão", callback_data=f"confirm_ciente:{demanda_id}"))
+    return markup
+
+
+def get_demanda_actions_inline_keyboard(demanda_id, status='aprovada'):
+    """Gera botões Inline interativos para gerenciar a pauta diretamente na mensagem."""
+    markup = types.InlineKeyboardMarkup()
+    st = str(status).lower().strip()
+
+    row1 = [
+        types.InlineKeyboardButton("🔎 Detalhes", callback_data=f"det_dem:{demanda_id}"),
+        types.InlineKeyboardButton("👤 Equipe", callback_data=f"equipe_dem:{demanda_id}")
+    ]
+    markup.row(*row1)
+
+    if st in ('pendente', 'em_ajuste', 'ajustes'):
+        row2 = [
+            types.InlineKeyboardButton("✅ Aprovar", callback_data=f"appr_dem:{demanda_id}"),
+            types.InlineKeyboardButton("❌ Rejeitar", callback_data=f"rej_dem:{demanda_id}")
+        ]
+        markup.row(*row2)
+    elif st in ('aprovada', 'aprovado'):
+        row2 = [
+            types.InlineKeyboardButton("🎯 Concluir Missão", callback_data=f"conc_dem:{demanda_id}"),
+            types.InlineKeyboardButton("❌ Rejeitar", callback_data=f"rej_dem:{demanda_id}")
+        ]
+        markup.row(*row2)
+    elif st in ('concluida', 'concluído', 'concluido'):
+        markup.row(types.InlineKeyboardButton("🔄 Reabrir Pauta", callback_data=f"reopen_dem:{demanda_id}"))
+
+    return markup
 
 
 def get_demanda_actions_reply_keyboard(demanda_id, status='aprovada'):
