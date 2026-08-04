@@ -139,7 +139,9 @@ def render_page():
                             
                             try:
                                 loop = asyncio.get_event_loop()
-                                resultados = await loop.run_in_executor(None, sfx_searcher.search, query, 12)
+                                res_tuple = await loop.run_in_executor(None, sfx_searcher.search_sfx, query)
+                                resultados = res_tuple[0] if isinstance(res_tuple, tuple) else res_tuple
+                                sugestoes = res_tuple[1] if isinstance(res_tuple, tuple) and len(res_tuple) > 1 else []
                                 
                                 if not resultados:
                                     with results_container:
@@ -148,17 +150,20 @@ def render_page():
                                     
                                 with results_container:
                                     ui.label(f"🔊 Encontrados {len(resultados)} efeitos sonoros:").classes('text-xs font-bold text-cyan q-mb-xs')
+                                    if sugestoes:
+                                        ui.label(f"💡 Sugestões da IA: {', '.join(sugestoes)}").classes('text-[11px] text-amber-4 q-mb-xs')
                                     
                                     for item in resultados:
                                         title = item.get('title', 'Efeito Sonoro')
-                                        audio_url = item.get('audio_url') or item.get('preview_url')
-                                        duration = item.get('duration', 'N/I')
+                                        audio_url = item.get('url') or item.get('audio_url') or item.get('preview_url')
+                                        duration = item.get('duration', 'Curto')
+                                        fonte = item.get('source', 'SFX')
                                         
                                         with ui.card().classes('w-full q-pa-sm bg-black/30 border border-cyan-500/20 rounded-lg'):
                                             with ui.row().classes('w-full justify-between items-center wrap gap-2'):
                                                 with ui.column().classes('gap-0 flex-grow'):
                                                     ui.label(title).classes('text-xs font-bold text-white')
-                                                    ui.label(f"⏱️ Duração: {duration}").classes('text-[10px] text-grey-4')
+                                                    ui.label(f"⏱️ Duração: {duration} | Fonte: {fonte}").classes('text-[10px] text-grey-4')
                                                 
                                                 if audio_url:
                                                     with ui.row().classes('items-center gap-2'):
@@ -183,7 +188,27 @@ def render_page():
                         value='Identifique os momentos mais marcantes do vídeo, incluindo presença de autoridades, cerimonial militar, falas principais e imagens de ação para montagem de Reels / Shorts.'
                     ).props('dark outlined dense w-full').classes('w-full')
 
-                    file_input = ui.input('Caminho ou Nome do Arquivo de Vídeo Local', placeholder='evento_passagem_comando.mp4').props('dark outlined dense w-full')
+                    uploaded_info = {'name': '', 'path': ''}
+
+                    ui.label('📁 Selecionar Arquivo de Vídeo (Upload via Explorer / Finder / Dispositivo):').classes('text-xs font-bold text-cyan q-mt-xs')
+
+                    def handle_upload(e):
+                        try:
+                            temp_dir = os.path.join(os.path.dirname(__file__), 'downloads')
+                            os.makedirs(temp_dir, exist_ok=True)
+                            save_path = os.path.join(temp_dir, e.name)
+                            with open(save_path, 'wb') as f:
+                                f.write(e.content.read())
+                            uploaded_info['name'] = e.name
+                            uploaded_info['path'] = save_path
+                            file_input.value = e.name
+                            ui.notify(f"Vídeo {e.name} carregado com sucesso para análise!", color='success')
+                        except Exception as up_err:
+                            ui.notify(f"Erro no upload do vídeo: {up_err}", color='red')
+
+                    ui.upload(on_upload=handle_upload, max_file_size=500000000).props('dark dense outlined w-full accept="video/*" label="Clique aqui ou arraste seu arquivo de vídeo (Windows Explorer / Mac Finder)"').classes('w-full')
+
+                    file_input = ui.input('Arquivo de Vídeo Selecionado', value=uploaded_info['name'], placeholder='Vídeo enviado pelo Explorer/Finder acima ou nome do vídeo baixado').props('dark outlined dense w-full')
 
                     cuts_results = ui.column().classes('w-full gap-2 q-mt-sm')
 
