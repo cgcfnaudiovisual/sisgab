@@ -3591,8 +3591,11 @@ def render_page():
                                 with ui.grid(columns='1 sm:grid-cols-2 md:grid-cols-3').classes('w-full gap-3'):
                                     for c in sorted(list_c, key=lambda x: x.get('assento_id', '')):
                                         is_acomp = bool(c.get('convidado_principal_id'))
-                                        posto = c.get('posto_graduacao') or ''
-                                        nome_c = f"{posto} {c['nome']}".strip()
+                                        main_g = main_guests_map.get(c.get('convidado_principal_id')) if is_acomp else None
+                                        posto = (c.get('posto_graduacao') or (main_g.get('posto_graduacao') if main_g else '') or '').strip()
+                                        almirantado_info = parse_almirantado_stars(posto)
+                                        nome_limpo = clean_authority_name(main_g.get('nome') if (is_acomp and main_g) else c['nome'])
+                                        target_logo = resolved_logo_url or brasao_l_url
                                         insignia_data = RANK_INSIGNIAS.get(posto, None)
                                         qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={c['id']}"
 
@@ -3616,7 +3619,7 @@ def render_page():
                                                         f'<span class="jade-insignia-badge" style="background:{insignia_data["color"]}22; color:{insignia_data["color"]}; border: 1px solid {insignia_data["color"]}44; font-size:8px;">'
                                                         f'{insignia_data["stars"]} {insignia_data["title"]}</span>'
                                                     )
-                                                ui.label(nome_c).classes('text-sm font-black text-white leading-tight')
+                                                ui.label(nome_limpo).classes('text-sm font-black text-white leading-tight')
                                                 sub = '(Acompanhante)' if is_acomp else (c.get('cargo_funcao') or c.get('categoria'))
                                                 if sub:
                                                     ui.label(sub).classes('text-[10px] text-grey-4 font-bold')
@@ -3631,7 +3634,7 @@ def render_page():
             (function() {
                 var area = document.querySelector('.print-area');
                 if (!area) { window.print(); return; }
-                var win = window.open('', '_blank', 'width=1050,height=800');
+                var win = window.open('', '_blank', 'width=1080,height=850');
                 if (!win) { window.print(); return; }
                 
                 var cssStyles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
@@ -3641,7 +3644,7 @@ def render_page():
                     <!DOCTYPE html>
                     <html>
                     <head>
-                        <title>JADE - Impressão Oficial de Placas</title>
+                        <title>JADE - Impressão Oficial de Placas de Assento</title>
                         ${cssStyles}
                         <style>
                             @page { size: A4 portrait; margin: 0mm !important; }
@@ -3650,9 +3653,10 @@ def render_page():
                             .print-area { display: block !important; position: static !important; width: 100% !important; visibility: visible !important; }
                             .prisma-card-a4-slot { height: 66mm !important; max-height: 66mm !important; border: 1.5pt solid #1a1a1a !important; outline: 0.5pt solid #1a1a1a !important; outline-offset: -2.5mm !important; margin-bottom: 4.5mm !important; page-break-inside: avoid !important; background: #ffffff !important; color: #000000 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; position: relative !important; box-sizing: border-box !important; }
                             .prisma-conteudo-central { display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; text-align: center !important; width: 100% !important; }
-                            .prisma-texto-reservado { font-weight: bold !important; letter-spacing: 2px !important; text-transform: uppercase !important; color: #1f4e79 !important; font-size: 14pt !important; }
-                            .prisma-posto-extenso { font-weight: bold !important; text-transform: uppercase !important; letter-spacing: 1px !important; font-size: 14pt !important; }
-                            .prisma-nome-autoridade { font-weight: 900 !important; text-transform: uppercase !important; font-size: 22pt !important; line-height: 1.1 !important; }
+                            .prisma-texto-reservado { font-weight: 900 !important; letter-spacing: 3px !important; text-transform: uppercase !important; color: #1f4e79 !important; font-size: 20pt !important; margin-bottom: 2px !important; }
+                            .prisma-posto-extenso { font-weight: bold !important; text-transform: uppercase !important; letter-spacing: 1.5px !important; font-size: 18pt !important; margin-bottom: 2px !important; }
+                            .prisma-nome-autoridade { font-weight: 900 !important; text-transform: uppercase !important; font-size: 32pt !important; line-height: 1.05 !important; }
+                            img { max-width: 100% !important; display: inline-block !important; }
                         </style>
                     </head>
                     <body>
@@ -3661,7 +3665,26 @@ def render_page():
                         </div>
                         <script>
                             window.onload = function() {
-                                setTimeout(function() { window.print(); window.close(); }, 400);
+                                var imgs = Array.from(document.querySelectorAll('img'));
+                                if (imgs.length === 0) {
+                                    setTimeout(function() { window.print(); window.close(); }, 400);
+                                    return;
+                                }
+                                var loaded = 0;
+                                function checkAndPrint() {
+                                    loaded++;
+                                    if (loaded >= imgs.length) {
+                                        setTimeout(function() { window.print(); window.close(); }, 450);
+                                    }
+                                }
+                                imgs.forEach(function(img) {
+                                    if (img.complete && img.naturalWidth !== 0) {
+                                        checkAndPrint();
+                                    } else {
+                                        img.onload = checkAndPrint;
+                                        img.onerror = checkAndPrint;
+                                    }
+                                });
                             };
                         <\\/script>
                     </body>
@@ -3675,7 +3698,7 @@ def render_page():
             (function() {
                 var area = document.querySelector('.print-area');
                 if (!area) return;
-                var win = window.open('', '_blank', 'width=1050,height=800');
+                var win = window.open('', '_blank', 'width=1080,height=850');
                 if (!win) return;
                 
                 var cssStyles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
