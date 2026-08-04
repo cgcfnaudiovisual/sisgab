@@ -432,19 +432,21 @@ def build_layout_base():
     system_title = str(data_service.get_config_value('cabecalho_tv_title', 'SISTEMA C2') or 'SISTEMA C2').upper()
     ui.run_javascript(f"document.title = '{system_title}'")
 
-    with ui.header().classes('no-shadow relative').style(f'background: {theme.colors["bg_panel"]}; border-bottom: {theme.colors["border"]}; min-height: 56px; height: auto; padding: 4px 8px;'):
+    with ui.header().classes('no-shadow relative').style(f'background: {theme.colors["bg_panel"]}; border-bottom: {theme.colors["border"]}; height: 56px; min-height: 56px; padding: 0 12px;'):
 
-        with ui.row().classes('w-full items-center justify-between gap-2 flex-wrap sm:no-wrap min-h-[48px]'):
-            # LADO ESQUERDO: Botão de Menu + Logo + Título
+        with ui.row().classes('w-full h-full items-center justify-between no-wrap gap-2'):
+            # LADO ESQUERDO: Botão de Menu + Logo + Título Responsivo em Linha Única
             with ui.row().classes('items-center gap-2 no-wrap shrink-0'):
                 ui.button(on_click=lambda: left_drawer.toggle(), icon='menu').props('flat color=white dense')
-                ui.image(LOGO_BASE64).style('width: 30px; height: 30px; filter: drop-shadow(0 0 4px rgba(197, 160, 89, 0.85));').classes('shrink-0')
+                ui.image(LOGO_BASE64).style('width: 28px; height: 28px; filter: drop-shadow(0 0 4px rgba(197, 160, 89, 0.85));').classes('shrink-0')
                 with ui.column().classes('gap-0 items-start'):
-                    ui.label(system_title).style(f'color: {theme.colors["primary"]}; font-weight: bold; line-height: 1.1; letter-spacing: 1px; font-size: 0.9rem;').classes('cyber-title text-left no-wrap')
+                    # No Mobile: Exibe SISGAB curto | No PC: Exibe título completo
+                    ui.label('SISGAB').style(f'color: {theme.colors["primary"]}; font-weight: bold; line-height: 1.1; letter-spacing: 1px; font-size: 0.95rem;').classes('cyber-title text-left no-wrap lt-sm')
+                    ui.label(system_title).style(f'color: {theme.colors["primary"]}; font-weight: bold; line-height: 1.1; letter-spacing: 1px; font-size: 0.9rem;').classes('cyber-title text-left no-wrap gt-xs')
                     ui.label('Comunicação Social • Gabinete').style('font-size: 0.65rem; color: #64748b;').classes('text-left no-wrap gt-xs')
 
-            # LADO DIREITO: Controles (Rádio, Tema, Notificação, Usuário, Senha, Logout)
-            with ui.row().classes('items-center gap-2 shrink-0 ml-auto no-wrap'):
+            # LADO DIREITO: Rádio Marinha + Avatar do Usuário
+            with ui.row().classes('items-center gap-3 shrink-0 ml-auto no-wrap'):
                 # Período de referência ativo
                 active_year = app.storage.user.setdefault('ano_letivo_ativo', '2026')
                 
@@ -454,7 +456,7 @@ def build_layout_base():
                     app.storage.user['year_notified'] = True
 
                 # Player de Rádio Minimalista
-                with ui.row().classes('items-center gap-1 no-wrap q-mr-xs gt-xs').style('border-right: 1px solid rgba(197, 160, 89, 0.1); padding-right: 8px;'):
+                with ui.row().classes('items-center gap-1 no-wrap q-mr-xs gt-xs').style('border-right: 1px solid rgba(197, 160, 89, 0.15); padding-right: 10px;'):
                     ui.html('<audio id="radio-player" src="https://stm0.inovativa.net/listen/radiomarinha/radio.mp3" preload="none"></audio>')
                     ui.label('RÁDIO MARINHA').classes('text-[10px] font-bold tracking-wider text-cyan q-mr-xs gt-sm')
                     
@@ -486,25 +488,18 @@ def build_layout_base():
                     ui.icon('volume_up', color='grey-5').classes('text-xs gt-sm')
                     ui.slider(min=0, max=1, step=0.05, value=0.5, on_change=lambda e: set_radio_volume(e.value)).props('dark dense').classes('gt-sm').style('width: 50px; margin: 0; padding: 0;')
 
-                theme_toggle.render_theme_toggle()
-                notifications.render_notification_bell()
-                with ui.column().classes('items-end gap-0 gt-sm'):
+                # Informações do Usuário e Avatar
+                with ui.column().classes('items-end gap-0 gt-xs'):
                     ui.label(user_name).classes('text-white text-weight-bold text-xs')
                     ui.label(user_posto).classes('text-grey-5 text-xs')
                 user_photo = user.get('url_foto') if user else None
                 user_avatar_src = user_photo if isinstance(user_photo, str) and user_photo.startswith('http') else 'https://cdn.quasar.dev/img/boy-avatar.png'
-                ui.element('div').classes('shadow shrink-0').style(
-                    f"width: 30px; height: 30px; background-image: url('{user_avatar_src}'); "
-                    f"background-size: cover; background-position: center; border-radius: 4px; "
-                    f"border: 1.5px solid rgba(197, 160, 89, 0.4); box-shadow: 0 0 10px rgba(197, 160, 89, 0.2);"
+                ui.element('div').classes('shadow shrink-0 cursor-pointer').style(
+                    f"width: 32px; height: 32px; background-image: url('{user_avatar_src}'); "
+                    f"background-size: cover; background-position: center; border-radius: 6px; "
+                    f"border: 1.5px solid rgba(197, 160, 89, 0.5); box-shadow: 0 0 10px rgba(197, 160, 89, 0.2);"
                 )
 
-                with ui.button(on_click=lambda: open_change_password_dialog(user), icon='vpn_key').props('flat round color=amber-9 dense'):
-                    ui.tooltip('Alterar Minha Senha')
-                with ui.button(on_click=logout, icon='logout').props('flat round color=red dense'):
-                    ui.tooltip('Sair do Sistema')
-
-                    
     try:
         user_agent = ui.context.client.request.headers.get('user-agent', '').lower()
         is_mobile = any(x in user_agent for x in ['mobile', 'android', 'iphone', 'ipad', 'phone'])
@@ -519,101 +514,114 @@ def build_layout_base():
     )
     with left_drawer:
         # overflow-x hidden na scroll_area impede barras de rolagem horizontais indesejadas
-        with ui.scroll_area().classes('w-full h-full').style('padding: 8px 10px; overflow-x: hidden;'):
-            with ui.column().classes('w-full gap-1').style('overflow-x: hidden;'):
+        with ui.column().classes('w-full h-full justify-between').style('padding: 8px 10px; overflow-x: hidden;'):
+            with ui.scroll_area().classes('w-full flex-grow').style('overflow-x: hidden;'):
+                with ui.column().classes('w-full gap-1').style('overflow-x: hidden;'):
 
-                def render_menu_list(categories):
-                    user_role = role
-                    import pandas as pd
-                    perms_df = data_service.get_core_data().get('permissions', pd.DataFrame())
-                    
-                    # Recupera dicionário de contagem de cliques do usuário atual
-                    click_counts = app.storage.user.setdefault('menu_clicks', {})
-                    
-                    for cat in categories:
-                        allowed_items = []
-                        for item in cat['items']:
-                            path_clean = item['path'].strip('/').replace('/', '_')
-                            f_key = f"menu_{path_clean}"
-                            row = perms_df[perms_df['feature_key'] == f_key] if not perms_df.empty else pd.DataFrame()
-                            
-                            if not row.empty:
-                                allowed_roles_str = str(row['allowed_roles'].iloc[0])
-                                allowed_roles = [r.strip().lower() for r in allowed_roles_str.split(',') if r.strip()]
-                                if user_role in allowed_roles:
-                                    allowed_items.append(item)
-                            else:
-                                if 'roles' in item:
-                                    if user_role in item['roles']:
+                    def render_menu_list(categories):
+                        user_role = role
+                        import pandas as pd
+                        perms_df = data_service.get_core_data().get('permissions', pd.DataFrame())
+                        
+                        # Recupera dicionário de contagem de cliques do usuário atual
+                        click_counts = app.storage.user.setdefault('menu_clicks', {})
+                        
+                        for cat in categories:
+                            allowed_items = []
+                            for item in cat['items']:
+                                path_clean = item['path'].strip('/').replace('/', '_')
+                                f_key = f"menu_{path_clean}"
+                                row = perms_df[perms_df['feature_key'] == f_key] if not perms_df.empty else pd.DataFrame()
+                                
+                                if not row.empty:
+                                    allowed_roles_str = str(row['allowed_roles'].iloc[0])
+                                    allowed_roles = [r.strip().lower() for r in allowed_roles_str.split(',') if r.strip()]
+                                    if user_role in allowed_roles:
                                         allowed_items.append(item)
                                 else:
-                                    allowed_items.append(item)
-                        
-                        if not allowed_items:
-                            continue
+                                    if 'roles' in item:
+                                        if user_role in item['roles']:
+                                            allowed_items.append(item)
+                                    else:
+                                        allowed_items.append(item)
                             
-                        # Ordena dinamicamente os itens permitidos da categoria com base no número de cliques (decrescente)
-                        allowed_items.sort(key=lambda x: click_counts.get(x['path'], 0), reverse=True)
-                            
-                        with ui.row().classes('w-full items-center gap-2 q-mt-sm q-mb-xs px-1 no-wrap'):
-                            ui.label(cat['category']).classes('text-[9.2px] text-primary/80 font-bold tracking-widest cyber-title no-wrap').style('white-space: nowrap;')
-                        
-                        for item in allowed_items:
-                            is_active = app.storage.user.get('current_path') == item['path']
-                            
-                            if is_active:
-                                block_style = (
-                                    f'border: 1.5px solid {theme.colors["primary"]}; '
-                                    f'background: rgba(197, 160, 89, 0.08); '
-                                    f'box-shadow: 0 0 10px rgba(197, 160, 89, 0.15);'
-                                )
-                                icon_color = theme.colors['primary']
-                                text_color = theme.colors['primary']
-                            else:
-                                block_style = (
-                                    f'border: 1px solid rgba(197, 160, 89, 0.08); '
-                                    f'background: rgba(12, 18, 30, 0.25);'
-                                )
-                                icon_color = '#64748b'
-                                text_color = '#e2e8f0'
-                            
-                            # Calcula badge de pendentes se for Homologar Pautas
-                            badge_count = 0
-                            if item['path'] == '/comsoc_homologar':
-                                from database import get_db_connection
-                                db_b = get_db_connection()
-                                if db_b:
-                                    try:
-                                        res_b = db_b.table('demandas_comunicacao').select('id').eq('status', 'pendente').execute()
-                                        if res_b.data:
-                                            badge_count = len(res_b.data)
-                                    except Exception as e:
-                                        print(f"[MENU BADGE ERR] {e}")
+                            if not allowed_items:
+                                continue
                                 
-                            # Função para registrar clique e redirecionar
-                            def make_click_handler(target_path=item['path'], new_tab=item.get('new_tab', False)):
-                                def on_click():
-                                    current_clicks = app.storage.user.setdefault('menu_clicks', {})
-                                    current_clicks[target_path] = current_clicks.get(target_path, 0) + 1
-                                    app.storage.user['menu_clicks'] = current_clicks
-                                    ui.navigate.to(target_path, new_tab=new_tab)
-                                return on_click
+                            # Ordena dinamicamente os itens permitidos da categoria com base no número de cliques (decrescente)
+                            allowed_items.sort(key=lambda x: click_counts.get(x['path'], 0), reverse=True)
                                 
-                            with ui.button(on_click=make_click_handler()).props('flat no-caps').classes('w-full q-pa-none q-ma-none text-left').style('margin-bottom: 2px;'):
-                                with ui.row().classes(
-                                    'w-full items-center gap-3 p-2 rounded-xl transition-all hover:border-primary/45 hover:bg-primary/5 no-wrap'
-                                ).style(block_style):
-                                    ui.icon(item['icon']).classes('text-lg flex-shrink-0').style(f'color: {icon_color};')
-                                    with ui.column().classes('gap-0 flex-grow min-w-0 leading-none'):
-                                        with ui.row().classes('items-center gap-2 no-wrap w-full justify-between'):
-                                            ui.label(item['name']).classes('text-[10.5px] font-bold no-wrap').style(f'color: {text_color}; white-space: nowrap;')
-                                            if badge_count > 0:
-                                                ui.badge(str(badge_count)).props('color=red-7 dense text-color=white').classes('text-[8px] q-px-sm')
-                                        if item.get('subtitle'):
-                                            ui.label(item['subtitle']).classes('text-[7.8px] q-mt-xs no-wrap').style('color: #64748b; white-space: nowrap;')
+                            with ui.row().classes('w-full items-center gap-2 q-mt-sm q-mb-xs px-1 no-wrap'):
+                                ui.label(cat['category']).classes('text-[9.2px] text-primary/80 font-bold tracking-widest cyber-title no-wrap').style('white-space: nowrap;')
+                            
+                            for item in allowed_items:
+                                is_active = app.storage.user.get('current_path') == item['path']
+                                
+                                if is_active:
+                                    block_style = (
+                                        f'border: 1.5px solid {theme.colors["primary"]}; '
+                                        f'background: rgba(197, 160, 89, 0.08); '
+                                        f'box-shadow: 0 0 10px rgba(197, 160, 89, 0.15);'
+                                    )
+                                    icon_color = theme.colors['primary']
+                                    text_color = theme.colors['primary']
+                                else:
+                                    block_style = (
+                                        f'border: 1px solid rgba(197, 160, 89, 0.08); '
+                                        f'background: rgba(12, 18, 30, 0.25);'
+                                    )
+                                    icon_color = '#64748b'
+                                    text_color = '#e2e8f0'
+                                
+                                # Calcula badge de pendentes se for Homologar Pautas
+                                badge_count = 0
+                                if item['path'] == '/comsoc_homologar':
+                                    from database import get_db_connection
+                                    db_b = get_db_connection()
+                                    if db_b:
+                                        try:
+                                            res_b = db_b.table('demandas_comunicacao').select('id').eq('status', 'pendente').execute()
+                                            if res_b.data:
+                                                badge_count = len(res_b.data)
+                                        except Exception as e:
+                                            print(f"[MENU BADGE ERR] {e}")
+                                    
+                                # Função para registrar clique e redirecionar
+                                def make_click_handler(target_path=item['path'], new_tab=item.get('new_tab', False)):
+                                    def on_click():
+                                        current_clicks = app.storage.user.setdefault('menu_clicks', {})
+                                        current_clicks[target_path] = current_clicks.get(target_path, 0) + 1
+                                        app.storage.user['menu_clicks'] = current_clicks
+                                        ui.navigate.to(target_path, new_tab=new_tab)
+                                    return on_click
+                                    
+                                with ui.button(on_click=make_click_handler()).props('flat no-caps').classes('w-full q-pa-none q-ma-none text-left').style('margin-bottom: 2px;'):
+                                    with ui.row().classes(
+                                        'w-full items-center gap-3 p-2 rounded-xl transition-all hover:border-primary/45 hover:bg-primary/5 no-wrap'
+                                    ).style(block_style):
+                                        ui.icon(item['icon']).classes('text-lg flex-shrink-0').style(f'color: {icon_color};')
+                                        with ui.column().classes('gap-0 flex-grow min-w-0 leading-none'):
+                                            with ui.row().classes('items-center gap-2 no-wrap w-full justify-between'):
+                                                ui.label(item['name']).classes('text-[10.5px] font-bold no-wrap').style(f'color: {text_color}; white-space: nowrap;')
+                                                if badge_count > 0:
+                                                    ui.badge(str(badge_count)).props('color=red-7 dense text-color=white').classes('text-[8px] q-px-sm')
+                                            if item.get('subtitle'):
+                                                ui.label(item['subtitle']).classes('text-[7.8px] q-mt-xs no-wrap').style('color: #64748b; white-space: nowrap;')
 
-                render_menu_list(sisgab_menu_categories)
+                    render_menu_list(sisgab_menu_categories)
                 
+            # ── RODAPÉ DA SIDEBAR: Alterar Senha & Sair do Sistema ──
+            with ui.column().classes('w-full gap-1 q-pt-sm border-t border-gray-800/60 q-mt-xs shrink-0'):
+                with ui.button(on_click=lambda: open_change_password_dialog(user)).props('flat no-caps').classes('w-full q-pa-none text-left'):
+                    with ui.row().classes('w-full items-center gap-3 p-2 rounded-xl border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 no-wrap'):
+                        ui.icon('vpn_key').classes('text-lg text-amber-500 flex-shrink-0')
+                        ui.label('Alterar Minha Senha').classes('text-[11px] font-bold text-amber-400 no-wrap')
+
+                with ui.button(on_click=logout).props('flat no-caps').classes('w-full q-pa-none text-left'):
+                    with ui.row().classes('w-full items-center gap-3 p-2 rounded-xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 no-wrap'):
+                        ui.icon('logout').classes('text-lg text-red-500 flex-shrink-0')
+                        ui.label('Sair do Sistema').classes('text-[11px] font-bold text-red-400 no-wrap')
+
     return ui.column().classes('w-full h-full p-0')
 
 
