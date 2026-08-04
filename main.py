@@ -429,21 +429,20 @@ def build_layout_base():
     }
     user_posto = user.get('posto') or role_map.get(role, 'Operador')
     
-    system_title = str(data_service.get_config_value('cabecalho_tv_title', 'SISTEMA C2') or 'SISTEMA C2').upper()
+    system_title = "SISGAB"
     ui.run_javascript(f"document.title = '{system_title}'")
 
     with ui.header().classes('no-shadow relative').style(f'background: {theme.colors["bg_panel"]}; border-bottom: {theme.colors["border"]}; height: 56px; min-height: 56px; padding: 0 12px;'):
 
         with ui.row().classes('w-full h-full items-center justify-between no-wrap gap-2'):
-            # LADO ESQUERDO: Botão de Menu + Logo + Título Responsivo em Linha Única
+            # LADO ESQUERDO: Botão de Menu + Logo + Título SISGAB
             with ui.row().classes('items-center gap-2 no-wrap shrink-0'):
                 ui.button(on_click=lambda: left_drawer.toggle(), icon='menu').props('flat color=white dense')
                 ui.image(LOGO_BASE64).style('width: 28px; height: 28px; filter: drop-shadow(0 0 4px rgba(197, 160, 89, 0.85));').classes('shrink-0')
                 with ui.column().classes('gap-0 items-start'):
-                    # No Mobile: Exibe SISGAB curto | No PC: Exibe título completo
-                    ui.label('SISGAB').style(f'color: {theme.colors["primary"]}; font-weight: bold; line-height: 1.1; letter-spacing: 1px; font-size: 0.95rem;').classes('cyber-title text-left no-wrap lt-sm')
-                    ui.label(system_title).style(f'color: {theme.colors["primary"]}; font-weight: bold; line-height: 1.1; letter-spacing: 1px; font-size: 0.9rem;').classes('cyber-title text-left no-wrap gt-xs')
+                    ui.label('SISGAB').style(f'color: {theme.colors["primary"]}; font-weight: bold; line-height: 1.1; letter-spacing: 1px; font-size: 0.95rem;').classes('cyber-title text-left no-wrap')
                     ui.label('Comunicação Social • Gabinete').style('font-size: 0.65rem; color: #64748b;').classes('text-left no-wrap gt-xs')
+
 
             # LADO DIREITO: Rádio Marinha + Avatar do Usuário
             with ui.row().classes('items-center gap-3 shrink-0 ml-auto no-wrap'):
