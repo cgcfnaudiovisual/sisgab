@@ -941,23 +941,21 @@ def render_page():
                             smtp_status.text = f'❌ Falha na conexão: {err}'
 
                     def save_smtp():
-                        if not conn:
-                            ui.notify('Sem conexão com o banco', color='red')
-                            return
                         try:
-                            configs = [
-                                {'chave': 'smtp_host', 'valor': s_host.value.strip()},
-                                {'chave': 'smtp_port', 'valor': s_port.value.strip()},
-                                {'chave': 'smtp_user', 'valor': s_user.value.strip()},
-                                {'chave': 'smtp_password', 'valor': s_pass.value.strip()},
-                                {'chave': 'smtp_from_name', 'valor': s_name.value.strip()},
-                            ]
-                            for item in configs:
-                                conn.table('config').upsert(item).execute()
+                            from database import save_smtp_config
+                            save_smtp_config({
+                                'smtp_host': s_host.value.strip(),
+                                'smtp_port': s_port.value.strip(),
+                                'smtp_user': s_user.value.strip(),
+                                'smtp_pass': s_pass.value.strip(),
+                                'smtp_sender_name': s_name.value.strip(),
+                                'smtp_use_tls': True
+                            })
                             ui.notify('✅ Configurações SMTP salvas com sucesso!', color='success')
                             smtp_dialog.close()
                         except Exception as err:
                             smtp_status.text = f'Erro ao salvar: {err}'
+
 
                     with ui.row().classes('w-full justify-between items-center q-mt-md'):
                         ui.button('🧪 Testar Conexão', on_click=test_smtp).props('outline dense color=amber-9')

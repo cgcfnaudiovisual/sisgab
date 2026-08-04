@@ -1659,7 +1659,7 @@ def delete_rsvp_convite(convite_id: str):
 
 
 def get_smtp_config() -> dict:
-    """Retorna as configurações do servidor SMTP armazenadas no banco."""
+    """Retorna as configurações do servidor SMTP armazenadas no banco com suporte universal a alias de chaves."""
     config = {
         'smtp_host': 'smtp.gmail.com',
         'smtp_port': 587,
@@ -1668,43 +1668,71 @@ def get_smtp_config() -> dict:
         'smtp_use_tls': True,
         'smtp_sender_name': 'Comunicação Social - CGCFN'
     }
+    
+    def parse_rows(rows):
+        if not rows: return
+        for row in rows:
+            k = str(row.get('chave', '')).strip().lower()
+            v = str(row.get('valor', '')).strip()
+            if not k or not v: continue
+            if k == 'smtp_host': config['smtp_host'] = v
+            elif k == 'smtp_port': config['smtp_port'] = int(v) if v.isdigit() else 587
+            elif k in ('smtp_user', 'smtp_username'): config['smtp_user'] = v
+            elif k in ('smtp_pass', 'smtp_password'): config['smtp_pass'] = v
+            elif k in ('smtp_sender_name', 'smtp_from_name'): config['smtp_sender_name'] = v
+            elif k == 'smtp_use_tls': config['smtp_use_tls'] = v.lower() in ('true', '1')
+
     conn = get_service_db_connection() or get_db_connection()
     if conn:
         try:
             res = conn.table('config').select('*').ilike('chave', 'smtp_%').execute()
-            if res.data:
-                for row in res.data:
-                    k = row.get('chave')
-                    v = row.get('valor')
-                    if k == 'smtp_host': config['smtp_host'] = str(v)
-                    elif k == 'smtp_port': config['smtp_port'] = int(v or 587)
-                    elif k == 'smtp_user': config['smtp_user'] = str(v)
-                    elif k == 'smtp_pass': config['smtp_pass'] = str(v)
-                    elif k == 'smtp_use_tls': config['smtp_use_tls'] = str(v).lower() in ('true', '1')
-                    elif k == 'smtp_sender_name': config['smtp_sender_name'] = str(v)
+            parse_rows(res.data)
         except Exception as e:
             print(f"[GET SMTP CONFIG ERR] {e}")
+            
+    # Fallback local SQLite
+    try:
+        local_db = get_local_db_connection()
+        res = local_db.table('config').select('*').ilike('chave', 'smtp_%').execute()
+        parse_rows(res.data)
+    except Exception as loc_e:
+        print(f"[GET SMTP CONFIG LOCAL ERR] {loc_e}")
+
     return config
 
 
 def save_smtp_config(cfg: dict):
-    """Salva as configurações de SMTP no banco de dados."""
+    """Salva as configurações de SMTP no banco de dados (salvando aliases para garantia total)."""
     conn = get_service_db_connection() or get_db_connection()
+    
+    # Prepara dicionario completo com ambas grafias
+    save_data = {
+        'smtp_host': cfg.get('smtp_host', 'smtp.gmail.com'),
+        'smtp_port': str(cfg.get('smtp_port', 587)),
+        'smtp_user': cfg.get('smtp_user', ''),
+        'smtp_pass': cfg.get('smtp_pass', ''),
+        'smtp_password': cfg.get('smtp_pass', ''),
+        'smtp_sender_name': cfg.get('smtp_sender_name', 'SisGAB'),
+        'smtp_from_name': cfg.get('smtp_sender_name', 'SisGAB'),
+        'smtp_use_tls': 'true' if cfg.get('smtp_use_tls', True) else 'false'
+    }
+
     if conn:
-        for k, v in cfg.items():
+        for k, v in save_data.items():
             try:
                 conn.table('config').upsert({'chave': k, 'valor': str(v)}).execute()
             except Exception as e:
                 print(f"[SAVE SMTP CONFIG ERR {k}] {e}")
     
-    # Fallback local
+    # Fallback local SQLite
     try:
         local_db = get_local_db_connection()
-        for k, v in cfg.items():
+        for k, v in save_data.items():
             local_db.table('config').upsert({'chave': k, 'valor': str(v)}).execute()
     except Exception:
         pass
     return True
+
 
 
 def send_real_email_smtp(to_email: str, subject: str, body_html: str):
