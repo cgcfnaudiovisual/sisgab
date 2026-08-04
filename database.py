@@ -1475,8 +1475,88 @@ def upsert_autoridade_base(data: dict):
     return local_db.table('autoridades_base').upsert(data).execute()
 
 
+def sync_rsvp_with_jade():
+    """Sincroniza automaticamente todos os eventos e convidados do RSVP com o Mapeamento de Assentos (Placas JADE)."""
+    init_local_rsvp_tables()
+    conn = get_service_db_connection() or get_db_connection()
+    local_db = get_local_db_connection()
+
+    # 1. Carregar eventos RSVP
+    rsvp_evs = []
+    if conn:
+        try:
+            r = conn.table('rsvp_eventos').select('*').execute()
+            if r.data: rsvp_evs.extend(r.data)
+        except Exception: pass
+    try:
+        r_loc = local_db.table('rsvp_eventos').select('*').execute()
+        if r_loc.data:
+            existing_ids = {e['id'] for e in rsvp_evs}
+            for e in r_loc.data:
+                if e['id'] not in existing_ids:
+                    rsvp_evs.append(e)
+    except Exception: pass
+
+    # 2. Inserir/Sincronizar eventos em jade_eventos
+    for ev in rsvp_evs:
+        j_ev_data = {
+            'id': str(ev['id']),
+            'nome': str(ev.get('nome_evento') or ev.get('nome') or 'Evento Cerimonial'),
+            'data_evento': str(ev.get('data_evento') or datetime.datetime.now().strftime('%Y-%m-%d')),
+            'local_evento': str(ev.get('local_evento') or ''),
+            'fileiras': 6,
+            'colunas': 12
+        }
+        if conn:
+            try: conn.table('jade_eventos').upsert(j_ev_data).execute()
+            except Exception: pass
+        try: local_db.table('jade_eventos').upsert(j_ev_data).execute()
+        except Exception: pass
+
+    # 3. Carregar convites RSVP
+    rsvp_convs = []
+    if conn:
+        try:
+            rc = conn.table('rsvp_convites').select('*').execute()
+            if rc.data: rsvp_convs.extend(rc.data)
+        except Exception: pass
+    try:
+        rc_loc = local_db.table('rsvp_convites').select('*').execute()
+        if rc_loc.data:
+            existing_c_ids = {c['id'] for c in rsvp_convs}
+            for c in rc_loc.data:
+                if c['id'] not in existing_c_ids:
+                    rsvp_convs.append(c)
+    except Exception: pass
+
+    # 4. Inserir/Sincronizar convidados em jade_convidados
+    for c in rsvp_convs:
+        ev_id = str(c.get('evento_id', ''))
+        if not ev_id: continue
+
+        nome_full = f"{c.get('posto_graduacao','')} {c.get('nome_autoridade','')}".strip()
+        status_conf = 'confirmado' if c.get('status') == 'confirmado' else 'recusado' if c.get('status') in ('recusado', 'justificado') else 'provavel'
+        
+        j_conv_data = {
+            'id': str(c['id']),
+            'evento_id': ev_id,
+            'nome': nome_full,
+            'categoria': 'Autoridade Militar' if any(p in nome_full.upper() for p in ('ALMIRANTE', 'CAPITÃO', 'COMANDANTE', 'GENERAL', 'MINISTRO', 'TENENTE', 'TEN')) else 'Geral',
+            'cargo_funcao': c.get('cargo_funcao', 'Convidado de RSVP'),
+            'status_confirmacao': status_conf,
+            'status_placa': 'pendente',
+            'max_acompanhantes': int(c.get('acompanhantes_count', 0) or 0)
+        }
+
+        if conn:
+            try: conn.table('jade_convidados').upsert(j_conv_data).execute()
+            except Exception: pass
+        try: local_db.table('jade_convidados').upsert(j_conv_data).execute()
+        except Exception: pass
+
+
 def create_rsvp_evento(nome: str, data: str, hora: str, local: str, traje: str):
-    """Cria um novo evento ceremonial de RSVP com fallback gracioso em banco local."""
+    """Cria um novo evento ceremonial de RSVP e sincroniza automaticamente no Mapeamento de Assentos."""
     init_local_rsvp_tables()
     import uuid, datetime
     ev_id = str(uuid.uuid4())
@@ -1493,14 +1573,18 @@ def create_rsvp_evento(nome: str, data: str, hora: str, local: str, traje: str):
     conn = get_service_db_connection() or get_db_connection()
     if conn:
         try:
-            res = conn.table('rsvp_eventos').insert(ev_data).execute()
-            return res
+            conn.table('rsvp_eventos').insert(ev_data).execute()
         except Exception as err:
             print(f"[RSVP CREATE EVENTO SUPABASE FALLBACK] {err}")
     
     # Fallback SQLite local
     local_db = get_local_db_connection()
-    return local_db.table('rsvp_eventos').insert(ev_data).execute()
+    local_db.table('rsvp_eventos').insert(ev_data).execute()
+
+    # Sincroniza imediatamente com as Placas JADE
+    sync_rsvp_with_jade()
+    return ev_id
+
 
 
 

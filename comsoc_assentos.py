@@ -103,6 +103,12 @@ def render_page():
     
     @ui.refreshable
     def render_content():
+        try:
+            from database import sync_rsvp_with_jade
+            sync_rsvp_with_jade()
+        except Exception as sync_err:
+            print(f"[RSVP JADE SYNC ERR] {sync_err}")
+
         db = get_service_db_connection() or get_db_connection()
         if not db:
             with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
@@ -117,6 +123,7 @@ def render_page():
             eventos = res_ev.data if res_ev.data else []
         except Exception as e:
             print(f"[JADE EVENTS FETCH ERR] {e}")
+
 
         if not state.selected_event_id and eventos:
             state.selected_event_id = eventos[0]['id']
