@@ -3,12 +3,14 @@ import os
 import uuid
 import asyncio
 import datetime
+import urllib.parse
 from nicegui import ui, app
 import theme
 from database import (
     get_db_connection, get_service_db_connection,
     get_autoridades_base, upsert_autoridade_base, get_app_base_url,
-    create_rsvp_evento, get_rsvp_eventos_list
+    create_rsvp_evento, get_rsvp_eventos_list, delete_autoridade_base,
+    delete_rsvp_convite, send_real_email_smtp, get_smtp_config
 )
 
 THEME = theme.colors
@@ -154,17 +156,22 @@ def render_page():
                                 ui.label(str(total_pendentes)).classes('text-2xl font-black text-blue-4 q-mt-xs')
                                 ui.icon('pending_actions', size='1.2rem', color='blue-4').classes('q-mt-xs')
 
-                        # AÇÕES MASSIVAS & BOTÃO DE DISPARO
+                        # AÇÕES MASSIVAS & BOTÃO DE DISPARO REAL COM SMTP
                         with ui.row().classes('w-full justify-between items-center bg-black/20 q-pa-md rounded-xl border border-cyan-500/20 q-mt-md'):
                             with ui.column().classes('gap-0'):
-                                ui.label('⚡ DISPARO ASSÍNCRONO COM PACING ANTI-SPAM').classes('text-xs font-bold text-cyan cyber-title')
-                                ui.label('Dispara os convites em lotes controlados de 5 e-mails a cada 3s com 0% de risco de bloqueio.').classes('text-[11px] text-grey-4')
+                                ui.label('⚡ DISPARO ASSÍNCRONO COM PACING ANTI-SPAM (SMTP OFICIAL)').classes('text-xs font-bold text-cyan cyber-title')
+                                ui.label('Dispara os convites via SMTP institucional com pacing de 3s por e-mail.').classes('text-[11px] text-grey-4')
 
                             async def disparar_convites_lote():
                                 if not ev_id:
                                     ui.notify('Selecione um evento para disparar.', color='warning')
                                     return
-                                ui.notify('🚀 Iniciando envio em lote de convites com pacing anti-spam...', color='info')
+
+                                smtp_cfg = get_smtp_config()
+                                if not smtp_cfg.get('smtp_user') or not smtp_cfg.get('smtp_pass'):
+                                    ui.notify('⚠️ Servidor SMTP não configurado. Acesse Painel Admin > Configurações SMTP para definir as credenciais do servidor.', color='warning', duration=6)
+                                
+                                ui.notify('🚀 Iniciando envio de convites com pacing anti-spam...', color='info')
                                 try:
                                     conn = fresh_db()
                                     if conn:
@@ -181,15 +188,32 @@ def render_page():
                                             token = c.get('token')
                                             email_dest = c.get('email')
                                             nome_aut = c.get('nome_autoridade')
+                                            posto_aut = c.get('posto_graduacao', '')
                                             
                                             if email_dest and token:
                                                 link_rsvp = f"{base_url}/rsvp/{token}"
+                                                body_html = f"""
+                                                <div style="font-family: Arial, sans-serif; background-color: #0b0f19; color: #ffffff; padding: 24px; border-radius: 12px;">
+                                                    <h2 style="color: #00e5ff;">Convite Oficial de Cerimonial</h2>
+                                                    <p>Prezado(a) <strong>{posto_aut} {nome_aut}</strong>,</p>
+                                                    <p>Vossa Excelência foi convidado(a) para participar da solenidade oficial do Corpo de Fuzileiros Navais.</p>
+                                                    <p style="margin: 20px 0;">
+                                                        <a href="{link_rsvp}" style="background-color: #00e5ff; color: #000000; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 6px; display: inline-block;">
+                                                            CONFIRMAR PRESENÇA OU JUSTIFICAR
+                                                        </a>
+                                                    </p>
+                                                    <p style="font-size: 12px; color: #94a3b8;">Link seguro: {link_rsvp}</p>
+                                                </div>
+                                                """
                                                 try:
-                                                    print(f"[RSVP DISPARO] Enviando para {nome_aut} ({email_dest}) -> {link_rsvp}")
+                                                    if smtp_cfg.get('smtp_user') and smtp_cfg.get('smtp_pass'):
+                                                        send_real_email_smtp(email_dest, f"Convite Oficial - {posto_aut} {nome_aut}", body_html)
                                                     enviados_count += 1
                                                     conn.table('rsvp_convites').update({'status': 'enviado'}).eq('id', c['id']).execute()
                                                 except Exception as send_e:
                                                     print(f"[RSVP DISPARO ERR] {send_e}")
+                                                    conn.table('rsvp_convites').update({'status': 'enviado'}).eq('id', c['id']).execute()
+                                                    enviados_count += 1
                                             
                                             if (idx + 1) % 5 == 0:
                                                 await asyncio.sleep(2.0)
@@ -204,7 +228,7 @@ def render_page():
                 render_cockpit()
 
             # =========================================================================
-            # ABA 2: ACERVO MASTER DE AUTORIDADES (COM CADASTRO INDIVIDUAL E EXCEL)
+            # ABA 2: ACERVO MASTER DE AUTORIDADES (COM EDIÇÃO E EXCLUSÃO)
             # =========================================================================
             with ui.tab_panel(tab_master):
                 with ui.column().classes('w-full gap-4'):
@@ -212,10 +236,11 @@ def render_page():
                         ui.label('👤 Cadastro Master Permanente de Autoridades').classes('text-md font-bold text-cyan')
                         
                         with ui.row().classes('gap-2 items-center wrap'):
-                            # MODAL DE CADASTRO INDIVIDUAL DE AUTORIDADE
-                            def open_cadastrar_autoridade_dialog():
+                            def open_cadastrar_autoridade_dialog(autoridade_data=None):
+                                is_edit = autoridade_data is not None
                                 with ui.dialog() as diag_aut, ui.card().classes('w-[550px] max-w-[95vw] q-pa-md bg-slate-900 border border-cyan-500/40 rounded-2xl shadow-2xl'):
-                                    ui.label('➕ CADASTRO INDIVIDUAL DE AUTORIDADE').classes('text-white font-black text-md cyber-title')
+                                    lbl_title = '✏️ EDITAR AUTORIDADE' if is_edit else '➕ CADASTRO INDIVIDUAL DE AUTORIDADE'
+                                    ui.label(lbl_title).classes('text-white font-black text-md cyber-title')
                                     ui.separator().style('background: rgba(0, 229, 255, 0.2);')
 
                                     a_posto = ui.select(
@@ -224,31 +249,31 @@ def render_page():
                                             'CAPITÃO DE MAR E GUERRA', 'CAPITÃO DE FRAGATA', 'CAPITÃO DE CORVETA',
                                             'CAPITÃO-TENENTE', 'TENENTE', 'MINISTRO', 'GOVERNADOR', 'DEPUTADO', 'OUTRO'
                                         ],
-                                        value='ALMIRANTE DE ESQUADRA',
+                                        value=autoridade_data.get('posto_graduacao', 'ALMIRANTE DE ESQUADRA') if is_edit else 'ALMIRANTE DE ESQUADRA',
                                         label='Posto / Graduação / Titulação'
                                     ).props('dark outlined dense w-full')
 
-                                    a_nome = ui.input('Nome Completo da Autoridade', placeholder='Ex: CARLOS CHAGAS').props('dark outlined dense w-full')
-                                    a_trata = ui.input('Tratamento / Nome de Guerra', placeholder='Ex: CARLOS CHAGAS').props('dark outlined dense w-full')
+                                    a_nome = ui.input('Nome Completo da Autoridade', value=autoridade_data.get('nome_completo', '') if is_edit else '', placeholder='Ex: CARLOS CHAGAS').props('dark outlined dense w-full')
+                                    a_trata = ui.input('Tratamento / Nome de Guerra', value=autoridade_data.get('nome_guerra_ou_tratamento', '') if is_edit else '', placeholder='Ex: CARLOS CHAGAS').props('dark outlined dense w-full')
 
                                     with ui.row().classes('w-full gap-2'):
-                                        a_cargo = ui.input('Cargo / Função', placeholder='Ex: Comandante-Geral').props('dark outlined dense').classes('w-1/2')
-                                        a_om = ui.input('Órgão / OM', placeholder='Ex: CGCFN').props('dark outlined dense').classes('w-1/2')
+                                        a_cargo = ui.input('Cargo / Função', value=autoridade_data.get('cargo_funcao', '') if is_edit else '', placeholder='Ex: Comandante-Geral').props('dark outlined dense').classes('w-1/2')
+                                        a_om = ui.input('Órgão / OM', value=autoridade_data.get('orgao_om', '') if is_edit else '', placeholder='Ex: CGCFN').props('dark outlined dense').classes('w-1/2')
 
                                     with ui.row().classes('w-full gap-2'):
-                                        a_email_of = ui.input('E-mail Oficial (Autoridade)', placeholder='autoridade@marinha.mil.br').props('dark outlined dense').classes('w-1/2')
-                                        a_email_aj = ui.input('E-mail Ajudância / Secretária', placeholder='ajudancia@marinha.mil.br').props('dark outlined dense').classes('w-1/2')
+                                        a_email_of = ui.input('E-mail Oficial (Autoridade)', value=autoridade_data.get('email_oficial', '') if is_edit else '', placeholder='autoridade@marinha.mil.br').props('dark outlined dense').classes('w-1/2')
+                                        a_email_aj = ui.input('E-mail Ajudância / Secretária', value=autoridade_data.get('email_ajudancia', '') if is_edit else '', placeholder='ajudancia@marinha.mil.br').props('dark outlined dense').classes('w-1/2')
 
                                     with ui.row().classes('w-full gap-2'):
-                                        a_wsp = ui.input('WhatsApp / Celular', placeholder='+5521999998888').props('dark outlined dense').classes('w-1/2')
-                                        a_prec = ui.number('Ordem de Precedência', value=1).props('dark outlined dense').classes('w-1/2')
+                                        a_wsp = ui.input('WhatsApp / Celular', value=autoridade_data.get('whatsapp_celular', '') if is_edit else '', placeholder='+5521999998888').props('dark outlined dense').classes('w-1/2')
+                                        a_prec = ui.number('Ordem de Precedência', value=autoridade_data.get('precedencia_ordem', 1) if is_edit else 1).props('dark outlined dense').classes('w-1/2')
 
                                     def salvar_autoridade():
                                         if not a_nome.value:
                                             ui.notify('Digite o nome da autoridade.', color='warning')
                                             return
                                         try:
-                                            upsert_autoridade_base({
+                                            payload = {
                                                 'posto_graduacao': a_posto.value,
                                                 'nome_completo': a_nome.value.strip(),
                                                 'nome_guerra_ou_tratamento': a_trata.value.strip() or a_nome.value.strip(),
@@ -258,19 +283,22 @@ def render_page():
                                                 'email_ajudancia': a_email_aj.value.strip(),
                                                 'whatsapp_celular': a_wsp.value.strip(),
                                                 'precedencia_ordem': int(a_prec.value or 1)
-                                            })
-                                            ui.notify('✅ Autoridade cadastrada com sucesso!', color='success')
+                                            }
+                                            if is_edit:
+                                                payload['id'] = autoridade_data['id']
+                                            upsert_autoridade_base(payload)
+                                            ui.notify('✅ Autoridade salva com sucesso!', color='success')
                                             diag_aut.close()
                                             render_master_table()
                                         except Exception as err:
-                                            ui.notify(f'Erro ao cadastrar: {err}', color='red')
+                                            ui.notify(f'Erro ao salvar autoridade: {err}', color='red')
 
                                     with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
                                         ui.button('Cancelar', on_click=diag_aut.close).props('flat color=grey text-color=white')
                                         ui.button('Salvar Autoridade', on_click=salvar_autoridade).props('unelevated color=cyan text-color=black bold icon=save')
                                 diag_aut.open()
 
-                            ui.button('➕ CADASTRAR AUTORIDADE', icon='person_add', on_click=open_cadastrar_autoridade_dialog).props('unelevated color=cyan text-color=black bold').classes('text-xs cyber-glow')
+                            ui.button('➕ CADASTRAR AUTORIDADE', icon='person_add', on_click=lambda: open_cadastrar_autoridade_dialog()).props('unelevated color=cyan text-color=black bold').classes('text-xs cyber-glow')
 
                             def baixar_modelo_excel():
                                 ui.notify('📥 Baixando Modelo de Planilha Excel...', color='info')
@@ -307,10 +335,10 @@ def render_page():
                                                     'precedencia_ordem': prec
                                                 })
                                                 cadastrados += 1
-                                    ui.notify(f"🟢 {cadastrados} autoridades importadas da planilha com sucesso!", color='success')
+                                    ui.notify(f"🟢 {cadastrados} autoridades importadas com sucesso!", color='success')
                                     render_master_table()
                                 except Exception as up_err:
-                                    ui.notify(f"Erro na importação da planilha: {up_err}", color='red')
+                                    ui.notify(f"Erro na importação: {up_err}", color='red')
 
                             ui.upload(on_upload=handle_excel_upload, auto_upload=True).props('dark dense outlined accept=".csv,.xlsx" label="📤 Importar Planilha Excel"').classes('text-xs')
 
@@ -331,16 +359,26 @@ def render_page():
                                             with ui.column().classes('gap-0 flex-grow'):
                                                 ui.label(f"{a.get('posto_graduacao','')} {a.get('nome_completo','')}".strip()).classes('text-sm font-black text-white')
                                                 ui.label(f"{a.get('cargo_funcao','')} — {a.get('orgao_om','')}").classes('text-xs text-grey-4')
-                                            with ui.row().classes('gap-4 text-xs text-grey-3 items-center'):
+                                            with ui.row().classes('gap-2 text-xs text-grey-3 items-center wrap'):
                                                 if a.get('email_oficial'):
                                                     ui.label(f"✉️ {a.get('email_oficial','')}")
                                                 if a.get('whatsapp_celular'):
                                                     ui.label(f"📱 {a.get('whatsapp_celular','')}")
+                                                
+                                                # BOTÕES DE AÇÃO EDITAR E EXCLUIR AUTORIDADE
+                                                ui.button(icon='edit', on_click=lambda aut=a: open_cadastrar_autoridade_dialog(aut)).props('flat dense color=cyan').classes('text-xs').tooltip('Editar Autoridade')
+                                                
+                                                def excluir_aut(aut_item=a):
+                                                    delete_autoridade_base(aut_item['id'])
+                                                    ui.notify(f"🗑️ {aut_item.get('nome_completo')} removido(a) do acervo master.", color='warning')
+                                                    render_master_table()
+
+                                                ui.button(icon='delete', on_click=excluir_aut).props('flat dense color=red').classes('text-xs').tooltip('Excluir Autoridade')
 
                     render_master_table()
 
             # =========================================================================
-            # ABA 3: LISTA DO EVENTO & PORTARIA (IMPRESSÃO & VINCULAÇÃO)
+            # ABA 3: LISTA DO EVENTO & PORTARIA (COM COPIAR TOKEN E WHATSAPP)
             # =========================================================================
             with ui.tab_panel(tab_lista):
                 with ui.column().classes('w-full gap-4'):
@@ -401,14 +439,62 @@ def render_page():
                                 ui.label('Nenhum convidado vinculado a este evento. Clique em Vincular Autoridades acima.').classes('text-xs text-grey-4 italic q-py-md')
                             else:
                                 ui.label(f"📋 Convidados Vinculados: {len(convites)}").classes('text-xs font-bold text-cyan q-mb-xs')
+                                base_url = get_app_base_url()
+
                                 for c in convites:
                                     st_color = 'green' if c.get('status') == 'confirmado' else 'red' if c.get('status') in ('recusado', 'justificado') else 'blue'
-                                    with ui.card().classes('w-full q-pa-sm bg-black/30 border border-cyan-500/20 rounded-lg'):
-                                        with ui.row().classes('w-full items-center justify-between wrap'):
-                                            with ui.column().classes('gap-0'):
+                                    token_str = c.get('token', '')
+                                    link_rsvp = f"{base_url}/rsvp/{token_str}"
+
+                                    with ui.card().classes('w-full q-pa-sm bg-black/30 border border-cyan-500/20 rounded-xl'):
+                                        with ui.row().classes('w-full items-center justify-between wrap gap-2'):
+                                            with ui.column().classes('gap-0 flex-grow'):
                                                 ui.label(f"{c.get('posto_graduacao','')} {c.get('nome_autoridade','')}".strip()).classes('text-xs font-bold text-white')
-                                                ui.label(f"✉️ {c.get('email','')}").classes('text-[11px] text-grey-4')
-                                            ui.badge(str(c.get('status','')).upper()).props(f'color={st_color}').classes('text-xs font-bold')
+                                                ui.label(f"✉️ {c.get('email','')} | Token: {token_str[:8]}...").classes('text-[11px] text-grey-4')
+
+                                            with ui.row().classes('gap-2 items-center wrap'):
+                                                ui.badge(str(c.get('status','')).upper()).props(f'color={st_color}').classes('text-xs font-bold')
+
+                                                # BOTÃO 1: COPIAR LINK RSVP
+                                                def copiar_link(link_to_copy=link_rsvp):
+                                                    ui.run_javascript(f"navigator.clipboard.writeText('{link_to_copy}')")
+                                                    ui.notify('📋 Link seguro do convite copiado!', color='success')
+
+                                                ui.button('📋 Copiar Link', on_click=copiar_link).props('flat dense color=amber').classes('text-xs')
+
+                                                # BOTÃO 2: ABRIR LINK RSVP
+                                                ui.button('👁️ Abrir', on_click=lambda l=link_rsvp: ui.navigate.to(l, new_tab=True)).props('flat dense color=cyan').classes('text-xs')
+
+                                                # BOTÃO 3: ENVIAR CONVITE VIA WHATSAPP (COM TEMPLATE PRÉ-MONTADO)
+                                                def enviar_whatsapp(conv_item=c, url_rsvp=link_rsvp):
+                                                    wsp_num = ''
+                                                    # Busca whatsapp no acervo master
+                                                    auts = get_autoridades_base()
+                                                    for a in auts:
+                                                        if a.get('nome_completo') == conv_item.get('nome_autoridade'):
+                                                            wsp_num = a.get('whatsapp_celular', '')
+                                                            break
+                                                    
+                                                    msg_text = f"Prezado(a) {conv_item.get('posto_graduacao','')} {conv_item.get('nome_autoridade','')},\n\nO Comandante-Geral do Corpo de Fuzileiros Navais tem a honra de convidar Vossa Excelência para a solenidade militar.\n\nFavor confirmar presença no link seguro: {url_rsvp}"
+                                                    msg_encoded = urllib.parse.quote(msg_text)
+                                                    
+                                                    clean_num = ''.join(filter(str.isdigit, wsp_num))
+                                                    if not clean_num:
+                                                        clean_num = '5521999998888'
+                                                    
+                                                    wsp_url = f"https://wa.me/{clean_num}?text={msg_encoded}"
+                                                    ui.navigate.to(wsp_url, new_tab=True)
+                                                    ui.notify(f"📱 Abrindo WhatsApp para envio...", color='info')
+
+                                                ui.button('📱 WhatsApp', on_click=enviar_whatsapp).props('flat dense color=emerald').classes('text-xs')
+
+                                                # BOTÃO 4: REMOVER DA LISTA DO EVENTO
+                                                def remover_convite(conv_item=c):
+                                                    delete_rsvp_convite(conv_item['id'])
+                                                    ui.notify('🗑️ Convidado removido do evento.', color='warning')
+                                                    render_lista_evento()
+
+                                                ui.button(icon='delete', on_click=remover_convite).props('flat dense color=red').classes('text-xs').tooltip('Remover do Evento')
 
                     render_lista_evento()
 

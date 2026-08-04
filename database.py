@@ -1626,4 +1626,123 @@ def update_rsvp_response(token: str, status: str, acompanhantes_count: int, acom
     return True
 
 
+def delete_autoridade_base(aut_id: str):
+    """Exclui uma autoridade da base master."""
+    conn = get_service_db_connection() or get_db_connection()
+    if conn:
+        try:
+            conn.table('autoridades_base').delete().eq('id', aut_id).execute()
+        except Exception:
+            pass
+    try:
+        local_db = get_local_db_connection()
+        local_db.table('autoridades_base').delete().eq('id', aut_id).execute()
+    except Exception:
+        pass
+    return True
+
+
+def delete_rsvp_convite(convite_id: str):
+    """Exclui um convidado vinculado a um evento de RSVP."""
+    conn = get_service_db_connection() or get_db_connection()
+    if conn:
+        try:
+            conn.table('rsvp_convites').delete().eq('id', convite_id).execute()
+        except Exception:
+            pass
+    try:
+        local_db = get_local_db_connection()
+        local_db.table('rsvp_convites').delete().eq('id', convite_id).execute()
+    except Exception:
+        pass
+    return True
+
+
+def get_smtp_config() -> dict:
+    """Retorna as configurações do servidor SMTP armazenadas no banco."""
+    config = {
+        'smtp_host': 'smtp.gmail.com',
+        'smtp_port': 587,
+        'smtp_user': '',
+        'smtp_pass': '',
+        'smtp_use_tls': True,
+        'smtp_sender_name': 'Comunicação Social - CGCFN'
+    }
+    conn = get_service_db_connection() or get_db_connection()
+    if conn:
+        try:
+            res = conn.table('config').select('*').ilike('chave', 'smtp_%').execute()
+            if res.data:
+                for row in res.data:
+                    k = row.get('chave')
+                    v = row.get('valor')
+                    if k == 'smtp_host': config['smtp_host'] = str(v)
+                    elif k == 'smtp_port': config['smtp_port'] = int(v or 587)
+                    elif k == 'smtp_user': config['smtp_user'] = str(v)
+                    elif k == 'smtp_pass': config['smtp_pass'] = str(v)
+                    elif k == 'smtp_use_tls': config['smtp_use_tls'] = str(v).lower() in ('true', '1')
+                    elif k == 'smtp_sender_name': config['smtp_sender_name'] = str(v)
+        except Exception as e:
+            print(f"[GET SMTP CONFIG ERR] {e}")
+    return config
+
+
+def save_smtp_config(cfg: dict):
+    """Salva as configurações de SMTP no banco de dados."""
+    conn = get_service_db_connection() or get_db_connection()
+    if conn:
+        for k, v in cfg.items():
+            try:
+                conn.table('config').upsert({'chave': k, 'valor': str(v)}).execute()
+            except Exception as e:
+                print(f"[SAVE SMTP CONFIG ERR {k}] {e}")
+    
+    # Fallback local
+    try:
+        local_db = get_local_db_connection()
+        for k, v in cfg.items():
+            local_db.table('config').upsert({'chave': k, 'valor': str(v)}).execute()
+    except Exception:
+        pass
+    return True
+
+
+def send_real_email_smtp(to_email: str, subject: str, body_html: str):
+    """Envia um e-mail real utilizando as configurações SMTP salvas no sistema."""
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    cfg = get_smtp_config()
+    smtp_host = cfg.get('smtp_host', '').strip()
+    smtp_port = int(cfg.get('smtp_port', 587))
+    smtp_user = cfg.get('smtp_user', '').strip()
+    smtp_pass = cfg.get('smtp_pass', '').strip()
+    sender_name = cfg.get('smtp_sender_name', 'SisGAB').strip()
+    use_tls = cfg.get('smtp_use_tls', True)
+
+    if not smtp_host or not smtp_user or not smtp_pass:
+        raise Exception("Servidor SMTP não configurado. Acesse o Painel Admin > Configurações de E-mail para definir a senha do servidor.")
+
+    msg = MIMEMultipart('alternative')
+    msg['From'] = f"{sender_name} <{smtp_user}>"
+    msg['To'] = to_email
+    msg['Subject'] = subject
+
+    msg.attach(MIMEText(body_html, 'html'))
+
+    if smtp_port == 465:
+        server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10)
+    else:
+        server = smtplib.SMTP(smtp_host, smtp_port, timeout=10)
+        if use_tls:
+            server.starttls()
+
+    server.login(smtp_user, smtp_pass)
+    server.sendmail(smtp_user, [to_email], msg.as_string())
+    server.quit()
+    return True
+
+
+
 

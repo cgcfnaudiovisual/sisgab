@@ -971,7 +971,10 @@ def render_page():
 
 
         with container:
-            theme.section_header('Usuários e Permissões', 'Gestão de Usuários e Aprovação de Credenciais')
+            with ui.row().classes('w-full justify-between items-center'):
+                theme.section_header('Usuários e Permissões', 'Gestão de Usuários, Permissões e Servidor SMTP')
+                ui.button('📧 Configurações SMTP / E-mail', on_click=open_smtp_dialog).props('unelevated color=cyan text-color=black bold icon=email').classes('text-xs cyber-glow')
+
             
             if is_offline:
                 with ui.row().classes('w-full items-center q-pa-sm rounded-lg text-caption gap-2').style('background: rgba(255, 152, 0, 0.1); border: 1px solid rgba(255, 152, 0, 0.3); color: #ffb300;'):
