@@ -908,9 +908,10 @@ def rsvp_public_page(token: str, request: Request):
     
     banner_url = evento.get('banner_url') or 'assets/brasao_cgcfn.png'
 
-    with ui.column().classes('w-full min-h-screen items-center justify-center p-2 sm:p-6').style('background: radial-gradient(ellipse at top, #1e293b 0%, #0f172a 50%, #0b0f19 100%); font-family: "Outfit", sans-serif;'):
+    with ui.column().classes('w-full min-h-screen items-center justify-center p-2 sm:p-6 bg-transparent').style('font-family: "Outfit", sans-serif; position: relative; z-index: 10;'):
         # CARTÃO CENTRAL DE LUXO COM SOMBRA DOURADA E BRILHO INSTITUCIONAL
-        with ui.card().classes('w-full max-w-2xl bg-slate-900/90 border-2 border-amber-500/40 rounded-3xl shadow-2xl overflow-hidden').style('box-shadow: 0 0 60px rgba(245, 158, 11, 0.15); backdrop-filter: blur(12px);'):
+        with ui.card().classes('w-full max-w-2xl bg-slate-900/95 border-2 border-amber-500/40 rounded-3xl shadow-2xl overflow-hidden').style('box-shadow: 0 0 60px rgba(245, 158, 11, 0.2); backdrop-filter: blur(16px);'):
+
             
             # HERO BANNER / CABEÇALHO DE PRESTÍGIO
             with ui.element('div').classes('w-full relative min-h-[160px] flex items-center justify-center text-center p-6').style(
