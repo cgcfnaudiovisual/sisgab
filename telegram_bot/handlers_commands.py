@@ -41,3 +41,16 @@ def register_commands(bot):
         profile = await check_authorized_user(message.from_user.id)
         is_operator = profile and str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design')
         await bot.reply_to(message, "❌ Operação cancelada com sucesso.", reply_markup=get_main_menu_keyboard(is_operator))
+
+    @bot.message_handler(commands=['cobrar_presenca', 'lembrar_presenca', 'insistir_presenca'])
+    async def cobrar_presenca_cmd(message):
+        profile = await check_authorized_user(message.from_user.id)
+        if not profile or str(profile.get('role', '')).lower() not in ('admin', 'supervisor', 'praca_gab', 'comsoc', 'oficial'):
+            await bot.reply_to(message, "⛔ Acesso restrito aos sargenteantes e administradores.")
+            return
+        from .scheduled_jobs import trigger_10min_attendance_reminder
+        notified = await trigger_10min_attendance_reminder(bot, force_now=True)
+        if notified > 0:
+            await bot.reply_to(message, f"📢 **Cobrança Recorrente Disparada!**\nLembrete/alerta enviado para **{notified}** militar(es) com presença pendente de resposta.", parse_mode='Markdown')
+        else:
+            await bot.reply_to(message, "🟢 Todos os militares já acusaram presença hoje ou não há pendências ativas!", parse_mode='Markdown')

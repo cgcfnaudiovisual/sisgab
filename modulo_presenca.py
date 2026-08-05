@@ -183,13 +183,26 @@ def render_page():
                             ui.label('EFETIVO E CHAMADA DIÁRIA').classes('text-sm font-bold text-white')
                             ui.label(f"Total: {tot_efetivo} militares | Data: {dt_str}").classes('text-xs text-grey-4 font-mono')
                     
-                    # Botão para copiar texto do Pronto para o CheGab
                     def copiar_pronto():
                         txt = gerar_texto_pronto_chegab(dt_str, presencas_dict, efetivo_lista, presencas_list=presencas_list)
                         ui.run_javascript(f'navigator.clipboard.writeText({json.dumps(txt)})')
                         ui.notify('📋 Pronto do CheGab copiado com sucesso! Envie no WhatsApp/Telegram.', color='positive', duration=5)
                         
-                    ui.button('📋 Copiar Pronto ao CheGab', icon='content_copy', on_click=copiar_pronto).props('unelevated color=green text-color=white bold').classes('q-py-xs text-xs')
+                    async def disparar_cobranca_telegram():
+                        try:
+                            import telegram_bot
+                            if telegram_bot.bot:
+                                from telegram_bot.scheduled_jobs import trigger_10min_attendance_reminder
+                                n_count = await trigger_10min_attendance_reminder(telegram_bot.bot, force_now=True)
+                                ui.notify(f"🔔 Lembrete/Alerta enviado no Telegram para {n_count} militares pendentes!", color='positive', duration=6)
+                            else:
+                                ui.notify("⚠️ Bot do Telegram offline.", color='warning')
+                        except Exception as c_err:
+                            ui.notify(f"Erro ao cobrar presença: {c_err}", color='negative')
+
+                    with ui.row().classes('items-center gap-2'):
+                        ui.button('🔔 Cobrar Pendentes no Telegram', icon='notifications_active', on_click=disparar_cobranca_telegram).props('unelevated color=amber-9 text-color=black bold').classes('q-py-xs text-xs').tooltip('Envia alerta tático de cobrança para quem ainda não respondeu hoje')
+                        ui.button('📋 Copiar Pronto ao CheGab', icon='content_copy', on_click=copiar_pronto).props('unelevated color=green text-color=white bold').classes('q-py-xs text-xs')
 
                 # Chips de contagem
                 with ui.row().classes('w-full gap-2 q-mt-md flex-wrap text-xs'):

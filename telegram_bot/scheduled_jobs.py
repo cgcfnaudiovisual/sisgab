@@ -153,8 +153,8 @@ async def trigger_daily_attendance_call(bot):
         print(f"[ATTENDANCE CALL ERR] {e}")
 
 
-async def trigger_10min_attendance_reminder(bot):
-    """Verifica militares pendentes de chamada no dia atual (fuso GMT-3) e envia aviso a cada 10 min."""
+async def trigger_10min_attendance_reminder(bot, force_now=False):
+    """Verifica militares pendentes de chamada no dia atual (fuso GMT-3) e envia aviso/cobrança insistente via Telegram."""
     try:
         from timezone import timezone, timedelta
     except Exception:
@@ -163,22 +163,22 @@ async def trigger_10min_attendance_reminder(bot):
     tz_gmt3 = timezone(timedelta(hours=-3))
     now = datetime.now(tz_gmt3)
     
-    # Executa entre 07:30h e 09:00h
-    if not (7 <= now.hour <= 9):
-        return
+    # Se não for disparado manualmente, executa na janela matutina das 07:10h às 09:30h
+    if not force_now and not (7 <= now.hour <= 9):
+        return 0
         
     try:
         from database import get_bot_db_connection as get_db_connection
         conn = get_db_connection()
-        if not conn: return
+        if not conn: return 0
         
         hoje_str = now.strftime('%Y-%m-%d')
         
-        res_ef = conn.table('efetivo').select('nome_guerra, telegram_id').execute()
-        if not res_ef.data: return
+        res_ef = conn.table('efetivo').select('nome_guerra, telegram_id, posto_grad').execute()
+        if not res_ef.data: return 0
         
-        res_pr = conn.table('presenca_diaria').select('nome_guerra').eq('data', hoje_str).execute()
-        respondidos = {p['nome_guerra'].upper() for p in res_pr.data} if res_pr.data else set()
+        res_pr = conn.table('presenca_diaria').select('nome_guerra, status').eq('data', hoje_str).execute()
+        respondidos = {p['nome_guerra'].upper() for p in res_pr.data if p.get('status')} if res_pr.data else set()
         
         # Inclui militares com isenção ativa de férias/licença no conjunto de respondidos
         try:
@@ -192,23 +192,45 @@ async def trigger_10min_attendance_reminder(bot):
             print(f"[REMINDER ISENTOS WARN] {ext_err}")
             
         from .keyboards import get_presenca_keyboard
-        msg_remind = (
-            "🚨 *LEMBRETE RECORRENTE DA SARGENTEAÇÃO*\n\n"
-            "Atenção! O regresso é 07:30h e o pronto para o CheGab é até **08:00h**.\n"
-            "Você ainda não acusou sua rotina de hoje!\n\n"
-            "Por favor, selecione sua situação nos botões abaixo:"
-        )
         
+        # Mensagem insistente e contextual conforme o horário
+        if now.hour == 7 and now.minute < 30:
+            hdr = "⏰ *AVISO DE REGRESSO DE CHAMADA — CGCFN/SISGAB*"
+            body = (
+                f"🚨 O horário de regresso é até **07:30h** e o pronto ao CheGab é até **08:00h**.\n"
+                f"Você ainda **não acusou sua rotina** de hoje!\n\n"
+                f"Por favor, selecione sua situação nos botões abaixo:"
+            )
+        elif (now.hour == 7 and now.minute >= 30) or (now.hour == 8 and now.minute == 0):
+            hdr = "🚨 *URGENTE — REGRESSO VENCIDO / PRONTO AO CHEGAB*"
+            body = (
+                f"⚠️ *ATENÇÃO!* O regresso das 07:30h já passou e o limite do pronto para o CheGab é **08:00h**!\n\n"
+                f"Sua presença ainda consta como **PENDENTE**. Toque no seu status IMEDIATAMENTE:"
+            )
+        else:
+            hdr = "🔥 *ALERTA CRÍTICO — PRESENÇA EM ATRASO*"
+            body = (
+                f"❌ *ATENÇÃO URGENTE!* O horário limite das 08:00h JÁ VENCEU!\n\n"
+                f"Consta pendência no seu registro diário. Regularize sua situação para a sargenteação:"
+            )
+
+        notified_count = 0
         for m in res_ef.data:
             nome_g = m['nome_guerra'].upper()
+            pg = m.get('posto_grad') or ''
             tg_id = m.get('telegram_id')
-            if nome_g not in respondidos and tg_id:
+            if nome_g not in respondidos and tg_id and str(tg_id).strip():
                 try:
-                    await bot.send_message(tg_id, msg_remind, reply_markup=get_presenca_keyboard(), parse_mode='Markdown')
+                    personalized_msg = f"{hdr}\n\n👤 *Militar:* {pg} {nome_g}\n{body}"
+                    await bot.send_message(tg_id, personalized_msg, reply_markup=get_presenca_keyboard(), parse_mode='Markdown')
+                    notified_count += 1
                 except Exception as e_send:
                     print(f"[ATTENDANCE REMIND ERR] {tg_id}: {e_send}")
+
+        return notified_count
     except Exception as e:
         print(f"[ATTENDANCE REMINDER LOOP ERR] {e}")
+        return 0
 
 
 SENT_2H_REMINDERS = set()
