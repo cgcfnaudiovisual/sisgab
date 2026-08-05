@@ -340,7 +340,7 @@ def render_page():
                     ui.button('🖨️ Imprimir Placas', icon='print', on_click=lambda: open_print_cards_dialog(current_event, convidados, layout)).props('unelevated color=cyan text-color=black dense bold').classes('q-px-sm text-xs').tooltip('Central de impressão: modelos, brasões, fontes, lote completo')
                     ui.button('✅ Confirmar', icon='how_to_reg', on_click=lambda: open_mass_confirmation_dialog(current_event, convidados)).props('unelevated color=green text-color=white dense bold').classes('q-px-sm text-xs').tooltip('Confirmar Presenças em Massa')
 
-                    ui.separator(vertical=True).classes('q-mx-xs').style('height: 24px; border-color: rgba(255,255,255,0.12);')
+                    ui.separator().props('vertical').classes('q-mx-xs').style('height: 24px; border-color: rgba(255,255,255,0.12);')
 
                     # GRUPO 2: Dados e Cadastro
                     ui.badge('DADOS').props('color=indigo text-color=white').classes('text-[9px] font-bold q-mr-xs')
@@ -348,7 +348,8 @@ def render_page():
                     ui.button('🏛️ Mestre', icon='account_balance', on_click=lambda: open_master_authorities_dialog(current_event)).props('unelevated color=indigo text-color=white dense bold').classes('q-px-sm text-xs').tooltip('Cadastro Mestre de Autoridades')
                     ui.button('📊 Planilhão', icon='table_chart', on_click=lambda: open_event_spreadsheet_dialog(current_event, convidados)).props('unelevated color=teal text-color=white dense bold').classes('q-px-sm text-xs').tooltip('Planilhão completo do evento com exportação CSV')
 
-                    ui.separator(vertical=True).classes('q-mx-xs').style('height: 24px; border-color: rgba(255,255,255,0.12);')
+                    ui.separator().props('vertical').classes('q-mx-xs').style('height: 24px; border-color: rgba(255,255,255,0.12);')
+
 
                     # GRUPO 3: Operações de Campo
                     ui.badge('CAMPO').props('color=amber text-color=black').classes('text-[9px] font-bold q-mr-xs')
