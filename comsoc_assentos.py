@@ -3406,24 +3406,25 @@ def render_page():
                     return f"{SUPABASE_LOGOS_BUCKET_URL}/{val.lstrip('/')}"
 
                 LOGO_URLS = {
-                    'cgcfn': f"{SUPABASE_LOGOS_BUCKET_URL}/brasao_cgcfn.png",
-                    'mb':    f"{SUPABASE_LOGOS_BUCKET_URL}/brasao_marinha.png",
-                    'cfn':   'https://upload.wikimedia.org/wikipedia/commons/thumb/2/21/Distintivo_do_Corpo_de_Fuzileiros_Navais_do_Brasil.svg/240px-Distintivo_do_Corpo_de_Fuzileiros_Navais_do_Brasil.svg.png',
+                    'cgcfn': url_to_base64('assets/brasao_cgcfn.png') or f"{SUPABASE_LOGOS_BUCKET_URL}/brasao_cgcfn.png",
+                    'mb':    url_to_base64('assets/brasao_marinha.png') or f"{SUPABASE_LOGOS_BUCKET_URL}/brasao_marinha.png",
+                    'cfn':   url_to_base64('assets/brasao_cgcfn.png'),
                 }
 
                 def resolve_asset_image(origin_type, bucket_val, custom_val):
                     if origin_type == 'bucket' and bucket_val:
                         if bucket_val in LOGO_URLS:
                             return LOGO_URLS[bucket_val]
-                        return resolve_logo_url(bucket_val)
+                        return url_to_base64(resolve_logo_url(bucket_val))
                     elif origin_type == 'url' and custom_val:
-                        return resolve_logo_url(custom_val.strip())
+                        return url_to_base64(custom_val.strip())
                     return ""
 
                 origin_l = sel_origin_logo_l.value if hasattr(sel_origin_logo_l, 'value') else 'bucket'
                 preset_l = sel_logo_preset.value if hasattr(sel_logo_preset, 'value') else 'cfn'
                 custom_l = upload_brasao_left.value if hasattr(upload_brasao_left, 'value') else ''
-                resolved_logo_url = resolve_asset_image(origin_l, preset_l, custom_l) or LOGO_URLS.get('cfn', '')
+                resolved_logo_url = resolve_asset_image(origin_l, preset_l, custom_l) or url_to_base64('assets/brasao_cgcfn.png')
+
 
                 origin_r = sel_origin_logo_r.value if hasattr(sel_origin_logo_r, 'value') else 'bucket'
                 preset_r = sel_logo_r_preset.value if hasattr(sel_logo_r_preset, 'value') else 'mb'
@@ -3872,7 +3873,7 @@ def render_page():
                             .print-hide, .q-header, .q-drawer, .q-footer { display: none !important; }
                             .print-area { display: block !important; position: static !important; width: 100% !important; visibility: visible !important; }
                             .prisma-card-a4-slot { height: 66mm !important; max-height: 66mm !important; border: 1.5pt solid #1a1a1a !important; outline: 0.5pt solid #1a1a1a !important; outline-offset: -2.5mm !important; margin-bottom: 4.5mm !important; page-break-inside: avoid !important; background: #ffffff !important; color: #000000 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; position: relative !important; box-sizing: border-box !important; }
-                            .prisma-conteudo-central { display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; text-align: center !important; width: 100% !important; }
+                            .prisma-conteudo-central { display: flex !important; flex-direction: column !items: center !important; justify-content: center !important; text-align: center !important; width: 100% !important; }
                             .prisma-texto-reservado { font-weight: 900 !important; letter-spacing: 3px !important; text-transform: uppercase !important; color: #1f4e79 !important; font-size: 20pt !important; margin-bottom: 2px !important; }
                             .prisma-posto-extenso { font-weight: bold !important; text-transform: uppercase !important; letter-spacing: 1.5px !important; font-size: 18pt !important; margin-bottom: 2px !important; }
                             .prisma-nome-autoridade { font-weight: 900 !important; text-transform: uppercase !important; font-size: 32pt !important; line-height: 1.05 !important; }
@@ -3888,12 +3889,45 @@ def render_page():
                 `);
                 doc.close();
 
-                setTimeout(function() {
-                    iframe.contentWindow.focus();
-                    iframe.contentWindow.print();
-                }, 600);
+                function triggerPrintWhenReady() {
+                    var images = doc.images;
+                    var loaded = 0;
+                    var total = images.length;
+
+                    function doPrint() {
+                        iframe.contentWindow.focus();
+                        iframe.contentWindow.print();
+                    }
+
+                    if (total === 0) {
+                        setTimeout(doPrint, 800);
+                        return;
+                    }
+
+                    for (var i = 0; i < total; i++) {
+                        if (images[i].complete) {
+                            loaded++;
+                        } else {
+                            images[i].onload = images[i].onerror = function() {
+                                loaded++;
+                                if (loaded >= total) {
+                                    setTimeout(doPrint, 500);
+                                }
+                            };
+                        }
+                    }
+
+                    if (loaded >= total) {
+                        setTimeout(doPrint, 800);
+                    } else {
+                        setTimeout(doPrint, 2500); // Fallback de segurança máximo
+                    }
+                }
+
+                setTimeout(triggerPrintWhenReady, 300);
             })();
             """
+
 
             js_pdf_export_cards = js_clean_print_cards
 
