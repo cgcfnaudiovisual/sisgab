@@ -276,14 +276,22 @@ def render_page():
                 ui.label('Banco de dados não disponível. Verifique a conexão.').classes('text-md font-bold')
             return
 
-        # 1. Carregar lista de eventos
+        # 1. Carregar lista de eventos (Supabase com fallback para SQLite local)
         eventos = []
         try:
             res_ev = db.table('jade_eventos').select('*').order('data_evento', desc=True).execute()
-            eventos = res_ev.data if res_ev.data else []
+            eventos = res_ev.data if res_ev and res_ev.data else []
         except Exception as e:
-            print(f"[JADE EVENTS FETCH ERR] {e}")
+            print(f"[JADE EVENTS SUPABASE ERR] {e}")
 
+        if not eventos:
+            try:
+                from sqlite_adapter import SQLiteDatabaseAdapter
+                local_db = SQLiteDatabaseAdapter()
+                res_loc = local_db.table('jade_eventos').select('*').order('data_evento', desc=True).execute()
+                eventos = res_loc.data if res_loc and res_loc.data else []
+            except Exception as loc_err:
+                print(f"[JADE EVENTS LOCAL ERR] {loc_err}")
 
         if not state.selected_event_id and eventos:
             state.selected_event_id = eventos[0]['id']
@@ -295,9 +303,18 @@ def render_page():
         if current_event:
             try:
                 res_conv = db.table('jade_convidados').select('*').eq('evento_id', current_event['id']).order('id', desc=False).execute()
-                convidados = res_conv.data if res_conv.data else []
+                convidados = res_conv.data if res_conv and res_conv.data else []
             except Exception as e:
-                print(f"[JADE GUESTS FETCH ERR] {e}")
+                print(f"[JADE GUESTS SUPABASE ERR] {e}")
+
+            if not convidados:
+                try:
+                    from sqlite_adapter import SQLiteDatabaseAdapter
+                    local_db = SQLiteDatabaseAdapter()
+                    res_c_loc = local_db.table('jade_convidados').select('*').eq('evento_id', current_event['id']).order('id', desc=False).execute()
+                    convidados = res_c_loc.data if res_c_loc and res_c_loc.data else []
+                except Exception as loc_c_err:
+                    print(f"[JADE GUESTS LOCAL ERR] {loc_c_err}")
 
             try:
                 layout = json.loads(current_event['layout_json']) if current_event.get('layout_json') else {}

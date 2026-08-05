@@ -248,6 +248,20 @@ def render_page():
                                 try:
                                     conn = fresh_db()
                                     if conn:
+                                        # Carregar dados do evento
+                                        ev_info = None
+                                        try:
+                                            r_ev = conn.table('rsvp_eventos').select('*').eq('id', ev_id).execute()
+                                            if r_ev.data: ev_info = r_ev.data[0]
+                                        except Exception: pass
+                                        
+                                        nome_evento_str = ev_info.get('nome_evento', 'Solenidade Oficial') if ev_info else 'Solenidade Oficial'
+                                        data_str = ev_info.get('data_evento', '') if ev_info else ''
+                                        hora_str = ev_info.get('hora_evento', '') if ev_info else ''
+                                        local_str = ev_info.get('local_evento', '') if ev_info else ''
+                                        traje_str = ev_info.get('traje_exigido', '') if ev_info else ''
+                                        banner_url = ev_info.get('banner_url', '') if ev_info else ''
+
                                         pend_res = conn.table('rsvp_convites').select('*').eq('evento_id', ev_id).execute()
                                         conv_list = pend_res.data or []
                                         if not conv_list:
@@ -256,6 +270,15 @@ def render_page():
                                         
                                         base_url = get_app_base_url()
                                         enviados_count = 0
+
+                                        banner_html = f'<img src="{banner_url}" style="width: 100%; max-height: 240px; object-fit: cover; border-radius: 12px; margin-bottom: 20px; border: 1px solid rgba(0,229,255,0.3);">' if banner_url else ''
+                                        detalhes_html = f"""
+                                        <div style="background-color: rgba(0, 229, 255, 0.05); border: 1px solid rgba(0, 229, 255, 0.2); padding: 16px; border-radius: 10px; margin: 20px 0; text-align: left;">
+                                            <p style="margin: 4px 0; font-size: 13px; color: #cbd5e1;">📅 <strong>Data & Hora:</strong> {data_str} às {hora_str}</p>
+                                            <p style="margin: 4px 0; font-size: 13px; color: #cbd5e1;">📍 <strong>Local:</strong> {local_str}</p>
+                                            {f'<p style="margin: 4px 0; font-size: 13px; color: #cbd5e1;">👔 <strong>Traje:</strong> {traje_str}</p>' if traje_str else ''}
+                                        </div>
+                                        """
 
                                         for idx, c in enumerate(conv_list):
                                             token = c.get('token')
@@ -269,31 +292,36 @@ def render_page():
                                                 <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #0b0f19; color: #ffffff; padding: 32px 24px; border-radius: 16px; max-width: 600px; margin: 0 auto; border: 1px solid rgba(0, 229, 255, 0.3); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
                                                     <div style="text-align: center; border-bottom: 1px solid rgba(0, 229, 255, 0.2); padding-bottom: 16px; margin-bottom: 24px;">
                                                         <p style="color: #00e5ff; font-size: 12px; font-weight: bold; letter-spacing: 3px; margin: 0;">MARINHA DO BRASIL</p>
-                                                        <p style="color: #fbbf24; font-size: 14px; font-weight: bold; letter-spacing: 2px; margin: 4px 0 0 0;">GABINETE DO COMANDANTE GERAL DO CFN</p>
+                                                        <p style="color: #fbbf24; font-size: 14px; font-weight: bold; letter-spacing: 2px; margin: 4px 0 0 0;">GABINETE DO COMANDANTE-GERAL DO CFN</p>
                                                     </div>
                                                     
-                                                    <h2 style="color: #ffffff; font-size: 20px; font-weight: 800; margin-top: 0; text-align: center;">Convite Oficial de Cerimonial</h2>
+                                                    {banner_html}
+
+                                                    <h2 style="color: #ffffff; font-size: 20px; font-weight: 800; margin-top: 0; text-align: center;">{nome_evento_str}</h2>
+                                                    <p style="color: #00e5ff; font-size: 13px; font-weight: bold; text-align: center; margin-top: -10px;">CONVITE OFICIAL DE CERIMONIAL</p>
                                                     
-                                                    <p style="font-size: 15px; color: #e2e8f0; line-height: 1.6;">Prezado(a) <strong style="color: #00e5ff;">{posto_aut} {nome_aut}</strong>,</p>
+                                                    <p style="font-size: 15px; color: #e2e8f0; line-height: 1.6; margin-top: 20px;">Prezado(a) <strong style="color: #00e5ff;">{posto_aut} {nome_aut}</strong>,</p>
                                                     
                                                     <p style="font-size: 14px; color: #cbd5e1; line-height: 1.6;">
-                                                        O Comandante-Geral do Corpo de Fuzileiros Navais tem a honra de convidar Vossa Excelência para participar da Solenidade Oficial do Corpo de Fuzileiros Navais.
+                                                        O Comandante-Geral do Corpo de Fuzileiros Navais tem a honra de convidar Vossa Excelência para participar da Solenidade Oficial.
                                                     </p>
                                                     
-                                                    <div style="text-align: center; margin: 32px 0;">
-                                                        <a href="{link_rsvp}" style="background: linear-gradient(135deg, #00e5ff 0%, #00b0ff 100%); color: #000000; padding: 14px 28px; text-decoration: none; font-weight: 900; font-size: 14px; border-radius: 8px; display: inline-block; box-shadow: 0 4px 15px rgba(0, 229, 255, 0.4); text-transform: uppercase; letter-spacing: 1px;">
-                                                            ✅ CONFIRMAR PRESENÇA OU JUSTIFICAR
+                                                    {detalhes_html}
+
+                                                    <div style="text-align: center; margin: 28px 0;">
+                                                        <a href="{link_rsvp}" style="background: linear-gradient(135deg, #00e5ff 0%, #00b0ff 100%); color: #000000; padding: 14px 32px; text-decoration: none; font-weight: 900; font-size: 14px; border-radius: 8px; display: inline-block; box-shadow: 0 4px 15px rgba(0, 229, 255, 0.4); text-transform: uppercase; letter-spacing: 1px;">
+                                                            ✉️ CONFIRMAR PRESENÇA
                                                         </a>
                                                     </div>
                                                     
                                                     <div style="background-color: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; text-align: center; margin-top: 24px;">
-                                                        <p style="font-size: 11px; color: #94a3b8; margin: 0; word-break: break-all;">Link de confirmação individual seguro:<br><a href="{link_rsvp}" style="color: #38bdf8;">{link_rsvp}</a></p>
+                                                        <p style="font-size: 11px; color: #94a3b8; margin: 0; word-break: break-all;">Link de acesso pessoal e seguro ao convite:<br><a href="{link_rsvp}" style="color: #38bdf8;">{link_rsvp}</a></p>
                                                     </div>
                                                 </div>
                                                 """
                                                 try:
                                                     if smtp_cfg.get('smtp_user') and smtp_cfg.get('smtp_pass'):
-                                                        send_real_email_smtp(email_dest, f"Convite Oficial - {posto_aut} {nome_aut}", body_html)
+                                                        send_real_email_smtp(email_dest, f"Convite Oficial — {nome_evento_str} ({posto_aut} {nome_aut})", body_html)
                                                     enviados_count += 1
                                                     conn.table('rsvp_convites').update({'status': 'enviado'}).eq('id', c['id']).execute()
                                                 except Exception as send_e:
@@ -309,7 +337,102 @@ def render_page():
                                 except Exception as err:
                                     ui.notify(f"Erro no disparo em lote: {err}", color='red')
 
-                            ui.button('📧 DISPARAR CONVITES EM LOTE', icon='send', on_click=disparar_convites_lote).props('unelevated color=cyan text-color=black bold').classes('cyber-glow')
+                            def open_disparar_comunicado_dialog():
+                                if not ev_id:
+                                    ui.notify('Selecione um evento para enviar comunicado.', color='warning')
+                                    return
+
+                                with ui.dialog() as diag_comunicado, ui.card().classes('w-[600px] max-w-[95vw] q-pa-md bg-slate-900 border border-amber-500/40 rounded-2xl shadow-2xl'):
+                                    ui.label('📣 ENVIAR COMUNICADO / AVISO EXTRA').classes('text-white font-black text-md cyber-title')
+                                    ui.label('Envie um e-mail de aviso ou atualização posterior aos convidados deste evento.').classes('text-xs text-grey-4')
+                                    ui.separator().style('background: rgba(245, 158, 11, 0.3);')
+
+                                    sel_publico = ui.select(
+                                        options={
+                                            'confirmados': '🟢 Apenas Convidados Confirmados',
+                                            'pendentes': '⏳ Apenas Pendentes / Não Confirmados',
+                                            'todos': '🌐 Todos os Convidados do Evento'
+                                        },
+                                        value='confirmados',
+                                        label='Público Alvo do Comunicado'
+                                    ).props('dark outlined dense w-full')
+
+                                    inp_assunto = ui.input('Assunto do E-mail', placeholder='Ex: Informações Importantes sobre Acesso e Estacionamento').props('dark outlined dense w-full')
+                                    inp_mensagem = ui.textarea('Mensagem do Comunicado (Suporta HTML ou texto livre)', placeholder='Prezado Convidado, informamos que o credenciamento será iniciado às 08h30...').props('dark outlined w-full').classes('min-h-[140px]')
+
+                                    async def enviar_comunicado_action():
+                                        if not inp_assunto.value or not inp_mensagem.value:
+                                            ui.notify('Preencha o assunto e a mensagem do comunicado.', color='warning')
+                                            return
+                                        
+                                        smtp_cfg = get_smtp_config()
+                                        if not smtp_cfg.get('smtp_user') or not smtp_cfg.get('smtp_pass'):
+                                            ui.notify('⚠️ Servidor SMTP não configurado.', color='warning')
+                                            return
+
+                                        conn = fresh_db()
+                                        if not conn: return
+                                        
+                                        # Buscar convidados conforme o filtro
+                                        query = conn.table('rsvp_convites').select('*').eq('evento_id', ev_id)
+                                        if sel_publico.value == 'confirmados':
+                                            query = query.eq('status', 'confirmado')
+                                        elif sel_publico.value == 'pendentes':
+                                            query = query.in_('status', ['enviado', 'visualizado', 'pendente'])
+                                        
+                                        res_target = query.execute()
+                                        target_list = res_target.data or []
+                                        
+                                        if not target_list:
+                                            ui.notify('Nenhum convidado encontrado no público selecionado.', color='warning')
+                                            return
+
+                                        ui.notify(f'🚀 Enviando comunicado para {len(target_list)} convidados...', color='info')
+                                        enviados = 0
+                                        base_url = get_app_base_url()
+
+                                        for idx, c in enumerate(target_list):
+                                            email_dest = c.get('email')
+                                            nome_aut = c.get('nome_autoridade')
+                                            posto_aut = c.get('posto_graduacao', '')
+                                            token = c.get('token', '')
+
+                                            if email_dest:
+                                                link_rsvp = f"{base_url}/rsvp/{token}" if token else base_url
+                                                msg_html = f"""
+                                                <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #0b0f19; color: #ffffff; padding: 32px 24px; border-radius: 16px; max-width: 600px; margin: 0 auto; border: 1px solid rgba(245, 158, 11, 0.4);">
+                                                    <div style="text-align: center; border-bottom: 1px solid rgba(245, 158, 11, 0.2); padding-bottom: 16px; margin-bottom: 20px;">
+                                                        <p style="color: #00e5ff; font-size: 12px; font-weight: bold; letter-spacing: 3px; margin: 0;">MARINHA DO BRASIL</p>
+                                                        <p style="color: #fbbf24; font-size: 14px; font-weight: bold; letter-spacing: 2px; margin: 4px 0 0 0;">GABINETE DO COMANDANTE-GERAL DO CFN</p>
+                                                    </div>
+                                                    <h3 style="color: #fbbf24; font-size: 18px; margin-top: 0; text-align: center;">📢 COMUNICADO OFICIAL</h3>
+                                                    <p style="font-size: 14px; color: #e2e8f0;">Prezado(a) <strong style="color: #00e5ff;">{posto_aut} {nome_aut}</strong>,</p>
+                                                    <div style="font-size: 14px; color: #cbd5e1; line-height: 1.6; background-color: rgba(255,255,255,0.03); padding: 16px; border-radius: 8px; border-left: 4px solid #fbbf24; margin: 16px 0;">
+                                                        {inp_mensagem.value.replace('\n', '<br>')}
+                                                    </div>
+                                                    {f'<div style="text-align: center; margin-top: 24px;"><a href="{link_rsvp}" style="color: #38bdf8; font-size: 12px;">Acessar detalhes do seu convite</a></div>' if token else ''}
+                                                </div>
+                                                """
+                                                try:
+                                                    send_real_email_smtp(email_dest, f"📢 {inp_assunto.value.strip()}", msg_html)
+                                                    enviados += 1
+                                                except Exception as send_err:
+                                                    print(f"[COMUNICADO SEND ERR] {send_err}")
+                                            
+                                            if (idx + 1) % 5 == 0:
+                                                await asyncio.sleep(2.0)
+
+                                        ui.notify(f"✅ Comunicado enviado com sucesso para {enviados} convidados!", color='success')
+                                        diag_comunicado.close()
+
+                                    with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
+                                        ui.button('Cancelar', on_click=diag_comunicado.close).props('flat color=grey text-color=white')
+                                        ui.button('🚀 Enviar Comunicado', icon='send', on_click=enviar_comunicado_action).props('unelevated color=amber text-color=black bold')
+                                diag_comunicado.open()
+
+                            with ui.row().classes('gap-2 wrap'):
+                                ui.button('📧 DISPARAR CONVITES EM LOTE', icon='send', on_click=disparar_convites_lote).props('unelevated color=cyan text-color=black bold').classes('cyber-glow')
+                                ui.button('📣 DISPARAR COMUNICADO EXTRA', icon='campaign', on_click=open_disparar_comunicado_dialog).props('unelevated color=amber text-color=black bold')
 
                 render_cockpit()
 
