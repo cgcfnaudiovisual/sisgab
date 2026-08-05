@@ -5,7 +5,7 @@ from services import data_service
 
 THEME = theme.colors
 
-# Opções de papéis/roles no sistema (9 Roles Oficiais)
+# Opções de papéis/roles no sistema (8 Roles Oficiais)
 ROLE_OPTIONS = {
     'admin': 'Administrador (Acesso Total)',
     'supervisor': 'Supervisor COMSOC',
@@ -14,8 +14,7 @@ ROLE_OPTIONS = {
     'praca_gab': 'Praça do Gabinete',
     'comsoc': 'Equipe COMSOC (Fotografia/Vídeo)',
     'comsoc_design': 'Equipe COMSOC (Artes Gráficas/Canva)',
-    'militar': 'Militar / Efetivo em Geral',
-    'aluno': 'Aluno (Acesso Restrito / Pendente)'
+    'militar': 'Militar / Efetivo em Geral'
 }
 
 ROLE_DESCRIPTIONS = {

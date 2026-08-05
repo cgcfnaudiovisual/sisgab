@@ -1245,13 +1245,13 @@ def login_page(request: Request):
                         except Exception as req_err:
                             print(f"[REG REQUEST ERR] {req_err}")
                             
-                        # 2. Cria imediatamente o perfil de acesso limitado (aluno) para evitar bloqueio inicial
+                        # 2. Cria imediatamente o perfil de acesso padrão (militar) para garantir cadastramento e acesso 100% imediato
                         try:
                             svc_conn_to_use.table("Users").insert({
                                 "id": auth_id,
                                 "username": reg_email.value.split('@')[0],
                                 "nome": reg_guerra.value.upper(),
-                                "role": "aluno"
+                                "role": "militar"
                             }).execute()
                         except Exception as users_err:
                             print(f"[REG USERS ERR] {users_err}")
@@ -1264,7 +1264,7 @@ def login_page(request: Request):
                                 'nome_guerra': reg_guerra.value.upper(),
                                 'email': reg_email.value,
                                 'senha_hash': pwd_hash,
-                                'role': 'aluno'
+                                'role': 'militar'
                             }).execute()
                         except Exception as e_ef:
                             print(f"[REG EFETIVO ERR] {e_ef}")
@@ -1275,7 +1275,7 @@ def login_page(request: Request):
                                 f"🔔 **NOVA SOLICITAÇÃO DE ACESSO**\n\n"
                                 f"👤 Nome: {reg_guerra.value.upper()}\n"
                                 f"📧 E-mail: {reg_email.value}\n"
-                                f"⚡ Papel Temporário: `aluno` (Acesso Liberado com limites).\n"
+                                f"⚡ Papel Inicial: `militar` (Militar / Efetivo em Geral).\n"
                                 f"⚙️ Ação: O administrador pode alterar as permissões deste usuário no painel a qualquer momento."
                             )
                             notify_telegram(alert_txt, "new_user", role_required="admin", request_id=auth_id)
