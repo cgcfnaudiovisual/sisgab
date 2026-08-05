@@ -573,7 +573,7 @@ def render_page():
                                     except Exception as auth_email_err:
                                         print(f"[AUTH EMAIL UPDATE ERR] {auth_email_err}")
 
-                            # 2. Atualiza a tabela users de forma segura
+                            # 2. Atualiza a tabela users
                             nome_com_posto = f"{e_posto.value} {clean_militar_name(nome_final)}".strip()
                             user_payload = {
                                 'nome': nome_com_posto,
@@ -586,28 +586,40 @@ def render_page():
                             if e_email.value:
                                 user_payload['email'] = e_email.value.strip()
 
+                            users_updated = False
+                            users_err_msg = ''
                             try:
                                 if is_uuid:
-                                    conn.table('users').update(user_payload).eq('id', uid_str).execute()
+                                    res_u = conn.table('users').update(user_payload).eq('id', uid_str).execute()
+                                elif user_email:
+                                    res_u = conn.table('users').update(user_payload).eq('email', user_email).execute()
                                 else:
-                                    if user_email:
-                                        conn.table('users').update(user_payload).eq('email', user_email).execute()
-                                    else:
-                                        conn.table('users').update(user_payload).eq('username', user.get('username')).execute()
+                                    res_u = conn.table('users').update(user_payload).eq('username', user.get('username')).execute()
+                                # Verifica se alguma linha foi de fato afetada
+                                if res_u and hasattr(res_u, 'data') and res_u.data:
+                                    users_updated = True
+                                    print(f"[USERS UPDATE OK] {len(res_u.data)} linha(s) atualizada(s) para {nome_com_posto}")
+                                else:
+                                    users_err_msg = 'Nenhuma linha afetada na tabela users (ID/email não encontrado)'
+                                    print(f"[USERS UPDATE WARN] {users_err_msg} | uid={uid_str} | email={user_email}")
                             except Exception as u_err:
+                                users_err_msg = str(u_err)
                                 print(f"[USERS UPDATE ERR] {u_err}")
-                                user_payload.pop('antiguidade_num', None)
-                                user_payload.pop('email', None)
-                                user_payload.pop('posto', None)
+                                # Tenta sem email (campo pode ter restrição de unicidade)
                                 try:
+                                    payload_sem_email = {k: v for k, v in user_payload.items() if k != 'email'}
                                     if is_uuid:
-                                        conn.table('users').update(user_payload).eq('id', uid_str).execute()
+                                        res_u2 = conn.table('users').update(payload_sem_email).eq('id', uid_str).execute()
                                     else:
-                                        conn.table('users').update(user_payload).eq('username', user.get('username')).execute()
+                                        res_u2 = conn.table('users').update(payload_sem_email).eq('username', user.get('username')).execute()
+                                    if res_u2 and hasattr(res_u2, 'data') and res_u2.data:
+                                        users_updated = True
+                                        print(f"[USERS UPDATE RETRY OK] {len(res_u2.data)} linha(s)")
                                 except Exception as u_retry_err:
                                     print(f"[USERS RETRY ERR] {u_retry_err}")
 
-                            # 3. Mantém a integridade da tabela efetivo
+                            # 3. Mantém a integridade da tabela efetivo (SEMPRE tenta, independente do status de users)
+                            ef_updated = False
                             try:
                                 update_fields = {
                                     'nome_guerra': clean_militar_name(nome_final),
@@ -620,33 +632,59 @@ def render_page():
                                     'antiguidade_num': ant_save
                                 }
                                 
+                                res_ef = None
+                                if not is_uuid and uid_str.isdigit():
+                                    res_ef = conn.table('efetivo').update(update_fields).eq('id', int(uid_str)).execute()
+                                elif user_email:
+                                    res_ef = conn.table('efetivo').update(update_fields).eq('email', user_email).execute()
+                                elif user.get('telegram_id'):
+                                    res_ef = conn.table('efetivo').update(update_fields).eq('telegram_id', user.get('telegram_id')).execute()
+                                else:
+                                    clean_target = clean_militar_name(user.get('nome', ''))
+                                    res_ef = conn.table('efetivo').update(update_fields).ilike('nome_guerra', f"%{clean_target}%").execute()
+                                
+                                if res_ef and hasattr(res_ef, 'data') and res_ef.data:
+                                    ef_updated = True
+                                    print(f"[EFETIVO UPDATE OK] {len(res_ef.data)} linha(s) atualizada(s)")
+                                else:
+                                    print(f"[EFETIVO UPDATE WARN] Nenhuma linha afetada | uid={uid_str} | email={user_email}")
+                                    
+                            except Exception as ef_err:
+                                print(f"[EFETIVO UPDATE ERR] {ef_err}")
+                                # Tenta sem antiguidade_num se a coluna não existir no efetivo
                                 try:
-                                    if not is_uuid and uid_str.isdigit():
-                                        conn.table('efetivo').update(update_fields).eq('id', int(uid_str)).execute()
-                                    elif user_email:
-                                        conn.table('efetivo').update(update_fields).eq('email', user_email).execute()
+                                    update_fields_sem_ant = {k: v for k, v in update_fields.items() if k != 'antiguidade_num'}
+                                    if user_email:
+                                        conn.table('efetivo').update(update_fields_sem_ant).eq('email', user_email).execute()
                                     elif user.get('telegram_id'):
-                                        conn.table('efetivo').update(update_fields).eq('telegram_id', user.get('telegram_id')).execute()
-                                    else:
-                                        clean_target = clean_militar_name(user.get('nome', ''))
-                                        conn.table('efetivo').update(update_fields).ilike('nome_guerra', f"%{clean_target}%").execute()
-                                except Exception as ef_sub_err:
-                                    if 'antiguidade_num' in str(ef_sub_err):
-                                        update_fields.pop('antiguidade_num', None)
-                                        if not is_uuid and uid_str.isdigit():
-                                            conn.table('efetivo').update(update_fields).eq('id', int(uid_str)).execute()
-                                        else:
-                                            clean_target = clean_militar_name(user.get('nome', ''))
-                                            conn.table('efetivo').update(update_fields).ilike('nome_guerra', f"%{clean_target}%").execute()
-                            except Exception as sync_err:
-                                print(f"[DB WARN] Erro ao sincronizar efetivo: {sync_err}")
+                                        conn.table('efetivo').update(update_fields_sem_ant).eq('telegram_id', user.get('telegram_id')).execute()
+                                except Exception as ef_retry_err:
+                                    print(f"[EFETIVO RETRY ERR] {ef_retry_err}")
+
+                            # 4. Atualiza o dict local imediatamente para o UI refletir sem depender do reload
+                            user['nome'] = nome_com_posto
+                            user['username'] = e_unm.value
+                            user['telegram_id'] = e_tg.value or ''
+                            user['url_foto'] = e_foto.value or ''
+                            user['role'] = e_role.value
+                            user['antiguidade_num'] = ant_save
+                            user['posto_grad'] = e_posto.value
+
+                            # 5. Feedback de resultado real
+                            if users_updated or ef_updated:
+                                ui.notify(f"✅ Cadastro de {nome_final} atualizado com sucesso!", color='positive')
+                            elif not users_updated and not ef_updated:
+                                ui.notify(f"⚠️ Salvo localmente mas não encontrado no banco. Verifique o ID/email. Erro: {users_err_msg[:80]}", color='warning', duration=8)
+                            else:
+                                ui.notify(f"✅ {nome_final} atualizado (efetivo: {ef_updated}, users: {users_updated})", color='positive')
                             
-                            ui.notify(f"Cadastro de {nome_final} atualizado!", color='success')
                             data_service.clear_cache()
                             edit_dialog.close()
                             reload_admin_data()
                         except Exception as err:
                             e_error.text = f"Erro: {err}"
+                            ui.notify(f"❌ Erro ao salvar: {err}", color='negative', duration=8)
+
                             
                     # Botões de Ação (recuados para ficarem dentro da coluna do diálogo)
                     with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
