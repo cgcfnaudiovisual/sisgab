@@ -133,8 +133,10 @@ def open_nova_tarefa_dialog(efetivo_options: dict, callback_refresh=None):
             resp_sel = ui.select(
                 efetivo_options,
                 value=None,
-                label='👤 Responsável pela Execução'
-            ).props('dark outlined dense option-dark w-full clearable')
+                label='👤 Responsável pela Execução',
+                with_input=True,
+                clearable=True
+            ).props('dark outlined dense option-dark w-full new-value-mode=add-unique').tooltip('Selecione do efetivo ou digite o nome do militar')
 
             # Observações
             obs_in = ui.textarea('Observações / Briefing').props('dark outlined dense w-full rows=3 stack-label')
@@ -246,16 +248,19 @@ def open_editar_tarefa_dialog(tarefa: dict, efetivo_options: dict, callback_refr
 
     # Carrega responsável atual
     enc_id = tarefa.get('encarregado_id')
-    if enc_id is not None:
+    if enc_id is not None and str(enc_id).strip():
+        raw_enc = str(enc_id).strip()
         try:
-            enc_id = int(str(enc_id).strip())
-        except (ValueError, TypeError):
-            enc_id = None
+            enc_id = int(raw_enc)
+        except ValueError:
+            enc_id = raw_enc
+    else:
+        enc_id = None
 
     st_val = str(tarefa.get('status', 'pendente') or 'pendente').lower()
 
     if enc_id is not None and enc_id not in efetivo_options:
-        efetivo_options[enc_id] = f"Militar Inativo (ID: {enc_id})"
+        efetivo_options[enc_id] = str(enc_id) if isinstance(enc_id, str) else f"Militar (ID: {enc_id})"
 
     with ui.dialog() as dlg, ui.card().classes('w-[660px] max-w-[96vw] q-pa-lg').style(
         'background:#131a26; border:1px solid rgba(0,229,255,0.3); max-height:92vh; overflow-y:auto;'
@@ -296,8 +301,10 @@ def open_editar_tarefa_dialog(tarefa: dict, efetivo_options: dict, callback_refr
             resp_sel = ui.select(
                 efetivo_options,
                 value=enc_id,
-                label='👤 Responsável'
-            ).props('dark outlined dense option-dark w-full clearable')
+                label='👤 Responsável',
+                with_input=True,
+                clearable=True
+            ).props('dark outlined dense option-dark w-full new-value-mode=add-unique').tooltip('Selecione do efetivo ou digite o nome do militar')
 
             obs_in = ui.textarea('Observações / Briefing', value=str(tarefa.get('observacoes_execucao', '') or '')).props('dark outlined dense w-full rows=3 stack-label')
 

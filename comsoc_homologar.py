@@ -175,30 +175,33 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                 except Exception:
                     mids = []
                 
-                # Converte IDs para inteiros para evitar quebra do NiceGUI (ValueError)
+                # Converte IDs para inteiros ou mantém texto para militares livres
                 enc_id = demanda.get('encarregado_id')
                 if enc_id is not None and str(enc_id).strip():
+                    raw_enc = str(enc_id).strip()
                     try:
-                        enc_id = int(str(enc_id).strip())
+                        enc_id = int(raw_enc)
                     except ValueError:
-                        pass
+                        enc_id = raw_enc
                 else:
                     enc_id = None
 
                 des_id = None
                 for mid in mids:
-                    try:
-                        mid_int = int(str(mid).strip())
-                    except ValueError:
-                        mid_int = mid
-                    if enc_id is None or str(mid_int) != str(enc_id):
-                        des_id = mid_int
-                        break
+                    if mid is not None and str(mid).strip():
+                        raw_m = str(mid).strip()
+                        try:
+                            mid_int = int(raw_m)
+                        except ValueError:
+                            mid_int = raw_m
+                        if enc_id is None or str(mid_int) != str(enc_id):
+                            des_id = mid_int
+                            break
 
                 if enc_id is not None and enc_id not in efetivo_options:
-                    efetivo_options[enc_id] = f"Militar Inativo (ID: {enc_id})"
+                    efetivo_options[enc_id] = str(enc_id) if isinstance(enc_id, str) else f"Militar (ID: {enc_id})"
                 if des_id is not None and des_id not in efetivo_options:
-                    efetivo_options[des_id] = f"Militar Inativo (ID: {des_id})"
+                    efetivo_options[des_id] = str(des_id) if isinstance(des_id, str) else f"Militar (ID: {des_id})"
 
                 ui.label('🎖️ Designação de Equipe Operacional / Criativa').classes('text-xs font-bold text-cyan q-mt-xs')
                 with ui.row().classes('w-full gap-2 no-wrap'):
@@ -208,7 +211,7 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                         label='👤 Encarregado da Missão',
                         with_input=True,
                         clearable=True
-                    ).props('dark outlined dense option-dark new-value-mode=add').classes('w-1/2')
+                    ).props('dark outlined dense option-dark new-value-mode=add-unique').classes('w-1/2').tooltip('Selecione do efetivo ou digite o nome do militar')
 
                     designer_select = ui.select(
                         efetivo_options,
@@ -216,7 +219,7 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                         label='🎨 Militar Designado (Arte / Design)',
                         with_input=True,
                         clearable=True
-                    ).props('dark outlined dense option-dark new-value-mode=add').classes('w-1/2')
+                    ).props('dark outlined dense option-dark new-value-mode=add-unique').classes('w-1/2').tooltip('Selecione do efetivo ou digite o nome do militar')
 
                 # Container Dinâmico para Tipos de Serviço Requeridos (exibido para Coberturas Audiovisuais)
                 container_servicos = ui.column().classes('w-full gap-1 q-mt-xs')
@@ -277,11 +280,11 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
 
                             enc_val = encarregado_select.value
                             if enc_val:
+                                enc_save = str(enc_val).strip()
                                 if isinstance(enc_val, int) or (isinstance(enc_val, str) and enc_val.isdigit()):
-                                    enc_save = int(enc_val)
-                                    militar_ids.append(enc_save)
+                                    militar_ids.append(int(enc_val))
                                 else:
-                                    aut_extra.append(f"[Responsável: {str(enc_val).strip()}]")
+                                    aut_extra.append(f"[Responsável: {enc_save}]")
 
                             des_val = designer_select.value
                             if des_val:
@@ -359,19 +362,41 @@ def open_concluir_missao_dialog(demanda, user_name_guerra="SUPERVISOR", callback
         ui.label(f"Solicitante: {demanda.get('solicitante_nome','')} ({demanda.get('setor','')})").classes('text-xs text-grey-4 q-mb-md')
 
         enc_id = demanda.get('encarregado_id')
-        try:
-            enc_id = int(str(enc_id).strip()) if enc_id else None
-        except ValueError:
+        if enc_id is not None and str(enc_id).strip():
+            raw_enc = str(enc_id).strip()
+            try:
+                enc_id = int(raw_enc)
+            except ValueError:
+                enc_id = raw_enc
+        else:
             enc_id = None
 
         if enc_id is not None and enc_id not in efetivo_options:
-            efetivo_options[enc_id] = f"Militar Inativo (ID: {enc_id})"
+            efetivo_options[enc_id] = str(enc_id) if isinstance(enc_id, str) else f"Militar (ID: {enc_id})"
 
         with ui.column().classes('w-full gap-3 text-xs'):
-            encarregado_sel = ui.select(efetivo_options, value=enc_id, label='👤 Encarregado da Missão').props('dark outlined dense option-dark w-full').classes('w-full')
-            fotografo_sel = ui.select(efetivo_options, label='📷 Fotógrafo / Cinegrafista').props('dark outlined dense option-dark w-full').classes('w-full')
-            designer_sel = ui.select(efetivo_options, label='🎨 Designer / Redator').props('dark outlined dense option-dark w-full').classes('w-full')
-            
+            encarregado_sel = ui.select(
+                efetivo_options,
+                value=enc_id,
+                label='👤 Encarregado da Missão',
+                with_input=True,
+                clearable=True
+            ).props('dark outlined dense option-dark new-value-mode=add-unique w-full').classes('w-full').tooltip('Selecione do efetivo ou digite o nome do militar')
+
+            fotografo_sel = ui.select(
+                efetivo_options,
+                label='📷 Fotógrafo / Cinegrafista',
+                with_input=True,
+                clearable=True
+            ).props('dark outlined dense option-dark new-value-mode=add-unique w-full').classes('w-full').tooltip('Selecione do efetivo ou digite o nome do fotógrafo')
+
+            designer_sel = ui.select(
+                efetivo_options,
+                label='🎨 Designer / Redator',
+                with_input=True,
+                clearable=True
+            ).props('dark outlined dense option-dark new-value-mode=add-unique w-full').classes('w-full').tooltip('Selecione do efetivo ou digite o nome do designer')
+
             drive_input = ui.input('🔗 Link da Galeria de Fotos / Drive (Opcional)', placeholder='https://drive.google.com/...').props('dark outlined dense w-full')
             parecer_input = ui.textarea('✍️ Relatório de Entrega / Parecer Final', placeholder='Ex: Cobertura realizada. 50 fotos tratadas enviadas ao acervo.').props('dark outlined dense w-full rows=3')
             error_lbl = ui.label('').classes('text-xs text-red font-bold')
@@ -381,16 +406,44 @@ def open_concluir_missao_dialog(demanda, user_name_guerra="SUPERVISOR", callback
                 if db_c:
                     try:
                         militar_ids = []
-                        if encarregado_sel.value: militar_ids.append(encarregado_sel.value)
-                        if fotografo_sel.value: militar_ids.append(fotografo_sel.value)
-                        if designer_sel.value: militar_ids.append(designer_sel.value)
+                        aut_extra = []
+
+                        enc_val = encarregado_sel.value
+                        enc_save = None
+                        if enc_val:
+                            enc_save = str(enc_val).strip()
+                            if isinstance(enc_val, int) or (isinstance(enc_val, str) and enc_val.isdigit()):
+                                militar_ids.append(int(enc_val))
+                            else:
+                                aut_extra.append(f"[Responsável: {enc_save}]")
+
+                        fot_val = fotografo_sel.value
+                        if fot_val:
+                            if isinstance(fot_val, int) or (isinstance(fot_val, str) and fot_val.isdigit()):
+                                militar_ids.append(int(fot_val))
+                            else:
+                                aut_extra.append(f"[Fotógrafo: {str(fot_val).strip()}]")
+
+                        des_val = designer_sel.value
+                        if des_val:
+                            if isinstance(des_val, int) or (isinstance(des_val, str) and des_val.isdigit()):
+                                militar_ids.append(int(des_val))
+                            else:
+                                aut_extra.append(f"[Design: {str(des_val).strip()}]")
 
                         update_payload = {
                             'status': 'concluida',
                             'notificar_militar_ids': json.dumps(list(set(militar_ids)))
                         }
-                        if encarregado_sel.value:
-                            update_payload['encarregado_id'] = encarregado_sel.value
+                        if enc_save:
+                            update_payload['encarregado_id'] = enc_save
+
+                        if aut_extra:
+                            aut_atual = demanda.get('autoridades') or ''
+                            for a_ex in aut_extra:
+                                if a_ex not in aut_atual:
+                                    aut_atual = f"{aut_atual} {a_ex}".strip()
+                            update_payload['autoridades'] = aut_atual
 
                         dem_id = demanda['id']
                         if isinstance(dem_id, str) and dem_id.isdigit():
@@ -398,12 +451,28 @@ def open_concluir_missao_dialog(demanda, user_name_guerra="SUPERVISOR", callback
 
                         db_c.table('demandas_comunicacao').update(update_payload).eq('id', dem_id).execute()
 
+                        # Monta descrição da equipe de cobertura
+                        equipe_str_list = []
+                        if enc_val:
+                            lbl_e = efetivo_options.get(enc_val, str(enc_val))
+                            equipe_str_list.append(f"Encarregado: {lbl_e}")
+                        if fot_val:
+                            lbl_f = efetivo_options.get(fot_val, str(fot_val))
+                            equipe_str_list.append(f"Fotógrafo/Cinegrafista: {lbl_f}")
+                        if des_val:
+                            lbl_d = efetivo_options.get(des_val, str(des_val))
+                            equipe_str_list.append(f"Designer/Redator: {lbl_d}")
+
+                        parecer_texto = parecer_input.value or 'Pauta concluída e entregue.'
+                        if equipe_str_list:
+                            parecer_texto += f"\n\n👨‍✈️ Equipe da Cobertura: {', '.join(equipe_str_list)}"
+
                         hist = {
                             'demanda_id': dem_id,
                             'data_hora': datetime.now().isoformat(),
                             'usuario': user_name_guerra,
                             'acao': 'Missão Concluída',
-                            'parecer': parecer_input.value or 'Pauta concluída e entregue.'
+                            'parecer': parecer_texto
                         }
                         try:
                             db_c.table('demandas_historico_tramitacao').insert(hist).execute()
@@ -480,41 +549,48 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
         
         enc_id = demanda.get('encarregado_id')
         if enc_id is not None and str(enc_id).strip():
+            raw_enc = str(enc_id).strip()
             try:
-                enc_id = int(str(enc_id).strip())
+                enc_id = int(raw_enc)
             except ValueError:
-                pass
+                enc_id = raw_enc
         else:
             enc_id = None
 
         des_id = None
         for mid in mids:
-            try:
-                mid_int = int(str(mid).strip())
-            except ValueError:
-                mid_int = mid
-            if enc_id is None or str(mid_int) != str(enc_id):
-                des_id = mid_int
-                break
+            if mid is not None and str(mid).strip():
+                raw_m = str(mid).strip()
+                try:
+                    mid_int = int(raw_m)
+                except ValueError:
+                    mid_int = raw_m
+                if enc_id is None or str(mid_int) != str(enc_id):
+                    des_id = mid_int
+                    break
 
         if enc_id is not None and enc_id not in efetivo_options:
-            efetivo_options[enc_id] = f"Militar Inativo (ID: {enc_id})"
+            efetivo_options[enc_id] = str(enc_id) if isinstance(enc_id, str) else f"Militar (ID: {enc_id})"
         if des_id is not None and des_id not in efetivo_options:
-            efetivo_options[des_id] = f"Militar Inativo (ID: {des_id})"
+            efetivo_options[des_id] = str(des_id) if isinstance(des_id, str) else f"Militar (ID: {des_id})"
 
         with ui.column().classes('w-full gap-3 text-xs'):
             with ui.row().classes('w-full gap-2 no-wrap'):
                 encarregado_select = ui.select(
                     efetivo_options,
                     value=enc_id,
-                    label='👤 Encarregado da Missão'
-                ).props('dark outlined dense option-dark').classes('w-1/2')
+                    label='👤 Encarregado da Missão',
+                    with_input=True,
+                    clearable=True
+                ).props('dark outlined dense option-dark new-value-mode=add-unique').classes('w-1/2').tooltip('Selecione do efetivo ou digite o nome do militar')
 
                 designer_select = ui.select(
                     efetivo_options,
                     value=des_id,
-                    label='🎨 Militar Designado (Arte / Design)'
-                ).props('dark outlined dense option-dark').classes('w-1/2')
+                    label='🎨 Militar Designado (Arte / Design)',
+                    with_input=True,
+                    clearable=True
+                ).props('dark outlined dense option-dark new-value-mode=add-unique').classes('w-1/2').tooltip('Selecione do efetivo ou digite o nome do militar')
             
             parecer_input = ui.textarea('✍️ Parecer da Chefia / Despacho', placeholder='Digite o parecer ou instruções...').props('dark outlined dense w-full rows=3')
             error_lbl = ui.label('').classes('text-xs text-red font-bold')
@@ -527,6 +603,25 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
                 db = get_service_db_connection() or get_db_connection()
                 if db:
                     try:
+                        militar_ids = []
+                        aut_extra = []
+
+                        enc_val = encarregado_select.value
+                        enc_save = None
+                        if enc_val:
+                            enc_save = str(enc_val).strip()
+                            if isinstance(enc_val, int) or (isinstance(enc_val, str) and enc_val.isdigit()):
+                                militar_ids.append(int(enc_val))
+                            else:
+                                aut_extra.append(f"[Responsável: {enc_save}]")
+
+                        des_val = designer_select.value
+                        if des_val:
+                            if isinstance(des_val, int) or (isinstance(des_val, str) and des_val.isdigit()):
+                                militar_ids.append(int(des_val))
+                            else:
+                                aut_extra.append(f"[Design: {str(des_val).strip()}]")
+
                         hist = {
                             'demanda_id': demanda['id'],
                             'data_hora': datetime.now().isoformat(),
@@ -538,19 +633,20 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
                             db.table('demandas_historico_tramitacao').insert(hist).execute()
                         except Exception as h_err:
                             print(f"[HIST INSERT ERR] {h_err}")
-                        
-                        militar_ids = []
-                        if encarregado_select.value:
-                            militar_ids.append(encarregado_select.value)
-                        if designer_select.value:
-                            militar_ids.append(designer_select.value)
 
                         update_data = {
                             'status': novo_status,
                             'notificar_militar_ids': json.dumps(list(set(militar_ids)))
                         }
-                        if encarregado_select.value:
-                            update_data['encarregado_id'] = encarregado_select.value
+                        if enc_save:
+                            update_data['encarregado_id'] = enc_save
+
+                        if aut_extra:
+                            aut_atual = demanda.get('autoridades') or ''
+                            for a_ex in aut_extra:
+                                if a_ex not in aut_atual:
+                                    aut_atual = f"{aut_atual} {a_ex}".strip()
+                            update_data['autoridades'] = aut_atual
 
                         dem_id = demanda['id']
                         if isinstance(dem_id, str) and dem_id.isdigit():

@@ -928,8 +928,10 @@ def render_page(autofill: str = None):
                             militar_select = ui.select(
                                 efetivo_options,
                                 multiple=True,
-                                label=lbl_militar
-                            ).props('dark outlined dense w-full option-dark').classes('w-full')
+                                label=lbl_militar,
+                                with_input=True,
+                                clearable=True
+                            ).props('dark outlined dense w-full option-dark new-value-mode=add-unique').classes('w-full').tooltip('Selecione do efetivo ou digite o nome do militar')
                         else:
                             militar_select = None
 
