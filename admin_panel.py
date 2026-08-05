@@ -197,27 +197,28 @@ def render_page():
                     if rank in ('SD', 'SOLDADO', 'MN', 'MARINHEIRO'): return 16
                     return 98
 
-                # Ordena os operadores: COMSOC/Admin primeiro, depois por Ordem de Precedência / Antiguidade, depois por Nome
+                # Ordena os operadores pela coluna antiguidade_num (cadeia hierarquica unica)
                 def sort_users(u):
-                    role = str(u.get('role', 'compel')).strip().lower()
-                    is_comsoc = role in ('admin', 'supervisor', 'comsoc', 'comsoc_design', 'operador')
+                    role = str(u.get('role', '')).strip().lower()
+                    is_comsoc = role in ('admin', 'supervisor', 'comsoc', 'comsoc_design')
                     group_priority = 0 if is_comsoc else 1
-                    
-                    pg = u.get('posto_grad') or ''
-                    if not pg:
-                        parts = str(u.get('nome', '')).split()
-                        pg = parts[0] if parts else ''
-                    
-                    seniority = get_rank_seniority(pg)
-                    
+
                     raw_ant = u.get('antiguidade_num') or u.get('numero_antiguidade') or u.get('ordem_precedencia')
-                    if raw_ant is not None and str(raw_ant).strip().isdigit():
-                        ant_val = int(str(raw_ant).strip())
-                    else:
-                        ant_val = seniority
+                    try:
+                        ant_val = int(str(raw_ant).strip()) if raw_ant is not None else 9999
+                    except Exception:
+                        ant_val = 9999
+
+                    # Fallback por posto/graduacao se nao houver numero definido
+                    if ant_val in (99, 9999):
+                        pg = u.get('posto_grad') or ''
+                        if not pg:
+                            parts = str(u.get('nome', '')).split()
+                            pg = parts[0] if parts else ''
+                        ant_val = get_rank_seniority(pg) + 1000  # Coloca apos os que tem numero definido
 
                     nome_guerra = str(u.get('nome', '')).upper()
-                    return (group_priority, ant_val, seniority, nome_guerra)
+                    return (group_priority, ant_val, nome_guerra)
                 
                 users_data = sorted(users_data, key=sort_users)
 
@@ -351,7 +352,7 @@ def render_page():
                                 auth_id = str(uuid.uuid4())
                                 ui.notify('Operador registrado com sucesso no banco de dados local!', color='success')
 
-                            # Insere na tabela users (sem antiguidade_num — coluna existe apenas em 'efetivo')
+                            # Insere na tabela users (com antiguidade_num apos migracao SQL)
                             u_payload = {
                                 'id': auth_id,
                                 'username': c_email.value.split('@')[0],
@@ -359,7 +360,8 @@ def render_page():
                                 'role': c_role.value,
                                 'telegram_id': c_tg.value or None,
                                 'url_foto': c_foto.value or None,
-                                'email': c_email.value
+                                'email': c_email.value,
+                                'antiguidade_num': ant_save
                             }
                             try:
                                 conn.table('users').insert(u_payload).execute()
@@ -571,14 +573,15 @@ def render_page():
                                     except Exception as auth_email_err:
                                         print(f"[AUTH EMAIL UPDATE ERR] {auth_email_err}")
 
-                            # 2. Atualiza a tabela users (sem antiguidade_num — coluna existe apenas em 'efetivo')
+                            # 2. Atualiza a tabela users (antiguidade_num disponivel apos executar a migracao SQL)
                             nome_com_posto = f"{e_posto.value} {clean_militar_name(nome_final)}".strip()
                             user_payload = {
                                 'nome': nome_com_posto,
                                 'username': e_unm.value,
                                 'telegram_id': e_tg.value or None,
                                 'url_foto': e_foto.value or None,
-                                'role': e_role.value
+                                'role': e_role.value,
+                                'antiguidade_num': ant_save
                             }
                             if e_email.value:
                                 user_payload['email'] = e_email.value.strip()
