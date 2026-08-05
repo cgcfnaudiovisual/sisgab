@@ -178,7 +178,14 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
         if not res_ef.data: return 0
         
         res_pr = conn.table('presenca_diaria').select('nome_guerra, status').eq('data', hoje_str).execute()
-        respondidos = {p['nome_guerra'].upper() for p in res_pr.data if p.get('status')} if res_pr.data else set()
+        respondidos = set()
+        if res_pr and res_pr.data:
+            for p in res_pr.data:
+                st = str(p.get('status') or '').strip().upper()
+                if st and st not in ('PENDENTE', 'NONE', 'NULL'):
+                    ng = str(p.get('nome_guerra') or '').strip().upper()
+                    if ng:
+                        respondidos.add(ng)
         
         # Inclui militares com isenção ativa de férias/licença no conjunto de respondidos
         try:
@@ -191,6 +198,21 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
         except Exception as ext_err:
             print(f"[REMINDER ISENTOS WARN] {ext_err}")
             
+        # Mapeia telegram_id da tabela users caso a tabela efetivo esteja sem o campo preenchido
+        user_tg_map = {}
+        try:
+            res_u = conn.table('users').select('nome, username, telegram_id').execute()
+            if res_u and res_u.data:
+                for u_row in res_u.data:
+                    tid = u_row.get('telegram_id')
+                    if tid and str(tid).strip():
+                        unm = str(u_row.get('username') or '').strip().upper()
+                        nm = str(u_row.get('nome') or '').strip().upper()
+                        if unm: user_tg_map[unm] = str(tid).strip()
+                        if nm: user_tg_map[nm] = str(tid).strip()
+        except Exception as u_map_err:
+            print(f"[REMINDER USER MAP WARN] {u_map_err}")
+
         from .keyboards import get_presenca_keyboard
         
         # Mensagem insistente e contextual conforme o horário
@@ -216,13 +238,14 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
 
         notified_count = 0
         for m in res_ef.data:
-            nome_g = m['nome_guerra'].upper()
-            pg = m.get('posto_grad') or ''
-            tg_id = m.get('telegram_id')
-            if nome_g not in respondidos and tg_id and str(tg_id).strip():
+            nome_g = str(m.get('nome_guerra') or '').strip().upper()
+            pg = str(m.get('posto_grad') or '').strip()
+            tg_id = m.get('telegram_id') or user_tg_map.get(nome_g)
+            
+            if nome_g and nome_g not in respondidos and tg_id and str(tg_id).strip():
                 try:
                     personalized_msg = f"{hdr}\n\n👤 *Militar:* {pg} {nome_g}\n{body}"
-                    await bot.send_message(tg_id, personalized_msg, reply_markup=get_presenca_keyboard(), parse_mode='Markdown')
+                    await bot.send_message(str(tg_id).strip(), personalized_msg, reply_markup=get_presenca_keyboard(), parse_mode='Markdown')
                     notified_count += 1
                 except Exception as e_send:
                     print(f"[ATTENDANCE REMIND ERR] {tg_id}: {e_send}")
