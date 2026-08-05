@@ -4938,3 +4938,4 @@ def open_print_cards_dialog(event, convidados, layout):
             ui.notify(f"Erro ao importar planilha: {ex}", color='red')
 
     render_content()
+
