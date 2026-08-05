@@ -376,6 +376,160 @@ def register_common_handlers(bot):
         except Exception as e:
             print(f"[INLINE DEMANDA ACTION ERR] {e}")
 
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_req:', 'reject_req:', 'approve_role:')))
+    async def handle_user_approval_callbacks(call):
+        try:
+            from database import get_bot_db_connection as get_db_connection
+            db = get_db_connection()
+
+            if call.data.startswith('approve_req:'):
+                req_id = call.data.split(':', 1)[1]
+                await bot.answer_callback_query(call.id, "Selecione o perfil...")
+                
+                # Cria o teclado inline para seleção do papel do novo operador
+                markup = types.InlineKeyboardMarkup(row_width=2)
+                markup.add(
+                    types.InlineKeyboardButton("👑 Administrador", callback_data=f"approve_role:admin:{req_id}"),
+                    types.InlineKeyboardButton("⚖️ Supervisor", callback_data=f"approve_role:supervisor:{req_id}"),
+                    types.InlineKeyboardButton("⚖️ Oficial Gabinete", callback_data=f"approve_role:oficial_gab:{req_id}"),
+                    types.InlineKeyboardButton("⚓ Oficial OM", callback_data=f"approve_role:oficial:{req_id}"),
+                    types.InlineKeyboardButton("📜 Praça Gabinete", callback_data=f"approve_role:praca_gab:{req_id}"),
+                    types.InlineKeyboardButton("📸 COMSOC", callback_data=f"approve_role:comsoc:{req_id}"),
+                    types.InlineKeyboardButton("🎨 COMSOC Design", callback_data=f"approve_role:comsoc_design:{req_id}"),
+                    types.InlineKeyboardButton("⚓ Militar Geral", callback_data=f"approve_role:militar:{req_id}")
+                )
+                
+                await bot.send_message(
+                    call.message.chat.id,
+                    f"⚙️ **APROVAÇÃO DE ACESSO (ID: `{req_id}`)**\n\n"
+                    f"Escolha a permissão/papel a ser atribuído a este usuário:",
+                    reply_markup=markup,
+                    parse_mode='Markdown'
+                )
+
+            elif call.data.startswith('approve_role:'):
+                parts = call.data.split(':')
+                role_selected = parts[1]
+                req_id = parts[2]
+
+                await bot.answer_callback_query(call.id, f"Aprovando com perfil {role_selected}...")
+
+                # Busca os dados da solicitação
+                req_data = None
+                if db:
+                    for tbl in ['RegistrationRequests', 'registration_requests']:
+                        try:
+                            res = db.table(tbl).select('*').eq('id', req_id).execute()
+                            if res and res.data:
+                                req_data = res.data[0]
+                                break
+                        except Exception:
+                            pass
+                
+                u_email = req_data.get('email', '') if req_data else f"user_{req_id[:6]}@marinha.mil.br"
+                u_guerra = req_data.get('nome_guerra') or req_data.get('nome_completo') or "Militar"
+                u_tg_id = req_data.get('telegram_id') if req_data else None
+
+                # 1. Atualiza status da solicitação
+                if db:
+                    for tbl in ['RegistrationRequests', 'registration_requests']:
+                        try:
+                            db.table(tbl).update({'status': 'approved'}).eq('id', req_id).execute()
+                        except Exception:
+                            pass
+
+                    # 2. Atualiza users e efetivo
+                    try:
+                        db.table('users').upsert({
+                            'id': req_id,
+                            'username': u_email.split('@')[0] if '@' in u_email else u_guerra.lower(),
+                            'nome': u_guerra.upper(),
+                            'role': role_selected,
+                            'telegram_id': u_tg_id
+                        }, on_conflict='id').execute()
+                    except Exception as u_err:
+                        print(f"[BOT USERS UPSERT ERR] {u_err}")
+
+                    try:
+                        db.table('efetivo').upsert({
+                            'nome_guerra': u_guerra.upper(),
+                            'email': u_email,
+                            'role': role_selected,
+                            'telegram_id': u_tg_id
+                        }, on_conflict='nome_guerra').execute()
+                    except Exception as ef_err:
+                        print(f"[BOT EFETIVO UPSERT ERR] {ef_err}")
+
+                role_labels = {
+                    'admin': '👑 Administrador',
+                    'supervisor': '⚖️ Supervisor COMSOC',
+                    'oficial_gab': '⚖️ Oficial do Gabinete',
+                    'oficial': '⚓ Oficial da OM',
+                    'praca_gab': '📜 Praça do Gabinete',
+                    'comsoc': '📸 Equipe COMSOC (Foto/Vídeo)',
+                    'comsoc_design': '🎨 Equipe COMSOC (Design)',
+                    'militar': '⚓ Militar / Efetivo em Geral'
+                }
+                label_str = role_labels.get(role_selected, role_selected)
+
+                # Edita mensagem no chat do admin
+                try:
+                    await bot.edit_message_text(
+                        f"✅ **SOLICITAÇÃO DE ACESSO APROVADA!**\n\n"
+                        f"👤 **Operador:** `{u_guerra.upper()}`\n"
+                        f"📧 **E-mail:** `{u_email}`\n"
+                        f"⚙️ **Perfil Concedido:** {label_str}",
+                        chat_id=call.message.chat.id,
+                        message_id=call.message.message_id,
+                        parse_mode='Markdown'
+                    )
+                except Exception:
+                    await bot.send_message(
+                        call.message.chat.id,
+                        f"✅ **Acesso Aprovado!** Operador `{u_guerra.upper()}` habilitado como {label_str}.",
+                        parse_mode='Markdown'
+                    )
+
+                # Se houver telegram_id do usuário solicitante, notifica-o diretamente no Telegram!
+                if u_tg_id:
+                    try:
+                        await bot.send_message(
+                            int(u_tg_id),
+                            f"🎉 **SEU ACESSO AO SISGAB FOI APROVADO!**\n\n"
+                            f"Seu perfil foi configurado como: **{label_str}**.\n"
+                            f"Você já pode utilizar todas as funcionalidades e botões do sistema no Telegram e na Web!",
+                            parse_mode='Markdown'
+                        )
+                    except Exception as notif_user_err:
+                        print(f"[NOTIFY USER APPROVED ERR] {notif_user_err}")
+
+            elif call.data.startswith('reject_req:'):
+                req_id = call.data.split(':', 1)[1]
+                await bot.answer_callback_query(call.id, "Solicitação rejeitada.")
+
+                if db:
+                    for tbl in ['RegistrationRequests', 'registration_requests']:
+                        try:
+                            db.table(tbl).update({'status': 'rejected'}).eq('id', req_id).execute()
+                        except Exception:
+                            pass
+
+                try:
+                    await bot.edit_message_text(
+                        f"❌ **SOLICITAÇÃO DE ACESSO REJEITADA.**\nID da solicitação: `{req_id}`",
+                        chat_id=call.message.chat.id,
+                        message_id=call.message.message_id,
+                        parse_mode='Markdown'
+                    )
+                except Exception:
+                    pass
+        except Exception as err:
+            print(f"[APPROVAL CALLBACK ERR] {err}")
+            try:
+                await bot.answer_callback_query(call.id, f"Erro: {err}")
+            except Exception:
+                pass
+
     @bot.message_handler(func=lambda msg: True)
     async def handle_all_messages(message):
         chat_id = message.chat.id

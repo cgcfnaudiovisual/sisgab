@@ -5,7 +5,7 @@ from services import data_service
 
 THEME = theme.colors
 
-# Opções de papéis/roles no sistema (8 Roles Oficiais)
+# Opções de papéis/roles no sistema (9 Roles Oficiais)
 ROLE_OPTIONS = {
     'admin': 'Administrador (Acesso Total)',
     'supervisor': 'Supervisor COMSOC',
@@ -14,7 +14,8 @@ ROLE_OPTIONS = {
     'praca_gab': 'Praça do Gabinete',
     'comsoc': 'Equipe COMSOC (Fotografia/Vídeo)',
     'comsoc_design': 'Equipe COMSOC (Artes Gráficas/Canva)',
-    'militar': 'Militar / Efetivo em Geral'
+    'militar': 'Militar / Efetivo em Geral',
+    'aluno': 'Aluno (Acesso Restrito / Pendente)'
 }
 
 ROLE_DESCRIPTIONS = {
@@ -89,9 +90,24 @@ def render_page():
 
         if db_conn:
             try:
-                # Solicitações pendentes reais
-                req_res = db_conn.table('registration_requests').select('*').in_('status', ['pending', 'pendente']).execute()
-                requests_data = req_res.data if req_res.data else []
+                # Solicitações pendentes reais (suporta 'RegistrationRequests' e 'registration_requests')
+                raw_reqs = []
+                for tbl in ['RegistrationRequests', 'registration_requests']:
+                    try:
+                        req_res = db_conn.table(tbl).select('*').in_('status', ['pending', 'pendente']).execute()
+                        if req_res and req_res.data:
+                            raw_reqs.extend(req_res.data)
+                    except Exception:
+                        pass
+                
+                # Deduplica por ID ou e-mail
+                seen_req_ids = set()
+                requests_data = []
+                for r in raw_reqs:
+                    r_key = r.get('id') or r.get('email')
+                    if r_key and r_key not in seen_req_ids:
+                        seen_req_ids.add(r_key)
+                        requests_data.append(r)
 
                 # Usuários e Efetivo reais
                 users_res = db_conn.table('users').select('*').execute()
@@ -1077,15 +1093,15 @@ def render_page():
                     else:
                         with ui.column().classes('w-full gap-3'):
                             for req in requests_data:
-                                state = {'role': 'compel'}
+                                state = {'role': 'militar'}
                                 
                                 with ui.card().classes('w-full q-pa-sm border hover:border-cyan-500/40 bg-black/20').style(f'border-color: rgba(0, 229, 255, 0.1);'):
                                     with ui.row().classes('w-full items-center justify-between wrap gap-4'):
                                         with ui.column().classes('gap-1'):
-                                            ui.label(req['nome_completo']).classes('text-subtitle2 font-bold').style(f'color: {THEME["text_main"]}')
+                                            ui.label(req.get('nome_completo') or req.get('nome_guerra') or 'Operador').classes('text-subtitle2 font-bold').style(f'color: {THEME["text_main"]}')
                                             with ui.row().classes('gap-4 text-caption').style(f'color: {THEME["text_dim"]}'):
-                                                ui.label(f"Guerra: {req['nome_guerra']}")
-                                                ui.label(f"E-mail: {req['email']}")
+                                                ui.label(f"Guerra: {req.get('nome_guerra', 'N/I')}")
+                                                ui.label(f"E-mail: {req.get('email', 'N/I')}")
                                                 date_str = req.get('created_at', '')[:10] if req.get('created_at') else ''
                                                 if date_str:
                                                     ui.label(f"Solicitado em: {date_str}")
@@ -1094,12 +1110,12 @@ def render_page():
                                         with ui.row().classes('items-center gap-3'):
                                             ui.select(
                                                 ROLE_OPTIONS, 
-                                                value='compel',
+                                                value='militar',
                                                 label='Papel a Atribuir',
                                                 on_change=lambda e, s=state: s.update({'role': e.value})
                                             ).props('dark outlined dense').classes('w-60')
                                             
-                                            def process_request(req_id=req['id'], req_email=req['email'], req_guerra=req['nome_guerra'], action='', s=state):
+                                            def process_request(req_id=req['id'], req_email=req.get('email', ''), req_guerra=req.get('nome_guerra', ''), action='', s=state):
                                                 # SEGURANÇA: Verificação de privilégios server-side
                                                 user_role = str(app.storage.user.get('user_data', {}).get('role', '')).upper()
                                                 if user_role not in ('ADMIN', 'SUPERVISOR'):
@@ -1118,16 +1134,23 @@ def render_page():
                                                 try:
                                                     if action == 'approved':
                                                         req_tg_id = req.get('telegram_id') or None
-                                                        conn.table('registration_requests').update({'status': 'approved'}).eq('id', req_id).execute()
+                                                        for tbl_name in ['RegistrationRequests', 'registration_requests']:
+                                                            try:
+                                                                conn.table(tbl_name).update({'status': 'approved'}).eq('id', req_id).execute()
+                                                            except Exception:
+                                                                pass
                                                         
                                                         # Upsert em users e efetivo salvando telegram_id se disponivel
-                                                        conn.table('users').upsert({
-                                                            'id': req_id,
-                                                            'username': req_email.split('@')[0],
-                                                            'nome': req_guerra,
-                                                            'role': s['role'],
-                                                            'telegram_id': req_tg_id
-                                                        }, on_conflict='id').execute()
+                                                        try:
+                                                            conn.table('users').upsert({
+                                                                'id': req_id,
+                                                                'username': req_email.split('@')[0] if '@' in req_email else req_guerra.lower(),
+                                                                'nome': req_guerra,
+                                                                'role': s['role'],
+                                                                'telegram_id': req_tg_id
+                                                            }, on_conflict='id').execute()
+                                                        except Exception as u_err:
+                                                            print(f"[USERS UPSERT ERR] {u_err}")
                                                         
                                                         try:
                                                             conn.table('efetivo').upsert({
