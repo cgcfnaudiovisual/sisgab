@@ -108,9 +108,24 @@ def render_page():
                         seen_req_ids.add(r_key)
                         requests_data.append(r)
 
-                # Usuários e Efetivo reais
-                users_res = db_conn.table('users').select('*').execute()
-                users_data = users_res.data if users_res.data else []
+                # Usuários e Efetivo reais (suporta 'Users' e 'users')
+                raw_users = []
+                for u_tbl in ['Users', 'users']:
+                    try:
+                        u_res = db_conn.table(u_tbl).select('*').execute()
+                        if u_res and u_res.data:
+                            raw_users.extend(u_res.data)
+                    except Exception:
+                        pass
+                
+                # Deduplica usuários reais
+                seen_u_keys = set()
+                users_data = []
+                for u in raw_users:
+                    uk = u.get('id') or u.get('email') or u.get('username')
+                    if uk and uk not in seen_u_keys:
+                        seen_u_keys.add(uk)
+                        users_data.append(u)
                 
                 def clean_militar_name(name_str):
                     if not name_str:

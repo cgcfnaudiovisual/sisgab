@@ -1240,28 +1240,30 @@ def login_page(request: Request):
                         # Determina conexão a ser usada para as inserções no banco
                         svc_conn_to_use = svc_conn if svc_conn else db_conn
                         
-                        # 1. Cria a solicitação pendente para aprovação/controle posterior
-                        try:
-                            svc_conn_to_use.table("RegistrationRequests").insert({
-                                "id": auth_id,
-                                "email": reg_email.value,
-                                "nome_completo": reg_guerra.value,
-                                "nome_guerra": reg_guerra.value,
-                                "status": "pending"
-                            }).execute()
-                        except Exception as req_err:
-                            print(f"[REG REQUEST ERR] {req_err}")
+                        # 1. Cria a solicitação pendente em ambas as tabelas (RegistrationRequests e registration_requests)
+                        for tbl in ['RegistrationRequests', 'registration_requests']:
+                            try:
+                                svc_conn_to_use.table(tbl).insert({
+                                    "id": auth_id,
+                                    "email": reg_email.value,
+                                    "nome_completo": reg_guerra.value.upper(),
+                                    "nome_guerra": reg_guerra.value.upper(),
+                                    "status": "pending"
+                                }).execute()
+                            except Exception as req_err:
+                                print(f"[REG REQUEST {tbl} ERR] {req_err}")
                             
-                        # 2. Cria imediatamente o perfil de acesso padrão (militar) para garantir cadastramento e acesso 100% imediato
-                        try:
-                            svc_conn_to_use.table("Users").insert({
-                                "id": auth_id,
-                                "username": reg_email.value.split('@')[0],
-                                "nome": reg_guerra.value.upper(),
-                                "role": "militar"
-                            }).execute()
-                        except Exception as users_err:
-                            print(f"[REG USERS ERR] {users_err}")
+                        # 2. Cria o perfil de acesso padrão (militar) em ambas as tabelas (Users e users)
+                        for tbl in ['Users', 'users']:
+                            try:
+                                svc_conn_to_use.table(tbl).insert({
+                                    "id": auth_id,
+                                    "username": reg_email.value.split('@')[0],
+                                    "nome": reg_guerra.value.upper(),
+                                    "role": "militar"
+                                }).execute()
+                            except Exception as users_err:
+                                print(f"[REG USERS {tbl} ERR] {users_err}")
                             
                         # 3. Cria o hash e insere na tabela efetivo
                         import bcrypt

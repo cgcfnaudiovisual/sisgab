@@ -121,10 +121,19 @@ async def broadcast_notification(text: str, notification_type: str, role_require
             except Exception:
                 pass
 
+        markup = None
+        if notification_type == "new_user" and request_id:
+            from telebot import types
+            markup = types.InlineKeyboardMarkup()
+            markup.row(
+                types.InlineKeyboardButton("✅ Aprovar", callback_data=f"approve_req:{request_id}"),
+                types.InlineKeyboardButton("❌ Rejeitar", callback_data=f"reject_req:{request_id}")
+            )
+
         tasks = []
         if group_chat_id:
             try:
-                tasks.append(_send_msg_safe(bot, int(group_chat_id), text))
+                tasks.append(_send_msg_safe(bot, int(group_chat_id), text, reply_markup=markup))
             except Exception as e_grp:
                 print(f"[NOTIFY] Erro ao adicionar envio para chat do grupo ({group_chat_id}): {e_grp}", flush=True)
 
@@ -148,15 +157,6 @@ async def broadcast_notification(text: str, notification_type: str, role_require
                 print(f"[NOTIFY] Erro ao buscar em 'efetivo': {ef_err}", flush=True)
 
         if users_list:
-            markup = None
-            if notification_type == "new_user" and request_id:
-                from telebot import types
-                markup = types.InlineKeyboardMarkup()
-                markup.row(
-                    types.InlineKeyboardButton("✅ Aprovar", callback_data=f"approve_req:{request_id}"),
-                    types.InlineKeyboardButton("❌ Rejeitar", callback_data=f"reject_req:{request_id}")
-                )
-
             for user in users_list:
                 u_id = user.get('id')
                 tg_id = user.get('telegram_id')

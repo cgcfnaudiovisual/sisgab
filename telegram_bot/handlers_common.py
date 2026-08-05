@@ -250,19 +250,22 @@ async def mostrar_historico_usuarios_telegram(bot, message):
         await bot.send_message(chat_id, "⚠️ Banco de dados indisponível.")
         return
 
-    users_list = []
-    try:
-        res = db.table('users').select('*').limit(20).execute()
-        users_list = res.data or []
-    except Exception as e:
-        print(f"[HIST USERS ERR] {e}")
-
-    if not users_list:
+    raw_users = []
+    for tbl in ['Users', 'users', 'efetivo']:
         try:
-            res_ef = db.table('efetivo').select('id, nome_guerra, email, role').execute()
-            users_list = res_ef.data or []
-        except Exception:
-            pass
+            res = db.table(tbl).select('*').limit(25).execute()
+            if res and res.data:
+                raw_users.extend(res.data)
+        except Exception as e:
+            print(f"[HIST {tbl} ERR] {e}")
+
+    seen = set()
+    users_list = []
+    for u in raw_users:
+        u_key = u.get('id') or u.get('email') or u.get('nome_guerra')
+        if u_key and u_key not in seen:
+            seen.add(u_key)
+            users_list.append(u)
 
     if not users_list:
         await bot.send_message(chat_id, "📭 Nenhum usuário cadastrado no histórico.")
