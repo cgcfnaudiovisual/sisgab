@@ -359,7 +359,6 @@ def render_page():
                                 'id': auth_id,
                                 'username': c_email.value.split('@')[0],
                                 'nome': full_name_save,
-                                'posto': c_posto.value,
                                 'role': c_role.value,
                                 'telegram_id': c_tg.value or None,
                                 'url_foto': c_foto.value or None,
@@ -578,9 +577,9 @@ def render_page():
                                         print(f"[AUTH EMAIL UPDATE ERR] {auth_email_err}")
 
                             # 2. Atualiza a tabela users de forma segura
+                            nome_com_posto = f"{e_posto.value} {clean_militar_name(nome_final)}".strip()
                             user_payload = {
-                                'nome': nome_final,
-                                'posto': e_posto.value,
+                                'nome': nome_com_posto,
                                 'username': e_unm.value,
                                 'telegram_id': e_tg.value or None,
                                 'url_foto': e_foto.value or None,
@@ -599,13 +598,17 @@ def render_page():
                                     else:
                                         conn.table('users').update(user_payload).eq('username', user.get('username')).execute()
                             except Exception as u_err:
-                                if 'antiguidade_num' in str(u_err) or 'email' in str(u_err):
-                                    user_payload.pop('antiguidade_num', None)
-                                    user_payload.pop('email', None)
+                                print(f"[USERS UPDATE ERR] {u_err}")
+                                user_payload.pop('antiguidade_num', None)
+                                user_payload.pop('email', None)
+                                user_payload.pop('posto', None)
+                                try:
                                     if is_uuid:
                                         conn.table('users').update(user_payload).eq('id', uid_str).execute()
                                     else:
                                         conn.table('users').update(user_payload).eq('username', user.get('username')).execute()
+                                except Exception as u_retry_err:
+                                    print(f"[USERS RETRY ERR] {u_retry_err}")
 
                             # 3. Mantém a integridade da tabela efetivo
                             try:
