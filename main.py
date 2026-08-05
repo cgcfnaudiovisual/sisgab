@@ -1005,30 +1005,94 @@ def rsvp_public_page(token: str, request: Request):
                                     ui.button('📧 FECHAR ESTA PÁGINA', on_click=lambda: ui.run_javascript('window.close()')).props('unelevated color=grey-8 text-color=white bold icon=close').style('font-size: 0.85rem; padding: 10px 20px; border-radius: 12px;')
 
                         else:
-                            # FORMULÁRIO ATIVO DE RESPOSTA (SENIOR ACCESSIBILITY)
+                            # FORMULÁRIO ATIVO DE RESPOSTA (SENIOR ACCESSIBILITY & DESIGN VIP)
                             with ui.column().classes('w-full gap-4 items-center'):
-                                # PAINEL DE ACOMPANHANTES E RESTRIÇÕES
-                                with ui.column().classes('w-full gap-3 text-left bg-black/50 p-4 sm:p-5 rounded-2xl border border-amber-500/30'):
+                                # PAINEL DE ACOMPANHANTES E COMITIVAS DE LUXO
+                                with ui.column().classes('w-full gap-3 text-left bg-black/60 p-4 sm:p-5 rounded-2xl border border-amber-500/30 shadow-inner'):
                                     acomp_chk = ui.checkbox('Irei acompanhado(a) a esta solenidade', value=bool(convite.get('acompanhantes_count'))).props('dark').style('font-size: 0.95rem; font-weight: 800; color: #fbbf24;')
                                     
-                                    with ui.column().classes('w-full gap-3 q-mt-xs').bind_visibility_from(acomp_chk, 'value'):
-                                        with ui.row().classes('w-full gap-3 items-center wrap'):
-                                            acomp_num = ui.number('Quantidade de Acompanhantes', value=int(convite.get('acompanhantes_count', 1) or 1), min=1, max=10).props('dark outlined').classes('w-full sm:w-1/3').style('font-size: 0.9rem;')
-                                            acomp_input = ui.input('Nome(s) Completo(s) do(s) Acompanhante(s)', value=convite.get('acompanhantes_nomes','') or '', placeholder='Ex: Sra. Maria Silva (Esposa)').props('dark outlined').classes('w-full sm:w-2/3').style('font-size: 0.9rem;')
+                                    acomp_container = ui.column().classes('w-full gap-3 q-mt-xs')
+                                    acomp_container.bind_visibility_from(acomp_chk, 'value')
+
+                                    selected_count = {'val': int(convite.get('acompanhantes_count', 1) or 1)}
+                                    initial_names = convite.get('acompanhantes_nomes','') or ''
+
+                                    with acomp_container:
+                                        ui.label('SELECIONE O NÚMERO DE ACOMPANHANTES OU COMITIVA:').classes('text-[11px] font-bold text-grey-4 tracking-wider')
+                                        
+                                        # Seletores estilo pílula rápida + Input Customizado
+                                        with ui.row().classes('w-full gap-2 items-center wrap'):
+                                            btn_pills = {}
+                                            num_input = ui.number(value=selected_count['val'], min=1, max=50).props('dark outlined dense').classes('w-24').style('font-size: 0.9rem;')
+
+                                            def update_count(val):
+                                                selected_count['val'] = int(val or 1)
+                                                num_input.value = selected_count['val']
+                                                render_name_fields()
+
+                                            for n in [1, 2, 3, 4]:
+                                                btn_pills[n] = ui.button(f'{n}', on_click=lambda v=n: update_count(v)).props('unelevated dense').style('min-width: 38px; border-radius: 8px; font-weight: 900;')
+
+                                            ui.label('pessoas').classes('text-xs text-grey-4 font-bold')
+
+                                        num_input.on('update:model-value', lambda e: update_count(e.value))
+
+                                        names_area = ui.column().classes('w-full gap-2 q-mt-xs')
+
+                                        def render_name_fields():
+                                            names_area.clear()
+                                            cnt = selected_count['val']
+                                            
+                                            # Atualiza estilo das pílulas
+                                            for n, b in btn_pills.items():
+                                                if n == cnt:
+                                                    b.style('background: #f59e0b !important; color: #000 !important; min-width: 38px; border-radius: 8px; font-weight: 900;')
+                                                else:
+                                                    b.style('background: rgba(255,255,255,0.1) !important; color: #fff !important; min-width: 38px; border-radius: 8px; font-weight: 900;')
+
+                                            with names_area:
+                                                if cnt <= 4:
+                                                    # Modo Individual (1 a 4 acompanhantes)
+                                                    existing_list = [n.strip() for n in initial_names.split(',') if n.strip()]
+                                                    inputs_list = []
+                                                    for i in range(cnt):
+                                                        val_init = existing_list[i] if i < len(existing_list) else ''
+                                                        inp = ui.input(f'Acompanhante {i+1} (Nome Completo / Parentesco)', value=val_init, placeholder=f'Ex: Sra. Maria Silva (Esposa)').props('dark outlined dense w-full').style('font-size: 0.88rem;')
+                                                        inputs_list.append(inp)
+                                                    names_area.inputs_ref = inputs_list
+                                                    names_area.mode = 'individual'
+                                                else:
+                                                    # Modo Comitiva / Delegação (5 a 50+ acompanhantes)
+                                                    ui.label(f'📝 RELAÇÃO DA COMITIVA ({cnt} INTEGRANTES):').classes('text-xs font-bold text-cyan-4')
+                                                    ui.label('Informe ou cole a lista de nomes da delegação abaixo (um por linha ou por vírgula):').classes('text-[11px] text-grey-4')
+                                                    text_comitiva = ui.textarea(value=initial_names, placeholder='Ex:\n1. Cap. Lucas Silva\n2. Sra. Ana Souza\n3. Maj. Marcos Oliveira').props('dark outlined w-full').style('font-size: 0.88rem;')
+                                                    names_area.textarea_ref = text_comitiva
+                                                    names_area.mode = 'comitiva'
+
+                                        render_name_fields()
 
                                 obs_input = ui.input('Observações / Restrições Especiais (Opcional)', value=convite.get('observacoes','') or '', placeholder='Ex: Restrição de mobilidade ou dieta especial').props('dark outlined w-full').style('font-size: 0.9rem;')
 
                                 def submit_resposta(choice):
                                     try:
                                         client_ip = request.client.host if request.client else ''
-                                        ac_count = int(acomp_num.value or 0) if acomp_chk.value else 0
-                                        ac_nome = acomp_input.value if acomp_chk.value else ''
+                                        ac_count = selected_count['val'] if acomp_chk.value else 0
+                                        
+                                        if acomp_chk.value:
+                                            if getattr(names_area, 'mode', '') == 'individual':
+                                                names_arr = [inp.value.strip() for inp in getattr(names_area, 'inputs_ref', []) if inp.value and inp.value.strip()]
+                                                ac_nome = ', '.join(names_arr)
+                                            else:
+                                                ac_nome = getattr(names_area, 'textarea_ref', ui.input()).value.strip()
+                                        else:
+                                            ac_nome = ''
                                         
                                         update_rsvp_response(token, choice, ac_count, ac_nome, obs_input.value, client_ip)
                                         convite['status'] = choice
                                         render_content(show_conclusion=True, final_status=choice)
                                     except Exception as err:
                                         ui.notify(f"Erro ao registrar resposta: {err}", color='red')
+
 
                                 # BOTÕES VIP DE ALTO CONTRASTE E TOUCH-FRIENDLY
                                 with ui.column().classes('w-full gap-3 q-mt-sm items-center'):
