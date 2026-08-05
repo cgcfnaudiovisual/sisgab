@@ -184,6 +184,15 @@ def get_notifications_toggle_keyboard(user_prefs):
     markup.row(types.KeyboardButton("⬅️ Voltar"))
     return markup
 
+def get_roles_selection_keyboard():
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True, row_width=2)
+    markup.row(types.KeyboardButton("👑 1. Administrador (Acesso Total)"), types.KeyboardButton("⚖️ 2. Supervisor COMSOC"))
+    markup.row(types.KeyboardButton("⚖️ 3. Oficial do Gabinete"), types.KeyboardButton("⚓ 4. Oficial da OM"))
+    markup.row(types.KeyboardButton("📜 5. Praça do Gabinete"), types.KeyboardButton("📸 6. Equipe COMSOC (Fotografia/Vídeo)"))
+    markup.row(types.KeyboardButton("🎨 7. Equipe COMSOC (Design/Canva)"), types.KeyboardButton("⚓ 8. Militar / Efetivo em Geral"))
+    markup.row(types.KeyboardButton("❌ 9. Rejeitar Cadastro"), types.KeyboardButton("⬅️ Voltar"))
+    return markup
+
 def get_aviso_menu_keyboard():
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     markup.row(types.KeyboardButton("📢 Novo Aviso"), types.KeyboardButton("📋 Listar Existentes"))

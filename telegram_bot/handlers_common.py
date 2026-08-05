@@ -242,9 +242,66 @@ def _get_weekly_events_text():
         return f"❌ Erro ao buscar agenda semanal: {e}"
 
 
+async def mostrar_historico_usuarios_telegram(bot, message):
+    chat_id = message.chat.id
+    from database import get_bot_db_connection as get_db_connection
+    db = get_db_connection()
+    if not db:
+        await bot.send_message(chat_id, "⚠️ Banco de dados indisponível.")
+        return
+
+    users_list = []
+    try:
+        res = db.table('users').select('*').limit(20).execute()
+        users_list = res.data or []
+    except Exception as e:
+        print(f"[HIST USERS ERR] {e}")
+
+    if not users_list:
+        try:
+            res_ef = db.table('efetivo').select('id, nome_guerra, email, role').execute()
+            users_list = res_ef.data or []
+        except Exception:
+            pass
+
+    if not users_list:
+        await bot.send_message(chat_id, "📭 Nenhum usuário cadastrado no histórico.")
+        return
+
+    from .utils import check_authorized_user
+    profile = await check_authorized_user(message.from_user.id)
+    chat_states[chat_id] = {
+        'action': 'gerenciar_usuarios_pendentes',
+        'requests': users_list,
+        'user': profile
+    }
+
+    reply_markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True, row_width=1)
+    
+    msg_hist = f"📜 **HISTÓRICO COMPLETO DE USUÁRIOS ({len(users_list)})**\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+    for idx, u in enumerate(users_list[:15], 1):
+        u_guerra = str(u.get('nome') or u.get('nome_guerra') or 'Militar').upper()
+        u_email = str(u.get('email') or u.get('username') or 'N/I')
+        u_role = str(u.get('role') or 'militar').upper()
+        msg_hist += f"{idx}. **{u_guerra}** ({u_email}) — Perfil: `{u_role}`\n"
+        
+        btn_label = f"👤 #{idx} — {u_guerra} ({u_email.split('@')[0]})".strip()
+        reply_markup.add(types.KeyboardButton(btn_label))
+
+    from .keyboards import get_main_menu_keyboard
+    is_operator = str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design') if profile else False
+    reply_markup.add(types.KeyboardButton("⬅️ Voltar"))
+    
+    msg_hist += "\n💡 *Para alterar o perfil de qualquer usuário acima, clique no botão correspondente no teclado abaixo:*"
+
+    await bot.send_message(chat_id, msg_hist, reply_markup=reply_markup, parse_mode='Markdown')
+
+
 async def listar_cadastros_pendentes(bot, message):
     chat_id = message.chat.id
     from database import get_bot_db_connection as get_db_connection
+    from .utils import check_authorized_user
+    profile = await check_authorized_user(message.from_user.id)
     db = get_db_connection()
     if not db:
         await bot.send_message(chat_id, "⚠️ Banco de dados indisponível no momento.")
@@ -268,30 +325,52 @@ async def listar_cadastros_pendentes(bot, message):
             pending_requests.append(r)
 
     if not pending_requests:
+        try:
+            res_u = db.table('users').select('*').in_('role', ['aluno', 'pendente']).limit(10).execute()
+            if res_u and res_u.data:
+                pending_requests.extend(res_u.data)
+        except Exception:
+            pass
+
+    if not pending_requests:
+        reply_markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+        reply_markup.row(types.KeyboardButton("📜 Ver Histórico Completo de Usuários"), types.KeyboardButton("⬅️ Voltar"))
         await bot.send_message(
             chat_id,
-            "✅ **NENHUMA SOLICITAÇÃO PENDENTE!**\n\n"
-            "Todas as solicitações de cadastro de novos usuários já foram aprovadas ou processadas.",
+            "✅ **NENHUMA SOLICITAÇÃO PENDENTE DE APROVAÇÃO!**\n\n"
+            "Todas as solicitações de cadastro de novos usuários já foram processadas.\n"
+            "Você pode alterar o perfil dos usuários cadastrados clicando no botão abaixo:",
+            reply_markup=reply_markup,
             parse_mode='Markdown'
         )
         return
 
+    chat_states[chat_id] = {
+        'action': 'gerenciar_usuarios_pendentes',
+        'requests': pending_requests,
+        'user': profile
+    }
+
     await bot.send_message(
         chat_id,
-        f"📋 **ENCONTRADAS {len(pending_requests)} SOLICITAÇÃO(ÕES) PENDENTE(S)**\n"
-        f"Analise os dados abaixo e selecione a ação para cada operador:",
+        f"📋 **ENCONTRADAS {len(pending_requests)} SOLICITAÇÃO(ÕES) PENDENTE(S)**\n\n"
+        f"Escolha a forma de aprovação:\n"
+        f"1️⃣ Clique em **Aprovar & Escolher Perfil** no chat, OU\n"
+        f"2️⃣ Selecione o militar nos **Botões do Teclado (rodapé)**.",
         parse_mode='Markdown'
     )
 
-    for req in pending_requests:
+    reply_markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True, row_width=1)
+
+    for idx, req in enumerate(pending_requests, 1):
         req_id = req.get('id', '')
         req_nome = req.get('nome_completo') or req.get('nome_guerra') or 'Militar'
-        req_guerra = req.get('nome_guerra', 'N/I')
+        req_guerra = req.get('nome_guerra', req_nome)
         req_email = req.get('email', 'N/I')
         req_date = req.get('created_at', '')[:10] if req.get('created_at') else 'N/I'
 
         card_txt = (
-            f"👤 **SOLICITAÇÃO DE ACESSO PENDENTE**\n\n"
+            f"👤 **SOLICITAÇÃO #{idx}**\n\n"
             f"📌 **Nome:** `{req_nome}`\n"
             f"🎖️ **Guerra:** `{req_guerra}`\n"
             f"📧 **E-mail:** `{req_email}`\n"
@@ -299,13 +378,25 @@ async def listar_cadastros_pendentes(bot, message):
             f"⚙️ **Status:** `PENDENTE`"
         )
 
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        markup.add(
+        inline_markup = types.InlineKeyboardMarkup(row_width=2)
+        inline_markup.add(
             types.InlineKeyboardButton("✅ Aprovar & Escolher Perfil", callback_data=f"approve_req:{req_id}"),
             types.InlineKeyboardButton("❌ Rejeitar", callback_data=f"reject_req:{req_id}")
         )
 
-        await bot.send_message(chat_id, card_txt, reply_markup=markup, parse_mode='Markdown')
+        await bot.send_message(chat_id, card_txt, reply_markup=inline_markup, parse_mode='Markdown')
+
+        btn_label = f"👤 #{idx} — {str(req_guerra).upper()} ({req_email.split('@')[0]})".strip()
+        reply_markup.add(types.KeyboardButton(btn_label))
+
+    reply_markup.add(types.KeyboardButton("📜 Ver Histórico Completo de Usuários"), types.KeyboardButton("⬅️ Voltar"))
+
+    await bot.send_message(
+        chat_id,
+        "👇 **Menu de Teclado Embutido:** Selecione o militar abaixo para alterar perfil:",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
 
 
 def register_common_handlers(bot):
@@ -1337,6 +1428,147 @@ def register_common_handlers(bot):
                     "🔍 **BUSCA DE FOTOS**\n\nRecurso de busca acionado.",
                     reply_markup=get_main_menu_keyboard(is_operator)
                 )
+                return
+            elif text in ("⬅️ Voltar", "voltar"):
+                clear_state(chat_id)
+                await bot.reply_to(
+                    message,
+                    "⚓ **Menu Principal — SisGAB**",
+                    reply_markup=get_main_menu_keyboard(is_operator),
+                    parse_mode='Markdown'
+                )
+                return
+
+        if action == 'gerenciar_usuarios_pendentes':
+            if text == "📜 Ver Histórico Completo de Usuários":
+                await mostrar_historico_usuarios_telegram(bot, message)
+                return
+            elif text in ("⬅️ Voltar", "voltar"):
+                clear_state(chat_id)
+                await bot.reply_to(
+                    message,
+                    "⚓ **Menu Principal — SisGAB**",
+                    reply_markup=get_main_menu_keyboard(is_operator),
+                    parse_mode='Markdown'
+                )
+                return
+            elif text.startswith("👤 #"):
+                try:
+                    idx_str = text.split("#")[1].split(" ")[0]
+                    idx = int(idx_str) - 1
+                    requests_list = state.get('requests', [])
+                    if 0 <= idx < len(requests_list):
+                        req_sel = requests_list[idx]
+                        chat_states[chat_id] = {
+                            'action': 'selecionar_perfil_usuario',
+                            'req_data': req_sel,
+                            'user': profile
+                        }
+                        from .keyboards import get_roles_selection_keyboard
+                        req_nome = req_sel.get('nome_guerra') or req_sel.get('nome_completo') or req_sel.get('nome') or 'Militar'
+                        await bot.reply_to(
+                            message,
+                            f"⚙️ **SELEÇÃO DE PERFIL PARA: `{req_nome.upper()}`**\n\nEscolha a permissão/papel a ser atribuído no teclado abaixo:",
+                            reply_markup=get_roles_selection_keyboard(),
+                            parse_mode='Markdown'
+                        )
+                        return
+                except Exception as err_sel:
+                    print(f"[USER SEL ERR] {err_sel}")
+
+        if action == 'selecionar_perfil_usuario':
+            req_sel = state.get('req_data', {})
+            role_map = {
+                "👑 1. Administrador (Acesso Total)": "admin",
+                "⚖️ 2. Supervisor COMSOC": "supervisor",
+                "⚖️ 3. Oficial do Gabinete": "oficial_gab",
+                "⚓ 4. Oficial da OM": "oficial",
+                "📜 5. Praça do Gabinete": "praca_gab",
+                "📸 6. Equipe COMSOC (Fotografia/Vídeo)": "comsoc",
+                "🎨 7. Equipe COMSOC (Design/Canva)": "comsoc_design",
+                "⚓ 8. Militar / Efetivo em Geral": "militar"
+            }
+
+            if text in role_map or any(r_val in text.lower() for r_val in role_map.values()):
+                role_selected = role_map.get(text)
+                if not role_selected:
+                    for label, r_val in role_map.items():
+                        if r_val in text.lower() or label in text:
+                            role_selected = r_val
+                            break
+                if not role_selected:
+                    role_selected = 'militar'
+
+                req_id = req_sel.get('id', '')
+                u_email = req_sel.get('email', '')
+                u_guerra = req_sel.get('nome_guerra') or req_sel.get('nome_completo') or req_sel.get('nome') or "Militar"
+                u_tg_id = req_sel.get('telegram_id')
+
+                from database import get_bot_db_connection as get_db_connection
+                db = get_db_connection()
+                if db:
+                    for tbl in ['RegistrationRequests', 'registration_requests']:
+                        try:
+                            db.table(tbl).update({'status': 'approved'}).eq('id', req_id).execute()
+                        except Exception:
+                            pass
+                        if u_email:
+                            try:
+                                db.table(tbl).update({'status': 'approved'}).eq('email', u_email).execute()
+                            except Exception:
+                                pass
+
+                    try:
+                        db.table('users').update({'role': role_selected}).eq('id', req_id).execute()
+                    except Exception:
+                        pass
+                    if u_email:
+                        try:
+                            db.table('users').update({'role': role_selected}).eq('email', u_email).execute()
+                        except Exception:
+                            pass
+
+                    if u_email:
+                        try:
+                            db.table('efetivo').update({'role': role_selected}).eq('email', u_email).execute()
+                        except Exception:
+                            pass
+                    if u_guerra:
+                        try:
+                            db.table('efetivo').update({'role': role_selected}).ilike('nome_guerra', u_guerra).execute()
+                        except Exception:
+                            pass
+
+                clear_state(chat_id)
+                await bot.reply_to(
+                    message,
+                    f"✅ **PERFIL DO OPERADOR `{u_guerra.upper()}` ATUALIZADO!**\n\n⚙️ **Novo Perfil:** `{role_selected.upper()}`",
+                    reply_markup=get_main_menu_keyboard(is_operator),
+                    parse_mode='Markdown'
+                )
+
+                if u_tg_id:
+                    try:
+                        await bot.send_message(
+                            int(u_tg_id),
+                            f"🎉 **SEU PERFIL NO SISGAB FOI ATUALIZADO!**\n\nSeu novo papel é: **{role_selected.upper()}**.\nVocê já pode acessar as funcionalidades e menus liberados!",
+                            parse_mode='Markdown'
+                        )
+                    except Exception:
+                        pass
+                return
+            elif text in ("❌ 9. Rejeitar Cadastro", "Rejeitar"):
+                req_id = req_sel.get('id', '')
+                from database import get_bot_db_connection as get_db_connection
+                db = get_db_connection()
+                if db:
+                    for tbl in ['RegistrationRequests', 'registration_requests']:
+                        try:
+                            db.table(tbl).update({'status': 'rejected'}).eq('id', req_id).execute()
+                        except Exception:
+                            pass
+                clear_state(chat_id)
+                await bot.reply_to(message, "❌ **Solicitação rejeitada.**", reply_markup=get_main_menu_keyboard(is_operator))
                 return
             elif text in ("⬅️ Voltar", "voltar"):
                 clear_state(chat_id)
