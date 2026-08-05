@@ -242,6 +242,71 @@ def _get_weekly_events_text():
         return f"❌ Erro ao buscar agenda semanal: {e}"
 
 
+async def listar_cadastros_pendentes(bot, message):
+    chat_id = message.chat.id
+    from database import get_bot_db_connection as get_db_connection
+    db = get_db_connection()
+    if not db:
+        await bot.send_message(chat_id, "⚠️ Banco de dados indisponível no momento.")
+        return
+
+    raw_reqs = []
+    for tbl in ['RegistrationRequests', 'registration_requests']:
+        try:
+            res = db.table(tbl).select('*').in_('status', ['pending', 'pendente']).execute()
+            if res and res.data:
+                raw_reqs.extend(res.data)
+        except Exception as err:
+            print(f"[BOT REG PENDENTES QUERY ERR] {err}")
+
+    seen = set()
+    pending_requests = []
+    for r in raw_reqs:
+        r_key = r.get('id') or r.get('email')
+        if r_key and r_key not in seen:
+            seen.add(r_key)
+            pending_requests.append(r)
+
+    if not pending_requests:
+        await bot.send_message(
+            chat_id,
+            "✅ **NENHUMA SOLICITAÇÃO PENDENTE!**\n\n"
+            "Todas as solicitações de cadastro de novos usuários já foram aprovadas ou processadas.",
+            parse_mode='Markdown'
+        )
+        return
+
+    await bot.send_message(
+        chat_id,
+        f"📋 **ENCONTRADAS {len(pending_requests)} SOLICITAÇÃO(ÕES) PENDENTE(S)**\n"
+        f"Analise os dados abaixo e selecione a ação para cada operador:",
+        parse_mode='Markdown'
+    )
+
+    for req in pending_requests:
+        req_id = req.get('id', '')
+        req_nome = req.get('nome_completo') or req.get('nome_guerra') or 'Militar'
+        req_guerra = req.get('nome_guerra', 'N/I')
+        req_email = req.get('email', 'N/I')
+        req_date = req.get('created_at', '')[:10] if req.get('created_at') else 'N/I'
+
+        card_txt = (
+            f"👤 **SOLICITAÇÃO DE ACESSO PENDENTE**\n\n"
+            f"📌 **Nome:** `{req_nome}`\n"
+            f"🎖️ **Guerra:** `{req_guerra}`\n"
+            f"📧 **E-mail:** `{req_email}`\n"
+            f"📅 **Data:** `{req_date}`\n"
+            f"⚙️ **Status:** `PENDENTE`"
+        )
+
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            types.InlineKeyboardButton("✅ Aprovar & Escolher Perfil", callback_data=f"approve_req:{req_id}"),
+            types.InlineKeyboardButton("❌ Rejeitar", callback_data=f"reject_req:{req_id}")
+        )
+
+        await bot.send_message(chat_id, card_txt, reply_markup=markup, parse_mode='Markdown')
+
 
 def register_common_handlers(bot):
 
@@ -644,6 +709,14 @@ def register_common_handlers(bot):
                     reply_markup=get_om_keyboard(), 
                     parse_mode='Markdown'
                 )
+
+            elif text in ("👥 Cadastros Pendentes", "🔑 Aprovar Cadastros", "/pendentes", "/cadastros", "/usuarios", "/aprovar"):
+                user_role = str(profile.get('role', '')).lower()
+                if user_role not in ('admin', 'supervisor', 'oficial_gab', 'oficial'):
+                    await bot.reply_to(message, "⛔ Apenas Administradores ou Supervisores podem gerenciar solicitações de cadastro.")
+                    return
+                await listar_cadastros_pendentes(bot, message)
+                return
 
             elif text in ("📋 Gerenciar Demandas", "📋 Voltar para Lista de Demandas", "/demandas", "/gerenciar"):
                 from database import get_bot_db_connection as get_db_connection
