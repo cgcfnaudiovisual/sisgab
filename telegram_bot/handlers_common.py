@@ -473,13 +473,16 @@ def register_common_handlers(bot):
                 )
 
             elif call.data.startswith('approve_role:'):
-                parts = call.data.split(':')
+                parts = call.data.split(':', 2)
                 role_selected = parts[1]
                 req_id = parts[2]
 
-                await bot.answer_callback_query(call.id, f"Aprovando com perfil {role_selected}...")
+                try:
+                    await bot.answer_callback_query(call.id, f"Aprovando perfil: {role_selected}...")
+                except Exception:
+                    pass
 
-                # Busca os dados da solicitação
+                # Busca os dados da solicitação no banco de dados
                 req_data = None
                 if db:
                     for tbl in ['RegistrationRequests', 'registration_requests']:
@@ -490,40 +493,63 @@ def register_common_handlers(bot):
                                 break
                         except Exception:
                             pass
+                    
+                    if not req_data and req_id.isdigit():
+                        for tbl in ['RegistrationRequests', 'registration_requests']:
+                            try:
+                                res = db.table(tbl).select('*').eq('id', int(req_id)).execute()
+                                if res and res.data:
+                                    req_data = res.data[0]
+                                    break
+                            except Exception:
+                                pass
                 
                 u_email = req_data.get('email', '') if req_data else f"user_{req_id[:6]}@marinha.mil.br"
                 u_guerra = req_data.get('nome_guerra') or req_data.get('nome_completo') or "Militar"
                 u_tg_id = req_data.get('telegram_id') if req_data else None
 
-                # 1. Atualiza status da solicitação
+                # 1. Atualiza o status em ambas as tabelas de solicitação
                 if db:
                     for tbl in ['RegistrationRequests', 'registration_requests']:
                         try:
                             db.table(tbl).update({'status': 'approved'}).eq('id', req_id).execute()
                         except Exception:
                             pass
+                        if req_id.isdigit():
+                            try:
+                                db.table(tbl).update({'status': 'approved'}).eq('id', int(req_id)).execute()
+                            except Exception:
+                                pass
+                        if u_email:
+                            try:
+                                db.table(tbl).update({'status': 'approved'}).eq('email', u_email).execute()
+                            except Exception:
+                                pass
 
-                    # 2. Atualiza users e efetivo
+                    # 2. Atualiza a role na tabela USERS
                     try:
-                        db.table('users').upsert({
-                            'id': req_id,
-                            'username': u_email.split('@')[0] if '@' in u_email else u_guerra.lower(),
-                            'nome': u_guerra.upper(),
-                            'role': role_selected,
-                            'telegram_id': u_tg_id
-                        }, on_conflict='id').execute()
-                    except Exception as u_err:
-                        print(f"[BOT USERS UPSERT ERR] {u_err}")
+                        db.table('users').update({'role': role_selected}).eq('id', req_id).execute()
+                    except Exception as u_err1:
+                        print(f"[USERS UPDATE ID ERR] {u_err1}")
+                        
+                    if u_email:
+                        try:
+                            db.table('users').update({'role': role_selected}).eq('email', u_email).execute()
+                        except Exception as u_err2:
+                            print(f"[USERS UPDATE EMAIL ERR] {u_err2}")
 
-                    try:
-                        db.table('efetivo').upsert({
-                            'nome_guerra': u_guerra.upper(),
-                            'email': u_email,
-                            'role': role_selected,
-                            'telegram_id': u_tg_id
-                        }, on_conflict='nome_guerra').execute()
-                    except Exception as ef_err:
-                        print(f"[BOT EFETIVO UPSERT ERR] {ef_err}")
+                    # 3. Atualiza a role na tabela EFETIVO
+                    if u_email:
+                        try:
+                            db.table('efetivo').update({'role': role_selected}).eq('email', u_email).execute()
+                        except Exception as ef_err1:
+                            print(f"[EFETIVO UPDATE EMAIL ERR] {ef_err1}")
+
+                    if u_guerra:
+                        try:
+                            db.table('efetivo').update({'role': role_selected}).ilike('nome_guerra', u_guerra).execute()
+                        except Exception as ef_err2:
+                            print(f"[EFETIVO UPDATE GUERRA ERR] {ef_err2}")
 
                 role_labels = {
                     'admin': '👑 Administrador',
@@ -537,13 +563,17 @@ def register_common_handlers(bot):
                 }
                 label_str = role_labels.get(role_selected, role_selected)
 
-                # Edita mensagem no chat do admin
+                confirm_txt = (
+                    f"✅ **SOLICITAÇÃO DE ACESSO APROVADA!**\n\n"
+                    f"👤 **Operador:** `{u_guerra.upper()}`\n"
+                    f"📧 **E-mail:** `{u_email}`\n"
+                    f"⚙️ **Perfil Concedido:** {label_str}"
+                )
+
+                # Edita a mensagem no chat do administrador
                 try:
                     await bot.edit_message_text(
-                        f"✅ **SOLICITAÇÃO DE ACESSO APROVADA!**\n\n"
-                        f"👤 **Operador:** `{u_guerra.upper()}`\n"
-                        f"📧 **E-mail:** `{u_email}`\n"
-                        f"⚙️ **Perfil Concedido:** {label_str}",
+                        confirm_txt,
                         chat_id=call.message.chat.id,
                         message_id=call.message.message_id,
                         parse_mode='Markdown'
@@ -551,18 +581,18 @@ def register_common_handlers(bot):
                 except Exception:
                     await bot.send_message(
                         call.message.chat.id,
-                        f"✅ **Acesso Aprovado!** Operador `{u_guerra.upper()}` habilitado como {label_str}.",
+                        confirm_txt,
                         parse_mode='Markdown'
                     )
 
-                # Se houver telegram_id do usuário solicitante, notifica-o diretamente no Telegram!
+                # Se houver ID do Telegram do usuário solicitante, notifica-o!
                 if u_tg_id:
                     try:
                         await bot.send_message(
                             int(u_tg_id),
                             f"🎉 **SEU ACESSO AO SISGAB FOI APROVADO!**\n\n"
-                            f"Seu perfil foi configurado como: **{label_str}**.\n"
-                            f"Você já pode utilizar todas as funcionalidades e botões do sistema no Telegram e na Web!",
+                            f"Seu perfil foi ativado como: **{label_str}**.\n"
+                            f"Você já pode utilizar todas as funcionalidades do sistema na Web e no Telegram!",
                             parse_mode='Markdown'
                         )
                     except Exception as notif_user_err:
