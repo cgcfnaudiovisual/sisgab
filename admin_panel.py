@@ -5,7 +5,7 @@ from services import data_service
 
 THEME = theme.colors
 
-# Opções de papéis/roles no sistema
+# Opções de papéis/roles no sistema (8 Roles Oficiais)
 ROLE_OPTIONS = {
     'admin': 'Administrador (Acesso Total)',
     'supervisor': 'Supervisor COMSOC',
@@ -13,10 +13,8 @@ ROLE_OPTIONS = {
     'oficial': 'Oficial da OM',
     'praca_gab': 'Praça do Gabinete',
     'comsoc': 'Equipe COMSOC (Fotografia/Vídeo)',
-    'comsoc_design': 'Equipe COMSOC (Edições Gráficas/Artes)',
-    'operador': 'Operador COMSOC',
-    'militar': 'Militar em Geral (Autoatendimento)',
-    'compel': 'Militar / Efetivo em Geral'
+    'comsoc_design': 'Equipe COMSOC (Artes Gráficas/Canva)',
+    'militar': 'Militar / Efetivo em Geral'
 }
 
 ROLE_DESCRIPTIONS = {
@@ -27,7 +25,7 @@ ROLE_DESCRIPTIONS = {
     },
     'supervisor': {
         'title': '⚖️ Supervisor COMSOC',
-        'web': '✅ GESTÃO & HOMOLOGAÇÃO: Homologação e Tramitação de Pautas, Modulo de Presença & Pronto CheGab, Agenda Geral, Cautelas e Mídia TV.',
+        'web': '✅ GESTÃO & HOMOLOGAÇÃO: Homologação e Tramitação de Pautas, Módulo de Presença & Pronto CheGab, Agenda Geral, Cautelas e Mídia TV.',
         'telegram': '✅ GESTÃO: Criar Demandas, Chamada Matutina, Relatório /pronto CheGab, Digerir IA, Agenda e Cautelas.'
     },
     'oficial_gab': {
@@ -41,7 +39,7 @@ ROLE_DESCRIPTIONS = {
         'telegram': '✅ SOLICITAÇÕES: Criar Demandas por Botões, Consultar Agenda Semanal e Dar Presença.'
     },
     'praca_gab': {
-        'title': '📜 Praça do Gabinete',
+        'title': '📜 Praça do Gabinete (Sargenteação)',
         'web': '✅ SARGENTEARIA & OPERACIONAL: Registrar Presença Diária, Apoiar Chamada, Cautela de Equipamentos e Agenda.',
         'telegram': '✅ SARGENTEARIA: Dar Presença Diária, Gerar /pronto CheGab, Criar Demandas e Cautelas.'
     },
@@ -51,24 +49,14 @@ ROLE_DESCRIPTIONS = {
         'telegram': '🎨 COMSOC: Criar Demandas com Botões, Dar Presença, Cautelas Ativas e Digerir Pauta (IA).'
     },
     'comsoc_design': {
-        'title': '🎨 Equipe COMSOC (Edições Gráficas/Artes)',
-        'web': '🎨 DESIGN & ARTES: Modulo de Produção Gráfica, Galeria de Artes, Demandas COMSOC e Brindes.',
+        'title': '🎨 Equipe COMSOC (Artes Gráficas/Canva)',
+        'web': '🎨 DESIGN & ARTES: Módulo de Produção Gráfica, Galeria de Artes, Demandas COMSOC e Brindes.',
         'telegram': '🎨 DESIGN: Criar Demandas, Digerir IA, Consultar Agenda e Dar Presença.'
     },
-    'operador': {
-        'title': '⚙️ Operador COMSOC',
-        'web': '⚙️ OPERADOR COMSOC: Painel de Tramitação, Demandas, Cautelas, Presença Diária e Galeria de Fotos.',
-        'telegram': '⚙️ OPERADOR: Criar Demandas por Botões, Dar Presença, /pronto, IA e Cautelas.'
-    },
     'militar': {
-        'title': '⚓ Militar Externo / Outras OMs (Acesso Mínimo)',
-        'web': '⚓ ACESSO MÍNIMO: Preencher Nova Solicitação de Cobertura COMSOC, Consultar Agenda Geral e Buscar Fotos por Reconhecimento Facial.',
-        'telegram': '⚓ ACESSO MÍNIMO: Criar Demanda por Botões, Consultar Agenda Semanal, Enviar Selfie e Buscar Fotos por Reconhecimento Facial.'
-    },
-    'compel': {
         'title': '⚓ Militar / Efetivo em Geral',
-        'web': '⚓ ACESSO MÍNIMO: Preencher Nova Solicitação de Cobertura, Consultar Agenda e Reconhecimento Facial.',
-        'telegram': '⚓ ACESSO MÍNIMO: Criar Demanda por Botões, Consultar Agenda e Buscar Fotos.'
+        'web': '⚓ AUTOATENDIMENTO: Solicitar Cobertura COMSOC, Consultar Agenda e Galeria de Fotos.',
+        'telegram': '⚓ AUTOATENDIMENTO: Responder Chamada Matutina, Consultar Agenda e Buscar Fotos.'
     }
 }
 
@@ -232,6 +220,15 @@ def render_page():
                     return (group_priority, ant_val, seniority, nome_guerra)
                 
                 users_data = sorted(users_data, key=sort_users)
+
+                cur_filter = app.storage.user.get('admin_filter_role', 'TODOS')
+                if cur_filter != 'TODOS':
+                    if cur_filter == 'comsoc':
+                        users_data = [u for u in users_data if str(u.get('role', '')).lower() in ('comsoc', 'comsoc_design', 'supervisor')]
+                    elif cur_filter == 'militar':
+                        users_data = [u for u in users_data if str(u.get('role', '')).lower() in ('militar', 'compel', 'oficial', 'oficial_gab')]
+                    else:
+                        users_data = [u for u in users_data if str(u.get('role', '')).lower() == cur_filter]
             except Exception as e:
                 print(f"[ADMIN] Erro ao carregar dados do Supabase: {e}")
 
@@ -1173,6 +1170,29 @@ def render_page():
                                 on_click=open_create_dialog
                             ).props('unelevated dense').style(f'background: {THEME["accent"]}; color: #0b0f19; font-weight: bold;').classes('cyber-glow text-xs px-3 py-1.5')
 
+
+                    # Filtros rápidos por papel/categoria
+                    with ui.row().classes('w-full items-center justify-between gap-2 q-my-xs flex-wrap text-xs'):
+                        with ui.row().classes('items-center gap-1.5 flex-wrap'):
+                            ui.label('🔍 Filtrar Categoria:').classes('text-grey-4 font-bold mr-1')
+                            
+                            current_filter = app.storage.user.get('admin_filter_role', 'TODOS')
+                            
+                            def set_role_filter(r_val):
+                                app.storage.user['admin_filter_role'] = r_val
+                                reload_admin_data()
+
+                            filter_options = [
+                                ('TODOS', 'Todos'),
+                                ('admin', '👑 Admins'),
+                                ('comsoc', '📸 COMSOC/Design'),
+                                ('praca_gab', '📜 Sargenteação'),
+                                ('militar', '⚓ Militares')
+                            ]
+                            for f_val, f_lbl in filter_options:
+                                is_sel = (current_filter == f_val)
+                                f_props = 'unelevated dense color=cyan text-color=black font-bold' if is_sel else 'outline dense color=grey-6 text-color=white'
+                                ui.button(f_lbl, on_click=lambda _, v=f_val: set_role_filter(v)).props(f_props).classes('text-[11px] px-2 py-0.5')
 
                     ui.separator().style('background-color: rgba(0, 229, 255, 0.15);')
 

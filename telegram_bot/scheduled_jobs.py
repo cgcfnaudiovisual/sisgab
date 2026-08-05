@@ -250,6 +250,10 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
                 except Exception as e_send:
                     print(f"[ATTENDANCE REMIND ERR] {tg_id}: {e_send}")
 
+        total_militares = len(res_ef.data)
+        respondidos_count = len(respondidos)
+        print(f"[CHAMADA MATUTINA {now.strftime('%H:%M')}] 🔔 {notified_count} lembretes enviados | {respondidos_count}/{total_militares} já responderam.")
+
         return notified_count
     except Exception as e:
         print(f"[ATTENDANCE REMINDER LOOP ERR] {e}")
