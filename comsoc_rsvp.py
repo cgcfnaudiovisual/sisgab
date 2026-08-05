@@ -399,6 +399,7 @@ def render_page():
 
                                             if email_dest:
                                                 link_rsvp = f"{base_url}/rsvp/{token}" if token else base_url
+                                                msg_body_formatted = inp_mensagem.value.replace('\n', '<br>')
                                                 msg_html = f"""
                                                 <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #0b0f19; color: #ffffff; padding: 32px 24px; border-radius: 16px; max-width: 600px; margin: 0 auto; border: 1px solid rgba(245, 158, 11, 0.4);">
                                                     <div style="text-align: center; border-bottom: 1px solid rgba(245, 158, 11, 0.2); padding-bottom: 16px; margin-bottom: 20px;">
@@ -408,7 +409,7 @@ def render_page():
                                                     <h3 style="color: #fbbf24; font-size: 18px; margin-top: 0; text-align: center;">📢 COMUNICADO OFICIAL</h3>
                                                     <p style="font-size: 14px; color: #e2e8f0;">Prezado(a) <strong style="color: #00e5ff;">{posto_aut} {nome_aut}</strong>,</p>
                                                     <div style="font-size: 14px; color: #cbd5e1; line-height: 1.6; background-color: rgba(255,255,255,0.03); padding: 16px; border-radius: 8px; border-left: 4px solid #fbbf24; margin: 16px 0;">
-                                                        {inp_mensagem.value.replace('\n', '<br>')}
+                                                        {msg_body_formatted}
                                                     </div>
                                                     {f'<div style="text-align: center; margin-top: 24px;"><a href="{link_rsvp}" style="color: #38bdf8; font-size: 12px;">Acessar detalhes do seu convite</a></div>' if token else ''}
                                                 </div>
