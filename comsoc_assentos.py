@@ -2698,171 +2698,324 @@ def render_page():
 
         diag.open()
 
-    def open_print_cards_dialog(event, convidados, layout):
-        rows_count = layout.get('rows', 5)
-        allocated_by_row = {}
-        for r in range(rows_count):
-            row_label = get_row_label(r)
-            allocated_by_row[row_label] = [c for c in convidados if (c.get('assento_id') or '').startswith(f"{row_label}-")]
+def gerar_pdf_placas_reportlab(event, convidados, current_model, only_confirmed, print_config):
+    """Gera PDF vetorial em milímetros A4 nativamente no servidor Python via ReportLab."""
+    try:
+        import io, re, base64, os
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image as RLImage
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER
 
-        # Estado e Persistência do Estúdio de Impressão
-        saved_cfg = {}
-        if isinstance(layout, dict):
-            saved_cfg = layout.get('print_config', {})
-        elif isinstance(event, dict) and event.get('layout_json'):
-            try:
-                import json
-                l_dict = json.loads(event.get('layout_json') or '{}')
-                saved_cfg = l_dict.get('print_config', {})
-            except Exception:
-                saved_cfg = {}
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=10, rightMargin=10, topMargin=10, bottomMargin=10)
+        elements = []
+        styles = getSampleStyleSheet()
 
-        print_config = {
-            'model': saved_cfg.get('model', 'prisma_a4_4slots'),
-            'items_per_sheet': int(saved_cfg.get('items_per_sheet', 4)),
-            'chk_only_confirmed': bool(saved_cfg.get('chk_only_confirmed', False)),
-            'chk_logo': bool(saved_cfg.get('chk_logo', True)),
-            'chk_qr': bool(saved_cfg.get('chk_qr', True)),
-            'chk_rank': bool(saved_cfg.get('chk_rank', True)),
-            'chk_border': bool(saved_cfg.get('chk_border', True)),
-            'header_line1': str(saved_cfg.get('header_line1', 'MARINHA DO BRASIL')),
-            'header_line2': str(saved_cfg.get('header_line2', event.get('nome', 'SOLENIDADE').upper())),
-            'termo_convidado': str(saved_cfg.get('termo_convidado', 'RESERVADO')),
-            'brasao_pos': str(saved_cfg.get('brasao_pos', 'esquerda')),
-            'origin_logo_l': str(saved_cfg.get('origin_logo_l', 'bucket')),
-            'logo_preset_l': str(saved_cfg.get('logo_preset_l', 'cfn')),
-            'upload_brasao_left': str(saved_cfg.get('upload_brasao_left', '')),
-            'qr_pos': str(saved_cfg.get('qr_pos', 'direita')),
-            'origin_logo_r': str(saved_cfg.get('origin_logo_r', 'bucket')),
-            'logo_preset_r': str(saved_cfg.get('logo_preset_r', 'mb')),
-            'upload_brasao_right': str(saved_cfg.get('upload_brasao_right', '')),
-            'origin_bg': str(saved_cfg.get('origin_bg', 'none')),
-            'bg_preset': str(saved_cfg.get('bg_preset', 'cfn')),
-            'template_bg_url': str(saved_cfg.get('template_bg_url', '')),
-            'logo_width': float(saved_cfg.get('logo_width', 16)),
-            'logo_pos_x': float(saved_cfg.get('logo_pos_x', 6)),
-            'logo_pos_y': float(saved_cfg.get('logo_pos_y', 4)),
-            'qr_size': float(saved_cfg.get('qr_size', 13)),
-            'qr_pos_x': float(saved_cfg.get('qr_pos_x', 5)),
-            'qr_pos_y': float(saved_cfg.get('qr_pos_y', 3)),
-            'font_nome': float(saved_cfg.get('font_nome', 22)),
-            'font_posto': float(saved_cfg.get('font_posto', 13)),
-            'font_reservado': float(saved_cfg.get('font_reservado', 18)),
-        }
+        title_style = ParagraphStyle(
+            'PrismaTitle', parent=styles['Normal'],
+            fontName='Helvetica-Bold', fontSize=14, leading=16,
+            textColor=colors.HexColor('#1f4e79'), alignment=TA_CENTER
+        )
+        posto_style = ParagraphStyle(
+            'PrismaPosto', parent=styles['Normal'],
+            fontName='Helvetica-Bold', fontSize=15, leading=18,
+            textColor=colors.HexColor('#000000'), alignment=TA_CENTER
+        )
+        nome_style = ParagraphStyle(
+            'PrismaNome', parent=styles['Normal'],
+            fontName='Helvetica-Bold', fontSize=24, leading=28,
+            textColor=colors.HexColor('#000000'), alignment=TA_CENTER
+        )
+        sub_style = ParagraphStyle(
+            'PrismaSub', parent=styles['Normal'],
+            fontName='Helvetica', fontSize=10, leading=12,
+            textColor=colors.HexColor('#444444'), alignment=TA_CENTER
+        )
 
-        # Configurações Padrão de Prisma
-        CONFIG_DEFAULT = {
-            'formato_folha': 'A4_PORTRAIT_4_SLOTS',
-            'exibir_borda_dupla': True,
-            'brasao_padrao': 'assets/brasao_cgcfn.png',
-            'gap_linhas_mm': 6,
-            'termo_convidado': 'RESERVADO',
-            'fonte_familia': 'Montserrat, sans-serif',
-        }
+        logo_path = 'assets/brasao_cgcfn.png'
+        rl_logo = None
+        if os.path.exists(logo_path):
+            try: rl_logo = RLImage(logo_path, width=32, height=32)
+            except Exception: pass
 
-        # Insígnias oficiais por Posto/Graduação (texto rico com indicador visual)
-        RANK_INSIGNIAS = {
-            'AE':  {'stars': '★★★★', 'title': 'ALMIRANTE DE ESQUADRA',       'color': '#FFD700'},
-            'VA':  {'stars': '★★★',  'title': 'VICE-ALMIRANTE',              'color': '#FFD700'},
-            'CA':  {'stars': '★★',   'title': 'CONTRA-ALMIRANTE',            'color': '#FFD700'},
-            'CMG': {'stars': '★',    'title': 'CAPITÃO DE MAR E GUERRA',     'color': '#C0C0C0'},
-            'CF':  {'stars': '⚓',   'title': 'CAPITÃO DE FRAGATA',          'color': '#C0C0C0'},
-            'CC':  {'stars': '⚓',   'title': 'CAPITÃO DE CORVETA',          'color': '#C0C0C0'},
-            'CT':  {'stars': '⚓',   'title': 'CAPITÃO-TENENTE',             'color': '#B0B0B0'},
-            '1TEN': {'stars': '▬',   'title': '1º TENENTE',                  'color': '#B0B0B0'},
-            '2TEN': {'stars': '▬',   'title': '2º TENENTE',                  'color': '#B0B0B0'},
-            'SO':  {'stars': '◆',    'title': 'SUBOFICIAL',                  'color': '#CD7F32'},
-            '1SG': {'stars': '▲▲▲',  'title': '1º SARGENTO',                 'color': '#CD7F32'},
-            '2SG': {'stars': '▲▲',   'title': '2º SARGENTO',                 'color': '#CD7F32'},
-            '3SG': {'stars': '▲',    'title': '3º SARGENTO',                 'color': '#CD7F32'},
-            'CB':  {'stars': '∨∨',   'title': 'CABO',                        'color': '#808080'},
-            'SD':  {'stars': '∨',    'title': 'SOLDADO',                     'color': '#808080'},
-            'MN':  {'stars': '∨',    'title': 'MARINHEIRO',                  'color': '#808080'},
-            'Dr.': {'stars': '⚖️',   'title': 'AUTORIDADE CIVIL',            'color': '#4A90D9'},
-            'Min.':{'stars': '🏛️',   'title': 'MINISTRO DE ESTADO',          'color': '#9B59B6'},
-            'Dep.':{'stars': '🏛️',   'title': 'DEPUTADO',                    'color': '#27AE60'},
-            'Sen.':{'stars': '🏛️',   'title': 'SENADOR',                     'color': '#2980B9'},
-            'Gen.':{'stars': '★★★★', 'title': 'GENERAL DE EXÉRCITO',         'color': '#FFD700'},
-            'Cel.':{'stars': '★',    'title': 'CORONEL',                     'color': '#C0C0C0'},
-            'TC':  {'stars': '★',    'title': 'TENENTE-CORONEL',             'color': '#C0C0C0'},
-            'Maj': {'stars': '★',    'title': 'MAJOR',                       'color': '#C0C0C0'}
-        }
+        # Coleta e ordena convidados
+        all_cards = []
+        seen_ids = set()
+        for c in (convidados or []):
+            if c['id'] not in seen_ids:
+                if only_confirmed and c.get('status_placa') not in ('pendente', 'em_producao', 'impressa', 'reimpressao'):
+                    continue
+                seen_ids.add(c['id'])
+                all_cards.append(c)
 
-        import os
-        import re
+        def sort_key_assento(c):
+            ass = str(c.get('assento_id', '')).upper().strip()
+            match = re.match(r'([A-Z]+)-?(\d+)', ass)
+            if match:
+                row, num = match.groups()
+                return (row, int(num))
+            return (ass if ass else 'ZZZ', 0)
 
-        def clean_authority_name(raw_name):
-            if not raw_name:
-                return ""
-            name = str(raw_name).strip()
-            name = re.sub(r'^(ACOMP\.|ACOMPANHANTE)\s*', '', name, flags=re.IGNORECASE)
-            name = re.sub(r'\s*\(\d+(/\d+)?\)$', '', name).strip()
-            return name.upper()
-
-        def get_rank_logo_asset(posto_str):
-            if not posto_str:
-                return None
-            p = str(posto_str).upper().strip()
-            
-            sigla = None
-            if any(k in p for k in ['ESQUADRA', 'SQUADRA', 'AE', 'ALMIRANTE DE ESQUADRA']):
-                sigla = 'AE'
-            elif any(k in p for k in ['VICE', 'VADM', 'V-ADM', 'VA', 'VICE-ALMIRANTE']):
-                sigla = 'VA'
-            elif any(k in p for k in ['CONTRA', 'CALTE', 'C-ADM', 'CA', 'CONTRA-ALMIRANTE']):
-                sigla = 'CA'
-            elif any(k in p for k in ['MAR E GUERRA', 'CMG']):
-                sigla = 'CMG'
-            elif any(k in p for k in ['FRAGATA', 'CF']):
-                sigla = 'CF'
-            elif any(k in p for k in ['CORVETA', 'CC']):
-                sigla = 'CC'
-            elif any(k in p for k in ['TENENTE', 'CT']):
-                sigla = 'CT'
-            else:
-                sigla = p.split()[0] if p else None
-
-            if not sigla:
-                return None
-
-            sigla_clean = re.sub(r'\W+', '', sigla).upper()
-
-            # 1. Procura no bucket 'logos' do Supabase por ex: AE.png, AE.PNG, ae.png
-            try:
-                from database import list_supabase_storage_files
-                bucket_files = list_supabase_storage_files("logos")
-                for f in bucket_files:
-                    fname = f.get('name', '')
-                    fname_no_ext = os.path.splitext(fname)[0].upper()
-                    if fname_no_ext == sigla_clean:
-                        return f.get('url')
-            except Exception as b_err:
-                print(f"[RANK LOGO BUCKET ERR] {b_err}")
-
-            # 2. Procura localmente em assets/insignias/
-            possible_names = [f"{sigla_clean.lower()}.png", f"{sigla_clean}.png", f"{sigla_clean.lower()}.jpg", f"{sigla_clean}.jpg"]
-            for p_name in possible_names:
-                local_p = os.path.join('assets', 'insignias', p_name)
-                if os.path.exists(local_p):
-                    return local_p
-
+        all_cards.sort(key=sort_key_assento)
+        if not all_cards:
             return None
 
-        def parse_almirantado_stars(posto_str):
-            if not posto_str:
-                return {'eh_almirante': False, 'stars': '', 'title': '', 'color': '#000000', 'png_asset': None}
-            p = str(posto_str).upper().strip()
-            
-            png_path = get_rank_logo_asset(p)
-            
-            if any(k in p for k in ['ESQUADRA', 'SQUADRA', 'AE', 'ALMIRANTE DE ESQUADRA']):
-                return {'eh_almirante': True, 'stars': '★ ★ ★ ★', 'title': 'ALMIRANTE DE ESQUADRA', 'color': '#000000', 'png_asset': png_path}
-            elif any(k in p for k in ['VICE', 'VADM', 'V-ADM', 'VA', 'VICE-ALMIRANTE']):
-                return {'eh_almirante': True, 'stars': '★ ★ ★', 'title': 'VICE-ALMIRANTE', 'color': '#000000', 'png_asset': png_path}
-            elif any(k in p for k in ['CONTRA', 'CALTE', 'C-ADM', 'CA', 'CONTRA-ALMIRANTE']):
-                return {'eh_almirante': True, 'stars': '★ ★', 'title': 'CONTRA-ALMIRANTE', 'color': '#000000', 'png_asset': png_path}
+        items_per_sheet = 4
+        total_pages = (len(all_cards) + items_per_sheet - 1) // items_per_sheet
 
-            return {'eh_almirante': False, 'stars': '', 'title': p, 'color': '#000000', 'png_asset': png_path}
+        for p_idx in range(total_pages):
+            batch = all_cards[p_idx * items_per_sheet : (p_idx + 1) * items_per_sheet]
+            table_data = []
+            
+            for c in batch:
+                is_acomp = bool(c.get('convidado_principal_id'))
+                posto = (c.get('posto_graduacao') or '').strip()
+                almirantado_info = parse_almirantado_stars(posto)
+                nome_limpo = clean_authority_name(c['nome'])
+                termo_reservado = print_config.get('termo_convidado', 'RESERVADO')
+                
+                qr_rl_img = None
+                try:
+                    import qrcode
+                    qr_obj = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=3, border=1)
+                    qr_obj.add_data(f"JADE|{event.get('id','')}|{c['id']}|{c.get('assento_id','')}")
+                    qr_obj.make(fit=True)
+                    img_q = qr_obj.make_image(fill_color="black", back_color="white")
+                    q_buf = io.BytesIO()
+                    img_q.save(q_buf, format="PNG")
+                    q_buf.seek(0)
+                    qr_rl_img = RLImage(q_buf, width=36, height=36)
+                except Exception: pass
+
+                cell_content = []
+                if is_acomp:
+                    cell_content.append(Paragraph(termo_reservado, title_style))
+                    cell_content.append(Spacer(1, 4))
+
+                tit_str = almirantado_info['title'] or posto.upper()
+                if tit_str:
+                    cell_content.append(Paragraph(tit_str, posto_style))
+                    cell_content.append(Spacer(1, 4))
+
+                cell_content.append(Paragraph(nome_limpo, nome_style))
+                
+                if c.get('assento_id'):
+                    cell_content.append(Spacer(1, 4))
+                    cell_content.append(Paragraph(f"ASSENTO: {c.get('assento_id')}", sub_style))
+
+                inner_row = []
+                inner_row.append([rl_logo] if rl_logo else [''])
+                inner_row.append(cell_content)
+                inner_row.append([qr_rl_img] if qr_rl_img else [''])
+
+                inner_table = Table(
+                    [[inner_row[0][0], inner_row[1], inner_row[2][0]]],
+                    colWidths=[40, 480, 45]
+                )
+                inner_table.setStyle(TableStyle([
+                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                    ('ALIGN', (0,0), (0,0), 'LEFT'),
+                    ('ALIGN', (1,0), (1,0), 'CENTER'),
+                    ('ALIGN', (2,0), (2,0), 'RIGHT'),
+                ]))
+
+                table_data.append([inner_table])
+
+            while len(table_data) < 4:
+                table_data.append([''])
+
+            page_table = Table(table_data, colWidths=[570], rowHeights=[185, 185, 185, 185])
+            page_table.setStyle(TableStyle([
+                ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#1a1a1a')),
+                ('INNERGRID', (0,0), (-1,-1), 1, colors.HexColor('#1a1a1a')),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('TOPPADDING', (0,0), (-1,-1), 10),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+            ]))
+
+            elements.append(page_table)
+            if p_idx < total_pages - 1:
+                elements.append(PageBreak())
+
+        doc.build(elements)
+        buf.seek(0)
+        return buf.getvalue()
+    except Exception as pdf_e:
+        print(f"[PDF REPORTLAB GERAR ERR] {pdf_e}")
+        return None
+
+
+def open_print_cards_dialog(event, convidados, layout):
+    rows_count = layout.get('rows', 5)
+
+    allocated_by_row = {}
+    for r in range(rows_count):
+        row_label = get_row_label(r)
+        allocated_by_row[row_label] = [c for c in convidados if (c.get('assento_id') or '').startswith(f"{row_label}-")]
+
+    # Estado e Persistência do Estúdio de Impressão
+    saved_cfg = {}
+    if isinstance(layout, dict):
+        saved_cfg = layout.get('print_config', {})
+    elif isinstance(event, dict) and event.get('layout_json'):
+        try:
+            import json
+            l_dict = json.loads(event.get('layout_json') or '{}')
+            saved_cfg = l_dict.get('print_config', {})
+        except Exception:
+            saved_cfg = {}
+
+    print_config = {
+        'model': saved_cfg.get('model', 'prisma_a4_4slots'),
+        'items_per_sheet': int(saved_cfg.get('items_per_sheet', 4)),
+        'chk_only_confirmed': bool(saved_cfg.get('chk_only_confirmed', False)),
+        'chk_logo': bool(saved_cfg.get('chk_logo', True)),
+        'chk_qr': bool(saved_cfg.get('chk_qr', True)),
+        'chk_rank': bool(saved_cfg.get('chk_rank', True)),
+        'chk_border': bool(saved_cfg.get('chk_border', True)),
+        'header_line1': str(saved_cfg.get('header_line1', 'MARINHA DO BRASIL')),
+        'header_line2': str(saved_cfg.get('header_line2', event.get('nome', 'SOLENIDADE').upper())),
+        'termo_convidado': str(saved_cfg.get('termo_convidado', 'RESERVADO')),
+        'brasao_pos': str(saved_cfg.get('brasao_pos', 'esquerda')),
+        'origin_logo_l': str(saved_cfg.get('origin_logo_l', 'bucket')),
+        'logo_preset_l': str(saved_cfg.get('logo_preset_l', 'cfn')),
+        'upload_brasao_left': str(saved_cfg.get('upload_brasao_left', '')),
+        'qr_pos': str(saved_cfg.get('qr_pos', 'direita')),
+        'origin_logo_r': str(saved_cfg.get('origin_logo_r', 'bucket')),
+        'logo_preset_r': str(saved_cfg.get('logo_preset_r', 'mb')),
+        'upload_brasao_right': str(saved_cfg.get('upload_brasao_right', '')),
+        'origin_bg': str(saved_cfg.get('origin_bg', 'none')),
+        'bg_preset': str(saved_cfg.get('bg_preset', 'cfn')),
+        'template_bg_url': str(saved_cfg.get('template_bg_url', '')),
+        'logo_width': float(saved_cfg.get('logo_width', 16)),
+        'logo_pos_x': float(saved_cfg.get('logo_pos_x', 6)),
+        'logo_pos_y': float(saved_cfg.get('logo_pos_y', 4)),
+        'qr_size': float(saved_cfg.get('qr_size', 13)),
+        'qr_pos_x': float(saved_cfg.get('qr_pos_x', 5)),
+        'qr_pos_y': float(saved_cfg.get('qr_pos_y', 3)),
+        'font_nome': float(saved_cfg.get('font_nome', 22)),
+        'font_posto': float(saved_cfg.get('font_posto', 13)),
+        'font_reservado': float(saved_cfg.get('font_reservado', 18)),
+    }
+
+    # Configurações Padrão de Prisma
+    CONFIG_DEFAULT = {
+        'formato_folha': 'A4_PORTRAIT_4_SLOTS',
+        'exibir_borda_dupla': True,
+        'brasao_padrao': 'assets/brasao_cgcfn.png',
+        'gap_linhas_mm': 6,
+        'termo_convidado': 'RESERVADO',
+        'fonte_familia': 'Montserrat, sans-serif',
+    }
+
+    # Insígnias oficiais por Posto/Graduação (texto rico com indicador visual)
+    RANK_INSIGNIAS = {
+        'AE':  {'stars': '★★★★', 'title': 'ALMIRANTE DE ESQUADRA',       'color': '#FFD700'},
+        'VA':  {'stars': '★★★',  'title': 'VICE-ALMIRANTE',              'color': '#FFD700'},
+        'CA':  {'stars': '★★',   'title': 'CONTRA-ALMIRANTE',            'color': '#FFD700'},
+        'CMG': {'stars': '★',    'title': 'CAPITÃO DE MAR E GUERRA',     'color': '#C0C0C0'},
+        'CF':  {'stars': '⚓',   'title': 'CAPITÃO DE FRAGATA',          'color': '#C0C0C0'},
+        'CC':  {'stars': '⚓',   'title': 'CAPITÃO DE CORVETA',          'color': '#C0C0C0'},
+        'CT':  {'stars': '⚓',   'title': 'CAPITÃO-TENENTE',             'color': '#B0B0B0'},
+        '1TEN': {'stars': '▬',   'title': '1º TENENTE',                  'color': '#B0B0B0'},
+        '2TEN': {'stars': '▬',   'title': '2º TENENTE',                  'color': '#B0B0B0'},
+        'SO':  {'stars': '◆',    'title': 'SUBOFICIAL',                  'color': '#CD7F32'},
+        '1SG': {'stars': '▲▲▲',  'title': '1º SARGENTO',                 'color': '#CD7F32'},
+        '2SG': {'stars': '▲▲',   'title': '2º SARGENTO',                 'color': '#CD7F32'},
+        '3SG': {'stars': '▲',    'title': '3º SARGENTO',                 'color': '#CD7F32'},
+        'CB':  {'stars': '∨∨',   'title': 'CABO',                        'color': '#808080'},
+        'SD':  {'stars': '∨',    'title': 'SOLDADO',                     'color': '#808080'},
+        'MN':  {'stars': '∨',    'title': 'MARINHEIRO',                  'color': '#808080'},
+        'Dr.': {'stars': '⚖️',   'title': 'AUTORIDADE CIVIL',            'color': '#4A90D9'},
+        'Min.':{'stars': '🏛️',   'title': 'MINISTRO DE ESTADO',          'color': '#9B59B6'},
+        'Dep.':{'stars': '🏛️',   'title': 'DEPUTADO',                    'color': '#27AE60'},
+        'Sen.':{'stars': '🏛️',   'title': 'SENADOR',                     'color': '#2980B9'},
+        'Gen.':{'stars': '★★★★', 'title': 'GENERAL DE EXÉRCITO',         'color': '#FFD700'},
+        'Cel.':{'stars': '★',    'title': 'CORONEL',                     'color': '#C0C0C0'},
+        'TC':  {'stars': '★',    'title': 'TENENTE-CORONEL',             'color': '#C0C0C0'},
+        'Maj': {'stars': '★',    'title': 'MAJOR',                       'color': '#C0C0C0'}
+    }
+
+
+    import os
+    import re
+
+    def clean_authority_name(raw_name):
+        if not raw_name:
+            return ""
+        name = str(raw_name).strip()
+        name = re.sub(r'^(ACOMP\.|ACOMPANHANTE)\s*', '', name, flags=re.IGNORECASE)
+        name = re.sub(r'\s*\(\d+(/\d+)?\)$', '', name).strip()
+        return name.upper()
+
+    def get_rank_logo_asset(posto_str):
+        if not posto_str:
+            return None
+        p = str(posto_str).upper().strip()
+        
+        sigla = None
+        if any(k in p for k in ['ESQUADRA', 'SQUADRA', 'AE', 'ALMIRANTE DE ESQUADRA']):
+            sigla = 'AE'
+        elif any(k in p for k in ['VICE', 'VADM', 'V-ADM', 'VA', 'VICE-ALMIRANTE']):
+            sigla = 'VA'
+        elif any(k in p for k in ['CONTRA', 'CALTE', 'C-ADM', 'CA', 'CONTRA-ALMIRANTE']):
+            sigla = 'CA'
+        elif any(k in p for k in ['MAR E GUERRA', 'CMG']):
+            sigla = 'CMG'
+        elif any(k in p for k in ['FRAGATA', 'CF']):
+            sigla = 'CF'
+        elif any(k in p for k in ['CORVETA', 'CC']):
+            sigla = 'CC'
+        elif any(k in p for k in ['TENENTE', 'CT']):
+            sigla = 'CT'
+        else:
+            sigla = p.split()[0] if p else None
+
+        if not sigla:
+            return None
+
+        sigla_clean = re.sub(r'\W+', '', sigla).upper()
+
+
+            # 1. Procura no bucket 'logos' do Supabase por ex: AE.png, AE.PNG, ae.png
+        try:
+            from database import list_supabase_storage_files
+            bucket_files = list_supabase_storage_files("logos")
+            for f in bucket_files:
+                fname = f.get('name', '')
+                fname_no_ext = os.path.splitext(fname)[0].upper()
+                if fname_no_ext == sigla_clean:
+                    return f.get('url')
+        except Exception as b_err:
+            print(f"[RANK LOGO BUCKET ERR] {b_err}")
+
+        # 2. Procura localmente em assets/insignias/
+        possible_names = [f"{sigla_clean.lower()}.png", f"{sigla_clean}.png", f"{sigla_clean.lower()}.jpg", f"{sigla_clean}.jpg"]
+        for p_name in possible_names:
+            local_p = os.path.join('assets', 'insignias', p_name)
+            if os.path.exists(local_p):
+                return local_p
+
+        return None
+
+    def parse_almirantado_stars(posto_str):
+        if not posto_str:
+            return {'eh_almirante': False, 'stars': '', 'title': '', 'color': '#000000', 'png_asset': None}
+        p = str(posto_str).upper().strip()
+        
+        png_path = get_rank_logo_asset(p)
+        
+        if any(k in p for k in ['ESQUADRA', 'SQUADRA', 'AE', 'ALMIRANTE DE ESQUADRA']):
+            return {'eh_almirante': True, 'stars': '★ ★ ★ ★', 'title': 'ALMIRANTE DE ESQUADRA', 'color': '#000000', 'png_asset': png_path}
+        elif any(k in p for k in ['VICE', 'VADM', 'V-ADM', 'VA', 'VICE-ALMIRANTE']):
+            return {'eh_almirante': True, 'stars': '★ ★ ★', 'title': 'VICE-ALMIRANTE', 'color': '#000000', 'png_asset': png_path}
+        elif any(k in p for k in ['CONTRA', 'CALTE', 'C-ADM', 'CA', 'CONTRA-ALMIRANTE']):
+            return {'eh_almirante': True, 'stars': '★ ★', 'title': 'CONTRA-ALMIRANTE', 'color': '#000000', 'png_asset': png_path}
+
+        return {'eh_almirante': False, 'stars': '', 'title': p, 'color': '#000000', 'png_asset': png_path}
+
 
         with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 860px; max-width: 96vw; max-height: 92vh; overflow-y: auto;'):
             ui.label(f"🖨️ ESTÚDIO DE IMPRESSÃO DE PLACAS & CREDENCIAIS JADE").classes('text-md font-bold text-cyan cyber-title q-mb-xs')
@@ -3929,159 +4082,6 @@ def render_page():
             """
 
 
-            js_pdf_export_cards = js_clean_print_cards
-
-
-            def gerar_pdf_placas_reportlab_internal():
-                import io, re, base64
-                from reportlab.lib.pagesizes import A4
-                from reportlab.lib import colors
-                from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image as RLImage
-                from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-                from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-
-                buf = io.BytesIO()
-                # Página A4 (210mm x 297mm) com margens zeras
-                doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=10, rightMargin=10, topMargin=10, bottomMargin=10)
-                elements = []
-                styles = getSampleStyleSheet()
-
-                title_style = ParagraphStyle(
-                    'PrismaTitle',
-                    parent=styles['Normal'],
-                    fontName='Helvetica-Bold',
-                    fontSize=14,
-                    leading=16,
-                    textColor=colors.HexColor('#1f4e79'),
-                    alignment=TA_CENTER
-                )
-
-                posto_style = ParagraphStyle(
-                    'PrismaPosto',
-                    parent=styles['Normal'],
-                    fontName='Helvetica-Bold',
-                    fontSize=15,
-                    leading=18,
-                    textColor=colors.HexColor('#000000'),
-                    alignment=TA_CENTER
-                )
-
-                nome_style = ParagraphStyle(
-                    'PrismaNome',
-                    parent=styles['Normal'],
-                    fontName='Helvetica-Bold',
-                    fontSize=24,
-                    leading=28,
-                    textColor=colors.HexColor('#000000'),
-                    alignment=TA_CENTER
-                )
-
-                sub_style = ParagraphStyle(
-                    'PrismaSub',
-                    parent=styles['Normal'],
-                    fontName='Helvetica',
-                    fontSize=10,
-                    leading=12,
-                    textColor=colors.HexColor('#444444'),
-                    alignment=TA_CENTER
-                )
-
-                # Carrega a imagem do brasão
-                logo_path = 'assets/brasao_cgcfn.png'
-                rl_logo = None
-                if os.path.exists(logo_path):
-                    try:
-                        rl_logo = RLImage(logo_path, width=32, height=32)
-                    except Exception: pass
-
-                # Agrupa convidados em blocos de 4 por folha
-                cards_to_pdf = list(all_cards)
-                items_per_sheet = 4
-                total_pages = (len(cards_to_pdf) + items_per_sheet - 1) // items_per_sheet
-
-                for p_idx in range(total_pages):
-                    batch = cards_to_pdf[p_idx * items_per_sheet : (p_idx + 1) * items_per_sheet]
-                    table_data = []
-                    
-                    for c in batch:
-                        is_acomp = bool(c.get('convidado_principal_id'))
-                        posto = (c.get('posto_graduacao') or '').strip()
-                        almirantado_info = parse_almirantado_stars(posto)
-                        nome_limpo = clean_authority_name(c['nome'])
-                        termo_reservado = input_termo_conv.value or 'RESERVADO'
-                        
-                        # Gera QR Code offline
-                        qr_rl_img = None
-                        try:
-                            import qrcode
-                            qr_obj = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=3, border=1)
-                            qr_obj.add_data(f"JADE|{event.get('id','')}|{c['id']}|{c.get('assento_id','')}")
-                            qr_obj.make(fit=True)
-                            img_q = qr_obj.make_image(fill_color="black", back_color="white")
-                            q_buf = io.BytesIO()
-                            img_q.save(q_buf, format="PNG")
-                            q_buf.seek(0)
-                            qr_rl_img = RLImage(q_buf, width=36, height=36)
-                        except Exception: pass
-
-                        # Célula da Placa
-                        cell_content = []
-                        if is_acomp:
-                            cell_content.append(Paragraph(termo_reservado, title_style))
-                            cell_content.append(Spacer(1, 4))
-
-                        tit_str = almirantado_info['title'] or posto.upper()
-                        if tit_str:
-                            cell_content.append(Paragraph(tit_str, posto_style))
-                            cell_content.append(Spacer(1, 4))
-
-                        cell_content.append(Paragraph(nome_limpo, nome_style))
-                        
-                        if c.get('assento_id'):
-                            cell_content.append(Spacer(1, 4))
-                            cell_content.append(Paragraph(f"ASSENTO: {c.get('assento_id')}", sub_style))
-
-                        # Tabela interna com Brasão na esquerda, Conteúdo no centro e QR no direito
-                        inner_row = []
-                        inner_row.append([rl_logo] if rl_logo else [''])
-                        inner_row.append(cell_content)
-                        inner_row.append([qr_rl_img] if qr_rl_img else [''])
-
-                        inner_table = Table(
-                            [[inner_row[0][0], inner_row[1], inner_row[2][0]]],
-                            colWidths=[40, 480, 45]
-                        )
-                        inner_table.setStyle(TableStyle([
-                            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                            ('ALIGN', (0,0), (0,0), 'LEFT'),
-                            ('ALIGN', (1,0), (1,0), 'CENTER'),
-                            ('ALIGN', (2,0), (2,0), 'RIGHT'),
-                        ]))
-
-                        table_data.append([inner_table])
-
-                    # Completa a folha para manter altura uniforme se houver menos de 4
-                    while len(table_data) < 4:
-                        table_data.append([''])
-
-                    page_table = Table(table_data, colWidths=[570], rowHeights=[185, 185, 185, 185])
-                    page_table.setStyle(TableStyle([
-                        ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#1a1a1a')),
-                        ('INNERGRID', (0,0), (-1,-1), 1, colors.HexColor('#1a1a1a')),
-                        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                        ('TOPPADDING', (0,0), (-1,-1), 10),
-                        ('BOTTOMPADDING', (0,0), (-1,-1), 10),
-                    ]))
-
-                    elements.append(page_table)
-                    if p_idx < total_pages - 1:
-                        elements.append(PageBreak())
-
-                doc.build(elements)
-                buf.seek(0)
-                return buf.getvalue()
-
-
             def on_trigger_print():
                 save_print_config_to_event(notify_user=False)
                 ui.run_javascript(js_clean_print_cards)
@@ -4089,20 +4089,24 @@ def render_page():
             def on_trigger_pdf():
                 save_print_config_to_event(notify_user=False)
                 try:
-                    pdf_bytes = gerar_pdf_placas_reportlab_internal()
-                    import base64
-                    b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
-                    file_name = f"Placas_JADE_{event.get('nome_evento','Evento').replace(' ', '_')}.pdf"
-                    js_download = f"""
-                    var a = document.createElement('a');
-                    a.href = 'data:application/pdf;base64,{b64_pdf}';
-                    a.download = '{file_name}';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    """
-                    ui.run_javascript(js_download)
-                    ui.notify('📄 PDF Vetorial gerado com sucesso no servidor e baixado!', color='positive')
+                    cfg_now = collect_current_print_config()
+                    pdf_bytes = gerar_pdf_placas_reportlab(event, convidados, current_model, only_confirmed, cfg_now)
+                    if pdf_bytes:
+                        import base64
+                        b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
+                        file_name = f"Placas_JADE_{event.get('nome_evento','Evento').replace(' ', '_')}.pdf"
+                        js_download = f"""
+                        var a = document.createElement('a');
+                        a.href = 'data:application/pdf;base64,{b64_pdf}';
+                        a.download = '{file_name}';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        """
+                        ui.run_javascript(js_download)
+                        ui.notify('📄 PDF Vetorial gerado com sucesso no servidor e baixado!', color='positive')
+                    else:
+                        ui.notify('Nenhum convidado selecionado para PDF.', color='warning')
                 except Exception as pdf_err:
                     print(f"[PDF REPORTLAB ERR] {pdf_err}")
                     ui.notify(f"Erro ao gerar PDF no servidor: {pdf_err}. Usando fallback do navegador...", color='warning')
