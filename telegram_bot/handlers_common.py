@@ -1270,6 +1270,54 @@ def register_common_handlers(bot):
             await bot.reply_to(message, "❌ Operação cancelada.", reply_markup=get_main_menu_keyboard(is_operator) if profile else get_unauthorized_keyboard())
             return
 
+        if action == 'settings':
+            if text in ("👥 Pedidos de Acesso", "👥 Cadastros Pendentes", "cadastros pendentes", "pedidos de acesso"):
+                clear_state(chat_id)
+                user_role = str(profile.get('role', '')).lower() if profile else ''
+                if user_role not in ('admin', 'supervisor', 'oficial_gab', 'oficial'):
+                    await bot.reply_to(message, "⛔ Apenas Administradores ou Supervisores podem gerenciar solicitações de cadastro.")
+                    return
+                await listar_cadastros_pendentes(bot, message)
+                return
+            elif text in ("🔔 Notificações", "notificações"):
+                clear_state(chat_id)
+                from .keyboards import get_notifications_toggle_keyboard
+                from notifications_manager import get_user_preferences
+                u_id = profile.get('id') if profile else None
+                u_prefs = get_user_preferences(u_id) if u_id else {}
+                await bot.reply_to(
+                    message,
+                    "🔔 **PREFERÊNCIAS DE NOTIFICAÇÕES**\n\nAjuste suas preferências de recebimento de alertas:",
+                    reply_markup=get_notifications_toggle_keyboard(u_prefs),
+                    parse_mode='Markdown'
+                )
+                return
+            elif text in ("📸 Cadastro Facial", "cadastro facial"):
+                chat_states[chat_id] = {
+                    'action': 'cadastro_facial',
+                    'step': 'await_photo',
+                    'user': profile
+                }
+                await bot.reply_to(message, "📸 **CADASTRO FACIAL**\n\nPor favor, envie uma foto nítida do seu rosto no chat para cadastrar a biometria facial.")
+                return
+            elif text in ("🔍 Buscar Minhas Fotos", "buscar minhas fotos"):
+                clear_state(chat_id)
+                await bot.reply_to(
+                    message,
+                    "🔍 **BUSCA DE FOTOS**\n\nRecurso de busca acionado.",
+                    reply_markup=get_main_menu_keyboard(is_operator)
+                )
+                return
+            elif text in ("⬅️ Voltar", "voltar"):
+                clear_state(chat_id)
+                await bot.reply_to(
+                    message,
+                    "⚓ **Menu Principal — SisGAB**",
+                    reply_markup=get_main_menu_keyboard(is_operator),
+                    parse_mode='Markdown'
+                )
+                return
+
         if action == 'edit_hora_demanda':
             dem_id = state.get('demanda_id')
             novahora = text.strip()
