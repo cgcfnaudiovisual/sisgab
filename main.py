@@ -268,6 +268,7 @@ import painel_comando
 import comsoc_assentos
 import estudio_grafico
 import comsoc_rsvp
+import modulo_presenca
 from database import authenticate_user, get_user_by_id
 
 from services import data_service
