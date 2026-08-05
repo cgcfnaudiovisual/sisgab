@@ -351,7 +351,7 @@ def render_page():
                                 auth_id = str(uuid.uuid4())
                                 ui.notify('Operador registrado com sucesso no banco de dados local!', color='success')
 
-                            # Insere na tabela users
+                            # Insere na tabela users (sem antiguidade_num — coluna existe apenas em 'efetivo')
                             u_payload = {
                                 'id': auth_id,
                                 'username': c_email.value.split('@')[0],
@@ -359,13 +359,11 @@ def render_page():
                                 'role': c_role.value,
                                 'telegram_id': c_tg.value or None,
                                 'url_foto': c_foto.value or None,
-                                'email': c_email.value,
-                                'antiguidade_num': ant_save
+                                'email': c_email.value
                             }
                             try:
                                 conn.table('users').insert(u_payload).execute()
                             except Exception:
-                                u_payload.pop('antiguidade_num', None)
                                 u_payload.pop('email', None)
                                 try:
                                     conn.table('users').insert(u_payload).execute()
@@ -573,15 +571,14 @@ def render_page():
                                     except Exception as auth_email_err:
                                         print(f"[AUTH EMAIL UPDATE ERR] {auth_email_err}")
 
-                            # 2. Atualiza a tabela users
+                            # 2. Atualiza a tabela users (sem antiguidade_num — coluna existe apenas em 'efetivo')
                             nome_com_posto = f"{e_posto.value} {clean_militar_name(nome_final)}".strip()
                             user_payload = {
                                 'nome': nome_com_posto,
                                 'username': e_unm.value,
                                 'telegram_id': e_tg.value or None,
                                 'url_foto': e_foto.value or None,
-                                'role': e_role.value,
-                                'antiguidade_num': ant_save
+                                'role': e_role.value
                             }
                             if e_email.value:
                                 user_payload['email'] = e_email.value.strip()
@@ -618,7 +615,27 @@ def render_page():
                                 except Exception as u_retry_err:
                                     print(f"[USERS RETRY ERR] {u_retry_err}")
 
-                            # 3. Mantém a integridade da tabela efetivo (SEMPRE tenta, independente do status de users)
+                            # 3. Garante UNICIDADE de precedência: se outro militar já tem ant_save, faz o swap
+                            try:
+                                res_check = conn.table('efetivo').select('id, nome_guerra, email, antiguidade_num').eq('antiguidade_num', ant_save).execute()
+                                if res_check and res_check.data:
+                                    for conflito in res_check.data:
+                                        conflito_email = conflito.get('email', '')
+                                        conflito_id = conflito.get('id')
+                                        # Só faz swap se for um registro diferente do atual
+                                        if conflito_email != user_email and str(conflito_id) != uid_str:
+                                            # Busca a precedência atual deste usuário para fazer o swap
+                                            cur_ant = user.get('antiguidade_num') or 99
+                                            try:
+                                                if conflito_id:
+                                                    conn.table('efetivo').update({'antiguidade_num': int(cur_ant)}).eq('id', conflito_id).execute()
+                                                    print(f"[PRECEDENCIA SWAP] {conflito.get('nome_guerra')} {ant_save} -> {cur_ant}")
+                                            except Exception as swap_err:
+                                                print(f"[PRECEDENCIA SWAP ERR] {swap_err}")
+                            except Exception as check_err:
+                                print(f"[PRECEDENCIA CHECK ERR] {check_err}")
+
+                            # 4. Mantém a integridade da tabela efetivo (SEMPRE tenta, independente do status de users)
                             ef_updated = False
                             try:
                                 update_fields = {
