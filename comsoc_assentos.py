@@ -3932,21 +3932,190 @@ def render_page():
             js_pdf_export_cards = js_clean_print_cards
 
 
+            def gerar_pdf_placas_reportlab_internal():
+                import io, re, base64
+                from reportlab.lib.pagesizes import A4
+                from reportlab.lib import colors
+                from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image as RLImage
+                from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+                from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+
+                buf = io.BytesIO()
+                # Página A4 (210mm x 297mm) com margens zeras
+                doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=10, rightMargin=10, topMargin=10, bottomMargin=10)
+                elements = []
+                styles = getSampleStyleSheet()
+
+                title_style = ParagraphStyle(
+                    'PrismaTitle',
+                    parent=styles['Normal'],
+                    fontName='Helvetica-Bold',
+                    fontSize=14,
+                    leading=16,
+                    textColor=colors.HexColor('#1f4e79'),
+                    alignment=TA_CENTER
+                )
+
+                posto_style = ParagraphStyle(
+                    'PrismaPosto',
+                    parent=styles['Normal'],
+                    fontName='Helvetica-Bold',
+                    fontSize=15,
+                    leading=18,
+                    textColor=colors.HexColor('#000000'),
+                    alignment=TA_CENTER
+                )
+
+                nome_style = ParagraphStyle(
+                    'PrismaNome',
+                    parent=styles['Normal'],
+                    fontName='Helvetica-Bold',
+                    fontSize=24,
+                    leading=28,
+                    textColor=colors.HexColor('#000000'),
+                    alignment=TA_CENTER
+                )
+
+                sub_style = ParagraphStyle(
+                    'PrismaSub',
+                    parent=styles['Normal'],
+                    fontName='Helvetica',
+                    fontSize=10,
+                    leading=12,
+                    textColor=colors.HexColor('#444444'),
+                    alignment=TA_CENTER
+                )
+
+                # Carrega a imagem do brasão
+                logo_path = 'assets/brasao_cgcfn.png'
+                rl_logo = None
+                if os.path.exists(logo_path):
+                    try:
+                        rl_logo = RLImage(logo_path, width=32, height=32)
+                    except Exception: pass
+
+                # Agrupa convidados em blocos de 4 por folha
+                cards_to_pdf = list(all_cards)
+                items_per_sheet = 4
+                total_pages = (len(cards_to_pdf) + items_per_sheet - 1) // items_per_sheet
+
+                for p_idx in range(total_pages):
+                    batch = cards_to_pdf[p_idx * items_per_sheet : (p_idx + 1) * items_per_sheet]
+                    table_data = []
+                    
+                    for c in batch:
+                        is_acomp = bool(c.get('convidado_principal_id'))
+                        posto = (c.get('posto_graduacao') or '').strip()
+                        almirantado_info = parse_almirantado_stars(posto)
+                        nome_limpo = clean_authority_name(c['nome'])
+                        termo_reservado = input_termo_conv.value or 'RESERVADO'
+                        
+                        # Gera QR Code offline
+                        qr_rl_img = None
+                        try:
+                            import qrcode
+                            qr_obj = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=3, border=1)
+                            qr_obj.add_data(f"JADE|{event.get('id','')}|{c['id']}|{c.get('assento_id','')}")
+                            qr_obj.make(fit=True)
+                            img_q = qr_obj.make_image(fill_color="black", back_color="white")
+                            q_buf = io.BytesIO()
+                            img_q.save(q_buf, format="PNG")
+                            q_buf.seek(0)
+                            qr_rl_img = RLImage(q_buf, width=36, height=36)
+                        except Exception: pass
+
+                        # Célula da Placa
+                        cell_content = []
+                        if is_acomp:
+                            cell_content.append(Paragraph(termo_reservado, title_style))
+                            cell_content.append(Spacer(1, 4))
+
+                        tit_str = almirantado_info['title'] or posto.upper()
+                        if tit_str:
+                            cell_content.append(Paragraph(tit_str, posto_style))
+                            cell_content.append(Spacer(1, 4))
+
+                        cell_content.append(Paragraph(nome_limpo, nome_style))
+                        
+                        if c.get('assento_id'):
+                            cell_content.append(Spacer(1, 4))
+                            cell_content.append(Paragraph(f"ASSENTO: {c.get('assento_id')}", sub_style))
+
+                        # Tabela interna com Brasão na esquerda, Conteúdo no centro e QR no direito
+                        inner_row = []
+                        inner_row.append([rl_logo] if rl_logo else [''])
+                        inner_row.append(cell_content)
+                        inner_row.append([qr_rl_img] if qr_rl_img else [''])
+
+                        inner_table = Table(
+                            [[inner_row[0][0], inner_row[1], inner_row[2][0]]],
+                            colWidths=[40, 480, 45]
+                        )
+                        inner_table.setStyle(TableStyle([
+                            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                            ('ALIGN', (0,0), (0,0), 'LEFT'),
+                            ('ALIGN', (1,0), (1,0), 'CENTER'),
+                            ('ALIGN', (2,0), (2,0), 'RIGHT'),
+                        ]))
+
+                        table_data.append([inner_table])
+
+                    # Completa a folha para manter altura uniforme se houver menos de 4
+                    while len(table_data) < 4:
+                        table_data.append([''])
+
+                    page_table = Table(table_data, colWidths=[570], rowHeights=[185, 185, 185, 185])
+                    page_table.setStyle(TableStyle([
+                        ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#1a1a1a')),
+                        ('INNERGRID', (0,0), (-1,-1), 1, colors.HexColor('#1a1a1a')),
+                        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                        ('TOPPADDING', (0,0), (-1,-1), 10),
+                        ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+                    ]))
+
+                    elements.append(page_table)
+                    if p_idx < total_pages - 1:
+                        elements.append(PageBreak())
+
+                doc.build(elements)
+                buf.seek(0)
+                return buf.getvalue()
+
+
             def on_trigger_print():
                 save_print_config_to_event(notify_user=False)
                 ui.run_javascript(js_clean_print_cards)
 
             def on_trigger_pdf():
                 save_print_config_to_event(notify_user=False)
-                ui.run_javascript(js_pdf_export_cards)
+                try:
+                    pdf_bytes = gerar_pdf_placas_reportlab_internal()
+                    import base64
+                    b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
+                    file_name = f"Placas_JADE_{event.get('nome_evento','Evento').replace(' ', '_')}.pdf"
+                    js_download = f"""
+                    var a = document.createElement('a');
+                    a.href = 'data:application/pdf;base64,{b64_pdf}';
+                    a.download = '{file_name}';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    """
+                    ui.run_javascript(js_download)
+                    ui.notify('📄 PDF Vetorial gerado com sucesso no servidor e baixado!', color='positive')
+                except Exception as pdf_err:
+                    print(f"[PDF REPORTLAB ERR] {pdf_err}")
+                    ui.notify(f"Erro ao gerar PDF no servidor: {pdf_err}. Usando fallback do navegador...", color='warning')
+                    ui.run_javascript(js_pdf_export_cards)
 
             with ui.row().classes('w-full justify-between items-center q-mt-md print-hide'):
                 ui.button('💾 Salvar Configurações no Evento', icon='save', on_click=lambda: save_print_config_to_event(notify_user=True)).props('unelevated color=emerald text-color=white bold dense').classes('text-xs').tooltip('Salva o modelo, brasões, títulos e fontes como padrão permanente deste evento')
                 with ui.row().classes('gap-2'):
                     ui.button('Fechar', on_click=diag.close).props('unelevated color=grey-8 dense')
-                    ui.button('📄 Baixar / Exportar em PDF', icon='picture_as_pdf', on_click=on_trigger_pdf).props('unelevated color=deep-purple text-color=white bold dense')
+                    ui.button('📄 Baixar PDF Oficial (Servidor)', icon='picture_as_pdf', on_click=on_trigger_pdf).props('unelevated color=deep-purple text-color=white bold dense').tooltip('Gera arquivo PDF milimétrico vetorial A4 direto do servidor sem falhas de imagem')
                     ui.button('🖨️ Imprimir Placas Selecionadas', icon='print', on_click=on_trigger_print).props('unelevated color=cyan text-color=black bold dense')
         diag.open()
+
 
     # ═══════════════════════════════════════════════════════════════
     # FASE: PLANILHÃO DO EVENTO (Tabela Completa + CSV Export)
