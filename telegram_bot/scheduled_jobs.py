@@ -199,6 +199,7 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
             print(f"[REMINDER ISENTOS WARN] {ext_err}")
             
         # Mapeia telegram_id da tabela users caso a tabela efetivo esteja sem o campo preenchido
+        # Indexa por nome completo, nome de guerra (sem posto) e username
         user_tg_map = {}
         try:
             res_u = conn.table('users').select('nome, username, telegram_id').execute()
@@ -206,12 +207,29 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
                 for u_row in res_u.data:
                     tid = u_row.get('telegram_id')
                     if tid and str(tid).strip():
+                        tid_str = str(tid).strip()
+                        # Índice por username
                         unm = str(u_row.get('username') or '').strip().upper()
+                        if unm:
+                            user_tg_map[unm] = tid_str
+                        # Índice por nome completo (ex: 'SO CARVALHO')
                         nm = str(u_row.get('nome') or '').strip().upper()
-                        if unm: user_tg_map[unm] = str(tid).strip()
-                        if nm: user_tg_map[nm] = str(tid).strip()
+                        if nm:
+                            user_tg_map[nm] = tid_str
+                            # Índice por nome de guerra sem posto (último token ou parte após espaço)
+                            parts = nm.split()
+                            if len(parts) > 1:
+                                nome_guerra_only = parts[-1]  # ex: 'CARVALHO'
+                                user_tg_map[nome_guerra_only] = tid_str
+                                # Também tenta junção de último(s) token(s) para nomes compostos
+                                if len(parts) > 2:
+                                    user_tg_map[' '.join(parts[1:])] = tid_str
         except Exception as u_map_err:
             print(f"[REMINDER USER MAP WARN] {u_map_err}")
+
+        # Diagnóstico
+        tg_preenchidos = sum(1 for m in res_ef.data if m.get('telegram_id') or user_tg_map.get(str(m.get('nome_guerra') or '').strip().upper()))
+        print(f"[CHAMADA DEBUG] Total efetivo: {len(res_ef.data)} | Com Telegram ID (efetivo+users): {tg_preenchidos} | Respondidos hoje: {len(respondidos)}")
 
         from .keyboards import get_presenca_keyboard
         
@@ -240,7 +258,14 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
         for m in res_ef.data:
             nome_g = str(m.get('nome_guerra') or '').strip().upper()
             pg = str(m.get('posto_grad') or '').strip()
-            tg_id = m.get('telegram_id') or user_tg_map.get(nome_g)
+            # Tenta telegram_id direto da tabela efetivo, depois fallback pelo mapa de users
+            tg_id = m.get('telegram_id')
+            if not tg_id or not str(tg_id).strip():
+                tg_id = (
+                    user_tg_map.get(nome_g)
+                    or user_tg_map.get(f"{pg} {nome_g}".strip())
+                    or user_tg_map.get(nome_g.split()[-1] if nome_g else '')
+                )
             
             if nome_g and nome_g not in respondidos and tg_id and str(tg_id).strip():
                 try:
