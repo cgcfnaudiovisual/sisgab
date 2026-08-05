@@ -287,9 +287,9 @@ sisgab_menu_categories = [
     {
         'category': '🏛️ GABINETE & OPERAÇÕES DIÁRIAS',
         'items': [
-            {'name': 'Painel de Comando', 'icon': 'dashboard', 'path': '/', 'subtitle': 'Agenda, KPIs e panorama geral'},
-            {'name': 'Chamada & Presença Diária', 'icon': 'assignment_ind', 'path': '/presenca', 'subtitle': 'Chamada matutina e Pronto do CheGab'},
-            {'name': 'Nova Solicitação / Demanda', 'icon': 'add_box', 'path': '/comsoc_demandas', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar'], 'subtitle': 'Formulário de pautas e tarefas'},
+            {'name': 'Painel de Comando', 'icon': 'dashboard', 'path': '/', 'roles': ['admin', 'supervisor', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'operador'], 'subtitle': 'Agenda, KPIs e panorama geral'},
+            {'name': 'Chamada & Presença Diária', 'icon': 'assignment_ind', 'path': '/presenca', 'roles': ['admin', 'supervisor', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'operador'], 'subtitle': 'Chamada matutina e Pronto do CheGab'},
+            {'name': 'Nova Solicitação / Demanda', 'icon': 'add_box', 'path': '/comsoc_demandas', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Formulário de pautas e tarefas'},
             {'name': 'Gestão de Demandas', 'icon': 'gavel', 'path': '/comsoc_homologar', 'roles': ['admin', 'supervisor', 'oficial_gab', 'comsoc', 'praca_gab'], 'subtitle': 'Parecer e aprovação de pautas'},
         ]
     },
@@ -297,7 +297,7 @@ sisgab_menu_categories = [
         'category': '🎯 TAREFAS & CERIMONIAL',
         'items': [
             {'name': 'Tarefas COMSOC', 'icon': 'task_alt', 'path': '/comsoc_tarefas', 'roles': ['admin', 'supervisor', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'operador'], 'subtitle': 'Kanban de tarefas criativas e internas'},
-            {'name': 'Placas de Assento (Jade)', 'icon': 'event_seat', 'path': '/comsoc_assentos', 'subtitle': 'Mapeamento e alocação de auditório'},
+            {'name': 'Placas de Assento (Jade)', 'icon': 'event_seat', 'path': '/comsoc_assentos', 'roles': ['admin', 'supervisor', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Mapeamento e alocação de auditório'},
             {'name': 'Gestão de Convites & RSVP', 'icon': 'mark_email_read', 'path': '/comsoc_rsvp', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Convites formais e confirmação de presença'},
         ]
     },
@@ -311,12 +311,12 @@ sisgab_menu_categories = [
     {
         'category': '📣 COMUNICAÇÃO & MÍDIA',
         'items': [
-            {'name': 'Central de IA', 'icon': 'psychology', 'path': '/assistente_ia', 'subtitle': 'Chat, redator e triagem de demandas'},
-            {'name': 'Smart Editor IA', 'icon': 'movie_filter', 'path': '/smart_editor', 'roles': ['admin', 'oficial_gab', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'supervisor'], 'subtitle': 'Cortes com IA, SFX e FCPXML'},
+            {'name': 'Central de IA', 'icon': 'psychology', 'path': '/assistente_ia', 'roles': ['admin', 'supervisor', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Chat, redator e triagem de demandas'},
+            {'name': 'Smart Editor IA', 'icon': 'movie_filter', 'path': '/smart_editor', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'supervisor'], 'subtitle': 'Cortes com IA, SFX e FCPXML'},
             {'name': 'Estúdio Gráfico (Canva)', 'icon': 'palette', 'path': '/estudio_grafico', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'supervisor'], 'subtitle': 'Editor visual de artes e impressos', 'new_tab': True},
-            {'name': 'Entrega em Hot', 'icon': 'photo_library', 'path': '/comsoc_galeria', 'subtitle': 'Upload de fotos em campo'},
-            {'name': 'Arquivo e Histórico', 'icon': 'history', 'path': '/comsoc_historico', 'subtitle': 'Busca e links de coberturas passadas'},
-            {'name': 'Aniversariantes & Datas', 'icon': 'cake', 'path': '/comsoc_aniversariantes', 'subtitle': 'Mensagens com IA e impressão'},
+            {'name': 'Entrega em Hot', 'icon': 'photo_library', 'path': '/comsoc_galeria', 'roles': ['admin', 'supervisor', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Upload de fotos em campo'},
+            {'name': 'Arquivo e Histórico', 'icon': 'history', 'path': '/comsoc_historico', 'roles': ['admin', 'supervisor', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Busca e links de coberturas passadas'},
+            {'name': 'Aniversariantes & Datas', 'icon': 'cake', 'path': '/comsoc_aniversariantes', 'roles': ['admin', 'supervisor', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Mensagens com IA e impressão'},
             {'name': 'Monitor TV (COMSOC TV)', 'icon': 'tv', 'path': '/sisgab_tv', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'tv', 'tv_comcia'], 'subtitle': 'Modo TV tático', 'new_tab': True},
         ]
     },
@@ -325,7 +325,7 @@ sisgab_menu_categories = [
         'items': [
             {'name': 'Configurações', 'icon': 'settings', 'path': '/config', 'roles': ['admin', 'oficial_gab'], 'subtitle': 'Parâmetros do sistema'},
             {'name': 'Usuários e Permissões', 'icon': 'admin_panel_settings', 'path': '/admin_panel', 'roles': ['admin'], 'subtitle': 'Controle de acesso e aprovação'},
-            {'name': 'Ajuda / Sobre', 'icon': 'help_outline', 'path': '/ajuda_sobre', 'subtitle': 'Manuais e suporte'},
+            {'name': 'Ajuda / Sobre', 'icon': 'help_outline', 'path': '/ajuda_sobre', 'roles': ['admin', 'supervisor', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar', 'compel', 'operador'], 'subtitle': 'Manuais e suporte'},
         ]
     }
 ]
@@ -377,6 +377,12 @@ def run_auth_checks():
         ui.navigate.to('/sisgab_tv')
         return False
 
+    if role_user == 'militar' and app.storage.user.get('current_path') != '/ajuda_sobre':
+        app.storage.user['current_path'] = '/ajuda_sobre'
+        ui.notify("ℹ️ Seu perfil 'militar' possui acesso apenas ao painel de Ajuda / Sobre por enquanto.", color='warning')
+        ui.navigate.to('/ajuda_sobre')
+        return False
+
     # ── AUTORIZAÇÃO SERVER-SIDE: verifica role contra rotas protegidas ──
     current_path = app.storage.user.get('current_path', '/')
     path_clean = current_path.strip('/').replace('/', '_')
@@ -395,9 +401,10 @@ def run_auth_checks():
         
     if allowed_roles:
         if role_user not in allowed_roles:
+            target = '/ajuda_sobre' if role_user == 'militar' else '/'
             ui.notify('⛔ Acesso não autorizado para esta página.', color='negative')
-            app.storage.user['current_path'] = '/'
-            ui.navigate.to('/')
+            app.storage.user['current_path'] = target
+            ui.navigate.to(target)
             return False
             
     return True
@@ -1539,7 +1546,7 @@ def login_page(request: Request):
                             app.storage.user['supabase_session'] = session_data
                             
                             role_user = str(profile.get('role', 'compel')).strip().lower()
-                            target_path = '/sisgab_tv' if role_user in ('tv', 'tv_comcia') else '/'
+                            target_path = '/sisgab_tv' if role_user in ('tv', 'tv_comcia') else '/ajuda_sobre' if role_user == 'militar' else '/'
                             app.storage.user['current_path'] = target_path
                             if role_user not in ('tv', 'tv_comcia'):
                                 app.storage.user['tv_lock_active'] = False
@@ -1565,7 +1572,7 @@ def login_page(request: Request):
                                     'id': local_user.get('id') or local_user.get('telegram_id') or 'local-fallback',
                                     'username': local_user.get('email', '').split('@')[0] if local_user.get('email') else local_user.get('nome_guerra', 'militar'),
                                     'nome': local_user.get('nome_guerra', 'militar'),
-                                    'role': local_user.get('role', 'compel')
+                                    'role': local_user.get('role', 'militar')
                                 }
                                 import time
                                 app.storage.user['authenticated'] = True
@@ -1576,13 +1583,13 @@ def login_page(request: Request):
                                     'id': profile.get('id'),
                                     'username': profile.get('username'),
                                     'nome_guerra': profile.get('nome', profile.get('username')),
-                                    'role': profile.get('role', 'compel'),
+                                    'role': profile.get('role', 'militar'),
                                     'email': login_email
                                 }
                                 app.storage.user['supabase_session'] = None
                                 
-                                role_user = str(profile.get('role', 'compel')).strip().lower()
-                                target_path = '/sisgab_tv' if role_user in ('tv', 'tv_comcia') else '/'
+                                role_user = str(profile.get('role', 'militar')).strip().lower()
+                                target_path = '/sisgab_tv' if role_user in ('tv', 'tv_comcia') else '/ajuda_sobre' if role_user == 'militar' else '/'
                                 app.storage.user['current_path'] = target_path
                                 if role_user not in ('tv', 'tv_comcia'):
                                     app.storage.user['tv_lock_active'] = False
