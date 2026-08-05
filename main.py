@@ -1052,13 +1052,24 @@ def rsvp_public_page(token: str, request: Request):
 
                                             with names_area:
                                                 if cnt <= 4:
-                                                    # Modo Individual (1 a 4 acompanhantes)
+                                                    # Modo Individual com Nome + Parentesco/Cargo opcional
                                                     existing_list = [n.strip() for n in initial_names.split(',') if n.strip()]
                                                     inputs_list = []
                                                     for i in range(cnt):
-                                                        val_init = existing_list[i] if i < len(existing_list) else ''
-                                                        inp = ui.input(f'Acompanhante {i+1} (Nome Completo / Parentesco)', value=val_init, placeholder=f'Ex: Sra. Maria Silva (Esposa)').props('dark outlined dense w-full').style('font-size: 0.88rem;')
-                                                        inputs_list.append(inp)
+                                                        val_full = existing_list[i] if i < len(existing_list) else ''
+                                                        # Extrai parentesco se estiver entre parênteses
+                                                        p_name = val_full
+                                                        p_rel = ''
+                                                        if '(' in val_full and ')' in val_full:
+                                                            p_name = val_full.split('(')[0].strip()
+                                                            p_rel = val_full.split('(')[1].replace(')', '').strip()
+
+                                                        with ui.card().classes('w-full p-3 bg-black/40 border border-grey-800 rounded-xl gap-2 q-my-xs'):
+                                                            ui.label(f'ACOMPANHANTE {i+1}').classes('text-[10px] font-bold text-amber-4 tracking-wider')
+                                                            with ui.row().classes('w-full gap-2 items-center wrap'):
+                                                                inp_n = ui.input('Nome Completo', value=p_name, placeholder='Ex: Maria Silva').props('dark outlined dense').classes('w-full sm:w-[58%]').style('font-size: 0.85rem;')
+                                                                inp_r = ui.input('Parentesco / Vínculo (Opcional)', value=p_rel, placeholder='Ex: Esposa, Filho, Ajudante').props('dark outlined dense').classes('w-full sm:w-[38%]').style('font-size: 0.85rem;')
+                                                                inputs_list.append((inp_n, inp_r))
                                                     names_area.inputs_ref = inputs_list
                                                     names_area.mode = 'individual'
                                                 else:
@@ -1071,6 +1082,7 @@ def rsvp_public_page(token: str, request: Request):
 
                                         render_name_fields()
 
+
                                 obs_input = ui.input('Observações / Restrições Especiais (Opcional)', value=convite.get('observacoes','') or '', placeholder='Ex: Restrição de mobilidade ou dieta especial').props('dark outlined w-full').style('font-size: 0.9rem;')
 
                                 def submit_resposta(choice):
@@ -1080,12 +1092,21 @@ def rsvp_public_page(token: str, request: Request):
                                         
                                         if acomp_chk.value:
                                             if getattr(names_area, 'mode', '') == 'individual':
-                                                names_arr = [inp.value.strip() for inp in getattr(names_area, 'inputs_ref', []) if inp.value and inp.value.strip()]
+                                                names_arr = []
+                                                for inp_n, inp_r in getattr(names_area, 'inputs_ref', []):
+                                                    nm = inp_n.value.strip() if inp_n.value else ''
+                                                    rel = inp_r.value.strip() if inp_r.value else ''
+                                                    if nm:
+                                                        if rel:
+                                                            names_arr.append(f"{nm} ({rel})")
+                                                        else:
+                                                            names_arr.append(nm)
                                                 ac_nome = ', '.join(names_arr)
                                             else:
                                                 ac_nome = getattr(names_area, 'textarea_ref', ui.input()).value.strip()
                                         else:
                                             ac_nome = ''
+
                                         
                                         update_rsvp_response(token, choice, ac_count, ac_nome, obs_input.value, client_ip)
                                         convite['status'] = choice
