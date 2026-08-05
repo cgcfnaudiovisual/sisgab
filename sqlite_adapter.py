@@ -671,6 +671,14 @@ class LocalSQLiteClient:
                 cursor.execute("ALTER TABLE efetivo ADD COLUMN categoria TEXT DEFAULT 'militar'")
             except:
                 pass
+            try:
+                cursor.execute("ALTER TABLE efetivo ADD COLUMN antiguidade_num INTEGER DEFAULT 99")
+            except:
+                pass
+            try:
+                cursor.execute("ALTER TABLE users ADD COLUMN antiguidade_num INTEGER DEFAULT 99")
+            except:
+                pass
             # Migração local: garante que encarregado_id exista na tabela de demandas se o BD já existia
             try:
                 cursor.execute("ALTER TABLE demandas_comunicacao ADD COLUMN encarregado_id TEXT")

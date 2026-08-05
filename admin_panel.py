@@ -152,6 +152,7 @@ def render_page():
                             is_dup = True
 
                         if not is_dup:
+                            ant_val = ef.get('antiguidade_num') or ef.get('numero_antiguidade') or ef.get('ordem_precedencia')
                             users_data.append({
                                 'id': str(ef.get('id')),
                                 'username': guerra.lower() if guerra else 'militar',
@@ -159,14 +160,15 @@ def render_page():
                                 'role': ef.get('role', 'praca_gab'),
                                 'telegram_id': ef.get('telegram_id', ''),
                                 'url_foto': ef.get('url_foto', ''),
-                                'posto_grad': pg
+                                'posto_grad': pg,
+                                'antiguidade_num': ant_val
                             })
                             if email: existing_emails.add(email)
                             if tg_id: existing_tgs.add(tg_id)
                             if guerra_clean: existing_clean_names.add(guerra_clean)
 
 
-                # Preenche posto_grad para os usuários da tabela users
+                # Preenche posto_grad e normaliza antiguidade para os usuários da tabela users
                 for u in users_data:
                     # Remove "NONE" do nome do usuário se houver devido a bug anterior
                     if str(u.get('nome', '')).upper().startswith("NONE "):
@@ -207,7 +209,7 @@ def render_page():
                     if rank in ('SD', 'SOLDADO', 'MN', 'MARINHEIRO'): return 16
                     return 98
 
-                # Ordena os operadores: COMSOC/Admin primeiro, depois por Antiguidade, depois por Nome
+                # Ordena os operadores: COMSOC/Admin primeiro, depois por Ordem de Precedência / Antiguidade, depois por Nome
                 def sort_users(u):
                     role = str(u.get('role', 'compel')).strip().lower()
                     is_comsoc = role in ('admin', 'supervisor', 'comsoc', 'comsoc_design', 'operador')
@@ -219,8 +221,15 @@ def render_page():
                         pg = parts[0] if parts else ''
                     
                     seniority = get_rank_seniority(pg)
+                    
+                    raw_ant = u.get('antiguidade_num') or u.get('numero_antiguidade') or u.get('ordem_precedencia')
+                    if raw_ant is not None and str(raw_ant).strip().isdigit():
+                        ant_val = int(str(raw_ant).strip())
+                    else:
+                        ant_val = seniority
+
                     nome_guerra = str(u.get('nome', '')).upper()
-                    return (group_priority, seniority, nome_guerra)
+                    return (group_priority, ant_val, seniority, nome_guerra)
                 
                 users_data = sorted(users_data, key=sort_users)
             except Exception as e:
@@ -236,6 +245,11 @@ def render_page():
                         ui.label('➕ CADASTRAR OPERADOR').classes('text-white text-md font-black cyber-title')
                         ui.icon('person_add', size='1.5rem').style(f'color: {THEME["accent"]}')
                     ui.separator().style('background-color: rgba(0, 229, 255, 0.15);')
+
+                    ranks_options = ['AE', 'VA', 'CA', 'CMG', 'CF', 'CC', 'CT', '1ºTEN', '2ºTEN', 'GM', 'SO', '1ºSG', '2ºSG', '3ºSG', 'CB', 'SD/MN']
+                    with ui.row().classes('w-full gap-2 no-wrap'):
+                        c_posto = ui.select(ranks_options, label='Posto / Graduação', value='SO').props('dark outlined dense').classes('w-1/2')
+                        c_antiguidade = ui.number('Antiguidade / Precedência', value=1, min=1, step=1).props('dark outlined dense').classes('w-1/2').tooltip('Ordem de precedência militar no grupo (1 = Mais Antigo)')
 
                     c_email = ui.input('E-mail (Login)', placeholder='militar@marinha.mil.br').props('dark outlined dense w-full')
                     c_pwd = ui.input('Senha Inicial', password=True).props('dark outlined dense w-full')
@@ -280,16 +294,21 @@ def render_page():
                             
                             import bcrypt
                             pwd_hash = bcrypt.hashpw(c_pwd.value.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
+                            clean_name_save = clean_militar_name(c_nome.value)
+                            full_name_save = f"{c_posto.value} {clean_name_save}".strip()
+                            ant_save = int(c_antiguidade.value) if c_antiguidade.value else 99
                             
                             if is_offline:
-                                ui.notify(f"[OFFLINE] Novo operador {c_nome.value.upper()} cadastrado!", color='success')
+                                ui.notify(f"[OFFLINE] Novo operador {full_name_save} cadastrado!", color='success')
                                 users_data.append({
                                     'id': f'mock-uid-{len(users_data)+1}',
                                     'username': c_email.value.split('@')[0],
-                                    'nome': c_nome.value.upper(),
+                                    'nome': full_name_save,
                                     'role': c_role.value,
                                     'telegram_id': c_tg.value or '',
-                                    'url_foto': c_foto.value or ''
+                                    'url_foto': c_foto.value or '',
+                                    'posto_grad': c_posto.value,
+                                    'antiguidade_num': ant_save
                                 })
                                 create_dialog.close()
                                 reload_admin_data()
@@ -336,67 +355,51 @@ def render_page():
                                 ui.notify('Operador registrado com sucesso no banco de dados local!', color='success')
 
                             # Insere na tabela users
+                            u_payload = {
+                                'id': auth_id,
+                                'username': c_email.value.split('@')[0],
+                                'nome': full_name_save,
+                                'posto': c_posto.value,
+                                'role': c_role.value,
+                                'telegram_id': c_tg.value or None,
+                                'url_foto': c_foto.value or None,
+                                'email': c_email.value,
+                                'antiguidade_num': ant_save
+                            }
                             try:
+                                conn.table('users').insert(u_payload).execute()
+                            except Exception:
+                                u_payload.pop('antiguidade_num', None)
+                                u_payload.pop('email', None)
                                 try:
-                                    conn.table('users').insert({
-                                        'id': auth_id,
-                                        'username': c_email.value.split('@')[0],
-                                        'nome': c_nome.value.upper(),
-                                        'role': c_role.value,
-                                        'telegram_id': c_tg.value or None,
-                                        'url_foto': c_foto.value or None,
-                                        'email': c_email.value
-                                    }).execute()
-                                except Exception as e_mail_err:
-                                    # Fallback: salva sem a coluna email
-                                    conn.table('users').insert({
-                                        'id': auth_id,
-                                        'username': c_email.value.split('@')[0],
-                                        'nome': c_nome.value.upper(),
-                                        'role': c_role.value,
-                                        'telegram_id': c_tg.value or None,
-                                        'url_foto': c_foto.value or None
-                                    }).execute()
-                            except Exception as db_err:
-                                if 'url_foto' in str(db_err):
-                                    # Fallback: salva sem a coluna url_foto
-                                    conn.table('users').insert({
-                                        'id': auth_id,
-                                        'username': c_email.value.split('@')[0],
-                                        'nome': c_nome.value.upper(),
-                                        'role': c_role.value,
-                                        'telegram_id': c_tg.value or None
-                                    }).execute()
-                                    ui.notify('Operador cadastrado sem foto. Adicione a coluna url_foto no Supabase!', color='warning', duration=6)
-                                else:
-                                    raise db_err
+                                    conn.table('users').insert(u_payload).execute()
+                                except Exception:
+                                    u_payload.pop('url_foto', None)
+                                    conn.table('users').insert(u_payload).execute()
                             
                             # Cria também na tabela efetivo para manter integridade
+                            ef_payload = {
+                                'telegram_id': c_tg.value or None,
+                                'nome_guerra': clean_name_save,
+                                'posto': c_posto.value,
+                                'posto_grad': c_posto.value,
+                                'email': c_email.value,
+                                'senha_hash': pwd_hash,
+                                'role': c_role.value,
+                                'url_foto': c_foto.value or None,
+                                'antiguidade_num': ant_save
+                            }
                             try:
+                                conn.table('efetivo').insert(ef_payload).execute()
+                            except Exception:
+                                ef_payload.pop('antiguidade_num', None)
                                 try:
-                                    conn.table('efetivo').insert({
-                                        'telegram_id': c_tg.value or None,
-                                        'nome_guerra': c_nome.value.upper(),
-                                        'email': c_email.value,
-                                        'senha_hash': pwd_hash,
-                                        'role': c_role.value,
-                                        'url_foto': c_foto.value or None
-                                    }).execute()
-                                except Exception as db_err:
-                                    if 'url_foto' in str(db_err):
-                                        conn.table('efetivo').insert({
-                                            'telegram_id': c_tg.value or None,
-                                            'nome_guerra': c_nome.value.upper(),
-                                            'email': c_email.value,
-                                            'senha_hash': pwd_hash,
-                                            'role': c_role.value
-                                        }).execute()
-                                    else:
-                                        raise db_err
-                            except Exception as db_err:
-                                print(f"[DB WARN] Sincronização parcial em efetivo: {db_err}")
+                                    conn.table('efetivo').insert(ef_payload).execute()
+                                except Exception:
+                                    ef_payload.pop('url_foto', None)
+                                    conn.table('efetivo').insert(ef_payload).execute()
                             
-                            ui.notify(f"Operador {c_nome.value.upper()} cadastrado com sucesso!", color='success')
+                            ui.notify(f"Operador {full_name_save} cadastrado com sucesso!", color='success')
                             data_service.clear_cache()
                             create_dialog.close()
                             reload_admin_data()
@@ -497,7 +500,16 @@ def render_page():
                     user_role_val = str(user.get('role', 'compel')).strip().lower()
                     if user_role_val not in ROLE_OPTIONS:
                         user_role_val = 'compel'
-                    e_role = ui.select(ROLE_OPTIONS, label='Papel do Usuário', value=user_role_val).props('dark outlined dense w-full')
+
+                    cur_ant_raw = user.get('antiguidade_num') or user.get('numero_antiguidade') or user.get('ordem_precedencia')
+                    if cur_ant_raw is not None and str(cur_ant_raw).strip().isdigit():
+                        cur_ant_val = int(str(cur_ant_raw).strip())
+                    else:
+                        cur_ant_val = get_rank_seniority(user_pg_val)
+
+                    with ui.row().classes('w-full gap-2 no-wrap'):
+                        e_role = ui.select(ROLE_OPTIONS, label='Papel do Usuário', value=user_role_val).props('dark outlined dense').classes('w-2/3')
+                        e_antiguidade = ui.number('Antiguidade / Precedência', value=cur_ant_val, min=1, step=1).props('dark outlined dense').classes('w-1/3').tooltip('Ordem de precedência militar no grupo (1 = Mais Antigo)')
                     
                     # Painel Dinâmico de Detalhamento das Permissões do Papel
                     role_info_box = ui.column().classes('w-full q-pa-sm border border-cyan-500/30 rounded-lg bg-black/50 gap-1')
@@ -528,6 +540,7 @@ def render_page():
                             return
                         
                         nome_final = e_nome.value.replace('None ', '').replace('None', '').strip().upper()
+                        ant_save = int(e_antiguidade.value) if e_antiguidade.value else 99
                         
                         if is_offline:
                             ui.notify(f"[OFFLINE] Dados de {user['username']} atualizados!", color='success')
@@ -536,6 +549,7 @@ def render_page():
                             user['telegram_id'] = e_tg.value or ''
                             user['url_foto'] = e_foto.value or ''
                             user['role'] = e_role.value
+                            user['antiguidade_num'] = ant_save
                             edit_dialog.close()
                             reload_admin_data()
                             return
@@ -570,47 +584,60 @@ def render_page():
                                 'username': e_unm.value,
                                 'telegram_id': e_tg.value or None,
                                 'url_foto': e_foto.value or None,
-                                'role': e_role.value
+                                'role': e_role.value,
+                                'antiguidade_num': ant_save
                             }
                             if e_email.value:
                                 user_payload['email'] = e_email.value.strip()
 
-                            if is_uuid:
-                                try:
+                            try:
+                                if is_uuid:
                                     conn.table('users').update(user_payload).eq('id', uid_str).execute()
-                                except Exception as u_err:
-                                    if 'email' in user_payload:
-                                        user_payload.pop('email')
-                                        conn.table('users').update(user_payload).eq('id', uid_str).execute()
-                            else:
-                                try:
+                                else:
                                     if user_email:
                                         conn.table('users').update(user_payload).eq('email', user_email).execute()
                                     else:
                                         conn.table('users').update(user_payload).eq('username', user.get('username')).execute()
-                                except Exception as u_err_non_uuid:
-                                    print(f"[USERS UPDATE NON-UUID WARN] {u_err_non_uuid}")
+                            except Exception as u_err:
+                                if 'antiguidade_num' in str(u_err) or 'email' in str(u_err):
+                                    user_payload.pop('antiguidade_num', None)
+                                    user_payload.pop('email', None)
+                                    if is_uuid:
+                                        conn.table('users').update(user_payload).eq('id', uid_str).execute()
+                                    else:
+                                        conn.table('users').update(user_payload).eq('username', user.get('username')).execute()
 
-                            # 3. Tenta manter a integridade da tabela efetivo
+                            # 3. Mantém a integridade da tabela efetivo
                             try:
                                 update_fields = {
-                                    'nome_guerra': nome_final,
+                                    'nome_guerra': clean_militar_name(nome_final),
                                     'posto': e_posto.value,
                                     'posto_grad': e_posto.value,
                                     'telegram_id': e_tg.value or None,
                                     'role': e_role.value,
                                     'email': e_email.value or None,
-                                    'url_foto': e_foto.value or None
+                                    'url_foto': e_foto.value or None,
+                                    'antiguidade_num': ant_save
                                 }
-                                ef_query = conn.table('efetivo').update(update_fields)
-                                if not is_uuid and uid_str.isdigit():
-                                    ef_query.eq('id', int(uid_str)).execute()
-                                elif user_email:
-                                    ef_query.eq('email', user_email).execute()
-                                elif user.get('telegram_id'):
-                                    ef_query.eq('telegram_id', user.get('telegram_id')).execute()
-                                else:
-                                    ef_query.eq('nome_guerra', user.get('nome', '').upper()).execute()
+                                
+                                try:
+                                    if not is_uuid and uid_str.isdigit():
+                                        conn.table('efetivo').update(update_fields).eq('id', int(uid_str)).execute()
+                                    elif user_email:
+                                        conn.table('efetivo').update(update_fields).eq('email', user_email).execute()
+                                    elif user.get('telegram_id'):
+                                        conn.table('efetivo').update(update_fields).eq('telegram_id', user.get('telegram_id')).execute()
+                                    else:
+                                        clean_target = clean_militar_name(user.get('nome', ''))
+                                        conn.table('efetivo').update(update_fields).ilike('nome_guerra', f"%{clean_target}%").execute()
+                                except Exception as ef_sub_err:
+                                    if 'antiguidade_num' in str(ef_sub_err):
+                                        update_fields.pop('antiguidade_num', None)
+                                        if not is_uuid and uid_str.isdigit():
+                                            conn.table('efetivo').update(update_fields).eq('id', int(uid_str)).execute()
+                                        else:
+                                            clean_target = clean_militar_name(user.get('nome', ''))
+                                            conn.table('efetivo').update(update_fields).ilike('nome_guerra', f"%{clean_target}%").execute()
                             except Exception as sync_err:
                                 print(f"[DB WARN] Erro ao sincronizar efetivo: {sync_err}")
                             
@@ -1187,6 +1214,8 @@ def render_page():
                                                     ui.label(role_text.upper()).classes('text-[9px] font-bold px-1.5 py-0.5 rounded border').style(
                                                         f"color: {role_color}; border-color: {role_color}40; background: {role_color}10;"
                                                     )
+                                                    ant_badge_num = u.get('antiguidade_num') or u.get('numero_antiguidade') or u.get('ordem_precedencia') or '99'
+                                                    ui.label(f"🎖️ Precedência: #{ant_badge_num}").classes('text-[9px] font-bold px-1.5 py-0.5 rounded border border-amber-500/40 text-amber-400 bg-amber-500/10').tooltip('Ordem de precedência militar no grupo')
                                                 with ui.row().classes('items-center gap-4 text-[11px]').style(f'color: {THEME["text_dim"]}'):
                                                     ui.label(f"User: {u['username']}")
                                                     if u.get('telegram_id'):
@@ -1200,22 +1229,19 @@ def render_page():
                                             ui.button(
                                                 icon='edit',
                                                 on_click=lambda _, cur_u=u: open_edit_dialog(cur_u)
-                                            ).props('flat round dense color=primary').classes('text-xs').style('background: rgba(0, 229, 255, 0.05);')
-                                            ui.tooltip('Editar Perfil')
+                                            ).props('flat round dense color=primary').classes('text-xs').style('background: rgba(0, 229, 255, 0.05);').tooltip('Editar Perfil')
                                             
                                             # Alterar Senha
                                             ui.button(
                                                 icon='vpn_key',
                                                 on_click=lambda _, cur_u=u: open_password_dialog(cur_u)
-                                            ).props('flat round dense color=amber-9').classes('text-xs').style('background: rgba(255, 193, 7, 0.05);')
-                                            ui.tooltip('Redefinir Senha')
+                                            ).props('flat round dense color=amber-9').classes('text-xs').style('background: rgba(255, 193, 7, 0.05);').tooltip('Redefinir Senha')
                                             
                                             # Excluir
                                             ui.button(
                                                 icon='delete',
                                                 on_click=lambda _, cur_u=u: open_delete_dialog(cur_u)
-                                            ).props('flat round dense color=red').classes('text-xs').style('background: rgba(255, 23, 68, 0.05);')
-                                            ui.tooltip('Excluir Operador')
+                                            ).props('flat round dense color=red').classes('text-xs').style('background: rgba(255, 23, 68, 0.05);').tooltip('Excluir Operador')
 
     # Primeiro carregamento
     reload_admin_data()
