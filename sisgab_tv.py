@@ -9,7 +9,7 @@ from logo_base64 import LOGO_BASE64
 THEME = theme.colors
 
 def render_page():
-    # Estilos CSS customizados para o letreiro de notícias (Ticker Marquee)
+    # Estilos CSS customizados para o letreiro de notícias (Ticker Marquee) e Responsividade 19"/22"
     ui.add_head_html("""
     <style>
     @keyframes marquee {
@@ -32,6 +32,64 @@ def render_page():
     .marquee-content:hover {
         animation-play-state: paused;
     }
+
+    /* Ajuste Automático Fluido para Monitores 19" e 22" (1366x768, 1440x900, 1080p) */
+    @media (max-height: 920px) or (max-width: 1600px) {
+        .tv-root-container {
+            padding: 6px 10px !important;
+            gap: 6px !important;
+        }
+        .tv-header {
+            padding: 4px 10px !important;
+        }
+        .tv-logo {
+            height: 38px !important;
+        }
+        .tv-header-title {
+            font-size: 1.35rem !important;
+        }
+        .tv-header-sub {
+            font-size: 0.7rem !important;
+        }
+        .tv-clock-time {
+            font-size: 1.6rem !important;
+        }
+        .tv-clock-date {
+            font-size: 0.75rem !important;
+        }
+        .tv-kpi-card {
+            min-height: 52px !important;
+            padding: 4px 8px !important;
+        }
+        .tv-kpi-title {
+            font-size: 0.65rem !important;
+        }
+        .tv-kpi-val {
+            font-size: 1.25rem !important;
+        }
+        .tv-kpi-icon {
+            font-size: 1.3rem !important;
+        }
+        .tv-col-card {
+            padding: 8px !important;
+        }
+    }
+
+    @media (max-height: 780px) {
+        .tv-header-title {
+            font-size: 1.15rem !important;
+        }
+        .tv-clock-time {
+            font-size: 1.4rem !important;
+        }
+        .tv-kpi-card {
+            min-height: 44px !important;
+            padding: 2px 6px !important;
+        }
+        .tv-kpi-val {
+            font-size: 1.1rem !important;
+        }
+    }
     </style>
     """)
 
@@ -41,17 +99,18 @@ def render_page():
     view_state = {'active': 'semana'}
     last_known_pendentes = [-1]
 
-    # Layout de tela cheia para a TV
-    with ui.column().classes('w-full min-h-screen q-pa-md gap-4 overflow-hidden').style(
+    # Layout de tela cheia 100vh dinâmico sem rolagem externa da página
+    with ui.column().classes('w-full h-screen max-h-screen q-pa-xs gap-1.5 overflow-hidden flex flex-col justify-between box-border tv-root-container').style(
         'background: radial-gradient(circle, #0c1020 0%, #05070e 100%); font-family: "Outfit", sans-serif;'
-    ):        # ── CABEÇALHO TÁTICO (Fixo) ──
-        with ui.row().classes('w-full justify-between items-center q-pb-xs border-b border-cyan-500/40').style('background: rgba(5, 10, 25, 0.4); backdrop-filter: blur(10px); border-radius: 12px; padding: 8px 16px;'):
-            with ui.row().classes('items-center gap-4'):
+    ):
+        # ── CABEÇALHO TÁTICO (Fixo) ──
+        with ui.row().classes('w-full justify-between items-center shrink-0 border-b border-cyan-500/40 tv-header').style('background: rgba(5, 10, 25, 0.4); backdrop-filter: blur(10px); border-radius: 12px; padding: 6px 14px;'):
+            with ui.row().classes('items-center gap-3'):
                 # Logo Oficial da Tela Inicial do SisGAB
-                ui.image(LOGO_BASE64).style('height: 55px; width: auto; object-fit: contain; filter: drop-shadow(0 0 14px rgba(197, 160, 89, 0.9));')
+                ui.image(LOGO_BASE64).classes('tv-logo').style('height: 48px; width: auto; object-fit: contain; filter: drop-shadow(0 0 14px rgba(197, 160, 89, 0.9));')
                 with ui.column().classes('gap-0'):
-                    ui.label('SISGAB - MONITOR').style('font-size: 1.8rem; font-weight: 900; color: #ffffff; letter-spacing: 3px; line-height: 1.1;')
-                    ui.label('CENTRAL DE OPERAÇÕES E COMUNICAÇÃO SOCIAL').style('font-size: 0.8rem; color: #00e5ff; font-weight: 800; letter-spacing: 1.5px;')
+                    ui.label('SISGAB - MONITOR').classes('tv-header-title').style('font-size: 1.6rem; font-weight: 900; color: #ffffff; letter-spacing: 3px; line-height: 1.1;')
+                    ui.label('CENTRAL DE OPERAÇÕES E COMUNICAÇÃO SOCIAL').classes('tv-header-sub').style('font-size: 0.78rem; color: #00e5ff; font-weight: 800; letter-spacing: 1.5px;')
             
             with ui.row().classes('items-center gap-3'):
                 def open_tv_missao_rapida_dialog():
@@ -243,10 +302,10 @@ def render_page():
                 alerts_enabled = app.storage.user.get('tv_alerts_enabled', True)
                 ui.checkbox('Card Alertas', value=alerts_enabled, on_change=lambda e: toggle_alerts(e.value)).props('dark dense').classes('text-xs text-white q-ml-sm')
 
-            # Relógio Digital Gigante (Horário de Brasília GMT-3) - Aumentado +20%
+            # Relógio Digital Gigante (Horário de Brasília GMT-3)
             with ui.column().classes('items-end gap-0'):
-                nonlocal_time = ui.label('').style('font-size: 2.2rem; font-weight: 900; color: #ffffff; line-height: 1; filter: drop-shadow(0 0 10px rgba(0,229,255,0.4));')
-                nonlocal_date = ui.label('').style('font-size: 0.85rem; color: #a1a1aa; font-weight: bold; letter-spacing: 2px;')
+                nonlocal_time = ui.label('').classes('tv-clock-time').style('font-size: 2.2rem; font-weight: 900; color: #ffffff; line-height: 1; filter: drop-shadow(0 0 10px rgba(0,229,255,0.4));')
+                nonlocal_date = ui.label('').classes('tv-clock-date').style('font-size: 0.85rem; color: #a1a1aa; font-weight: bold; letter-spacing: 2px;')
                 
                 def update_clock():
                     now_br = datetime.utcnow() - timedelta(hours=3)
@@ -381,58 +440,58 @@ def render_page():
                 )
             last_known_pendentes[0] = demandas_pendentes
 
-            # ── BLOCO 1: PAINEL DE KPIs OPERACIONAIS (AMPLIADO, GLASSMORPHISM TRANSLÚCIDO) ──
-            with ui.row().classes('w-full gap-3 justify-between items-stretch q-mt-xs flex-nowrap overflow-x-auto'):
-                card_kpi_style = 'background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(12px); border: 1px solid rgba(0, 229, 255, 0.3); border-radius: 12px; min-height: 85px;'
+            # ── BLOCO 1: PAINEL DE KPIs OPERACIONAIS (FLUIDO E TRANSLÚCIDO) ──
+            with ui.row().classes('w-full gap-2 justify-between items-stretch shrink-0 flex-nowrap overflow-x-auto').style('margin-top: 2px;'):
+                card_kpi_style = 'background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(12px); border: 1px solid rgba(0, 229, 255, 0.3); border-radius: 10px; min-height: 54px;'
                 
                 # KPI 1: Pautas Aprovadas
-                with ui.card().classes('flex-1 q-pa-md flex-row items-center gap-3 justify-center shadow-lg').style(card_kpi_style):
-                    ui.icon('camera_alt', color='cyan-4', size='md')
+                with ui.card().classes('flex-1 q-pa-xs flex-row items-center gap-2 justify-center shadow-lg tv-kpi-card').style(card_kpi_style):
+                    ui.icon('camera_alt', color='cyan-4', size='sm').classes('tv-kpi-icon')
                     with ui.column().classes('gap-0'):
-                        ui.label('PAUTAS ATIVAS').classes('text-xs text-grey-4 font-bold tracking-wider')
-                        ui.label(str(total_pautas)).classes('text-2xl font-black text-white')
+                        ui.label('PAUTAS ATIVAS').classes('text-[10px] text-grey-4 font-bold tracking-wider tv-kpi-title')
+                        ui.label(str(total_pautas)).classes('text-xl font-black text-white tv-kpi-val')
                 
                 # KPI 2: Pendente Análise
-                with ui.card().classes('flex-1 q-pa-md flex-row items-center gap-3 justify-center shadow-lg').style(card_kpi_style):
-                    ui.icon('hourglass_top', color='amber-4', size='md')
+                with ui.card().classes('flex-1 q-pa-xs flex-row items-center gap-2 justify-center shadow-lg tv-kpi-card').style(card_kpi_style):
+                    ui.icon('hourglass_top', color='amber-4', size='sm').classes('tv-kpi-icon')
                     with ui.column().classes('gap-0'):
-                        ui.label('PENDENTE ANÁLISE').classes('text-xs text-grey-4 font-bold tracking-wider')
-                        ui.label(str(demandas_pendentes)).classes('text-2xl font-black text-amber-4')
+                        ui.label('PENDENTE ANÁLISE').classes('text-[10px] text-grey-4 font-bold tracking-wider tv-kpi-title')
+                        ui.label(str(demandas_pendentes)).classes('text-xl font-black text-amber-4 tv-kpi-val')
 
                 # KPI 3: Em Ajuste
-                with ui.card().classes('flex-1 q-pa-md flex-row items-center gap-3 justify-center shadow-lg').style(card_kpi_style):
-                    ui.icon('build_circle', color='orange-4', size='md')
+                with ui.card().classes('flex-1 q-pa-xs flex-row items-center gap-2 justify-center shadow-lg tv-kpi-card').style(card_kpi_style):
+                    ui.icon('build_circle', color='orange-4', size='sm').classes('tv-kpi-icon')
                     with ui.column().classes('gap-0'):
-                        ui.label('EM AJUSTE').classes('text-xs text-grey-4 font-bold tracking-wider')
-                        ui.label(str(demandas_ajustes)).classes('text-2xl font-black text-orange-4')
+                        ui.label('EM AJUSTE').classes('text-[10px] text-grey-4 font-bold tracking-wider tv-kpi-title')
+                        ui.label(str(demandas_ajustes)).classes('text-xl font-black text-orange-4 tv-kpi-val')
 
                 # KPI 4: Prontidão 24 Horas
-                with ui.card().classes('flex-1 q-pa-md flex-row items-center gap-3 justify-center shadow-lg').style(card_kpi_style):
-                    ui.icon('bolt', color='yellow-4', size='md')
+                with ui.card().classes('flex-1 q-pa-xs flex-row items-center gap-2 justify-center shadow-lg tv-kpi-card').style(card_kpi_style):
+                    ui.icon('bolt', color='yellow-4', size='sm').classes('tv-kpi-icon')
                     with ui.column().classes('gap-0'):
-                        ui.label('PRONTIDÃO 24H').classes('text-xs text-grey-4 font-bold tracking-wider')
-                        ui.label(str(eventos_24h)).classes('text-2xl font-black text-yellow-4')
+                        ui.label('PRONTIDÃO 24H').classes('text-[10px] text-grey-4 font-bold tracking-wider tv-kpi-title')
+                        ui.label(str(eventos_24h)).classes('text-xl font-black text-yellow-4 tv-kpi-val')
 
                 # KPI 5: Missões Rápidas Hoje
-                with ui.card().classes('flex-1 q-pa-md flex-row items-center gap-3 justify-center shadow-lg').style(card_kpi_style):
-                    ui.icon('flash_on', color='deep-orange-4', size='md')
+                with ui.card().classes('flex-1 q-pa-xs flex-row items-center gap-2 justify-center shadow-lg tv-kpi-card').style(card_kpi_style):
+                    ui.icon('flash_on', color='deep-orange-4', size='sm').classes('tv-kpi-icon')
                     with ui.column().classes('gap-0'):
-                        ui.label('MISSÕES RÁPIDAS').classes('text-xs text-grey-4 font-bold tracking-wider')
-                        ui.label(str(missoes_rapidas_cnt)).classes('text-2xl font-black text-deep-orange-4')
+                        ui.label('MISSÕES RÁPIDAS').classes('text-[10px] text-grey-4 font-bold tracking-wider tv-kpi-title')
+                        ui.label(str(missoes_rapidas_cnt)).classes('text-xl font-black text-deep-orange-4 tv-kpi-val')
 
                 # KPI 6: Placas JADE (Solenidade)
-                with ui.card().classes('flex-1 q-pa-md flex-row items-center gap-3 justify-center shadow-lg').style(card_kpi_style):
-                    ui.icon('badge', color='indigo-3', size='md')
+                with ui.card().classes('flex-1 q-pa-xs flex-row items-center gap-2 justify-center shadow-lg tv-kpi-card').style(card_kpi_style):
+                    ui.icon('badge', color='indigo-3', size='sm').classes('tv-kpi-icon')
                     with ui.column().classes('gap-0'):
-                        ui.label('PLACAS JADE').classes('text-xs text-grey-4 font-bold tracking-wider')
-                        ui.label(f"{jade_printed}/{jade_total} IMP.").classes('text-xl font-black text-indigo-3')
+                        ui.label('PLACAS JADE').classes('text-[10px] text-grey-4 font-bold tracking-wider tv-kpi-title')
+                        ui.label(f"{jade_printed}/{jade_total} IMP.").classes('text-lg font-black text-indigo-3 tv-kpi-val')
 
                 # KPI 7: Efetivo no Pronto
-                with ui.card().classes('flex-1 q-pa-md flex-row items-center gap-3 justify-center shadow-lg').style(card_kpi_style):
-                    ui.icon('shield', color='teal-3', size='md')
+                with ui.card().classes('flex-1 q-pa-xs flex-row items-center gap-2 justify-center shadow-lg tv-kpi-card').style(card_kpi_style):
+                    ui.icon('shield', color='teal-3', size='sm').classes('tv-kpi-icon')
                     with ui.column().classes('gap-0'):
-                        ui.label('EFETIVO PRONTO').classes('text-xs text-grey-4 font-bold tracking-wider')
-                        ui.label(efetivo_pronto_str).classes('text-2xl font-black text-teal-3')
+                        ui.label('EFETIVO PRONTO').classes('text-[10px] text-grey-4 font-bold tracking-wider tv-kpi-title')
+                        ui.label(efetivo_pronto_str).classes('text-xl font-black text-teal-3 tv-kpi-val')
 
             # ── SELO HIGHLIGHT: COBERTURA EM TEMPO REAL / PRÓXIMO EVENTO ──
             agora_dt = datetime.utcnow() - timedelta(hours=3)
@@ -490,9 +549,9 @@ def render_page():
                         ui.label(f"👤 {pauta_alerta.get('solicitante_nome', 'COMSOC').upper()}").classes('text-grey-3 text-xs')
 
             # ── COLUNAS PRINCIPAIS DO MONITOR (FLEXBOX RESPONSIVO SEM OVERFLOW) ──
-            card_col_style = 'background: rgba(10, 16, 32, 0.45); backdrop-filter: blur(14px); border: 1px solid rgba(0, 229, 255, 0.25); border-radius: 16px; box-sizing: border-border;'
+            card_col_style = 'background: rgba(10, 16, 32, 0.45); backdrop-filter: blur(14px); border: 1px solid rgba(0, 229, 255, 0.25); border-radius: 16px; box-sizing: border-box;'
 
-            with ui.row().classes('w-full gap-3 flex-grow items-stretch no-wrap box-border').style('margin-top: 4px; min-height: calc(100vh - 220px); overflow: hidden;'):
+            with ui.row().classes('w-full gap-2 flex-grow flex-1 min-h-0 items-stretch no-wrap box-border overflow-hidden').style('margin-top: 2px; height: 100%;'):
                 
                 # pautas gerais reutilizadas nas colunas
                 pautas = []
@@ -508,8 +567,8 @@ def render_page():
                 # =========================================================================
                 # COLUNA 1 (ESQUERDA - PRIORIDADE): PAUTAS HOJE & AMANHÃ (PRONTIDÃO 48H)
                 # =========================================================================
-                with ui.card().classes('q-pa-sm no-shadow flex-col justify-between box-border overflow-hidden').style(card_col_style + ' flex: 1.1 1 0%; min-width: 0;'):
-                    with ui.column().classes('w-full gap-2 box-border overflow-hidden'):
+                with ui.card().classes('q-pa-sm no-shadow flex-col justify-between box-border overflow-hidden tv-col-card h-full').style(card_col_style + ' flex: 1.1 1 0%; min-width: 0; display: flex; flex-direction: column;'):
+                    with ui.column().classes('w-full h-full gap-2 box-border overflow-hidden flex-1 flex-col'):
                         with ui.row().classes('w-full items-center justify-between q-mb-xs border-b border-cyan-500/30 q-pb-xs no-wrap'):
                             with ui.row().classes('items-center gap-2 no-wrap overflow-hidden'):
                                 ui.icon('today', color='amber-4', size='sm').classes('shrink-0')
@@ -531,7 +590,7 @@ def render_page():
                             pautas_hoje_amanha.sort(key=lambda x: (x[1] if isinstance(x, (tuple, list)) and len(x) > 1 else '', x[0].get('hora_evento', '') if isinstance(x, (tuple, list)) and len(x) > 0 and isinstance(x[0], dict) else ''))
 
                         if pautas_hoje_amanha:
-                            with ui.column().classes('w-full gap-2 max-h-[580px] overflow-y-auto q-pr-xs box-border'):
+                            with ui.column().classes('w-full gap-2 flex-1 h-full min-h-0 overflow-y-auto q-pr-xs box-border'):
                                 for item in pautas_hoje_amanha:
                                     if not (isinstance(item, (tuple, list)) and len(item) == 2):
                                         continue
@@ -576,8 +635,8 @@ def render_page():
                 # =========================================================================
                 # COLUNA 2 (CENTRO): CRONOGRAMA DE PRODUÇÃO & FILTRO MULTI-PAINEL
                 # =========================================================================
-                with ui.card().classes('q-pa-sm no-shadow flex-col justify-between box-border overflow-hidden').style(card_col_style + ' flex: 1.2 1 0%; min-width: 0;'):
-                    with ui.column().classes('w-full gap-2 box-border overflow-hidden'):
+                with ui.card().classes('q-pa-sm no-shadow flex-col justify-between box-border overflow-hidden tv-col-card h-full').style(card_col_style + ' flex: 1.2 1 0%; min-width: 0; display: flex; flex-direction: column;'):
+                    with ui.column().classes('w-full h-full gap-2 box-border overflow-hidden flex-1 flex-col'):
                         with ui.row().classes('w-full items-center justify-between q-mb-xs border-b border-cyan-500/30 q-pb-xs no-wrap'):
                             with ui.row().classes('items-center gap-2 no-wrap overflow-hidden'):
                                 ui.icon('calendar_month', color='cyan-4', size='sm').classes('shrink-0')
@@ -620,7 +679,7 @@ def render_page():
                                 pautas_filtradas.sort(key=lambda x: x[1] if isinstance(x, (tuple, list)) and len(x) > 1 else datetime.min)
 
                                 if pautas_filtradas:
-                                    with ui.column().classes('w-full gap-2 max-h-[580px] overflow-y-auto q-pr-xs'):
+                                    with ui.column().classes('w-full gap-2 flex-1 h-full min-h-0 overflow-y-auto q-pr-xs'):
                                         for item in pautas_filtradas:
                                             if not (isinstance(item, (tuple, list)) and len(item) == 2):
                                                 continue
@@ -678,7 +737,7 @@ def render_page():
                                 pautas_filtradas.sort(key=lambda x: x[1] if isinstance(x, (tuple, list)) and len(x) > 1 else datetime.min)
 
                                 if pautas_filtradas:
-                                    with ui.column().classes('w-full gap-2 max-h-[580px] overflow-y-auto q-pr-xs'):
+                                    with ui.column().classes('w-full gap-2 flex-1 h-full min-h-0 overflow-y-auto q-pr-xs'):
                                         for item in pautas_filtradas:
                                             if not (isinstance(item, (tuple, list)) and len(item) == 2):
                                                 continue
@@ -718,7 +777,7 @@ def render_page():
                                             ui.label('Sem pautas').classes('text-xs text-grey-5 text-center w-full py-4')
 
                             else:
-                                with ui.column().classes('w-full gap-2 max-h-[580px] overflow-y-auto q-pr-xs'):
+                                with ui.column().classes('w-full gap-2 flex-1 h-full min-h-0 overflow-y-auto q-pr-xs'):
                                     for p in pautas:
                                         st_val = str(p.get('status', '')).strip().lower()
                                         st_badge_color = 'green' if st_val in ('aprovada', 'aprovado') else 'grey' if st_val == 'concluida' else 'amber'
@@ -736,7 +795,7 @@ def render_page():
                 # =========================================================================
                 # COLUNA 3 (DIREITA): PLACAS JADE PENDENTES & BOLETINS COMSOC (TRANSLÚCIDO)
                 # =========================================================================
-                with ui.column().classes('gap-3 flex-grow q-pa-none box-border overflow-hidden').style('flex: 0.9 1 0%; min-width: 0;'):
+                with ui.column().classes('gap-2 flex-grow q-pa-none box-border overflow-hidden h-full flex-col').style('flex: 0.9 1 0%; min-width: 0; display: flex; flex-direction: column;'):
                     
                     # ALERTA TÁTICO DE PLACAS JADE PENDENTES
                     count_jade_pending = 0
@@ -748,7 +807,7 @@ def render_page():
                             pass
                             
                     if count_jade_pending > 0:
-                        with ui.card().classes('w-full q-pa-sm no-shadow rounded-xl border border-amber-500/60 flex-row items-center justify-between no-wrap animate-pulse').style('background: rgba(245,158,11,0.25); backdrop-filter: blur(10px);'):
+                        with ui.card().classes('w-full q-pa-sm no-shadow rounded-xl border border-amber-500/60 flex-row items-center justify-between no-wrap animate-pulse shrink-0').style('background: rgba(245,158,11,0.25); backdrop-filter: blur(10px);'):
                             with ui.row().classes('items-center gap-2'):
                                 ui.icon('print', color='amber-3', size='sm')
                                 ui.label('PLACAS JADE PENDENTES:').classes('text-xs font-black text-amber-3 tracking-wider')
@@ -764,8 +823,8 @@ def render_page():
                     header_item = slide_headers[slide_idx] if 0 <= slide_idx < len(slide_headers) else ('announcement', '📢 BOLETINS COMSOC')
                     icon_name, title_lbl = header_item[0], header_item[1]
 
-                    with ui.card().classes('w-full q-pa-md no-shadow flex-col justify-between flex-grow').style(card_col_style):
-                        with ui.column().classes('w-full gap-2'):
+                    with ui.card().classes('w-full q-pa-sm no-shadow flex-col justify-between flex-grow flex-1 min-h-0 overflow-hidden tv-col-card').style(card_col_style + ' display: flex; flex-direction: column;'):
+                        with ui.column().classes('w-full h-full gap-2 flex-1 flex-col overflow-hidden'):
                             with ui.row().classes('w-full items-center justify-between q-mb-xs border-b border-cyan-500/30 q-pb-xs'):
                                 with ui.row().classes('items-center gap-2'):
                                     ui.icon(icon_name, color='cyan-4', size='sm')
@@ -826,7 +885,7 @@ def render_page():
             if 'boletins' in locals() and boletins:
                 bulletin_ticker_text += " | ".join([f"📢 {b['titulo']}: {b['conteudo'][:120]}" for b in boletins])
 
-            with ui.row().classes('w-full q-py-xs bg-black/70 border border-cyan-500/30 rounded-lg q-mt-auto items-center no-wrap').style('backdrop-filter: blur(10px);'):
+            with ui.row().classes('w-full q-py-xs bg-black/80 border border-cyan-500/30 rounded-lg shrink-0 items-center no-wrap').style('backdrop-filter: blur(10px); margin-top: 2px;'):
                 ui.label('ÚLTIMAS NOTÍCIAS').classes('bg-cyan-500 text-black text-xs font-black q-px-sm q-py-xs rounded-sm shrink-0 q-mr-sm tracking-wider')
                 with ui.row().classes('marquee-container flex-grow'):
                     ui.label(bulletin_ticker_text).classes('marquee-content text-xs text-white')
