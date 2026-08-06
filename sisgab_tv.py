@@ -234,6 +234,7 @@ def render_page():
                                         titulo_final = f"{prio_prefix}{t.upper()}"
                                         status_val = 'aprovada' if aprovar_direto else 'pendente'
 
+                                        import json
                                         db.table('demandas_comunicacao').insert({
                                             'titulo_evento': titulo_final,
                                             'solicitante_nome': sol_inp.value or 'MONITOR TV',
@@ -244,8 +245,9 @@ def render_page():
                                             'local_evento': loc_inp.value or 'Gabinete',
                                             'status': status_val,
                                             'categoria_demanda': cat_primary,
-                                            'responsavel_id': militares_sel[0] if militares_sel else None,
-                                            'observacoes': f"Equipe: {militares_str} | Briefing: {obs_inp.value}"
+                                            'encarregado_id': str(militares_sel[0]) if militares_sel else None,
+                                            'notificar_militar_ids': json.dumps(militares_sel) if militares_sel else '[]',
+                                            'autoridades': f"Equipe: {militares_str} | Briefing: {obs_inp.value or 'Sem briefing'}"
                                         }).execute()
 
                                         # Enviar notificação Telegram
