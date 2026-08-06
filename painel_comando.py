@@ -545,7 +545,30 @@ def render_page():
                             def _edit(dem=ev):
                                 from comsoc_homologar import open_editar_pauta_dialog
                                 open_editar_pauta_dialog(dem, render_events)
-                            ui.button(icon='edit', on_click=_edit).props('flat round dense color=cyan size=sm').tooltip('Editar')
+                            ui.button(icon='edit', on_click=_edit).props('flat round dense color=cyan size=sm').tooltip('Editar Pauta')
+
+                            def _send_tg(dem=ev):
+                                try:
+                                    from notifications_manager import notify_telegram
+                                    tit = dem.get('titulo_evento', 'Compromisso')
+                                    dt = dem.get('data_evento', '')
+                                    hr = str(dem.get('hora_evento', '09:00'))[:5]
+                                    loc = dem.get('local_evento', 'Gabinete')
+                                    sol = dem.get('solicitante_nome', 'CGCFN')
+                                    msg = (
+                                        f"📌 *LEMBRETE DE COMPROMISSO*\n\n"
+                                        f"🔹 *Evento:* {tit}\n"
+                                        f"📅 *Data:* {dt} às {hr}\n"
+                                        f"📍 *Local:* {loc}\n"
+                                        f"👤 *Solicitante:* {sol}"
+                                    )
+                                    notify_telegram(msg, "demandas")
+                                    ui.notify('📲 Lembrete enviado para o Telegram!', color='positive')
+                                except Exception as tg_err:
+                                    ui.notify(f'Erro ao notificar no Telegram: {tg_err}', color='warning')
+
+                            ui.button(icon='send', on_click=_send_tg).props('flat round dense color=amber size=sm').tooltip('Avisar no Telegram')
+
                             gcal_url = make_gcal_sync_url(
                                 title=ev.get('titulo_evento', ''),
                                 date_str=ev.get('data_evento', hoje.isoformat()),
@@ -556,6 +579,39 @@ def render_page():
                             ui.link('📅', gcal_url, new_tab=True).classes(
                                 'text-sm q-pa-xs rounded hover:bg-cyan-900/40 transition-all'
                             ).tooltip('Sync Google Calendar')
+
+                            def _delete(dem=ev):
+                                d_id = dem.get('id')
+                                tit_ev = dem.get('titulo_evento', 'Compromisso')
+                                with ui.dialog() as diag_del, ui.card().classes('q-pa-md bg-slate-900 border border-red-500/50 rounded-2xl items-center text-center max-w-[450px]'):
+                                    ui.icon('delete_forever', size='3rem', color='red-5').classes('q-mb-xs')
+                                    ui.label('CONFIRMAR EXCLUSÃO').classes('text-white font-black text-md cyber-title')
+                                    ui.label(f'Deseja realmente excluir o compromisso:\n"{tit_ev}"?').classes('text-xs text-grey-4 q-my-md leading-relaxed')
+                                    
+                                    def do_delete():
+                                        try:
+                                            if d_id:
+                                                _db = get_service_db_connection() or get_db_connection()
+                                                if _db:
+                                                    _db.table('demandas_comunicacao').delete().eq('id', d_id).execute()
+                                                try:
+                                                    from sqlite_adapter import SQLiteDatabaseAdapter
+                                                    SQLiteDatabaseAdapter().table('demandas_comunicacao').delete().eq('id', d_id).execute()
+                                                except Exception:
+                                                    pass
+                                                ui.notify(f'🗑️ Compromisso excluído com sucesso!', color='positive')
+                                                diag_del.close()
+                                                # Atualiza a tela
+                                                render_events()
+                                        except Exception as del_err:
+                                            ui.notify(f'Erro ao excluir: {del_err}', color='negative')
+
+                                    with ui.row().classes('w-full justify-end gap-2 q-mt-sm'):
+                                        ui.button('Cancelar', on_click=diag_del.close).props('flat color=grey text-color=white')
+                                        ui.button('🗑️ Confirmar Exclusão', on_click=do_delete).props('unelevated color=red text-color=white bold')
+                                diag_del.open()
+
+                            ui.button(icon='delete', on_click=_delete).props('flat round dense color=red size=sm').tooltip('Excluir Compromisso')
 
                     # ── Mobile: card empilhado ──
                     with ui.card().classes(
@@ -582,6 +638,10 @@ def render_page():
                                     from comsoc_homologar import open_editar_pauta_dialog
                                     open_editar_pauta_dialog(dem, render_events)
                                 ui.button(icon='edit', on_click=_edit_m).props('flat round dense color=cyan size=xs')
+
+                                def _delete_m(dem=ev):
+                                    _delete(dem)
+                                ui.button(icon='delete', on_click=_delete_m).props('flat round dense color=red size=xs')
                         ui.label(ev.get('titulo_evento', 'Sem Título')).classes('text-sm font-bold text-white q-mt-xs')
                         loc_m = ev.get('local_evento', '')
                         if loc_m:
