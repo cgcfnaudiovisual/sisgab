@@ -106,15 +106,12 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                     in_data_fim = ui.input('Data Término (Opcional)', value=str(demanda.get('data_fim', demanda.get('data_evento','')) or '')).props('type=date dark outlined dense').classes('w-1/3')
                     in_hora = ui.input('Hora', value=formatted_hora).props('type=time step=60 dark outlined dense').classes('w-1/3')
 
-                container_autoridades = ui.column().classes('w-full gap-0')
-                with container_autoridades:
-                    in_autoridades = ui.input('Autoridades Presentes', value=str(demanda.get('autoridades','') or '')).props('dark outlined dense w-full')
-                
-                # Dinamiza visibilidade do campo autoridades (foco em eventos/audiovisual/suporte)
-                container_autoridades.bind_visibility_from(
-                    in_categoria, 'value', 
-                    backward=lambda cat: cat in ('audiovisual', 'suporte_evento', 'outra_tarefa')
-                )
+                # Campo de Briefing, Observações e Autoridades (Sempre Visível e Destacado)
+                in_autoridades = ui.textarea(
+                    '📝 Briefing / Observações & Autoridades Presentes',
+                    value=str(demanda.get('autoridades') or demanda.get('observacoes') or ''),
+                    placeholder='Digite orientações da missão, fardamento, roteiro, autoridades presentes e observações gerais...'
+                ).props('dark outlined dense w-full rows=3').classes('w-full q-mt-xs')
 
                 st_val = str(demanda.get('status', 'pendente') or 'pendente').lower()
                 if st_val not in ('pendente', 'aprovada', 'aprovado', 'ajustes', 'concluida', 'rejeitado', 'rejeitada'):
