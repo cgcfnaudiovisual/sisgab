@@ -470,9 +470,20 @@ def build_layout_base():
                 # Período de referência ativo
                 active_year = app.storage.user.setdefault('ano_letivo_ativo', '2026')
                 
-                # Notificação inicial de conexão
+                # Notificação inicial de conexão de sessão
                 if not app.storage.user.get('year_notified'):
-                    ui.notify(f'🟢 Conectado ao SisGAB — Período {active_year}', color='positive', position='top')
+                    user_cached = app.storage.user.get('user_data', {})
+                    u_nome = user_cached.get('nome_guerra') or user_cached.get('username') or ''
+                    if u_nome and u_nome.lower() != 'militar':
+                        ui.notify(
+                            f'🛡️ SESSÃO ATIVA: BEM-VINDO, {u_nome.upper()}!',
+                            color='positive',
+                            position='top',
+                            icon='verified_user',
+                            close_button='OK'
+                        ).props('classes="text-weight-bold shadow-10 cyber-title" timeout=5000')
+                    else:
+                        ui.notify(f'🟢 Conectado ao SisGAB — Período {active_year}', color='positive', position='top')
                     app.storage.user['year_notified'] = True
 
                 # Player de Rádio Minimalista
@@ -1533,6 +1544,10 @@ def login_page(request: Request):
                             profile = auth_res['profile']
                             session_data = auth_res['session']
                             
+                            nome_g_sub = profile.get('nome') or profile.get('username') or user.value
+                            posto_sub = profile.get('posto_grad') or profile.get('posto') or ''
+                            nome_exibicao = f"{posto_sub} {nome_g_sub}".strip().upper() if posto_sub else nome_g_sub.upper()
+
                             import time
                             app.storage.user['authenticated'] = True
                             app.storage.user['login_time'] = time.time()
@@ -1541,7 +1556,8 @@ def login_page(request: Request):
                             app.storage.user['user_data'] = {
                                 'id': profile.get('id'),
                                 'username': profile.get('username'),
-                                'nome_guerra': profile.get('nome', profile.get('username')),
+                                'nome_guerra': nome_exibicao,
+                                'posto_grad': posto_sub,
                                 'role': profile.get('role', 'compel'),
                                 'email': login_email
                             }
@@ -1552,13 +1568,18 @@ def login_page(request: Request):
                             app.storage.user['current_path'] = target_path
                             if role_user not in ('tv', 'tv_comcia'):
                                 app.storage.user['tv_lock_active'] = False
-                            ui.notify(f'Bem-vindo, {profile.get("nome", user.value)}!', color='success')
                             
-                            # Registrar no log SQLite real (A8)
+                            ui.notify(
+                                f'🛡️ SESSÃO AUTENTICADA COM SUCESSO!\nBem-vindo ao SisGAB, {nome_exibicao}!',
+                                color='positive',
+                                position='top',
+                                icon='verified_user',
+                                close_button='OK'
+                            ).props('multi-line classes="text-weight-bold shadow-10 cyber-title" timeout=5000')
+                            
                             import log_acessos
                             log_acessos.log_access("Login", "Autenticação", "SUCESSO")
                             
-                            # Força redirecionamento físico de página via JS para o gerenciador de senhas do navegador salvar as credenciais
                             ui.run_javascript(f"window.location.href = '{target_path}'")
                         else:
                             # Fallback para autenticação local no banco efetivo (caso tenha sido criado sem Auth por rate limits)
@@ -1570,10 +1591,15 @@ def login_page(request: Request):
                             if not local_user and login_email != original_input:
                                 local_user = authenticate_user(login_email, pwd.value)
                             if local_user:
+                                nome_g_loc = local_user.get('nome_guerra') or local_user.get('nome_completo') or user.value
+                                posto_loc = local_user.get('posto_grad') or local_user.get('posto') or ''
+                                nome_exibicao = f"{posto_loc} {nome_g_loc}".strip().upper() if posto_loc else nome_g_loc.upper()
+
                                 profile = {
                                     'id': local_user.get('id') or local_user.get('telegram_id') or 'local-fallback',
-                                    'username': local_user.get('email', '').split('@')[0] if local_user.get('email') else local_user.get('nome_guerra', 'militar'),
-                                    'nome': local_user.get('nome_guerra', 'militar'),
+                                    'username': local_user.get('email', '').split('@')[0] if local_user.get('email') else nome_g_loc,
+                                    'nome': nome_exibicao,
+                                    'posto_grad': posto_loc,
                                     'role': local_user.get('role', 'militar')
                                 }
                                 import time
@@ -1584,7 +1610,8 @@ def login_page(request: Request):
                                 app.storage.user['user_data'] = {
                                     'id': profile.get('id'),
                                     'username': profile.get('username'),
-                                    'nome_guerra': profile.get('nome', profile.get('username')),
+                                    'nome_guerra': nome_exibicao,
+                                    'posto_grad': posto_loc,
                                     'role': profile.get('role', 'militar'),
                                     'email': login_email
                                 }
@@ -1595,7 +1622,14 @@ def login_page(request: Request):
                                 app.storage.user['current_path'] = target_path
                                 if role_user not in ('tv', 'tv_comcia'):
                                     app.storage.user['tv_lock_active'] = False
-                                ui.notify(f'Bem-vindo (Autenticação Direta), {profile.get("nome", user.value)}!', color='success')
+                                
+                                ui.notify(
+                                    f'🛡️ SESSÃO AUTENTICADA COM SUCESSO!\nBem-vindo ao SisGAB, {nome_exibicao}!',
+                                    color='positive',
+                                    position='top',
+                                    icon='verified_user',
+                                    close_button='OK'
+                                ).props('multi-line classes="text-weight-bold shadow-10 cyber-title" timeout=5000')
                                 
                                 import log_acessos
                                 log_acessos.log_access("Login", "Autenticação Local", "SUCESSO")
