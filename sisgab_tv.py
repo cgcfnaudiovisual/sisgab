@@ -9,7 +9,7 @@ from logo_base64 import LOGO_BASE64
 THEME = theme.colors
 
 def render_page():
-    # Estilos CSS customizados para o letreiro de notícias (Ticker Marquee) e Responsividade 19"/22"
+    # Estilos CSS customizados para o letreiro de notícias (Ticker Marquee) e Responsividade Ultra-Compacta
     ui.add_head_html("""
     <style>
     @keyframes marquee {
@@ -33,62 +33,48 @@ def render_page():
         animation-play-state: paused;
     }
 
-    /* Ajuste Automático Fluido para Monitores 19" e 22" (1366x768, 1440x900, 1080p) */
-    @media (max-height: 920px) or (max-width: 1600px) {
-        .tv-root-container {
-            padding: 6px 10px !important;
-            gap: 6px !important;
-        }
-        .tv-header {
-            padding: 4px 10px !important;
-        }
-        .tv-logo {
-            height: 38px !important;
-        }
-        .tv-header-title {
-            font-size: 1.35rem !important;
-        }
-        .tv-header-sub {
-            font-size: 0.7rem !important;
-        }
-        .tv-clock-time {
-            font-size: 1.6rem !important;
-        }
-        .tv-clock-date {
-            font-size: 0.75rem !important;
-        }
-        .tv-kpi-card {
-            min-height: 52px !important;
-            padding: 4px 8px !important;
-        }
-        .tv-kpi-title {
-            font-size: 0.65rem !important;
-        }
-        .tv-kpi-val {
-            font-size: 1.25rem !important;
-        }
-        .tv-kpi-icon {
-            font-size: 1.3rem !important;
-        }
-        .tv-col-card {
-            padding: 8px !important;
-        }
+    /* ── RESPONSIVIDADE ULTRA-COMPACTA PARA MONITORES DE 15", 19", 22" (1366x768, 1280x720, 1440x900, 1600x900) ── */
+    @media (max-height: 880px) or (max-width: 1600px) {
+        .tv-root-container { padding: 4px 8px !important; gap: 4px !important; }
+        .tv-header { padding: 4px 10px !important; }
+        .tv-logo { height: 34px !important; }
+        .tv-header-title { font-size: 1.25rem !important; }
+        .tv-header-sub { font-size: 0.68rem !important; }
+        .tv-clock-time { font-size: 1.5rem !important; }
+        .tv-clock-date { font-size: 0.7rem !important; }
+        .tv-kpi-card { min-height: 44px !important; padding: 2px 6px !important; }
+        .tv-kpi-title { font-size: 0.6rem !important; }
+        .tv-kpi-val { font-size: 1.15rem !important; }
+        .tv-kpi-icon { font-size: 1.15rem !important; }
+        .tv-col-card { padding: 6px !important; }
     }
 
-    @media (max-height: 780px) {
-        .tv-header-title {
-            font-size: 1.15rem !important;
-        }
-        .tv-clock-time {
-            font-size: 1.4rem !important;
-        }
-        .tv-kpi-card {
-            min-height: 44px !important;
-            padding: 2px 6px !important;
-        }
-        .tv-kpi-val {
-            font-size: 1.1rem !important;
-        }
+    @media (max-height: 768px) or (max-width: 1366px) {
+        .tv-root-container { padding: 2px 6px !important; gap: 2px !important; }
+        .tv-header { padding: 2px 8px !important; }
+        .tv-logo { height: 28px !important; }
+        .tv-header-title { font-size: 1.05rem !important; letter-spacing: 1.5px !important; }
+        .tv-header-sub { font-size: 0.60rem !important; letter-spacing: 1px !important; }
+        .tv-clock-time { font-size: 1.25rem !important; }
+        .tv-clock-date { font-size: 0.62rem !important; letter-spacing: 1px !important; }
+        .tv-kpi-card { min-height: 38px !important; padding: 2px 4px !important; }
+        .tv-kpi-title { font-size: 0.52rem !important; }
+        .tv-kpi-val { font-size: 1.0rem !important; }
+        .tv-kpi-icon { font-size: 1.0rem !important; }
+        .tv-col-card { padding: 5px !important; border-radius: 10px !important; }
+        .q-badge { font-size: 9px !important; padding: 1px 4px !important; }
+    }
+
+    @media (max-height: 680px) {
+        .tv-root-container { padding: 1px 4px !important; gap: 1px !important; }
+        .tv-header { padding: 1px 6px !important; }
+        .tv-logo { height: 24px !important; }
+        .tv-header-title { font-size: 0.9rem !important; }
+        .tv-clock-time { font-size: 1.1rem !important; }
+        .tv-kpi-card { min-height: 32px !important; padding: 1px 3px !important; }
+        .tv-kpi-title { font-size: 0.48rem !important; }
+        .tv-kpi-val { font-size: 0.9rem !important; }
+        .tv-kpi-icon { font-size: 0.9rem !important; }
     }
     </style>
     """)
@@ -303,6 +289,38 @@ def render_page():
 
                 alerts_enabled = app.storage.user.get('tv_alerts_enabled', True)
                 ui.checkbox('Card Alertas', value=alerts_enabled, on_change=lambda e: toggle_alerts(e.value)).props('dark dense').classes('text-xs text-white q-ml-sm')
+
+                def change_zoom(val):
+                    app.storage.user['tv_zoom_level'] = val
+                    ui.run_javascript(f'''
+                        const root = document.querySelector('.tv-root-container');
+                        if (root) {{
+                            if ("{val}" === "auto") {{
+                                root.style.transform = "";
+                                root.style.transformOrigin = "";
+                                root.style.width = "";
+                                root.style.height = "";
+                            }} else {{
+                                const scale = parseFloat("{val}");
+                                root.style.transform = `scale(${scale})`;
+                                root.style.transformOrigin = "top left";
+                                root.style.width = `${100 / scale}%`;
+                                root.style.height = `${100 / scale}vh`;
+                            }}
+                        }}
+                    ''')
+
+                cur_zoom = app.storage.user.get('tv_zoom_level', 'auto')
+                ui.select(
+                    {
+                        'auto': '🔍 Auto Fit',
+                        '0.9': '🔎 90%',
+                        '0.8': '🔎 80%',
+                        '0.7': '🔎 70%'
+                    },
+                    value=cur_zoom,
+                    on_change=lambda e: change_zoom(e.value)
+                ).props('dark dense options-dense outlined').style('font-size: 10px; width: 105px;').classes('q-ml-xs').tooltip('Ajuste Manual de Escala/Zoom para Monitores Menores')
 
             # Relógio Digital Gigante (Horário de Brasília GMT-3)
             with ui.column().classes('items-end gap-0'):
