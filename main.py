@@ -1784,14 +1784,16 @@ def sync_menu_permissions_db():
         print(f"[ERRO sync_menu_permissions_db] {e}")
 
 
-# Inicializa o Bot do Telegram concorrente ao servidor
+# Inicializa o Bot do Telegram e Agendadores concorrentes ao servidor
 from alerts_manager import AlertsManager
+from notifications_manager import start_19h_briefing_scheduler
 from database import seed_default_admin, seed_efetivo_gabinete
 app.on_startup(seed_default_admin)
 app.on_startup(seed_efetivo_gabinete)
 app.on_startup(sync_menu_permissions_db)
 app.on_startup(telegram_bot.init_bot)
 app.on_startup(AlertsManager.start_alerts_scheduler)
+app.on_startup(start_19h_briefing_scheduler)
 
 # Loop de liberação periódica de memória RAM para manter o pico sob 400MB
 async def memory_cleanup_loop():

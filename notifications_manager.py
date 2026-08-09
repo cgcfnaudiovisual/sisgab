@@ -518,12 +518,11 @@ def start_19h_briefing_scheduler():
                 now_br = datetime.utcnow() - timedelta(hours=3)
                 today_str = now_br.strftime('%Y-%m-%d')
                 
-                # Se for 19:00 BRT e ainda não disparou hoje
-                if now_br.hour == 19 and now_br.minute == 0:
-                    if _LAST_19H_SENT_DATE != today_str:
-                        _LAST_19H_SENT_DATE = today_str
-                        print(f"[19H SCHEDULER] Disparando relatório diário automático das 19:00h ({today_str})...", flush=True)
-                        send_daily_19h_telegram_briefing()
+                # Se for 19:00 BRT ou mais tarde e ainda não disparou hoje
+                if now_br.hour >= 19 and _LAST_19H_SENT_DATE != today_str:
+                    _LAST_19H_SENT_DATE = today_str
+                    print(f"[19H SCHEDULER] Disparando relatório diário automático das 19:00h ({today_str})...", flush=True)
+                    send_daily_19h_telegram_briefing()
             except Exception as loop_err:
                 print(f"[19H SCHEDULER LOOP ERR] {loop_err}", flush=True)
             time.sleep(30)
