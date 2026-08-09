@@ -41,6 +41,53 @@ def make_gcal_sync_url(title, date_str, time_str='09:00', location='CGCFN', deta
         return "https://calendar.google.com/calendar/u/0?cid=Y2djZm5hdWRpb3Zpc3VhbEBnbWFpbC5jb20"
 
 
+import json
+
+def parse_cobertura_icons(cobertura_val, cat_val=None):
+    """Mapeia os tipos de serviço requeridos para ícones com tooltips e cores."""
+    res = []
+    items = []
+    if cobertura_val:
+        if isinstance(cobertura_val, list):
+            items = cobertura_val
+        else:
+            raw = str(cobertura_val).strip()
+            try:
+                items = json.loads(raw)
+                if isinstance(items, str):
+                    items = json.loads(items)
+            except Exception:
+                items = [x.strip() for x in raw.replace('[','').replace(']','').replace('"','').replace("'",'').split(',') if x.strip()]
+    if not isinstance(items, list):
+        items = [str(items)]
+    
+    if cat_val:
+        items.append(str(cat_val))
+        
+    for item in items:
+        st = str(item).lower().strip()
+        if 'foto' in st or 'fotografia' in st:
+            res.append(('photo_camera', '📷 Fotografia', 'cyan-4'))
+        if 'video' in st or 'filmagem' in st:
+            res.append(('videocam', '🎥 Vídeo / Filmagem', 'amber-4'))
+        if 'grafico' in st or 'design' in st or 'arte' in st:
+            res.append(('palette', '🎨 Serviço Gráfico / Design', 'purple-3'))
+        if 'drone' in st or 'aerea' in st or 'aérea' in st:
+            res.append(('flight', '🚁 Imagens Aéreas / Drone', 'green-4'))
+        if 'rede' in st or 'reels' in st or 'social' in st:
+            res.append(('smartphone', '📱 Mídias Sociais / Reels', 'pink-4'))
+        if 'cerimonial' in st or 'jade' in st or 'assento' in st:
+            res.append(('badge', '🪪 Cerimonial & Solenidade', 'indigo-3'))
+            
+    unique_res = []
+    seen = set()
+    for icon_name, label, color in res:
+        if icon_name not in seen:
+            seen.add(icon_name)
+            unique_res.append((icon_name, label, color))
+    return unique_res
+
+
 def fetch_rss_news():
     """Busca notícias externas do feed do portal Poder Naval com fallback mock."""
     url = "https://www.naval.com.br/blog/feed/"
@@ -528,9 +575,16 @@ def render_page():
 
                         with ui.column().classes('gap-0 flex-grow'):
                             ui.label(ev.get('titulo_evento', 'Sem Título')).classes('text-sm font-bold text-white').style('line-height:1.3;')
-                            loc = ev.get('local_evento', '')
-                            if loc:
-                                ui.label(f"📍 {loc}").classes('text-[11px] text-grey-5')
+                            with ui.row().classes('items-center gap-2 wrap q-mt-none'):
+                                loc = ev.get('local_evento', '')
+                                if loc:
+                                    ui.label(f"📍 {loc}").classes('text-[11px] text-grey-5')
+                                
+                                cobs = parse_cobertura_icons(ev.get('tipo_cobertura'), ev.get('categoria_demanda'))
+                                if cobs:
+                                    with ui.row().classes('items-center gap-1 bg-black/40 q-px-xs rounded border border-white/10'):
+                                        for icon_name, tooltip_txt, color in cobs:
+                                            ui.icon(icon_name, color=color, size='0.95rem').tooltip(tooltip_txt)
 
                         try:
                             from telegram_bot.handlers_common import _format_militar_responsavel
@@ -643,9 +697,15 @@ def render_page():
                                     _delete(dem)
                                 ui.button(icon='delete', on_click=_delete_m).props('flat round dense color=red size=xs')
                         ui.label(ev.get('titulo_evento', 'Sem Título')).classes('text-sm font-bold text-white q-mt-xs')
-                        loc_m = ev.get('local_evento', '')
-                        if loc_m:
-                            ui.label(f"📍 {loc_m}").classes('text-[11px] text-grey-5')
+                        with ui.row().classes('items-center gap-2 wrap q-mt-none'):
+                            loc_m = ev.get('local_evento', '')
+                            if loc_m:
+                                ui.label(f"📍 {loc_m}").classes('text-[11px] text-grey-5')
+                            cobs_m = parse_cobertura_icons(ev.get('tipo_cobertura'), ev.get('categoria_demanda'))
+                            if cobs_m:
+                                with ui.row().classes('items-center gap-1 bg-black/40 q-px-xs rounded border border-white/10'):
+                                    for icon_name, tooltip_txt, color in cobs_m:
+                                        ui.icon(icon_name, color=color, size='0.85rem').tooltip(tooltip_txt)
             else:
                 with ui.column().classes('w-full items-center q-py-lg gap-2'):
                     ui.icon('event_available', size='2rem', color='cyan')

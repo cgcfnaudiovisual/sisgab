@@ -335,9 +335,54 @@ def render_page():
                 ui.timer(1.0, update_clock)
                 update_clock()
 
+        def parse_cobertura_icons(cobertura_val, cat_val=None):
+            import json
+            res = []
+            items = []
+            if cobertura_val:
+                if isinstance(cobertura_val, list):
+                    items = cobertura_val
+                else:
+                    raw = str(cobertura_val).strip()
+                    try:
+                        items = json.loads(raw)
+                        if isinstance(items, str):
+                            items = json.loads(items)
+                    except Exception:
+                        items = [x.strip() for x in raw.replace('[','').replace(']','').replace('"','').replace("'",'').split(',') if x.strip()]
+            if not isinstance(items, list):
+                items = [str(items)]
+            
+            if cat_val:
+                items.append(str(cat_val))
+                
+            for item in items:
+                st = str(item).lower().strip()
+                if 'foto' in st or 'fotografia' in st:
+                    res.append(('photo_camera', '📷 Fotografia', 'cyan-4'))
+                if 'video' in st or 'filmagem' in st:
+                    res.append(('videocam', '🎥 Vídeo / Filmagem', 'amber-4'))
+                if 'grafico' in st or 'design' in st or 'arte' in st:
+                    res.append(('palette', '🎨 Serviço Gráfico / Design', 'purple-3'))
+                if 'drone' in st or 'aerea' in st or 'aérea' in st:
+                    res.append(('flight', '🚁 Imagens Aéreas / Drone', 'green-4'))
+                if 'rede' in st or 'reels' in st or 'social' in st:
+                    res.append(('smartphone', '📱 Mídias Sociais / Reels', 'pink-4'))
+                if 'cerimonial' in st or 'jade' in st or 'assento' in st:
+                    res.append(('badge', '🪪 Cerimonial & Solenidade', 'indigo-3'))
+                    
+            unique_res = []
+            seen = set()
+            for icon_name, label, color in res:
+                if icon_name not in seen:
+                    seen.add(icon_name)
+                    unique_res.append((icon_name, label, color))
+            return unique_res
+
         # ── PAINEL PRINCIPAL REFRESHÁVEL AUTOMATICAMENTE ──
         @ui.refreshable
         def render_tv_dashboard():
+
             db = fresh_db()
             efetivo_nomes = {}
 
@@ -643,6 +688,11 @@ def render_page():
                                                 ui.label(f"🕒 {hr_txt}").classes('text-amber-4 font-black')
                                                 ui.label('|').classes('text-white/20')
                                                 ui.label(f"📍 {p.get('local_evento', 'Gabinete').upper()}").classes('text-cyan-4 font-bold truncate max-w-[120px]')
+                                                cobs_tv = parse_cobertura_icons(p.get('tipo_cobertura'), p.get('categoria_demanda'))
+                                                if cobs_tv:
+                                                    with ui.row().classes('items-center gap-0.5 bg-black/40 q-px-xs rounded border border-white/10'):
+                                                        for icon_name, tooltip_txt, color in cobs_tv:
+                                                            ui.icon(icon_name, color=color, size='0.85rem').tooltip(tooltip_txt)
                                                 if enc_nome:
                                                     ui.label('|').classes('text-white/20')
                                                     ui.label(f"🎖️ {enc_nome.upper()}").classes('text-green-4 font-black truncate max-w-[120px]')
@@ -735,6 +785,11 @@ def render_page():
                                                         ui.label(f"🕒 {hr_txt}").classes('text-amber-4 font-bold')
                                                         ui.label('|').classes('text-white/20')
                                                         ui.label(f"📍 {p.get('local_evento', 'Gabinete').upper()}").classes('text-cyan-4 font-bold')
+                                                        cobs_tv2 = parse_cobertura_icons(p.get('tipo_cobertura'), p.get('categoria_demanda'))
+                                                        if cobs_tv2:
+                                                            with ui.row().classes('items-center gap-0.5 bg-black/40 q-px-xs rounded border border-white/10'):
+                                                                for icon_name, tooltip_txt, color in cobs_tv2:
+                                                                    ui.icon(icon_name, color=color, size='0.85rem').tooltip(tooltip_txt)
                                                         if enc_nome:
                                                             ui.label('|').classes('text-white/20')
                                                             ui.label(f"🎖️ {enc_nome.upper()}").classes('text-green-4 font-black')
