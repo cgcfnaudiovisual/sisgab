@@ -1541,50 +1541,45 @@ def login_page(request: Request):
                                 print(f"[LOGIN LOOKUP ERR] {lookup_err}")
                         
                         def resolve_militar_display_name(email_or_user, profile_data=None):
+                            if profile_data and isinstance(profile_data, dict):
+                                ng = profile_data.get('nome_guerra') or profile_data.get('nome') or profile_data.get('nome_completo') or ''
+                                pg = profile_data.get('posto_grad') or profile_data.get('posto') or ''
+                                if ng and '@' not in str(ng):
+                                    return f"{pg} {ng}".strip().upper()
+
+                            clean_input = str(email_or_user).strip()
+                            if '@' in clean_input and 'cgcfn' in clean_input.lower():
+                                return "ADMINISTRADOR / COMSOC"
+
                             try:
                                 from database import get_service_db_connection, get_db_connection
                                 db = get_service_db_connection() or get_db_connection()
                                 if db:
-                                    clean_input = str(email_or_user).strip()
                                     if '@' in clean_input:
-                                        res_ef = db.table('efetivo').select('nome_guerra, posto_grad, nome_completo').eq('email', clean_input).execute()
+                                        res_ef = db.table('efetivo').select('nome_guerra, posto_grad, nome_completo').eq('email', clean_input).limit(1).execute()
                                         if res_ef.data:
                                             m = res_ef.data[0]
                                             ng = m.get('nome_guerra') or m.get('nome_completo') or ''
                                             pg = m.get('posto_grad') or ''
                                             if ng:
                                                 return f"{pg} {ng}".strip().upper()
-                                    res_ef2 = db.table('efetivo').select('nome_guerra, posto_grad, nome_completo').ilike('nome_guerra', clean_input).execute()
-                                    if res_ef2.data:
-                                        m = res_ef2.data[0]
-                                        ng = m.get('nome_guerra') or m.get('nome_completo') or ''
-                                        pg = m.get('posto_grad') or ''
-                                        if ng:
-                                            return f"{pg} {ng}".strip().upper()
-                                    res_u = db.table('users').select('nome, username, email').or_(f"username.eq.{clean_input},email.eq.{clean_input}").execute()
-                                    if res_u.data:
-                                        u = res_u.data[0]
-                                        ng = u.get('nome') or u.get('username') or ''
-                                        if ng and '@' not in ng:
-                                            res_ef3 = db.table('efetivo').select('nome_guerra, posto_grad').ilike('nome_guerra', ng.strip()).execute()
-                                            if res_ef3.data:
-                                                m3 = res_ef3.data[0]
-                                                return f"{m3.get('posto_grad', '')} {m3.get('nome_guerra', '')}".strip().upper()
-                                            return ng.upper()
+                                    else:
+                                        res_ef2 = db.table('efetivo').select('nome_guerra, posto_grad, nome_completo').ilike('nome_guerra', clean_input).limit(1).execute()
+                                        if res_ef2.data:
+                                            m = res_ef2.data[0]
+                                            ng = m.get('nome_guerra') or m.get('nome_completo') or ''
+                                            pg = m.get('posto_grad') or ''
+                                            if ng:
+                                                return f"{pg} {ng}".strip().upper()
                             except Exception as err:
-                                print(f"[RESOLVE DISPLAY NAME ERR] {err}")
-                            if profile_data and isinstance(profile_data, dict):
-                                nome_p = profile_data.get('nome') or profile_data.get('nome_guerra') or profile_data.get('username') or ''
-                                posto_p = profile_data.get('posto_grad') or profile_data.get('posto') or ''
-                                if nome_p and '@' not in nome_p:
-                                    return f"{posto_p} {nome_p}".strip().upper()
-                            if '@' in str(email_or_user):
-                                user_part = email_or_user.split('@')[0]
-                                if 'cgcfn' in user_part.lower():
-                                    return "ADMINISTRADOR / COMSOC"
+                                print(f"[RESOLVE DISPLAY NAME FAST ERR] {err}")
+
+                            if '@' in clean_input:
+                                user_part = clean_input.split('@')[0]
                                 parts = user_part.replace('.', ' ').replace('_', ' ').split()
                                 return " ".join([p.capitalize() for p in parts]).upper()
-                            return str(email_or_user).upper()
+
+                            return clean_input.upper()
 
                         try:
                             auth_res = authenticate_user_supabase(login_email, pwd.value)
