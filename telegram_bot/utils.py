@@ -316,7 +316,20 @@ async def _salvar_presenca_bot(bot, message, chat_id, state, sigla_code, obs_txt
     dt_str = now.strftime('%Y-%m-%d')
     hr_str = now.strftime('%H:%M:%S')
     
-    pres_id = str(uuid.uuid4())
+    # Buscar registro existente para (user_id, data) antes de inserir
+    pres_id = None
+    try:
+        from database import get_bot_db_connection
+        db_check = get_bot_db_connection()
+        if db_check:
+            res_existing = db_check.table('presenca_diaria').select('id').eq('user_id', str(user_id)).eq('data', dt_str).limit(1).execute()
+            if res_existing and res_existing.data:
+                pres_id = res_existing.data[0].get('id')
+    except Exception as chk_err:
+        print(f"[PRESENCA CHECK EXISTING ERR] {chk_err}")
+    
+    if not pres_id:
+        pres_id = str(uuid.uuid4())
     
     payload = {
         'id': pres_id,
@@ -340,8 +353,11 @@ async def _salvar_presenca_bot(bot, message, chat_id, state, sigla_code, obs_txt
             try:
                 db.table('presenca_diaria').upsert(payload, on_conflict='id').execute()
             except Exception as e_up1:
-                print(f"[PRESENCA SUPABASE UPSERT ID ERR] {e_up1}")
-                db.table('presenca_diaria').upsert(payload).execute()
+                print(f"[PRESENCA SUPABASE UPSERT ERR] {e_up1}")
+                try:
+                    db.table('presenca_diaria').upsert(payload).execute()
+                except Exception as e_up2:
+                    print(f"[PRESENCA SUPABASE INSERT FALLBACK ERR] {e_up2}")
     except Exception as sp_err:
         print(f"[PRESENCA BOT SUPABASE WARN] {sp_err}")
         

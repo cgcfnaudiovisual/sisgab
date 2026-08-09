@@ -893,11 +893,8 @@ def register_common_handlers(bot):
                         btn_label = f"⚙️ #{d_id} — {dt_hdr}{(tit or 'Pauta')[:15]}".strip()
                         demandas_map[btn_label] = d_id
 
-                    chat_states[chat_id] = {
-                        'action': 'gerenciar_demandas',
-                        'user': profile,
-                        'demandas_map': demandas_map
-                    }
+                    # NÃO setar estado aqui — os handlers de "⚙️ #ID" e "🔎 Detalhes" vivem na SEÇÃO 1
+                    # e precisam que o chat_id NÃO esteja em chat_states para funcionar.
 
                     list_msg += "👇 **Selecione a pauta no teclado de resposta rápida abaixo para gerenciar:**"
                     try:
@@ -1388,6 +1385,33 @@ def register_common_handlers(bot):
         step = state.get('step')
         profile = state.get('user')
         is_operator = str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design') if profile else False
+
+        # 🛡️ MENU OVERRIDE: Se o usuário clicar em qualquer botão do menu principal
+        # enquanto está num wizard, limpar o estado e reprocessar na SEÇÃO 1.
+        MAIN_MENU_BUTTONS = (
+            "📋 Gerenciar Demandas", "📋 Voltar para Lista de Demandas",
+            "📅 Agenda Semanal", "📋 Pautas COMSOC",
+            "🔌 Cautelas Ativas", "🤖 Digerir Pauta (IA)",
+            "📋 Pronto CheGab", "📊 Relatório Executivo",
+            "🟢 Dar Presença", "📋 Dar Presença",
+            "➕ Criar Demanda", "🪑 Placas JADE",
+            "⚡ Missão Rápida", "ℹ️ Ajuda",
+            "📸 Cadastro Facial", "🔍 Buscar Minhas Fotos",
+            "🪑 Solicitar Assento JADE", "⚙️ Configurações",
+            "👥 Cadastros Pendentes", "🔑 Aprovar Cadastros",
+        )
+        # Também detectar botões de ação de demanda (⚙️ #ID, 🔎 Detalhes, ✅ Aprovar, etc.)
+        is_demanda_action = (
+            text.startswith("⚙️ #") or text.startswith("⚙️ ") or
+            text.startswith("🔎 Detalhes #") or text.startswith("🎯 Concluir Missão #") or
+            text.startswith("✅ Aprovar #") or text.startswith("❌ Rejeitar #") or
+            text.startswith("🔄 Reabrir Pauta #") or text.startswith("✏️ Editar") or
+            text.startswith("👤 Equipe #")
+        )
+        if text in MAIN_MENU_BUTTONS or is_demanda_action:
+            clear_state(chat_id)
+            # Re-invocar o handler como se fosse SEÇÃO 1 (sem estado)
+            return await handle_all_messages(message)
 
         if text in ["❌ Cancelar", "cancelar"]:
             clear_state(chat_id)
@@ -2062,7 +2086,7 @@ def register_common_handlers(bot):
             from .keyboards import (
                 get_om_keyboard, get_date_keyboard, get_time_keyboard,
                 get_uniform_keyboard, get_authorities_keyboard, get_observations_keyboard,
-                get_multi_service_inline_keyboard, get_confirm_demanda_keyboard
+                get_multi_service_reply_keyboard, get_confirm_demanda_keyboard
             )
             
             # Suporte ao botão "⬅️ Voltar"

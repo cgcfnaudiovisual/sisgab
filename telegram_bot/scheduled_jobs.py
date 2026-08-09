@@ -343,7 +343,7 @@ async def send_tactical_2h_reminders(bot):
 
 
 async def generate_executive_report(bot, chat_id):
-    """Gera um relatório executivo resumido de KPIs de produção do mês."""
+    """Gera um relatório executivo enriquecido com KPIs de produção, presença, próximos eventos e cautelas."""
     try:
         from database import get_bot_db_connection as get_db_connection
         conn = get_db_connection()
@@ -353,8 +353,11 @@ async def generate_executive_report(bot, chat_id):
 
         now = datetime.now()
         mes_ano_prefix = now.strftime('%Y-%m')
+        hoje_iso = now.strftime('%Y-%m-%d')
         
-        # Pautas do mês
+        # ═══════════════════════════════════════
+        # 1. PAUTAS DO MÊS
+        # ═══════════════════════════════════════
         res_dem = conn.table('demandas_comunicacao').select('*').gte('data_evento', f"{mes_ano_prefix}-01").execute()
         demandas = res_dem.data if (res_dem and res_dem.data) else []
         
@@ -362,29 +365,131 @@ async def generate_executive_report(bot, chat_id):
         concluidas = sum(1 for d in demandas if str(d.get('status')).lower() in ('concluida', 'concluido', 'concluídas'))
         aprovadas = sum(1 for d in demandas if str(d.get('status')).lower() in ('aprovada', 'aprovado'))
         pendentes = sum(1 for d in demandas if str(d.get('status')).lower() in ('pendente', 'pendentes'))
+        rejeitadas = sum(1 for d in demandas if str(d.get('status')).lower() in ('rejeitado', 'rejeitada'))
+        em_ajuste = total - concluidas - aprovadas - pendentes - rejeitadas
+        
+        # Taxa de conclusão
+        taxa_conclusao = f"{(concluidas/total*100):.0f}%" if total > 0 else "N/A"
+        
+        # Barra de progresso visual
+        bar_len = 15
+        filled = int(bar_len * concluidas / total) if total > 0 else 0
+        bar = "█" * filled + "░" * (bar_len - filled)
         
         # Categorias mais requisitadas
         cats = {}
         for d in demandas:
-            c = str(d.get('in_categoria') or d.get('categoria') or 'Geral').title()
-            cats[c] = cats.get(c, 0) + 1
+            c = str(d.get('categoria_demanda') or d.get('in_categoria') or d.get('categoria') or 'geral').lower()
+            label_map = {
+                'audiovisual': '📸 Audiovisual', 'design_arte': '🎨 Design',
+                'impressos_albuns': '📕 Impressos', 'redacao_textos': '✍️ Redação',
+                'brindes_lembrancas': '🎁 Brindes', 'suporte_evento': '📦 Logístico',
+                'outra_tarefa': '⚡ Outra', 'geral': '📋 Geral'
+            }
+            label = label_map.get(c, f'📋 {c.title()}')
+            cats[label] = cats.get(label, 0) + 1
             
-        top_cat = sorted(cats.items(), key=lambda x: x[1], reverse=True)[:3]
-        top_cat_str = ", ".join([f"{k} ({v})" for k, v in top_cat]) if top_cat else "N/A"
+        top_cat = sorted(cats.items(), key=lambda x: x[1], reverse=True)[:4]
+        top_cat_lines = "\n".join([f"   • {k}: **{v}** pauta(s)" for k, v in top_cat]) if top_cat else "   • Sem dados suficientes"
+        
+        # ═══════════════════════════════════════
+        # 2. PRESENÇA DO DIA
+        # ═══════════════════════════════════════
+        pres_section = ""
+        try:
+            res_pres = conn.table('presenca_diaria').select('*').eq('data', hoje_iso).execute()
+            presencas = res_pres.data if (res_pres and res_pres.data) else []
+            
+            res_ef = conn.table('efetivo').select('id').execute()
+            total_ef = len(res_ef.data) if (res_ef and res_ef.data) else 0
+            
+            p_count = sum(1 for p in presencas if str(p.get('status','').upper()) == 'P')
+            fe_count = sum(1 for p in presencas if str(p.get('status','').upper()) in ('FE', 'L'))
+            dm_count = sum(1 for p in presencas if str(p.get('status','').upper()) in ('DM', 'H'))
+            ma_count = sum(1 for p in presencas if str(p.get('status','').upper()) in ('MA', 'MT', 'S'))
+            sem_registro = max(0, total_ef - len(presencas))
+            
+            pres_section = (
+                f"\n👥 **CHAMADA DO DIA ({now.strftime('%d/%m')}):**\n"
+                f"   🟢 Presentes: **{p_count}** | 🔵 Missão/Serviço: **{ma_count}**\n"
+                f"   🟡 Férias/Licença: **{fe_count}** | 🔴 Dispensa/Hospital: **{dm_count}**\n"
+                f"   ⚪ Sem Registro: **{sem_registro}** de {total_ef} militares\n"
+            )
+        except Exception as pres_err:
+            print(f"[EXEC REPORT PRES ERR] {pres_err}")
+        
+        # ═══════════════════════════════════════
+        # 3. PRÓXIMOS EVENTOS (3 dias)
+        # ═══════════════════════════════════════
+        prox_section = ""
+        try:
+            from datetime import timedelta
+            fim_3d = (now + timedelta(days=3)).strftime('%Y-%m-%d')
+            res_prox = conn.table('demandas_comunicacao').select('titulo_evento, data_evento, hora_evento, status').gte('data_evento', hoje_iso).lte('data_evento', fim_3d).in_('status', ['aprovada', 'aprovado', 'pendente']).order('data_evento', desc=False).order('hora_evento', desc=False).limit(6).execute()
+            prox_events = res_prox.data if (res_prox and res_prox.data) else []
+            
+            if prox_events:
+                prox_lines = []
+                for ev in prox_events:
+                    dt_ev = str(ev.get('data_evento', ''))[:10]
+                    try:
+                        parts = dt_ev.split('-')
+                        dt_br = f"{parts[2]}/{parts[1]}" if len(parts) == 3 else dt_ev
+                    except Exception:
+                        dt_br = dt_ev
+                    hr = str(ev.get('hora_evento', '09:00'))[:5]
+                    tit = str(ev.get('titulo_evento', 'Evento'))[:35]
+                    st_icon = '🟢' if 'aprov' in str(ev.get('status','')).lower() else '🟡'
+                    prox_lines.append(f"   {st_icon} {dt_br} {hr} — {tit}")
+                prox_section = f"\n📅 **PRÓXIMOS EVENTOS (72h):**\n" + "\n".join(prox_lines) + "\n"
+        except Exception as prox_err:
+            print(f"[EXEC REPORT PROX ERR] {prox_err}")
+        
+        # ═══════════════════════════════════════
+        # 4. CAUTELAS ATIVAS
+        # ═══════════════════════════════════════
+        caut_section = ""
+        try:
+            res_caut = conn.table('cautela_equipamentos').select('equipamento').eq('status', 'retirado').execute()
+            cautelas_ativas = res_caut.data if (res_caut and res_caut.data) else []
+            caut_count = len(cautelas_ativas)
+            if caut_count > 0:
+                caut_nomes = ", ".join([str(c.get('equipamento', '?'))[:20] for c in cautelas_ativas[:5]])
+                if caut_count > 5:
+                    caut_nomes += f" (+{caut_count - 5})"
+                caut_section = f"\n🔌 **CAUTELAS ATIVAS:** {caut_count} equipamento(s)\n   📦 {caut_nomes}\n"
+            else:
+                caut_section = "\n🔌 **CAUTELAS ATIVAS:** Nenhuma — acervo 100% disponível ✅\n"
+        except Exception as caut_err:
+            print(f"[EXEC REPORT CAUT ERR] {caut_err}")
+
+        # ═══════════════════════════════════════
+        # MONTAR RELATÓRIO FINAL
+        # ═══════════════════════════════════════
+        DIAS_SEMANA = {0:'SEG',1:'TER',2:'QUA',3:'QUI',4:'SEX',5:'SÁB',6:'DOM'}
+        dia_semana = DIAS_SEMANA.get(now.weekday(), '')
         
         report_msg = (
-            f"📊 **RELATÓRIO EXECUTIVO COMSOC — {now.strftime('%m/%Y')}**\n"
+            f"📊 **RELATÓRIO EXECUTIVO COMSOC**\n"
+            f"📅 {dia_semana}, {now.strftime('%d/%m/%Y %H:%M')} — {mes_ano_prefix}\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"📈 **INDICADORES DE PRODUÇÃO:**\n"
-            f"• Total de Demandas no Mês: **{total}**\n"
-            f"• ✅ Missões Concluídas: **{concluidas}**\n"
-            f"• 🟢 Pautas Aprovadas em Execução: **{aprovadas}**\n"
-            f"• 🟡 Pautas Aguardando Homologação: **{pendentes}**\n\n"
-            f"🎯 **Categorias Principais:** {top_cat_str}\n\n"
-            f"⚓ _Central de Inteligência Operacional SisGAB_"
+            f"📈 **PRODUÇÃO DO MÊS:**\n"
+            f"   [{bar}] {taxa_conclusao}\n"
+            f"   📋 Total: **{total}** | ✅ Concluídas: **{concluidas}**\n"
+            f"   🟢 Aprovadas: **{aprovadas}** | 🟡 Pendentes: **{pendentes}**\n"
+            f"   🛠️ Outros: **{em_ajuste + rejeitadas}**\n\n"
+            f"🎯 **DEMANDA POR CATEGORIA:**\n{top_cat_lines}\n"
+            f"{pres_section}"
+            f"{prox_section}"
+            f"{caut_section}"
+            f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"⚓ _Central de Inteligência Operacional — SisGAB_"
         )
-        await bot.send_message(chat_id, report_msg, parse_mode='Markdown')
+        try:
+            await bot.send_message(chat_id, report_msg, parse_mode='Markdown')
+        except Exception:
+            clean = report_msg.replace('**','').replace('*','').replace('_','')
+            await bot.send_message(chat_id, clean)
     except Exception as e:
         print(f"[EXEC REPORT ERR] {e}")
         await bot.send_message(chat_id, f"❌ Erro ao gerar relatório executivo: {e}")
-
