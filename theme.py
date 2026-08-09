@@ -155,6 +155,16 @@ body {
     border-color: rgba(197, 160, 89, 0.45) !important;
     box-shadow: 0 8px 30px rgba(197, 160, 89, 0.18), 0 0 15px rgba(197, 160, 89, 0.1) !important;
 }
+
+/* Estilização Tática Militar do Aviso de Reconexão */
+.nicegui-connection-lost {
+    background: #0f172a !important;
+    border: 1px solid rgba(197, 160, 89, 0.4) !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.85) !important;
+    border-radius: 10px !important;
+    color: #f8fafc !important;
+    font-family: 'Share Tech Mono', monospace !important;
+}
 </style>
 
 <canvas id="antigravity-canvas" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 0; opacity: 0.9;"></canvas>

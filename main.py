@@ -1832,6 +1832,7 @@ ui.run(
     title='SisGAB', 
     dark=True, 
     storage_secret=secret_env, 
+    reconnect_timeout=10.0, # 10 segundos de tolerância contra pequenas oscilações de rede antes de mostrar 'Connection lost'
     session_middleware_kwargs={'max_age': 30 * 24 * 60 * 60}, # 30 dias de persistência para "Manter conectado"
     host=host_env,
     port=port_env,
