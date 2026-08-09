@@ -722,12 +722,30 @@ def render_page(autofill: str = None):
                                         
                                         try:
                                             from notifications_manager import notify_telegram
+                                            detalhes_eventos = []
+                                            for idx, p in enumerate(payloads, 1):
+                                                tit = p.get('titulo_evento', 'Sem Título')
+                                                dt = p.get('data_evento', '')
+                                                hr = str(p.get('hora_evento', '09:00'))[:5]
+                                                loc = p.get('local_evento', 'Gabinete')
+                                                sol = p.get('solicitante_nome', 'Gabinete')
+                                                detalhes_eventos.append(
+                                                    f"🔹 *{idx}. {tit}*\n"
+                                                    f"   📅 Data: `{dt}` às `{hr}` | 📍 Local: `{loc}`\n"
+                                                    f"   👤 Solicitante: {sol}"
+                                                )
+                                            
+                                            resumo_str = "\n\n".join(detalhes_eventos)
+                                            op_nome = app.storage.user.get('user_data', {}).get('nome_guerra', 'ASSISTENTE IA')
+                                            
                                             alert_txt = (
-                                                f"📅 **CADASTRO EM LOTE REALIZADO (IA)**\n\n"
-                                                f"👤 Operador: {app.storage.user.get('user_data', {}).get('nome_guerra', 'ASSISTENTE IA')}\n"
-                                                f"📂 Total: {len(payloads)} eventos cadastrados na agenda tática."
+                                                f"📅 *CADASTRO EM LOTE REALIZADO (IA)*\n\n"
+                                                f"👤 *Operador:* {op_nome}\n"
+                                                f"📂 *Total:* {len(payloads)} evento(s) cadastrado(s) na agenda tática:\n\n"
+                                                f"{resumo_str}\n\n"
+                                                f"💡 _Acesse a Agenda ou Homologação para gerenciar e designar a equipe._"
                                             )
-                                            notify_telegram(alert_txt, "saude", role_required="admin")
+                                            notify_telegram(alert_txt, "demanda")
                                         except Exception as tel_err:
                                             print(f"[TELEGRAM NOTIF ERR] {tel_err}")
                                         
