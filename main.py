@@ -1186,6 +1186,12 @@ def sisgab_tv_page():
 
 @ui.page('/login')
 def login_page(request: Request):
+    if is_authenticated():
+        role_user = str(app.storage.user.get('user_data', {}).get('role', '')).strip().lower()
+        target_path = '/sisgab_tv' if role_user in ('tv', 'tv_comcia') else '/'
+        ui.navigate.to(target_path)
+        return
+
     theme.apply_global_styles()
     
     # Dialog de Solicitação de Acesso
@@ -1622,7 +1628,7 @@ def login_page(request: Request):
                             import log_acessos
                             log_acessos.log_access("Login", "Autenticação", "SUCESSO")
                             
-                            ui.navigate.to(target_path)
+                            ui.run_javascript(f"window.location.href = '{target_path}';")
                         else:
                             # Fallback para autenticação local no banco efetivo (caso tenha sido criado sem Auth por rate limits)
                             from database import authenticate_user
@@ -1670,7 +1676,7 @@ def login_page(request: Request):
                                 
                                 import log_acessos
                                 log_acessos.log_access("Login", "Autenticação Local", "SUCESSO")
-                                ui.navigate.to(target_path)
+                                ui.run_javascript(f"window.location.href = '{target_path}';")
                             else:
                                 error_label.text = 'E-mail, usuário ou senha incorretos'
                                 import log_acessos
