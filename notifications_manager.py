@@ -372,3 +372,167 @@ def send_recovery_pin_email(to_email: str, pin: str) -> bool:
         return False
 
 
+# ─────────────────────────────────────────────────────────────
+#  AGENDADOR AUTOMÁTICO DO RELATÓRIO TÁTICO DAS 19:00H (TELEGRAM)
+# ─────────────────────────────────────────────────────────────
+
+_SCHEDULER_19H_STARTED = False
+_LAST_19H_SENT_DATE = None
+
+def send_daily_19h_telegram_briefing() -> bool:
+    """Busca as pautas agendadas para o dia seguinte e envia o relatório tático diário no Telegram."""
+    try:
+        from database import get_service_db_connection, get_db_connection
+        from datetime import datetime, timedelta
+        import json
+
+        db = get_service_db_connection() or get_db_connection()
+        if not db:
+            print("[19H BRIEFING] Erro: Sem conexão ativa com o banco de dados.", flush=True)
+            return False
+
+        now_br = datetime.utcnow() - timedelta(hours=3)
+        amanha = (now_br + timedelta(days=1)).date()
+        amanha_iso = amanha.isoformat()
+
+        dias_semana = {
+            0: "SEGUNDA-FEIRA", 1: "TERÇA-FEIRA", 2: "QUARTA-FEIRA",
+            3: "QUINTA-FEIRA", 4: "SEXTA-FEIRA", 5: "SÁBADO", 6: "DOMINGO"
+        }
+        dia_semana_str = dias_semana.get(amanha.weekday(), "")
+        data_fmt = amanha.strftime("%d/%m/%Y")
+
+        res = db.table('demandas_comunicacao').select('*').eq('data_evento', amanha_iso).execute()
+        pautas = res.data if res.data else []
+
+        pautas_ativas = []
+        for p in pautas:
+            st = str(p.get('status', '')).strip().lower()
+            if st not in ('rejeitado', 'rejeitada', 'cancelado', 'cancelada'):
+                pautas_ativas.append(p)
+
+        pautas_ativas.sort(key=lambda x: str(x.get('hora_evento', '09:00'))[:5])
+
+        if not pautas_ativas:
+            msg = (
+                f"📌 *RELATÓRIO TÁTICO DE AMANHÃ ({data_fmt} - {dia_semana_str})*\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"🟢 *SITUAÇÃO:* Nenhuma pauta ou compromisso agendado para amanhã.\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"💡 _SisGAB Tático • Relatório Automático das 19:00h_\n"
+                f"🌐 `https://sisgab-cgcfn.ddns.net`"
+            )
+        else:
+            def format_coberturas(p):
+                cob_raw = p.get('tipo_cobertura')
+                cat_raw = p.get('categoria_demanda')
+                items = []
+                if cob_raw:
+                    try:
+                        items = json.loads(cob_raw) if isinstance(cob_raw, str) else cob_raw
+                    except Exception:
+                        items = [str(cob_raw)]
+                if cat_raw:
+                    items.append(str(cat_raw))
+                
+                icons = []
+                full_str = " ".join(items).lower()
+                if 'foto' in full_str: icons.append("📸 Fotografia")
+                if 'video' in full_str or 'filmagem' in full_str: icons.append("🎥 Vídeo")
+                if 'grafico' in full_str or 'design' in full_str: icons.append("🎨 Design Gráfico")
+                if 'drone' in full_str or 'aerea' in full_str: icons.append("🚁 Drone")
+                if 'rede' in full_str or 'reels' in full_str: icons.append("📱 Redes Sociais")
+                if 'cerimonial' in full_str or 'jade' in full_str: icons.append("🪪 Cerimonial")
+                
+                return " | ".join(icons) if icons else "📌 Cobertura Padrão"
+
+            def get_encarregado_nome(enc_id):
+                if not enc_id:
+                    return "⚠️ PENDENTE DE DESIGNAÇÃO"
+                try:
+                    res_m = db.table('efetivo').select('nome_guerra, posto_grad').eq('id', enc_id).execute()
+                    if res_m.data:
+                        m = res_m.data[0]
+                        pg = m.get('posto_grad', '')
+                        ng = m.get('nome_guerra', '')
+                        return f"{pg} {ng}".strip().upper()
+                except Exception:
+                    pass
+                return f"MILITAR #{enc_id}"
+
+            blocos = []
+            for idx, p in enumerate(pautas_ativas, 1):
+                tit = str(p.get('titulo_evento', 'Sem Título')).upper()
+                hr = str(p.get('hora_evento', '09:00'))[:5]
+                loc = str(p.get('local_evento', 'Gabinete')).upper()
+                sol = str(p.get('solicitante_nome', 'CGCFN')).upper()
+                enc_nome = get_encarregado_nome(p.get('encarregado_id'))
+                cobs_txt = format_coberturas(p)
+                obs_txt = str(p.get('autoridades') or p.get('observacoes') or '').strip().upper()
+
+                linha_obs = f"\n   📝 Briefing: {obs_txt}" if obs_txt else ""
+
+                blocos.append(
+                    f"🔹 *{idx}. {hr}h — {tit}*\n"
+                    f"   📍 Local: {loc}\n"
+                    f"   🛠️ Serviços: {cobs_txt}\n"
+                    f"   🎖️ Encarregado: {enc_nome}\n"
+                    f"   👤 Solicitante: {sol}"
+                    f"{linha_obs}"
+                )
+
+            resumo_pautas = "\n\n".join(blocos)
+            qtd = len(pautas_ativas)
+            msg = (
+                f"📌 *RELATÓRIO TÁTICO DE AMANHÃ ({data_fmt} - {dia_semana_str})*\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🚨 *ATENÇÃO COMSOC / GABINETE:* Há {qtd} pauta(s) agendada(s) para amanhã.\n\n"
+                f"{resumo_pautas}\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"💡 _SisGAB Tático • Relatório Automático das 19:00h_\n"
+                f"🌐 `https://sisgab-cgcfn.ddns.net`"
+            )
+
+        notify_telegram(msg, "demanda")
+        print(f"[19H BRIEFING] Relatório enviado no Telegram para {data_fmt} ({len(pautas_ativas)} pautas).", flush=True)
+        return True
+    except Exception as err:
+        print(f"[19H BRIEFING ERROR] Erro ao gerar/enviar relatório das 19h: {err}", flush=True)
+        return False
+
+
+def start_19h_briefing_scheduler():
+    """Inicia a thread em background que verifica se deu 19:00 BRT e despacha o relatório."""
+    global _SCHEDULER_19H_STARTED
+    if _SCHEDULER_19H_STARTED:
+        return
+    _SCHEDULER_19H_STARTED = True
+
+    def _loop():
+        global _LAST_19H_SENT_DATE
+        import time
+        from datetime import datetime, timedelta
+        print("[19H SCHEDULER] Loop agendador do relatório das 19:00h iniciado com sucesso.", flush=True)
+        while True:
+            try:
+                now_br = datetime.utcnow() - timedelta(hours=3)
+                today_str = now_br.strftime('%Y-%m-%d')
+                
+                # Se for 19:00 BRT e ainda não disparou hoje
+                if now_br.hour == 19 and now_br.minute == 0:
+                    if _LAST_19H_SENT_DATE != today_str:
+                        _LAST_19H_SENT_DATE = today_str
+                        print(f"[19H SCHEDULER] Disparando relatório diário automático das 19:00h ({today_str})...", flush=True)
+                        send_daily_19h_telegram_briefing()
+            except Exception as loop_err:
+                print(f"[19H SCHEDULER LOOP ERR] {loop_err}", flush=True)
+            time.sleep(30)
+
+    t = threading.Thread(target=_loop, daemon=True)
+    t.start()
+
+
+# Inicia o agendador automaticamente ao carregar o módulo
+start_19h_briefing_scheduler()
+
+
