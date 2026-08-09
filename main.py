@@ -476,14 +476,14 @@ def build_layout_base():
                     u_nome = user_cached.get('nome_guerra') or user_cached.get('username') or ''
                     if u_nome and u_nome.lower() != 'militar':
                         ui.notify(
-                            f'🛡️ SESSÃO ATIVA: BEM-VINDO, {u_nome.upper()}!',
-                            type='positive',
+                            f'🛡️ SESSÃO ATIVA — BEM-VINDO AO SISGAB, {u_nome.upper()}!',
+                            color='dark',
                             position='top',
-                            icon='verified_user',
+                            icon='shield',
                             close_button='OK'
                         )
                     else:
-                        ui.notify(f'🟢 Conectado ao SisGAB — Período {active_year}', type='positive', position='top')
+                        ui.notify(f'🟢 Conectado ao SisGAB — Período {active_year}', color='dark', position='top')
                     app.storage.user['year_notified'] = True
 
                 # Player de Rádio Minimalista
@@ -1620,10 +1620,10 @@ def login_page(request: Request):
                                 app.storage.user['tv_lock_active'] = False
                             
                             ui.notify(
-                                f'🛡️ SESSÃO AUTENTICADA: BEM-VINDO, {nome_exibicao}!',
-                                type='positive',
+                                f'🛡️ SESSÃO AUTENTICADA — BEM-VINDO AO SISGAB, {nome_exibicao}!',
+                                color='dark',
                                 position='top',
-                                icon='verified_user',
+                                icon='shield',
                                 close_button='OK'
                             )
                             
@@ -1670,10 +1670,10 @@ def login_page(request: Request):
                                     app.storage.user['tv_lock_active'] = False
                                 
                                 ui.notify(
-                                    f'🛡️ SESSÃO AUTENTICADA: BEM-VINDO, {nome_exibicao}!',
-                                    type='positive',
+                                    f'🛡️ SESSÃO AUTENTICADA — BEM-VINDO AO SISGAB, {nome_exibicao}!',
+                                    color='dark',
                                     position='top',
-                                    icon='verified_user',
+                                    icon='shield',
                                     close_button='OK'
                                 )
                                 
