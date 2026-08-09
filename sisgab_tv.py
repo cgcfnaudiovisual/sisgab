@@ -676,7 +676,11 @@ def render_page():
                                         with ui.row().classes('w-full justify-between items-start no-wrap gap-2'):
                                             with ui.row().classes('items-start gap-2 col-grow overflow-hidden'):
                                                 ui.badge(tag_dia, color='amber-9' if is_hoje else 'cyan-9').classes('text-xs font-black shrink-0 q-mt-xs q-px-sm')
-                                                ui.label(p.get('titulo_evento', 'Sem Título').upper()).classes('text-xs font-black text-white leading-tight break-words col-grow')
+                                                with ui.column().classes('gap-0 col-grow overflow-hidden'):
+                                                    ui.label(p.get('titulo_evento', 'Sem Título').upper()).classes('text-xs font-black text-white leading-tight break-words')
+                                                    obs_p = str(p.get('autoridades') or p.get('observacoes') or '').strip().upper()
+                                                    if obs_p:
+                                                        ui.label(f"📝 {obs_p}").classes('text-[10px] text-amber-3 font-bold truncate max-w-[320px]')
                                             
                                             if st_val in ('pendente', 'pendentes'):
                                                 ui.badge('PENDENTE', color='amber-9').classes('text-xs font-bold shrink-0 q-mt-xs')
@@ -773,7 +777,11 @@ def render_page():
                                                 with ui.row().classes('w-full justify-between items-start no-wrap gap-2'):
                                                     with ui.row().classes('items-start gap-2 col-grow'):
                                                         ui.label(f"{dia_semana_trad} {dia_num}").classes('text-xs font-black text-cyan font-mono shrink-0 q-mt-xs').style('min-width: 80px;')
-                                                        ui.label(p.get('titulo_evento', 'Sem Título').upper()).classes('text-sm font-bold text-white leading-tight break-words col-grow')
+                                                        with ui.column().classes('gap-0 col-grow overflow-hidden'):
+                                                            ui.label(p.get('titulo_evento', 'Sem Título').upper()).classes('text-sm font-bold text-white leading-tight break-words')
+                                                            obs_p2 = str(p.get('autoridades') or p.get('observacoes') or '').strip().upper()
+                                                            if obs_p2:
+                                                                ui.label(f"📝 {obs_p2}").classes('text-[10px] text-amber-3 font-bold truncate max-w-[340px]')
                                                     
                                                     if is_pend:
                                                         ui.badge('PENDENTE', color='amber-9').classes('text-xs font-bold shrink-0 q-mt-xs')

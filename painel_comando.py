@@ -538,6 +538,30 @@ def render_page():
                     except Exception:
                         pass
 
+                    # Cálculo da Contagem Regressiva Tática
+                    countdown_text = ""
+                    countdown_color = "cyan-9"
+                    try:
+                        dt_event_obj = datetime.strptime(str(ev.get('data_evento', '')), '%Y-%m-%d').date()
+                        days_diff = (dt_event_obj - hoje).days
+                        if days_diff == 0:
+                            countdown_text = "🔴 HOJE"
+                            countdown_color = "red-9"
+                        elif days_diff == 1:
+                            countdown_text = "⏳ AMANHÃ"
+                            countdown_color = "amber-9"
+                        elif days_diff > 1:
+                            countdown_text = f"⏳ EM {days_diff} DIAS"
+                            countdown_color = "cyan-9"
+                        elif days_diff < 0:
+                            countdown_text = f"⚠️ VENCIDO (HÁ {abs(days_diff)}D)"
+                            countdown_color = "deep-orange-10"
+                    except Exception:
+                        pass
+
+                    obs_text = str(ev.get('autoridades') or ev.get('observacoes') or '').strip()
+                    obs_text_upper = obs_text.upper() if obs_text else ""
+
                     row_border = 'border-emerald-500/30' if is_today_ev else ('border-red-500/30' if is_overdue else 'border-cyan-500/10')
                     row_bg = 'bg-emerald-950/20' if is_today_ev else ('bg-red-950/10' if is_overdue else 'bg-black/20')
 
@@ -561,9 +585,11 @@ def render_page():
                         except Exception:
                             date_display = date_str or '—'
                             day_name = ''
-                        with ui.column().classes('gap-0 items-center').style('min-width:55px;'):
+                        with ui.column().classes('gap-0 items-center').style('min-width:75px;'):
                             ui.label(date_display).classes('text-sm font-bold text-cyan')
-                            if day_name:
+                            if countdown_text:
+                                ui.badge(countdown_text, color=countdown_color).classes('text-[9px] font-black tracking-wider q-px-xs')
+                            elif day_name:
                                 ui.label(day_name).classes('text-[9px] text-grey-6 font-mono')
 
                         hora = ev.get('hora_evento', '--:--')
@@ -585,6 +611,9 @@ def render_page():
                                     with ui.row().classes('items-center gap-1 bg-black/40 q-px-xs rounded border border-white/10'):
                                         for icon_name, tooltip_txt, color in cobs:
                                             ui.icon(icon_name, color=color, size='0.95rem').tooltip(tooltip_txt)
+
+                            if obs_text_upper:
+                                ui.label(f"📝 BRIEFING: {obs_text_upper}").classes('text-[10px] text-amber-3 font-bold q-mt-xs leading-tight break-words').style('letter-spacing: 0.5px;')
 
                         try:
                             from telegram_bot.handlers_common import _format_militar_responsavel
@@ -684,6 +713,8 @@ def render_page():
                                     ui.label(dt_m.strftime('%d/%m %a').upper()).classes('text-xs font-bold text-cyan')
                                 except Exception:
                                     ui.label(date_str_m).classes('text-xs font-bold text-cyan')
+                                if countdown_text:
+                                    ui.badge(countdown_text, color=countdown_color).classes('text-[9px] font-black')
                                 hora_m = ev.get('hora_evento', '')
                                 if hora_m:
                                     ui.label(str(hora_m)[:5]).classes('text-xs text-grey-4 font-mono')
@@ -706,6 +737,8 @@ def render_page():
                                 with ui.row().classes('items-center gap-1 bg-black/40 q-px-xs rounded border border-white/10'):
                                     for icon_name, tooltip_txt, color in cobs_m:
                                         ui.icon(icon_name, color=color, size='0.85rem').tooltip(tooltip_txt)
+                        if obs_text_upper:
+                            ui.label(f"📝 BRIEFING: {obs_text_upper}").classes('text-[10px] text-amber-3 font-bold q-mt-xs leading-tight break-words')
             else:
                 with ui.column().classes('w-full items-center q-py-lg gap-2'):
                     ui.icon('event_available', size='2rem', color='cyan')
