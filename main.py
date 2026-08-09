@@ -477,13 +477,12 @@ def build_layout_base():
                     if u_nome and u_nome.lower() != 'militar':
                         ui.notify(
                             f'🛡️ SESSÃO ATIVA: BEM-VINDO, {u_nome.upper()}!',
-                            color='positive',
                             position='top',
                             icon='verified_user',
                             close_button='OK'
-                        ).props('classes="text-weight-bold shadow-10 cyber-title" timeout=5000')
+                        ).props('multi-line classes="bg-slate-900 text-cyan-3 text-weight-bold shadow-12 border border-cyan-500/50 rounded-xl q-pa-md" timeout=4000')
                     else:
-                        ui.notify(f'🟢 Conectado ao SisGAB — Período {active_year}', color='positive', position='top')
+                        ui.notify(f'🟢 Conectado ao SisGAB — Período {active_year}', position='top').props('classes="bg-slate-900 text-cyan-3 text-weight-bold border border-cyan-500/30 rounded-lg"')
                     app.storage.user['year_notified'] = True
 
                 # Player de Rádio Minimalista
@@ -1534,6 +1533,52 @@ def login_page(request: Request):
                             except Exception as lookup_err:
                                 print(f"[LOGIN LOOKUP ERR] {lookup_err}")
                         
+                        def resolve_militar_display_name(email_or_user, profile_data=None):
+                            try:
+                                from database import get_service_db_connection, get_db_connection
+                                db = get_service_db_connection() or get_db_connection()
+                                if db:
+                                    clean_input = str(email_or_user).strip()
+                                    if '@' in clean_input:
+                                        res_ef = db.table('efetivo').select('nome_guerra, posto_grad, nome_completo').eq('email', clean_input).execute()
+                                        if res_ef.data:
+                                            m = res_ef.data[0]
+                                            ng = m.get('nome_guerra') or m.get('nome_completo') or ''
+                                            pg = m.get('posto_grad') or ''
+                                            if ng:
+                                                return f"{pg} {ng}".strip().upper()
+                                    res_ef2 = db.table('efetivo').select('nome_guerra, posto_grad, nome_completo').ilike('nome_guerra', clean_input).execute()
+                                    if res_ef2.data:
+                                        m = res_ef2.data[0]
+                                        ng = m.get('nome_guerra') or m.get('nome_completo') or ''
+                                        pg = m.get('posto_grad') or ''
+                                        if ng:
+                                            return f"{pg} {ng}".strip().upper()
+                                    res_u = db.table('users').select('nome, username, email').or_(f"username.eq.{clean_input},email.eq.{clean_input}").execute()
+                                    if res_u.data:
+                                        u = res_u.data[0]
+                                        ng = u.get('nome') or u.get('username') or ''
+                                        if ng and '@' not in ng:
+                                            res_ef3 = db.table('efetivo').select('nome_guerra, posto_grad').ilike('nome_guerra', ng.strip()).execute()
+                                            if res_ef3.data:
+                                                m3 = res_ef3.data[0]
+                                                return f"{m3.get('posto_grad', '')} {m3.get('nome_guerra', '')}".strip().upper()
+                                            return ng.upper()
+                            except Exception as err:
+                                print(f"[RESOLVE DISPLAY NAME ERR] {err}")
+                            if profile_data and isinstance(profile_data, dict):
+                                nome_p = profile_data.get('nome') or profile_data.get('nome_guerra') or profile_data.get('username') or ''
+                                posto_p = profile_data.get('posto_grad') or profile_data.get('posto') or ''
+                                if nome_p and '@' not in nome_p:
+                                    return f"{posto_p} {nome_p}".strip().upper()
+                            if '@' in str(email_or_user):
+                                user_part = email_or_user.split('@')[0]
+                                if 'cgcfn' in user_part.lower():
+                                    return "ADMINISTRADOR / COMSOC"
+                                parts = user_part.replace('.', ' ').replace('_', ' ').split()
+                                return " ".join([p.capitalize() for p in parts]).upper()
+                            return str(email_or_user).upper()
+
                         try:
                             auth_res = authenticate_user_supabase(login_email, pwd.value)
                         except Exception as e:
@@ -1544,9 +1589,7 @@ def login_page(request: Request):
                             profile = auth_res['profile']
                             session_data = auth_res['session']
                             
-                            nome_g_sub = profile.get('nome') or profile.get('username') or user.value
-                            posto_sub = profile.get('posto_grad') or profile.get('posto') or ''
-                            nome_exibicao = f"{posto_sub} {nome_g_sub}".strip().upper() if posto_sub else nome_g_sub.upper()
+                            nome_exibicao = resolve_militar_display_name(login_email, profile)
 
                             import time
                             app.storage.user['authenticated'] = True
@@ -1557,49 +1600,44 @@ def login_page(request: Request):
                                 'id': profile.get('id'),
                                 'username': profile.get('username'),
                                 'nome_guerra': nome_exibicao,
-                                'posto_grad': posto_sub,
+                                'posto_grad': profile.get('posto_grad', ''),
                                 'role': profile.get('role', 'compel'),
                                 'email': login_email
                             }
                             app.storage.user['supabase_session'] = session_data
                             
                             role_user = str(profile.get('role', 'compel')).strip().lower()
-                            target_path = '/sisgab_tv' if role_user in ('tv', 'tv_comcia') else '/ajuda_sobre' if role_user == 'militar' else '/'
+                            target_path = '/sisgab_tv' if role_user in ('tv', 'tv_comcia') else '/'
                             app.storage.user['current_path'] = target_path
                             if role_user not in ('tv', 'tv_comcia'):
                                 app.storage.user['tv_lock_active'] = False
                             
                             ui.notify(
-                                f'🛡️ SESSÃO AUTENTICADA COM SUCESSO!\nBem-vindo ao SisGAB, {nome_exibicao}!',
-                                color='positive',
+                                f'🛡️ SESSÃO AUTENTICADA\nBem-vindo ao SisGAB, {nome_exibicao}!',
                                 position='top',
                                 icon='verified_user',
                                 close_button='OK'
-                            ).props('multi-line classes="text-weight-bold shadow-10 cyber-title" timeout=5000')
+                            ).props('multi-line classes="bg-slate-900 text-cyan-3 text-weight-bold shadow-12 border border-cyan-500/50 rounded-xl q-pa-md" timeout=5000')
                             
                             import log_acessos
                             log_acessos.log_access("Login", "Autenticação", "SUCESSO")
                             
-                            ui.run_javascript(f"window.location.href = '{target_path}'")
+                            ui.navigate.to(target_path)
                         else:
                             # Fallback para autenticação local no banco efetivo (caso tenha sido criado sem Auth por rate limits)
                             from database import authenticate_user
-                            # Tenta primeiro com o username ORIGINAL digitado pelo usuário (ex: "admin")
                             original_input = user.value.strip()
                             local_user = authenticate_user(original_input, pwd.value)
-                            # Se não funcionou com o original, tenta com o email resolvido
                             if not local_user and login_email != original_input:
                                 local_user = authenticate_user(login_email, pwd.value)
                             if local_user:
-                                nome_g_loc = local_user.get('nome_guerra') or local_user.get('nome_completo') or user.value
-                                posto_loc = local_user.get('posto_grad') or local_user.get('posto') or ''
-                                nome_exibicao = f"{posto_loc} {nome_g_loc}".strip().upper() if posto_loc else nome_g_loc.upper()
+                                nome_exibicao = resolve_militar_display_name(login_email, local_user)
 
                                 profile = {
                                     'id': local_user.get('id') or local_user.get('telegram_id') or 'local-fallback',
-                                    'username': local_user.get('email', '').split('@')[0] if local_user.get('email') else nome_g_loc,
+                                    'username': local_user.get('email', '').split('@')[0] if local_user.get('email') else original_input,
                                     'nome': nome_exibicao,
-                                    'posto_grad': posto_loc,
+                                    'posto_grad': local_user.get('posto_grad', ''),
                                     'role': local_user.get('role', 'militar')
                                 }
                                 import time
@@ -1611,29 +1649,28 @@ def login_page(request: Request):
                                     'id': profile.get('id'),
                                     'username': profile.get('username'),
                                     'nome_guerra': nome_exibicao,
-                                    'posto_grad': posto_loc,
+                                    'posto_grad': profile.get('posto_grad', ''),
                                     'role': profile.get('role', 'militar'),
                                     'email': login_email
                                 }
                                 app.storage.user['supabase_session'] = None
                                 
                                 role_user = str(profile.get('role', 'militar')).strip().lower()
-                                target_path = '/sisgab_tv' if role_user in ('tv', 'tv_comcia') else '/ajuda_sobre' if role_user == 'militar' else '/'
+                                target_path = '/sisgab_tv' if role_user in ('tv', 'tv_comcia') else '/'
                                 app.storage.user['current_path'] = target_path
                                 if role_user not in ('tv', 'tv_comcia'):
                                     app.storage.user['tv_lock_active'] = False
                                 
                                 ui.notify(
-                                    f'🛡️ SESSÃO AUTENTICADA COM SUCESSO!\nBem-vindo ao SisGAB, {nome_exibicao}!',
-                                    color='positive',
+                                    f'🛡️ SESSÃO AUTENTICADA\nBem-vindo ao SisGAB, {nome_exibicao}!',
                                     position='top',
                                     icon='verified_user',
                                     close_button='OK'
-                                ).props('multi-line classes="text-weight-bold shadow-10 cyber-title" timeout=5000')
+                                ).props('multi-line classes="bg-slate-900 text-cyan-3 text-weight-bold shadow-12 border border-cyan-500/50 rounded-xl q-pa-md" timeout=5000')
                                 
                                 import log_acessos
                                 log_acessos.log_access("Login", "Autenticação Local", "SUCESSO")
-                                ui.run_javascript(f"window.location.href = '{target_path}'")
+                                ui.navigate.to(target_path)
                             else:
                                 error_label.text = 'E-mail, usuário ou senha incorretos'
                                 import log_acessos
