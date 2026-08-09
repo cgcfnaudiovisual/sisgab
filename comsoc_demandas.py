@@ -308,16 +308,16 @@ def render_page(autofill: str = None):
                         with ui.row().classes('w-full items-center justify-between no-wrap border-b border-cyan-500/20 q-pb-xs q-mb-xs'):
                             ui.label('SELECIONE O MOTOR DE IA:').classes('text-[11px] font-bold text-cyan tracking-wider')
                             modelos_disponiveis = ai_helper.get_available_gemini_models()
-                            modelo_salvo = app.storage.user.get('preferred_gemini_model', 'gemini-2.0-flash')
+                            modelo_salvo = ai_helper.get_user_gemini_model_preference()
                             if modelo_salvo not in modelos_disponiveis:
-                                modelo_salvo = list(modelos_disponiveis.keys())[0] if modelos_disponiveis else 'gemini-2.0-flash'
-                                app.storage.user['preferred_gemini_model'] = modelo_salvo
+                                modelo_salvo = list(modelos_disponiveis.keys())[0] if modelos_disponiveis else 'gemini-2.5-flash'
+                                ai_helper.save_user_gemini_model_preference(modelo_salvo)
                                 
                             model_select_ia = ui.select(
                                 modelos_disponiveis,
                                 value=modelo_salvo,
-                                on_change=lambda e: app.storage.user.update({'preferred_gemini_model': e.value})
-                            ).props('dark outlined dense options-dark').classes('w-52 text-[10px]').style('max-height: 28px;')
+                                on_change=lambda e: ai_helper.save_user_gemini_model_preference(e.value)
+                            ).props('dark outlined dense options-dark').classes('w-56 text-[10px]').style('max-height: 28px;')
 
                         # Sub-abas de escolha de modo
                         with ui.tabs().classes('w-full text-cyan dense') as ai_tabs:
@@ -341,8 +341,8 @@ def render_page(autofill: str = None):
                                         return
                                     ui.notify('Gemini analisando questionário...', color='info')
                                     
-                                    selected_model = model_select_ia.value or 'gemini-2.0-flash'
-                                    ai_helper.GEMINI_MODEL_NAME = selected_model
+                                    selected_model = model_select_ia.value or ai_helper.get_user_gemini_model_preference()
+                                    ai_helper.save_user_gemini_model_preference(selected_model)
                                     
                                     try:
                                         response_json = await run.io_bound(ai_helper.digest_demand_questionnaire, text)

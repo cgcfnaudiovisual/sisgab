@@ -405,25 +405,57 @@ def _get_google_api_key() -> str:
     return GOOGLE_API_KEY
 
 
+DEFAULT_RECOMMENDED_MODEL = "gemini-2.5-flash"
+
 def _get_gemini_model_name() -> str:
-    """Retorna o modelo de IA configurado ou o padrão 'gemini-2.0-flash'"""
+    """Retorna o modelo de IA configurado ou o padrão 'gemini-2.5-flash'"""
     global GEMINI_MODEL_NAME
     if not GEMINI_MODEL_NAME:
-        GEMINI_MODEL_NAME = get_config_value("gemini_model_name", "gemini-2.0-flash")
+        GEMINI_MODEL_NAME = get_config_value("gemini_model_name", DEFAULT_RECOMMENDED_MODEL)
         if not GEMINI_MODEL_NAME:
-            GEMINI_MODEL_NAME = "gemini-2.0-flash"
+            GEMINI_MODEL_NAME = DEFAULT_RECOMMENDED_MODEL
     return GEMINI_MODEL_NAME
+
+
+def get_user_gemini_model_preference() -> str:
+    """Retorna a preferência salva do modelo de IA ou o padrão recomendado 'gemini-2.5-flash'."""
+    try:
+        from nicegui import app
+        pref = app.storage.user.get('preferred_gemini_model')
+        if pref:
+            return pref
+    except Exception:
+        pass
+    return _get_gemini_model_name() or DEFAULT_RECOMMENDED_MODEL
+
+
+def save_user_gemini_model_preference(model_id: str):
+    """Salva a preferência de modelo do usuário em app.storage.user e no banco global para sincronia total."""
+    if not model_id:
+        return
+    global GEMINI_MODEL_NAME
+    GEMINI_MODEL_NAME = model_id
+    try:
+        from nicegui import app
+        app.storage.user['preferred_gemini_model'] = model_id
+    except Exception:
+        pass
+    try:
+        from config import save_config_value
+        save_config_value('gemini_model_name', model_id)
+    except Exception:
+        pass
 
 
 def get_available_gemini_models() -> dict[str, str]:
     """Retorna um dicionário de modelos do Gemini disponíveis e funcionais (chave: id, valor: nome/descrição).
-    Consulta diretamente a API do Google Generative AI para retornar todos os modelos mais recentes (Gemini 3.6, 3.5, 2.5, etc.)."""
+    Consulta diretamente a API do Google Generative AI para retornar todos os modelos mais recentes."""
     fallback_models = {
-        "gemini-3.6-flash": "Gemini 3.6 Flash (Mais Recente & Recomendado)",
+        "gemini-2.5-flash": "Gemini 2.5 Flash (Mais Recente & Recomendado)",
+        "gemini-2.5-pro": "Gemini 2.5 Pro",
+        "gemini-3.6-flash": "Gemini 3.6 Flash",
         "gemini-3.5-flash": "Gemini 3.5 Flash",
         "gemini-3.1-pro-preview": "Gemini 3.1 Pro",
-        "gemini-2.5-flash": "Gemini 2.5 Flash",
-        "gemini-2.5-pro": "Gemini 2.5 Pro",
         "gemini-2.0-flash": "Gemini 2.0 Flash",
     }
     
@@ -448,22 +480,21 @@ def get_available_gemini_models() -> dict[str, str]:
                 
                 display_name = getattr(m, 'display_name', '') or model_id
                 
-                if model_id == "gemini-3.6-flash":
+                if model_id == DEFAULT_RECOMMENDED_MODEL:
+                    display_name += " (Mais Recente & Recomendado)"
+                elif "2.5-flash" in model_id:
                     display_name += " (Recomendado)"
                     
                 models_dict[model_id] = display_name
                 
         if models_dict:
-            # Ordena por versão (3.6 -> 3.5 -> 3.1 -> 3.0 -> 2.5 -> 2.0 -> 1.5)
             def model_sort_key(k):
-                if '3.6' in k: return 0
-                if '3.5' in k: return 1
-                if '3.1' in k: return 2
-                if '3-pro' in k or '3-flash' in k: return 3
-                if '2.5' in k: return 4
-                if '2.0' in k: return 5
-                if '1.5' in k: return 6
-                return 7
+                if '2.5-flash' in k: return 0
+                if '2.5-pro' in k: return 1
+                if '3.6' in k: return 2
+                if '3.5' in k: return 3
+                if '2.0-flash' in k: return 4
+                return 5
                 
             sorted_keys = sorted(models_dict.keys(), key=model_sort_key)
             return {k: models_dict[k] for k in sorted_keys}

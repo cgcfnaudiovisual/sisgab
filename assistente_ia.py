@@ -93,15 +93,15 @@ def render_page():
                             
                             # Seletor de Modelo Gemini dinâmico no Chat
                             modelos_disponiveis = ai_helper.get_available_gemini_models()
-                            modelo_salvo = app.storage.user.get('preferred_gemini_model', 'gemini-2.0-flash')
+                            modelo_salvo = ai_helper.get_user_gemini_model_preference()
                             if modelo_salvo not in modelos_disponiveis:
                                 modelos_disponiveis[modelo_salvo] = f"{modelo_salvo} (Ativo)"
                                 
                             chat_model_select = ui.select(
                                 modelos_disponiveis,
                                 value=modelo_salvo,
-                                on_change=lambda e: app.storage.user.update({'preferred_gemini_model': e.value})
-                            ).props('dark outlined dense options-dark').classes('w-44 text-[10px]').style('max-height: 28px;')
+                                on_change=lambda e: ai_helper.save_user_gemini_model_preference(e.value)
+                            ).props('dark outlined dense options-dark').classes('w-48 text-[10px]').style('max-height: 28px;')
                         
                         # Área de Conversa com Scroll
                         with ui.scroll_area().classes('w-full flex-grow q-py-md') as scroll_area:
@@ -168,8 +168,8 @@ def render_page():
                                 
                                 async def fetch_ai_response():
                                     try:
-                                        # Carrega o modelo selecionado no dropdown
-                                        ai_helper.GEMINI_MODEL_NAME = chat_model_select.value or 'gemini-2.0-flash'
+                                        # Carrega o modelo selecionado no dropdown ou a preferência global
+                                        ai_helper.GEMINI_MODEL_NAME = chat_model_select.value or ai_helper.get_user_gemini_model_preference()
                                         ans = await run.io_bound(ai_helper.chat_with_ai, text)
                                     except Exception as e:
                                         ans = f"Erro ao contatar o assistente de IA: {e}"
@@ -197,15 +197,15 @@ def render_page():
                                 
                                 # Seletor de Modelo Gemini dinâmico no Redator
                                 modelos_disponiveis = ai_helper.get_available_gemini_models()
-                                modelo_salvo = app.storage.user.get('preferred_gemini_model', 'gemini-2.0-flash')
+                                modelo_salvo = ai_helper.get_user_gemini_model_preference()
                                 if modelo_salvo not in modelos_disponiveis:
                                     modelos_disponiveis[modelo_salvo] = f"{modelo_salvo} (Ativo)"
                                     
                                 redator_model_select = ui.select(
                                     modelos_disponiveis,
                                     value=modelo_salvo,
-                                    on_change=lambda e: app.storage.user.update({'preferred_gemini_model': e.value})
-                                ).props('dark outlined dense options-dark').classes('w-44 text-[10px]').style('max-height: 28px;')
+                                    on_change=lambda e: ai_helper.save_user_gemini_model_preference(e.value)
+                                ).props('dark outlined dense options-dark').classes('w-48 text-[10px]').style('max-height: 28px;')
                             
                             redator_style = ui.select(
                                 label='Estilo / Tom de Linguagem',
@@ -258,7 +258,7 @@ def render_page():
                                 
                                 async def run_redator_ai():
                                     try:
-                                        ai_helper.GEMINI_MODEL_NAME = redator_model_select.value or 'gemini-2.0-flash'
+                                        ai_helper.GEMINI_MODEL_NAME = redator_model_select.value or ai_helper.get_user_gemini_model_preference()
                                         ans = await run.io_bound(
                                             ai_helper.improve_text,
                                             text=redator_input.value.strip(),
@@ -289,15 +289,15 @@ def render_page():
                             
                         # Lado Direito: Seletor de Modelo Gemini
                         modelos_disponiveis = ai_helper.get_available_gemini_models()
-                        modelo_salvo = app.storage.user.get('preferred_gemini_model', 'gemini-2.0-flash')
+                        modelo_salvo = ai_helper.get_user_gemini_model_preference()
                         if modelo_salvo not in modelos_disponiveis:
-                            modelo_salvo = list(modelos_disponiveis.keys())[0] if modelos_disponiveis else 'gemini-2.0-flash'
-                            app.storage.user['preferred_gemini_model'] = modelo_salvo
+                            modelo_salvo = list(modelos_disponiveis.keys())[0] if modelos_disponiveis else 'gemini-2.5-flash'
+                            ai_helper.save_user_gemini_model_preference(modelo_salvo)
                             
                         lote_model_select = ui.select(
                             modelos_disponiveis,
                             value=modelo_salvo,
-                            on_change=lambda e: app.storage.user.update({'preferred_gemini_model': e.value})
+                            on_change=lambda e: ai_helper.save_user_gemini_model_preference(e.value)
                         ).props('dark outlined dense options-dark').classes('w-48 text-[11px]').style('max-height: 28px;')
 
                     ui.label('Cole um texto livre (pauta semanal, mensagens do WhatsApp, e-mail) contendo um ou vários eventos/pautas. A IA identificará todos os eventos e montará um formulário de revisão para você ajustar e confirmar antes de salvar tudo na agenda de uma vez.').classes('text-xs text-grey-4 q-mb-md')
@@ -410,7 +410,7 @@ def render_page():
                             ui.label('Analisando e destrinchando eventos com IA...').classes('text-xs text-cyan text-center w-full font-bold tracking-widest cyber-title')
                         
                         try:
-                            ai_helper.GEMINI_MODEL_NAME = lote_model_select.value or 'gemini-2.0-flash'
+                            ai_helper.GEMINI_MODEL_NAME = lote_model_select.value or ai_helper.get_user_gemini_model_preference()
                             res_json = await run.io_bound(ai_helper.parse_multiple_events, text)
                             state_lote['eventos'] = json.loads(res_json)
                             lote_review_container.clear()

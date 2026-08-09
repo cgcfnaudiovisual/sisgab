@@ -18,7 +18,7 @@ DEFAULT_CONFIGS = {
     'tempo_alerta_tv': '10',
     'telegram_bot_token': '',
     'telegram_chat_id': '',
-    'gemini_model_name': 'gemini-2.0-flash',
+    'gemini_model_name': 'gemini-2.5-flash',
     'google_calendar_email': 'cgcfnaudiovisual@gmail.com',
     'google_calendar_url': 'https://calendar.google.com/calendar/u/0?cid=Y2djZm5hdWRpb3Zpc3VhbEBnbWFpbC5jb20'
 }
