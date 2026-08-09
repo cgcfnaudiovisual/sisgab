@@ -405,10 +405,10 @@ def _get_google_api_key() -> str:
     return GOOGLE_API_KEY
 
 
-DEFAULT_RECOMMENDED_MODEL = "gemini-2.5-flash"
+DEFAULT_RECOMMENDED_MODEL = "gemini-3.6-flash"
 
 def _get_gemini_model_name() -> str:
-    """Retorna o modelo de IA configurado ou o padrão 'gemini-2.5-flash'"""
+    """Retorna o modelo de IA configurado ou o padrão 'gemini-3.6-flash'"""
     global GEMINI_MODEL_NAME
     if not GEMINI_MODEL_NAME:
         GEMINI_MODEL_NAME = get_config_value("gemini_model_name", DEFAULT_RECOMMENDED_MODEL)
@@ -418,7 +418,7 @@ def _get_gemini_model_name() -> str:
 
 
 def get_user_gemini_model_preference() -> str:
-    """Retorna a preferência salva do modelo de IA ou o padrão recomendado 'gemini-2.5-flash'."""
+    """Retorna a preferência salva do modelo de IA ou o padrão recomendado 'gemini-3.6-flash'."""
     try:
         from nicegui import app
         pref = app.storage.user.get('preferred_gemini_model')
@@ -451,11 +451,11 @@ def get_available_gemini_models() -> dict[str, str]:
     """Retorna um dicionário de modelos do Gemini disponíveis e funcionais (chave: id, valor: nome/descrição).
     Consulta diretamente a API do Google Generative AI para retornar todos os modelos mais recentes."""
     fallback_models = {
-        "gemini-2.5-flash": "Gemini 2.5 Flash (Mais Recente & Recomendado)",
-        "gemini-2.5-pro": "Gemini 2.5 Pro",
-        "gemini-3.6-flash": "Gemini 3.6 Flash",
+        "gemini-3.6-flash": "Gemini 3.6 Flash (Mais Recente & Recomendado)",
         "gemini-3.5-flash": "Gemini 3.5 Flash",
         "gemini-3.1-pro-preview": "Gemini 3.1 Pro",
+        "gemini-2.5-flash": "Gemini 2.5 Flash",
+        "gemini-2.5-pro": "Gemini 2.5 Pro",
         "gemini-2.0-flash": "Gemini 2.0 Flash",
     }
     
@@ -480,21 +480,22 @@ def get_available_gemini_models() -> dict[str, str]:
                 
                 display_name = getattr(m, 'display_name', '') or model_id
                 
-                if model_id == DEFAULT_RECOMMENDED_MODEL:
+                if model_id == DEFAULT_RECOMMENDED_MODEL or "3.6" in model_id:
                     display_name += " (Mais Recente & Recomendado)"
-                elif "2.5-flash" in model_id:
-                    display_name += " (Recomendado)"
+                elif "3.5" in model_id:
+                    display_name += " (Nova Geração)"
                     
                 models_dict[model_id] = display_name
                 
         if models_dict:
             def model_sort_key(k):
-                if '2.5-flash' in k: return 0
-                if '2.5-pro' in k: return 1
-                if '3.6' in k: return 2
-                if '3.5' in k: return 3
-                if '2.0-flash' in k: return 4
-                return 5
+                if '3.6' in k: return 0
+                if '3.5' in k: return 1
+                if '3.1' in k: return 2
+                if '2.5-flash' in k: return 3
+                if '2.5-pro' in k: return 4
+                if '2.0-flash' in k: return 5
+                return 6
                 
             sorted_keys = sorted(models_dict.keys(), key=model_sort_key)
             return {k: models_dict[k] for k in sorted_keys}
