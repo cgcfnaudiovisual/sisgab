@@ -477,12 +477,13 @@ def build_layout_base():
                     if u_nome and u_nome.lower() != 'militar':
                         ui.notify(
                             f'🛡️ SESSÃO ATIVA: BEM-VINDO, {u_nome.upper()}!',
+                            type='positive',
                             position='top',
                             icon='verified_user',
                             close_button='OK'
-                        ).props('multi-line classes="bg-slate-900 text-cyan-3 text-weight-bold shadow-12 border border-cyan-500/50 rounded-xl q-pa-md" timeout=4000')
+                        )
                     else:
-                        ui.notify(f'🟢 Conectado ao SisGAB — Período {active_year}', position='top').props('classes="bg-slate-900 text-cyan-3 text-weight-bold border border-cyan-500/30 rounded-lg"')
+                        ui.notify(f'🟢 Conectado ao SisGAB — Período {active_year}', type='positive', position='top')
                     app.storage.user['year_notified'] = True
 
                 # Player de Rádio Minimalista
@@ -1619,11 +1620,12 @@ def login_page(request: Request):
                                 app.storage.user['tv_lock_active'] = False
                             
                             ui.notify(
-                                f'🛡️ SESSÃO AUTENTICADA\nBem-vindo ao SisGAB, {nome_exibicao}!',
+                                f'🛡️ SESSÃO AUTENTICADA: BEM-VINDO, {nome_exibicao}!',
+                                type='positive',
                                 position='top',
                                 icon='verified_user',
                                 close_button='OK'
-                            ).props('multi-line classes="bg-slate-900 text-cyan-3 text-weight-bold shadow-12 border border-cyan-500/50 rounded-xl q-pa-md" timeout=5000')
+                            )
                             
                             import log_acessos
                             log_acessos.log_access("Login", "Autenticação", "SUCESSO")
@@ -1668,11 +1670,12 @@ def login_page(request: Request):
                                     app.storage.user['tv_lock_active'] = False
                                 
                                 ui.notify(
-                                    f'🛡️ SESSÃO AUTENTICADA\nBem-vindo ao SisGAB, {nome_exibicao}!',
+                                    f'🛡️ SESSÃO AUTENTICADA: BEM-VINDO, {nome_exibicao}!',
+                                    type='positive',
                                     position='top',
                                     icon='verified_user',
                                     close_button='OK'
-                                ).props('multi-line classes="bg-slate-900 text-cyan-3 text-weight-bold shadow-12 border border-cyan-500/50 rounded-xl q-pa-md" timeout=5000')
+                                )
                                 
                                 import log_acessos
                                 log_acessos.log_access("Login", "Autenticação Local", "SUCESSO")
