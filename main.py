@@ -1777,16 +1777,34 @@ def sync_menu_permissions_db():
         print(f"[ERRO sync_menu_permissions_db] {e}")
 
 
-# Inicializa o Bot do Telegram e Agendadores concorrentes ao servidor
+# Inicializa o Bot do Telegram e Agendadores em tarefas desacopladas para nao bloquear a inicializacao da NiceGUI
 from alerts_manager import AlertsManager
 from notifications_manager import start_19h_briefing_scheduler
 from database import seed_default_admin, seed_efetivo_gabinete
-app.on_startup(seed_default_admin)
-app.on_startup(seed_efetivo_gabinete)
-app.on_startup(sync_menu_permissions_db)
-app.on_startup(telegram_bot.init_bot)
-app.on_startup(AlertsManager.start_alerts_scheduler)
-app.on_startup(start_19h_briefing_scheduler)
+
+async def _non_blocking_startup():
+    try:
+        await asyncio.to_thread(seed_default_admin)
+        await asyncio.to_thread(seed_efetivo_gabinete)
+        await asyncio.to_thread(sync_menu_permissions_db)
+    except Exception as e:
+        print(f"[STARTUP SEED ERR] {e}", flush=True)
+
+    try:
+        asyncio.create_task(telegram_bot.init_bot())
+    except Exception as e:
+        print(f"[STARTUP BOT ERR] {e}", flush=True)
+
+    try:
+        await asyncio.to_thread(AlertsManager.start_alerts_scheduler)
+        await asyncio.to_thread(start_19h_briefing_scheduler)
+    except Exception as e:
+        print(f"[STARTUP SCHEDULERS ERR] {e}", flush=True)
+
+def start_background_services():
+    asyncio.create_task(_non_blocking_startup())
+
+app.on_startup(start_background_services)
 
 # Loop de liberação periódica de memória RAM para manter o pico sob 400MB
 async def _memory_cleanup_task():
