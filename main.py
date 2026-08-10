@@ -1796,8 +1796,8 @@ async def _non_blocking_startup():
         print(f"[STARTUP BOT ERR] {e}", flush=True)
 
     try:
-        await asyncio.to_thread(AlertsManager.start_alerts_scheduler)
-        await asyncio.to_thread(start_19h_briefing_scheduler)
+        AlertsManager.start_alerts_scheduler()
+        start_19h_briefing_scheduler()
     except Exception as e:
         print(f"[STARTUP SCHEDULERS ERR] {e}", flush=True)
 

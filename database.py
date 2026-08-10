@@ -80,10 +80,9 @@ def get_db_connection():
 
     session = None
     try:
-        from nicegui import context, app
-        if getattr(context, 'client', None) is not None:
-            session = app.storage.user.get('supabase_session')
-    except Exception:
+        from nicegui import app
+        session = app.storage.user.get('supabase_session')
+    except (RuntimeError, Exception):
         session = None
 
     if session:
