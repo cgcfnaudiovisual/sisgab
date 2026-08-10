@@ -2880,8 +2880,8 @@ def render_page():
                 ]))
 
                 elements.append(page_table)
-            if p_idx < total_pages - 1:
-                elements.append(PageBreak())
+                if p_idx < total_pages - 1:
+                    elements.append(PageBreak())
 
             doc.build(elements)
             buf.seek(0)
@@ -4134,7 +4134,9 @@ def render_page():
                 save_print_config_to_event(notify_user=False)
                 try:
                     cfg_now = collect_current_print_config()
-                    pdf_bytes = gerar_pdf_placas_reportlab(event, convidados, current_model, only_confirmed, cfg_now)
+                    c_model = cfg_now.get('model', 'prisma_a4_4slots')
+                    c_only_conf = cfg_now.get('chk_only_confirmed', False)
+                    pdf_bytes = gerar_pdf_placas_reportlab(event, convidados, c_model, c_only_conf, cfg_now)
                     if pdf_bytes:
                         import base64
                         b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
