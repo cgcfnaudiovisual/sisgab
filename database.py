@@ -78,22 +78,13 @@ def get_db_connection():
     if DB_MODE == "local":
         return get_local_db_connection()
 
-    try:
-        from nicegui import app
-        has_storage = app.storage.user is not None
-    except Exception:
-        has_storage = False
-
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        print("[AVISO DB] Chaves do Supabase nao encontradas no .env. Utilizando banco local SQLite.")
-        return get_local_db_connection()
-
     session = None
-    if has_storage:
-        try:
+    try:
+        from nicegui import context, app
+        if getattr(context, 'client', None) is not None:
             session = app.storage.user.get('supabase_session')
-        except Exception:
-            pass
+    except Exception:
+        session = None
 
     if session:
         try:
