@@ -293,6 +293,12 @@ def fetch_efetivo_and_presencas(dt_str: str):
     except Exception as ext_err:
         pass
         
+    try:
+        from telegram_bot.utils import sort_efetivo_by_rank
+        efetivo_lista = sort_efetivo_by_rank(efetivo_lista)
+    except Exception as sort_err:
+        print(f"[SORT EFETIVO WARN] {sort_err}")
+
     return efetivo_lista, presencas_list
 
 

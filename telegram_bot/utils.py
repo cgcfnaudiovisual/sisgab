@@ -448,30 +448,38 @@ def get_rank_seniority(rank_str: str) -> int:
 
     return 98
 
+ANTIGUIDADE_OFICIAL_EXATA = [
+    'SO ROBERTO', 'SO CARVALHO', 'SO HENRIQUE', 'SO ABREU', 'SO COSTA', 'SO CRISTIAN',
+    'SG ERBE', 'SG MOISÉS', 'SG MOISES', 'SG SILVA', 'SG SANTANA', 'SG CALAÇA', 'SG CALACA',
+    'SG TONETTI', 'SG THIAGO NUNES', 'SG BORGES', 'SG TAVARES', 'SG SOUZA', 'SG ESDRAS',
+    'SG MICHELLE FIDELIS', 'SG MICHELLE', 'CB THIAGO FERREIRA', 'CB DE SOUZA', 'CB HENTTYZY', 'CB TANAKA'
+]
+
 def sort_efetivo_by_rank(ef_list: list) -> list:
-    """Ordena uma lista de militares priorizando 1º a Equipe COMSOC e 2º Praças do Gabinete (por antiguidade militar)."""
+    """Ordena uma lista de militares estritamente segundo a relação oficial de antiguidade."""
     def sort_key(item):
-        role = str(item.get('role', '')).strip().lower()
-        setor = str(item.get('setor', '')).strip().upper()
-        secao = str(item.get('secao', '')).strip().upper()
-        funcao = str(item.get('funcao', '')).strip().upper()
-        
-        is_comsoc = (
-            role in ('admin', 'supervisor', 'comsoc', 'comsoc_design', 'operador') or
-            'COMSOC' in setor or
-            'COMSOC' in secao or
-            'COMSOC' in funcao or
-            'COMUNICA' in funcao or
-            'DESIGN' in funcao or
-            'FOTO' in funcao or
-            'VIDEO' in funcao
-        )
-        
-        group_priority = 0 if is_comsoc else 1
-        
-        pg_text = f"{item.get('posto_grad') or ''} {item.get('posto') or ''} {item.get('nome_guerra') or ''}".strip()
-        seniority = get_rank_seniority(pg_text)
-        nome_guerra = str(item.get('nome_guerra') or item.get('nome') or '').upper()
-        return (group_priority, seniority, nome_guerra)
-        
+        pg = str(item.get('posto_grad') or item.get('posto') or '').strip().upper()
+        ng = str(item.get('nome_guerra') or item.get('nome') or '').strip().upper()
+        full = f"{pg} {ng}".strip().upper()
+
+        # 1. Busca exata de posto_grad + nome_guerra
+        for idx, target in enumerate(ANTIGUIDADE_OFICIAL_EXATA):
+            if full == target:
+                return (0, idx)
+
+        # 2. Busca por nome_guerra se o posto for compatível
+        for idx, target in enumerate(ANTIGUIDADE_OFICIAL_EXATA):
+            parts = target.split(maxsplit=1)
+            if len(parts) == 2 and ng == parts[1]:
+                return (0, idx)
+
+        # 3. Busca por sub-string de nome_guerra
+        for idx, target in enumerate(ANTIGUIDADE_OFICIAL_EXATA):
+            if ng in target or target in ng:
+                return (0, idx)
+
+        # 4. Fallback por posto de graduação genérico
+        seniority = get_rank_seniority(full)
+        return (1, seniority, ng)
+
     return sorted(ef_list, key=sort_key)
