@@ -298,6 +298,17 @@ def render_page():
                 except Exception as loc_err:
                     print(f"[JADE EVENTS LOCAL ERR] {loc_err}")
 
+            # Deduplicar lista de eventos por (nome, data_evento)
+            if eventos:
+                unique_eventos = []
+                seen_keys = set()
+                for e in eventos:
+                    key = (str(e.get('nome')).strip().upper(), str(e.get('data_evento')).strip())
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        unique_eventos.append(e)
+                eventos = unique_eventos
+
             # Garante que selected_event_id seja válido entre os eventos existentes
             if eventos:
                 valid_ids = [e['id'] for e in eventos]
@@ -2724,12 +2735,12 @@ def render_page():
                             except Exception as ex_av:
                                 ui.notify(f'Erro ao cadastrar: {ex_av}', color='negative')
 
-                        ui.button('🖨️ GERAR E IMPRIMIR PLACA EXPRESSA AGORA (1 CLIQUE)', icon='flash_on', on_click=create_and_print_avulso).props('unelevated color=deep-orange text-color=white bold').classes('w-full q-mt-sm')
+                    ui.button('🖨️ GERAR E IMPRIMIR PLACA EXPRESSA AGORA (1 CLIQUE)', icon='flash_on', on_click=create_and_print_avulso).props('unelevated color=deep-orange text-color=white bold').classes('w-full q-mt-sm')
 
-            with ui.row().classes('w-full justify-end q-mt-sm'):
-                ui.button('Fechar', icon='close', on_click=diag.close).props('unelevated color=grey-8 dense').classes('text-xs')
+        with ui.row().classes('w-full justify-end q-mt-sm'):
+            ui.button('Fechar', icon='close', on_click=diag.close).props('unelevated color=grey-8 dense').classes('text-xs')
 
-        diag.open()
+    diag.open()
 
     def gerar_pdf_placas_reportlab(event, convidados, current_model, only_confirmed, print_config):
         """Gera PDF vetorial em milímetros A4 nativamente no servidor Python via ReportLab."""
@@ -2801,14 +2812,14 @@ def render_page():
             for p_idx in range(total_pages):
                 batch = all_cards[p_idx * items_per_sheet : (p_idx + 1) * items_per_sheet]
                 table_data = []
-            
+        
                 for c in batch:
                     is_acomp = bool(c.get('convidado_principal_id'))
                     posto = (c.get('posto_graduacao') or '').strip()
                     almirantado_info = parse_almirantado_stars(posto)
                     nome_limpo = clean_authority_name(c['nome'])
                     termo_reservado = print_config.get('termo_convidado', 'RESERVADO')
-                
+            
                     qr_rl_img = None
                     try:
                         import qrcode
@@ -2833,7 +2844,7 @@ def render_page():
                         cell_content.append(Spacer(1, 4))
 
                     cell_content.append(Paragraph(nome_limpo, nome_style))
-                
+            
                     if c.get('assento_id'):
                         cell_content.append(Spacer(1, 4))
                         cell_content.append(Paragraph(f"ASSENTO: {c.get('assento_id')}", sub_style))
@@ -2869,8 +2880,8 @@ def render_page():
                 ]))
 
                 elements.append(page_table)
-                if p_idx < total_pages - 1:
-                    elements.append(PageBreak())
+            if p_idx < total_pages - 1:
+                elements.append(PageBreak())
 
             doc.build(elements)
             buf.seek(0)
@@ -2987,7 +2998,7 @@ def render_page():
             if not posto_str:
                 return None
             p = str(posto_str).upper().strip()
-        
+    
             sigla = None
             if any(k in p for k in ['ESQUADRA', 'SQUADRA', 'AE', 'ALMIRANTE DE ESQUADRA']):
                 sigla = 'AE'
@@ -3037,9 +3048,9 @@ def render_page():
             if not posto_str:
                 return {'eh_almirante': False, 'stars': '', 'title': '', 'color': '#000000', 'png_asset': None}
             p = str(posto_str).upper().strip()
-        
+    
             png_path = get_rank_logo_asset(p)
-        
+    
             if any(k in p for k in ['ESQUADRA', 'SQUADRA', 'AE', 'ALMIRANTE DE ESQUADRA']):
                 return {'eh_almirante': True, 'stars': '★ ★ ★ ★', 'title': 'ALMIRANTE DE ESQUADRA', 'color': '#000000', 'png_asset': png_path}
             elif any(k in p for k in ['VICE', 'VADM', 'V-ADM', 'VA', 'VICE-ALMIRANTE']):
@@ -3050,1926 +3061,1925 @@ def render_page():
             return {'eh_almirante': False, 'stars': '', 'title': p, 'color': '#000000', 'png_asset': png_path}
 
 
-            with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 860px; max-width: 96vw; max-height: 92vh; overflow-y: auto;'):
-                ui.label(f"🖨️ ESTÚDIO DE IMPRESSÃO DE PLACAS & CREDENCIAIS JADE").classes('text-md font-bold text-cyan cyber-title q-mb-xs')
-                ui.label("Personalize Modelos, Templates de Fundo, Brasões, Insígnias e Posicionamento").classes('text-xs text-grey-4 q-mb-md')
+        with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 860px; max-width: 96vw; max-height: 92vh; overflow-y: auto;'):
+            ui.label(f"🖨️ ESTÚDIO DE IMPRESSÃO DE PLACAS & CREDENCIAIS JADE").classes('text-md font-bold text-cyan cyber-title q-mb-xs')
+            ui.label("Personalize Modelos, Templates de Fundo, Brasões, Insígnias e Posicionamento").classes('text-xs text-grey-4 q-mb-md')
 
-                # ═══════════════════════════════════════════════════════════════
-                # PAINEL DE CONFIGURAÇÃO EXPANDIDO (print-hide)
-                # ═══════════════════════════════════════════════════════════════
-                with ui.card().classes('w-full q-pa-md bg-black/50 border border-cyan-500/30 rounded-xl q-mb-md print-hide'):
+            # ═══════════════════════════════════════════════════════════════
+            # PAINEL DE CONFIGURAÇÃO EXPANDIDO (print-hide)
+            # ═══════════════════════════════════════════════════════════════
+            with ui.card().classes('w-full q-pa-md bg-black/50 border border-cyan-500/30 rounded-xl q-mb-md print-hide'):
 
-                    # ── Linha 1: Modelo + Placas por Folha + Toggles ──
-                    with ui.row().classes('w-full items-center gap-3 wrap'):
-                        ui.label('Modelo:').classes('text-xs text-grey-3 font-bold')
-                        model_select = ui.select(
-                            options={
-                                'prisma_a4_4slots': '🏛️ Prisma Institucional A4 (4 por Folha - Moldura Dupla)',
-                                'prisma_dobravel_v': '📐 Prisma Dobrável V (Frente & Verso Invertido 180°)',
-                                'jade_horizontal_a4': '📋 Placa Horizontal CGCFN (Padrão Oficial)',
-                                'cadeira_a4': '📄 Placa de Cadeira (A4 Padrão)',
-                                'mesa_a5_dobravel': '🏷️ Placa de Mesa Dobrável (A5)',
-                                'credencial': '🪪 Credencial / Crachá de Peito',
-                                'template_custom': '🎨 Template Customizado (Imagem de Fundo)'
-                            },
-                            value=print_config['model']
-                        ).props('dark outlined dense').style('min-width: 310px;')
+                # ── Linha 1: Modelo + Placas por Folha + Toggles ──
+                with ui.row().classes('w-full items-center gap-3 wrap'):
+                    ui.label('Modelo:').classes('text-xs text-grey-3 font-bold')
+                    model_select = ui.select(
+                        options={
+                            'prisma_a4_4slots': '🏛️ Prisma Institucional A4 (4 por Folha - Moldura Dupla)',
+                            'prisma_dobravel_v': '📐 Prisma Dobrável V (Frente & Verso Invertido 180°)',
+                            'jade_horizontal_a4': '📋 Placa Horizontal CGCFN (Padrão Oficial)',
+                            'cadeira_a4': '📄 Placa de Cadeira (A4 Padrão)',
+                            'mesa_a5_dobravel': '🏷️ Placa de Mesa Dobrável (A5)',
+                            'credencial': '🪪 Credencial / Crachá de Peito',
+                            'template_custom': '🎨 Template Customizado (Imagem de Fundo)'
+                        },
+                        value=print_config['model']
+                    ).props('dark outlined dense').style('min-width: 310px;')
 
-                        ui.label('Placas / Folha A4:').classes('text-xs text-grey-3 font-bold q-ml-xs')
-                        input_items_per_sheet = ui.select(
-                            options={1: '1 por Folha A4', 2: '2 por Folha A4', 4: '4 por Folha A4 (Padrão)', 6: '6 por Folha A4', 8: '8 por Folha A4'},
-                            value=print_config['items_per_sheet']
-                        ).props('dark outlined dense').style('width: 170px;')
+                    ui.label('Placas / Folha A4:').classes('text-xs text-grey-3 font-bold q-ml-xs')
+                    input_items_per_sheet = ui.select(
+                        options={1: '1 por Folha A4', 2: '2 por Folha A4', 4: '4 por Folha A4 (Padrão)', 6: '6 por Folha A4', 8: '8 por Folha A4'},
+                        value=print_config['items_per_sheet']
+                    ).props('dark outlined dense').style('width: 170px;')
 
-                        with ui.row().classes('items-center gap-2'):
-                            chk_only_confirmed = ui.checkbox('Só Confirmados / Fila Ativa', value=print_config['chk_only_confirmed']).props('dark dense').classes('text-xs text-amber-3')
-                            chk_logo = ui.checkbox('Brasão MB', value=print_config['chk_logo']).props('dark dense').classes('text-xs text-grey-3')
-                            chk_qr = ui.checkbox('QR Code', value=print_config['chk_qr']).props('dark dense').classes('text-xs text-grey-3')
-                            chk_rank = ui.checkbox('Insígnia de Posto', value=print_config['chk_rank']).props('dark dense').classes('text-xs text-grey-3')
-                            chk_border = ui.checkbox('Borda Dupla', value=print_config['chk_border']).props('dark dense').classes('text-xs text-grey-3')
+                    with ui.row().classes('items-center gap-2'):
+                        chk_only_confirmed = ui.checkbox('Só Confirmados / Fila Ativa', value=print_config['chk_only_confirmed']).props('dark dense').classes('text-xs text-amber-3')
+                        chk_logo = ui.checkbox('Brasão MB', value=print_config['chk_logo']).props('dark dense').classes('text-xs text-grey-3')
+                        chk_qr = ui.checkbox('QR Code', value=print_config['chk_qr']).props('dark dense').classes('text-xs text-grey-3')
+                        chk_rank = ui.checkbox('Insígnia de Posto', value=print_config['chk_rank']).props('dark dense').classes('text-xs text-grey-3')
+                        chk_border = ui.checkbox('Borda Dupla', value=print_config['chk_border']).props('dark dense').classes('text-xs text-grey-3')
 
-                    ui.separator().classes('q-my-sm').style('border-color: rgba(255,255,255,0.08);')
+                ui.separator().classes('q-my-sm').style('border-color: rgba(255,255,255,0.08);')
 
-                    # ── Linha 2: Cabeçalho e Título Editáveis ──
-                    with ui.row().classes('w-full gap-2'):
-                        with ui.column().classes('col gap-0'):
-                            ui.label('Linha 1 do Cabeçalho:').classes('text-[10px] text-grey-5')
-                            input_header1 = ui.input(value=print_config['header_line1']).props('dark outlined dense').classes('w-full')
-                        with ui.column().classes('col gap-0'):
-                            ui.label('Linha 2 (Título do Evento):').classes('text-[10px] text-grey-5')
-                            input_header2 = ui.input(value=print_config['header_line2']).props('dark outlined dense').classes('w-full')
-                        with ui.column().classes('col-3 gap-0'):
-                            ui.label('Termo Convidado:').classes('text-[10px] text-grey-5')
-                            input_termo_conv = ui.input(value=print_config['termo_convidado']).props('dark outlined dense').classes('w-full')
+                # ── Linha 2: Cabeçalho e Título Editáveis ──
+                with ui.row().classes('w-full gap-2'):
+                    with ui.column().classes('col gap-0'):
+                        ui.label('Linha 1 do Cabeçalho:').classes('text-[10px] text-grey-5')
+                        input_header1 = ui.input(value=print_config['header_line1']).props('dark outlined dense').classes('w-full')
+                    with ui.column().classes('col gap-0'):
+                        ui.label('Linha 2 (Título do Evento):').classes('text-[10px] text-grey-5')
+                        input_header2 = ui.input(value=print_config['header_line2']).props('dark outlined dense').classes('w-full')
+                    with ui.column().classes('col-3 gap-0'):
+                        ui.label('Termo Convidado:').classes('text-[10px] text-grey-5')
+                        input_termo_conv = ui.input(value=print_config['termo_convidado']).props('dark outlined dense').classes('w-full')
 
-                    ui.separator().classes('q-my-sm').style('border-color: rgba(255,255,255,0.08);')
+                ui.separator().classes('q-my-sm').style('border-color: rgba(255,255,255,0.08);')
 
-                    # ── Funções de Integração com Supabase Storage Bucket 'logos' ──
-                    from database import list_supabase_storage_files, upload_file_to_supabase_storage
+                # ── Funções de Integração com Supabase Storage Bucket 'logos' ──
+                from database import list_supabase_storage_files, upload_file_to_supabase_storage
 
-                    def get_dynamic_logo_options():
-                        opts = {
-                            'cfn': '⚓ CFN (Fuzileiros Navais)',
-                            'mb':  '⚓ Marinha do Brasil'
-                        }
-                        try:
-                            storage_files = list_supabase_storage_files('logos')
-                            for f in storage_files:
-                                fname = f.get('name', '')
-                                furl = f.get('url', '')
-                                if fname and furl:
-                                    opts[furl] = f"☁️ {fname}"
-                        except Exception as err:
-                            print(f"[LOGOS BUCKET FETCH ERR] {err}")
-                        opts['custom'] = '🔗 URL Customizada'
-                        return opts
-
-                    def refresh_logo_options():
-                        new_opts = get_dynamic_logo_options()
-                        sel_logo_preset.options = new_opts
-                        sel_logo_preset.update()
-
-                    def open_logo_upload_dialog():
-                        with ui.dialog() as upload_diag, ui.card().classes('q-pa-md').style('min-width: 480px; background: #0c1829; border: 1px solid #00e5ff; border-radius: 12px;'):
-                            ui.label('📤 UPLOAD DE NOVO LOGO / BRASÃO').classes('text-sm font-bold text-cyan cyber-title q-mb-xs')
-                            ui.label('Envie um arquivo PNG/JPG para o Supabase Storage Bucket (logos)').classes('text-xs text-grey-4 q-mb-sm')
-
-                            async def handle_logo_upload(e):
-                                try:
-                                    import inspect
-                                    import asyncio
-                                    import os
-                                    file_obj = getattr(e, 'file', None)
-                                    if not file_obj:
-                                        ui.notify('❌ Nenhum arquivo detectado no upload.', color='negative')
-                                        return
-                                
-                                    content = file_obj.read()
-                                    if inspect.isawaitable(content):
-                                        content = await content
-                                
-                                    fname = getattr(file_obj, 'name', 'logo.png')
-                                    content_type = getattr(file_obj, 'content_type', 'image/png') or 'image/png'
-                                
-                                    fname_lower = fname.lower()
-                                    os.makedirs('assets/insignias', exist_ok=True)
-                                    local_path = os.path.join('assets', 'insignias', fname_lower)
-                                    try:
-                                        with open(local_path, 'wb') as f_out:
-                                            f_out.write(content)
-                                    except Exception as f_err:
-                                        print(f"[LOCAL SAVE ERR] {f_err}")
-
-                                    public_url = await asyncio.to_thread(upload_file_to_supabase_storage, content, fname, content_type, 'logos')
-                                    if public_url:
-                                        ui.notify(f'✅ Logo "{fname}" enviado para o Supabase com sucesso!', color='positive')
-                                        refresh_logo_options()
-                                        sel_logo_preset.value = public_url
-                                        upload_diag.close()
-                                        preview_container.refresh()
-                                    else:
-                                        ui.notify(f'✅ Salvo localmente em assets/insignias/{fname_lower}', color='warning')
-                                        refresh_logo_options()
-                                        upload_diag.close()
-                                        preview_container.refresh()
-                                except Exception as u_err:
-                                    print(f"[LOGO UPLOAD ERR] {u_err}")
-                                    ui.notify(f'❌ Erro no upload: {u_err}', color='negative')
-
-                            ui.upload(on_upload=handle_logo_upload, auto_upload=True, max_files=1).props('accept=.png,.jpg,.jpeg,.svg dark dense').classes('w-full q-my-sm')
-
-                            with ui.row().classes('w-full justify-end q-mt-sm'):
-                                ui.button('Cancelar', on_click=upload_diag.close).props('unelevated color=grey-8 dense').classes('text-xs')
-
-                        upload_diag.open()
-
-                    # ── Linha 3: Brasão Principal (Esquerdo) ──
-                    with ui.row().classes('w-full gap-3 items-end wrap bg-cyan-950/20 q-pa-sm rounded-lg border border-cyan-500/10'):
-                        with ui.column().classes('gap-0'):
-                            ui.label('Posição dos Brasões:').classes('text-[10px] text-grey-5')
-                            sel_brasao_pos = ui.select(
-                                options={
-                                    'esquerda': '◀ Brasão à Esquerda',
-                                    'ambos': '◀ Esquerda + Direita ▶',
-                                    'centro': '● Brasão Centralizado',
-                                    'nenhum': '✕ Sem Brasão'
-                                },
-                                value=print_config['brasao_pos']
-                            ).props('dark outlined dense').style('min-width: 170px;')
-
-                        with ui.column().classes('gap-0'):
-                            ui.label('Origem Brasão Principal:').classes('text-[10px] text-grey-5')
-                            sel_origin_logo_l = ui.select(
-                                options={'bucket': '☁️ Bucket Supabase', 'url': '🔗 URL Externa Customizada'},
-                                value=print_config['origin_logo_l']
-                            ).props('dark outlined dense').style('min-width: 170px;')
-
-                        with ui.column().classes('gap-0 col'):
-                            ui.label('Brasão Principal (Bucket Supabase):').classes('text-[10px] text-grey-5')
-                            with ui.row().classes('items-center gap-1 w-full'):
-                                sel_logo_preset = ui.select(
-                                    options=get_dynamic_logo_options(),
-                                    value=print_config['logo_preset_l']
-                                ).props('dark outlined dense').classes('col')
-                            
-                                ui.button(icon='refresh', on_click=refresh_logo_options).props('flat round dense color=cyan text-color=white').classes('text-xs').tooltip('Recarregar logos do Supabase')
-                                ui.button('➕ Upload', icon='cloud_upload', on_click=open_logo_upload_dialog).props('unelevated color=cyan text-color=black dense bold').classes('text-xs')
-
-                        with ui.column().classes('gap-0 col'):
-                            ui.label('URL Direta Brasão Principal (se URL Externa):').classes('text-[10px] text-grey-5')
-                            upload_brasao_left = ui.input(value=print_config['upload_brasao_left'], placeholder='https://.../brasao.png').props('dark outlined dense').classes('w-full')
-
-                    # ── Linha 4: Brasão Secundário (Direito) & QR Code ──
-                    with ui.row().classes('w-full gap-3 items-end wrap bg-cyan-950/20 q-pa-sm rounded-lg border border-cyan-500/10 q-mt-xs'):
-                        with ui.column().classes('gap-0'):
-                            ui.label('Posição QR Code:').classes('text-[10px] text-grey-5')
-                            sel_qr_pos = ui.select(
-                                options={
-                                    'direita': '▶ Canto Direito',
-                                    'esquerda': '◀ Canto Esquerdo',
-                                    'centro_baixo': '▼ Centro Inferior'
-                                },
-                                value=print_config['qr_pos']
-                            ).props('dark outlined dense').style('min-width: 170px;')
-
-                        with ui.column().classes('gap-0'):
-                            ui.label('Origem Brasão Direito:').classes('text-[10px] text-grey-5')
-                            sel_origin_logo_r = ui.select(
-                                options={'bucket': '☁️ Bucket Supabase', 'url': '🔗 URL Externa Customizada'},
-                                value=print_config['origin_logo_r']
-                            ).props('dark outlined dense').style('min-width: 170px;')
-
-                        with ui.column().classes('gap-0 col'):
-                            ui.label('Brasão Direito (Bucket Supabase):').classes('text-[10px] text-grey-5')
-                            sel_logo_r_preset = ui.select(
-                                options=get_dynamic_logo_options(),
-                                value=print_config['logo_preset_r']
-                            ).props('dark outlined dense').classes('w-full')
-
-                        with ui.column().classes('gap-0 col'):
-                            ui.label('URL Direta Brasão Direito (se URL Externa):').classes('text-[10px] text-grey-5')
-                            upload_brasao_right = ui.input(value=print_config['upload_brasao_right'], placeholder='https://.../brasao_direita.png').props('dark outlined dense').classes('w-full')
-
-                    # ── Linha 5: Template de Fundo (Background) ──
-                    with ui.row().classes('w-full gap-3 items-end wrap bg-cyan-950/20 q-pa-sm rounded-lg border border-cyan-500/10 q-mt-xs'):
-                        with ui.column().classes('gap-0'):
-                            ui.label('Origem Imagem de Fundo:').classes('text-[10px] text-amber-4 font-bold')
-                            sel_origin_bg = ui.select(
-                                options={'none': '🎨 Fundo Padrão (Sem Imagem)', 'bucket': '☁️ Bucket Supabase', 'url': '🔗 URL Externa Customizada'},
-                                value=print_config['origin_bg']
-                            ).props('dark outlined dense').style('min-width: 210px;')
-
-                        with ui.column().classes('gap-0 col'):
-                            ui.label('Imagem de Fundo (Bucket Supabase):').classes('text-[10px] text-amber-4 font-bold')
-                            sel_bg_preset = ui.select(
-                                options=get_dynamic_logo_options(),
-                                value=print_config['bg_preset']
-                            ).props('dark outlined dense').classes('w-full')
-
-                        with ui.column().classes('gap-0 col'):
-                            ui.label('URL Direta Imagem de Fundo (se URL Externa):').classes('text-[10px] text-amber-4 font-bold')
-                            input_template_bg = ui.input(value=print_config['template_bg_url'], placeholder='https://.../fundo.png').props('dark outlined dense').classes('w-full')
-
-                    ui.separator().classes('q-my-sm').style('border-color: rgba(255,255,255,0.08);')
-
-                    # ── Linha 5: Ajustes Finais de Escala, Tamanho e Posicionamento X/Y ──
-                    with ui.expansion('📐 Ajustes Finais de Escala, Tamanho (mm/pt) e Posicionamento Fino (X/Y)', icon='tune').classes('w-full bg-cyan-950/40 border border-cyan-500/20 rounded-lg text-cyan text-xs q-mb-sm'):
-                        with ui.row().classes('w-full gap-3 q-pa-sm wrap items-end'):
-                            with ui.column().classes('gap-0'):
-                                ui.label('Largura Logo (mm):').classes('text-[10px] text-grey-4')
-                                input_logo_width = ui.number(value=print_config['logo_width'], min=5, max=60, step=1).props('dark outlined dense').style('width: 110px;')
-                            with ui.column().classes('gap-0'):
-                                ui.label('Posição Logo X (mm):').classes('text-[10px] text-grey-4')
-                                input_logo_pos_x = ui.number(value=print_config['logo_pos_x'], min=0, max=60, step=1).props('dark outlined dense').style('width: 110px;')
-                            with ui.column().classes('gap-0'):
-                                ui.label('Posição Logo Y (mm):').classes('text-[10px] text-grey-4')
-                                input_logo_pos_y = ui.number(value=print_config['logo_pos_y'], min=0, max=40, step=1).props('dark outlined dense').style('width: 110px;')
-
-                            with ui.column().classes('gap-0'):
-                                ui.label('Tamanho QR Code (mm):').classes('text-[10px] text-grey-4')
-                                input_qr_size = ui.number(value=print_config['qr_size'], min=5, max=40, step=1).props('dark outlined dense').style('width: 120px;')
-                            with ui.column().classes('gap-0'):
-                                ui.label('Posição QR Code X (mm):').classes('text-[10px] text-grey-4')
-                                input_qr_pos_x = ui.number(value=print_config['qr_pos_x'], min=0, max=60, step=1).props('dark outlined dense').style('width: 120px;')
-                            with ui.column().classes('gap-0'):
-                                ui.label('Posição QR Code Y (mm):').classes('text-[10px] text-grey-4')
-                                input_qr_pos_y = ui.number(value=print_config['qr_pos_y'], min=0, max=40, step=1).props('dark outlined dense').style('width: 120px;')
-
-                            with ui.column().classes('gap-0'):
-                                ui.label('Fonte Nome (pt):').classes('text-[10px] text-grey-4')
-                                input_font_nome = ui.number(value=print_config['font_nome'], min=10, max=40, step=1).props('dark outlined dense').style('width: 100px;')
-                            with ui.column().classes('gap-0'):
-                                ui.label('Fonte Posto (pt):').classes('text-[10px] text-grey-4')
-                                input_font_posto = ui.number(value=print_config['font_posto'], min=8, max=30, step=1).props('dark outlined dense').style('width: 100px;')
-                            with ui.column().classes('gap-0'):
-                                ui.label('Fonte Reservado (pt):').classes('text-[10px] text-grey-4')
-                                input_font_reservado = ui.number(value=print_config['font_reservado'], min=10, max=36, step=1).props('dark outlined dense').style('width: 110px;')
-
-                    def collect_current_print_config():
-                        return {
-                            'model': model_select.value,
-                            'items_per_sheet': input_items_per_sheet.value,
-                            'chk_only_confirmed': chk_only_confirmed.value,
-                            'chk_logo': chk_logo.value,
-                            'chk_qr': chk_qr.value,
-                            'chk_rank': chk_rank.value,
-                            'chk_border': chk_border.value,
-                            'header_line1': input_header1.value or '',
-                            'header_line2': input_header2.value or '',
-                            'termo_convidado': input_termo_conv.value or 'RESERVADO',
-                            'brasao_pos': sel_brasao_pos.value,
-                            'origin_logo_l': sel_origin_logo_l.value,
-                            'logo_preset_l': sel_logo_preset.value,
-                            'upload_brasao_left': upload_brasao_left.value or '',
-                            'qr_pos': sel_qr_pos.value,
-                            'origin_logo_r': sel_origin_logo_r.value,
-                            'logo_preset_r': sel_logo_r_preset.value,
-                            'upload_brasao_right': upload_brasao_right.value or '',
-                            'origin_bg': sel_origin_bg.value,
-                            'bg_preset': sel_bg_preset.value,
-                            'template_bg_url': input_template_bg.value or '',
-                            'logo_width': input_logo_width.value or 16,
-                            'logo_pos_x': input_logo_pos_x.value or 6,
-                            'logo_pos_y': input_logo_pos_y.value or 4,
-                            'qr_size': input_qr_size.value or 13,
-                            'qr_pos_x': input_qr_pos_x.value or 5,
-                            'qr_pos_y': input_qr_pos_y.value or 3,
-                            'font_nome': input_font_nome.value or 22,
-                            'font_posto': input_font_posto.value or 13,
-                            'font_reservado': input_font_reservado.value or 18,
-                        }
-
-                    def save_print_config_to_event(notify_user=True):
-                        try:
-                            import json
-                            from database import get_db_connection
-                            _db = get_db_connection()
-
-                            cfg = collect_current_print_config()
-                            target_layout = layout if isinstance(layout, dict) else {}
-                            target_layout['print_config'] = cfg
-                        
-                            new_layout_str = json.dumps(target_layout, ensure_ascii=False)
-                            _db.table('jade_eventos').update({'layout_json': new_layout_str}).eq('id', event['id']).execute()
-                            if notify_user:
-                                ui.notify('💾 Configurações salvas como padrão deste evento!', color='positive', icon='check_circle')
-                        except Exception as s_err:
-                            print(f"[SAVE PRINT CONFIG ERR] {s_err}")
-                            if notify_user:
-                                ui.notify(f'❌ Erro ao salvar configurações: {s_err}', color='negative')
-
-                    def on_update_and_preview():
-                        save_print_config_to_event(notify_user=False)
-                        preview_container.refresh()
-
-                    with ui.row().classes('w-full justify-between items-center q-mt-sm'):
-                        ui.label('💡 As configurações salvas são gravadas como padrão deste evento.').classes('text-[11px] text-cyan-3 italic')
-                        with ui.row().classes('gap-2'):
-                            ui.button('💾 Salvar Configurações no Evento', icon='save', on_click=lambda: save_print_config_to_event(notify_user=True)).props('unelevated color=emerald text-color=white dense bold').classes('text-xs').tooltip('Salva o modelo, brasões, títulos e fontes como padrão permanente deste evento')
-                            ui.button('🔄 Atualizar Pré-Visualização', icon='refresh', on_click=on_update_and_preview).props('unelevated color=cyan text-color=black dense bold').classes('text-xs')
-
-                # ═══════════════════════════════════════════════════════════════
-                # CSS DE IMPRESSÃO
-                # ═══════════════════════════════════════════════════════════════
-                print_css = """
-                <style>
-                @media print {
-                    body * { visibility: hidden !important; background: white !important; color: black !important; }
-                    .print-area, .print-area * { visibility: visible !important; }
-                    .print-area { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; }
-                    .print-hide { display: none !important; }
-                    .page-break { page-break-after: always !important; }
-                    .jade-card { border: 2px solid #000 !important; margin-bottom: 16px !important; padding: 16px !important; background: #fff !important; color: #000 !important; border-radius: 8px !important; }
-                    .jade-card-template { margin-bottom: 16px !important; page-break-inside: avoid !important; }
-                    .jade-card-mesa { border: 2px dashed #666 !important; padding: 12px !important; background: #fff !important; color: #000 !important; margin-bottom: 16px !important; }
-                    .jade-card-cred { border: 1px solid #000 !important; width: 300px !important; height: 420px !important; padding: 12px !important; margin: 8px !important; float: left !important; }
-                    /* Placa Horizontal Oficial CGCFN */
-                    .jade-horizontal-sheet { page-break-after: always !important; }
-                    .jade-horizontal-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 12mm !important; padding: 8mm !important; }
-                    .jade-placa-horiz {
-                        background: #ffffff !important; color: #1a1a6e !important;
-                        border: 2px solid #1a1a6e !important; border-radius: 4px !important;
-                        width: 100% !important; height: 72mm !important; overflow: hidden !important;
-                        page-break-inside: avoid !important; position: relative !important;
+                def get_dynamic_logo_options():
+                    opts = {
+                        'cfn': '⚓ CFN (Fuzileiros Navais)',
+                        'mb':  '⚓ Marinha do Brasil'
                     }
-                    .jade-cut-line {
-                        border: 1px dashed #aaa !important;
-                        margin: 3mm 0 !important;
-                    }
-                }
-                /* Preview screen */
-                .jade-placa-horiz {
-                    background: #ffffff;
-                    color: #1a1a6e;
-                    border: 2px solid #1a1a6e;
-                    border-radius: 4px;
-                    position: relative;
-                    overflow: hidden;
-                    display: flex;
-                    flex-direction: row;
-                    align-items: center;
-                    min-height: 110px;
-                    gap: 0;
-                }
-                .jade-placa-horiz .jade-placa-left {
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    padding: 12px 10px 12px 16px;
-                    gap: 6px;
-                    min-width: 90px;
-                }
-                .jade-placa-horiz .jade-placa-center {
-                    flex: 1;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    text-align: center;
-                    padding: 12px 8px;
-                    gap: 4px;
-                }
-                .jade-placa-horiz .jade-placa-right {
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    padding: 12px 12px 12px 4px;
-                    gap: 4px;
-                }
-                .jade-star { font-size: 22px; color: #1a1a6e; line-height: 1.1; }
-                .jade-reservado { font-size: 15px; font-weight: 900; color: #8B0000; letter-spacing: 2px; text-transform: uppercase; }
-                .jade-posto-ext { font-size: 11px; font-weight: 700; color: #1a1a6e; letter-spacing: 1px; text-transform: uppercase; }
-                .jade-nome-guerra { font-size: 22px; font-weight: 900; color: #1a1a6e; letter-spacing: 1.5px; text-transform: uppercase; }
-                .jade-assento-badge { font-size: 9px; font-weight: 800; color: #555; border: 1px solid #ccc; padding: 2px 6px; border-radius: 3px; margin-top: 4px; }
-                .jade-horizontal-grid {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 16px;
-                    padding: 8px 0;
-                }
-                /* Container de 1 dos 4 slots por folha A4 (210mm x 74.25mm) */
-                .prisma-card-a4-slot {
-                    width: 100%;
-                    max-width: 210mm;
-                    height: 74.25mm;
-                    box-sizing: border-box;
-                    padding: 4mm 8mm;
-                    position: relative;
-                    background-color: #ffffff;
-                    color: #000000;
-                    border: 1.5pt solid #1a1a1a;
-                    outline: 0.5pt solid #1a1a1a;
-                    outline-offset: -2.5mm;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    page-break-inside: avoid;
-                    margin-bottom: 3mm;
-                }
-                .prisma-canto-esquerdo {
-                    position: absolute;
-                    top: 4mm;
-                    left: 6mm;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: flex-start;
-                    z-index: 10;
-                }
-                .prisma-brasao-om {
-                    width: 14mm;
-                    height: auto;
-                    margin-bottom: 1.5mm;
-                }
-                .prisma-estrelas-esquerda {
-                    font-size: 18pt;
-                    font-weight: bold;
-                    color: #000000;
-                    letter-spacing: 2px;
-                    line-height: 1;
-                }
-                .prisma-conteudo-central {
-                    width: 100%;
-                    height: 100%;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: center;
-                    align-items: center;
-                    text-align: center;
-                    padding-left: 26mm;
-                    padding-right: 26mm;
-                    gap: 5mm;
-                }
-                .prisma-texto-reservado {
-                    font-size: 18pt;
-                    font-weight: 800;
-                    text-transform: uppercase;
-                    color: #000000;
-                    line-height: 1;
-                    margin: 0;
-                    white-space: nowrap;
-                }
-                .prisma-posto-extenso {
-                    font-size: 13pt;
-                    font-weight: 600;
-                    text-transform: uppercase;
-                    color: #333333;
-                    line-height: 1;
-                    margin: 0;
-                    white-space: nowrap;
-                }
-                .prisma-nome-autoridade {
-                    font-size: 22pt;
-                    font-weight: 800;
-                    text-transform: uppercase;
-                    color: #000000;
-                    line-height: 1;
-                    margin: 0;
-                    white-space: nowrap;
-                }
-                .jade-template-card {
-                    position: relative;
-                    width: 100%;
-                    min-height: 180px;
-                    background-size: cover;
-                    background-position: center;
-                    background-repeat: no-repeat;
-                    border-radius: 12px;
-                    overflow: hidden;
-                }
-                .jade-template-overlay {
-                    position: relative;
-                    z-index: 2;
-                    padding: 16px;
-                    min-height: 180px;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: space-between;
-                    background: rgba(0,0,0,0.45);
-                }
-                .jade-insignia-badge {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 4px;
-                    padding: 2px 8px;
-                    border-radius: 4px;
-                    font-size: 10px;
-                    font-weight: 800;
-                    letter-spacing: 1px;
-                }
-                </style>
-                """
-                ui.add_head_html(print_css)
-
-                # ═══════════════════════════════════════════════════════════════
-                # ÁREA DE PRÉ-VISUALIZAÇÃO
-                # ═══════════════════════════════════════════════════════════════
-                @ui.refreshable
-                def preview_container():
-                    current_model = model_select.value
-                    h1 = input_header1.value or 'MARINHA DO BRASIL'
-                    h2 = input_header2.value or ''
-                    brasao_pos = sel_brasao_pos.value
-                    qr_pos = sel_qr_pos.value
-                    show_logo = chk_logo.value
-                    show_qr = chk_qr.value
-                    show_rank = chk_rank.value
-                    only_confirmed = chk_only_confirmed.value
-                    bg_url = ''
                     try:
-                        bg_url = input_template_bg.value.strip() if hasattr(input_template_bg, 'value') else ''
-                    except Exception:
-                        bg_url = ''
-                    SUPABASE_LOGOS_BUCKET_URL = "https://ruabgndnhgdverqlgvef.supabase.co/storage/v1/object/public/logos"
+                        storage_files = list_supabase_storage_files('logos')
+                        for f in storage_files:
+                            fname = f.get('name', '')
+                            furl = f.get('url', '')
+                            if fname and furl:
+                                opts[furl] = f"☁️ {fname}"
+                    except Exception as err:
+                        print(f"[LOGOS BUCKET FETCH ERR] {err}")
+                    opts['custom'] = '🔗 URL Customizada'
+                    return opts
 
-                    def resolve_logo_url(inp_val):
-                        if not inp_val:
-                            return ""
-                        val = str(inp_val).strip()
-                        if val.startswith('http://') or val.startswith('https://'):
-                            return val
-                        return f"{SUPABASE_LOGOS_BUCKET_URL}/{val.lstrip('/')}"
+                def refresh_logo_options():
+                    new_opts = get_dynamic_logo_options()
+                    sel_logo_preset.options = new_opts
+                    sel_logo_preset.update()
 
-                    LOGO_URLS = {
-                        'cgcfn': url_to_base64('assets/brasao_cgcfn.png') or f"{SUPABASE_LOGOS_BUCKET_URL}/brasao_cgcfn.png",
-                        'mb':    url_to_base64('assets/brasao_marinha.png') or f"{SUPABASE_LOGOS_BUCKET_URL}/brasao_marinha.png",
-                        'cfn':   url_to_base64('assets/brasao_cgcfn.png'),
+                def open_logo_upload_dialog():
+                    with ui.dialog() as upload_diag, ui.card().classes('q-pa-md').style('min-width: 480px; background: #0c1829; border: 1px solid #00e5ff; border-radius: 12px;'):
+                        ui.label('📤 UPLOAD DE NOVO LOGO / BRASÃO').classes('text-sm font-bold text-cyan cyber-title q-mb-xs')
+                        ui.label('Envie um arquivo PNG/JPG para o Supabase Storage Bucket (logos)').classes('text-xs text-grey-4 q-mb-sm')
+
+                        async def handle_logo_upload(e):
+                            try:
+                                import inspect
+                                import asyncio
+                                import os
+                                file_obj = getattr(e, 'file', None)
+                                if not file_obj:
+                                    ui.notify('❌ Nenhum arquivo detectado no upload.', color='negative')
+                                    return
+                            
+                                content = file_obj.read()
+                                if inspect.isawaitable(content):
+                                    content = await content
+                            
+                                fname = getattr(file_obj, 'name', 'logo.png')
+                                content_type = getattr(file_obj, 'content_type', 'image/png') or 'image/png'
+                            
+                                fname_lower = fname.lower()
+                                os.makedirs('assets/insignias', exist_ok=True)
+                                local_path = os.path.join('assets', 'insignias', fname_lower)
+                                try:
+                                    with open(local_path, 'wb') as f_out:
+                                        f_out.write(content)
+                                except Exception as f_err:
+                                    print(f"[LOCAL SAVE ERR] {f_err}")
+
+                                public_url = await asyncio.to_thread(upload_file_to_supabase_storage, content, fname, content_type, 'logos')
+                                if public_url:
+                                    ui.notify(f'✅ Logo "{fname}" enviado para o Supabase com sucesso!', color='positive')
+                                    refresh_logo_options()
+                                    sel_logo_preset.value = public_url
+                                    upload_diag.close()
+                                    preview_container.refresh()
+                                else:
+                                    ui.notify(f'✅ Salvo localmente em assets/insignias/{fname_lower}', color='warning')
+                                    refresh_logo_options()
+                                    upload_diag.close()
+                                    preview_container.refresh()
+                            except Exception as u_err:
+                                print(f"[LOGO UPLOAD ERR] {u_err}")
+                                ui.notify(f'❌ Erro no upload: {u_err}', color='negative')
+
+                        ui.upload(on_upload=handle_logo_upload, auto_upload=True, max_files=1).props('accept=.png,.jpg,.jpeg,.svg dark dense').classes('w-full q-my-sm')
+
+                        with ui.row().classes('w-full justify-end q-mt-sm'):
+                            ui.button('Cancelar', on_click=upload_diag.close).props('unelevated color=grey-8 dense').classes('text-xs')
+
+                    upload_diag.open()
+
+                # ── Linha 3: Brasão Principal (Esquerdo) ──
+                with ui.row().classes('w-full gap-3 items-end wrap bg-cyan-950/20 q-pa-sm rounded-lg border border-cyan-500/10'):
+                    with ui.column().classes('gap-0'):
+                        ui.label('Posição dos Brasões:').classes('text-[10px] text-grey-5')
+                        sel_brasao_pos = ui.select(
+                            options={
+                                'esquerda': '◀ Brasão à Esquerda',
+                                'ambos': '◀ Esquerda + Direita ▶',
+                                'centro': '● Brasão Centralizado',
+                                'nenhum': '✕ Sem Brasão'
+                            },
+                            value=print_config['brasao_pos']
+                        ).props('dark outlined dense').style('min-width: 170px;')
+
+                    with ui.column().classes('gap-0'):
+                        ui.label('Origem Brasão Principal:').classes('text-[10px] text-grey-5')
+                        sel_origin_logo_l = ui.select(
+                            options={'bucket': '☁️ Bucket Supabase', 'url': '🔗 URL Externa Customizada'},
+                            value=print_config['origin_logo_l']
+                        ).props('dark outlined dense').style('min-width: 170px;')
+
+                    with ui.column().classes('gap-0 col'):
+                        ui.label('Brasão Principal (Bucket Supabase):').classes('text-[10px] text-grey-5')
+                        with ui.row().classes('items-center gap-1 w-full'):
+                            sel_logo_preset = ui.select(
+                                options=get_dynamic_logo_options(),
+                                value=print_config['logo_preset_l']
+                            ).props('dark outlined dense').classes('col')
+                        
+                            ui.button(icon='refresh', on_click=refresh_logo_options).props('flat round dense color=cyan text-color=white').classes('text-xs').tooltip('Recarregar logos do Supabase')
+                            ui.button('➕ Upload', icon='cloud_upload', on_click=open_logo_upload_dialog).props('unelevated color=cyan text-color=black dense bold').classes('text-xs')
+
+                    with ui.column().classes('gap-0 col'):
+                        ui.label('URL Direta Brasão Principal (se URL Externa):').classes('text-[10px] text-grey-5')
+                        upload_brasao_left = ui.input(value=print_config['upload_brasao_left'], placeholder='https://.../brasao.png').props('dark outlined dense').classes('w-full')
+
+                # ── Linha 4: Brasão Secundário (Direito) & QR Code ──
+                with ui.row().classes('w-full gap-3 items-end wrap bg-cyan-950/20 q-pa-sm rounded-lg border border-cyan-500/10 q-mt-xs'):
+                    with ui.column().classes('gap-0'):
+                        ui.label('Posição QR Code:').classes('text-[10px] text-grey-5')
+                        sel_qr_pos = ui.select(
+                            options={
+                                'direita': '▶ Canto Direito',
+                                'esquerda': '◀ Canto Esquerdo',
+                                'centro_baixo': '▼ Centro Inferior'
+                            },
+                            value=print_config['qr_pos']
+                        ).props('dark outlined dense').style('min-width: 170px;')
+
+                    with ui.column().classes('gap-0'):
+                        ui.label('Origem Brasão Direito:').classes('text-[10px] text-grey-5')
+                        sel_origin_logo_r = ui.select(
+                            options={'bucket': '☁️ Bucket Supabase', 'url': '🔗 URL Externa Customizada'},
+                            value=print_config['origin_logo_r']
+                        ).props('dark outlined dense').style('min-width: 170px;')
+
+                    with ui.column().classes('gap-0 col'):
+                        ui.label('Brasão Direito (Bucket Supabase):').classes('text-[10px] text-grey-5')
+                        sel_logo_r_preset = ui.select(
+                            options=get_dynamic_logo_options(),
+                            value=print_config['logo_preset_r']
+                        ).props('dark outlined dense').classes('w-full')
+
+                    with ui.column().classes('gap-0 col'):
+                        ui.label('URL Direta Brasão Direito (se URL Externa):').classes('text-[10px] text-grey-5')
+                        upload_brasao_right = ui.input(value=print_config['upload_brasao_right'], placeholder='https://.../brasao_direita.png').props('dark outlined dense').classes('w-full')
+
+                # ── Linha 5: Template de Fundo (Background) ──
+                with ui.row().classes('w-full gap-3 items-end wrap bg-cyan-950/20 q-pa-sm rounded-lg border border-cyan-500/10 q-mt-xs'):
+                    with ui.column().classes('gap-0'):
+                        ui.label('Origem Imagem de Fundo:').classes('text-[10px] text-amber-4 font-bold')
+                        sel_origin_bg = ui.select(
+                            options={'none': '🎨 Fundo Padrão (Sem Imagem)', 'bucket': '☁️ Bucket Supabase', 'url': '🔗 URL Externa Customizada'},
+                            value=print_config['origin_bg']
+                        ).props('dark outlined dense').style('min-width: 210px;')
+
+                    with ui.column().classes('gap-0 col'):
+                        ui.label('Imagem de Fundo (Bucket Supabase):').classes('text-[10px] text-amber-4 font-bold')
+                        sel_bg_preset = ui.select(
+                            options=get_dynamic_logo_options(),
+                            value=print_config['bg_preset']
+                        ).props('dark outlined dense').classes('w-full')
+
+                    with ui.column().classes('gap-0 col'):
+                        ui.label('URL Direta Imagem de Fundo (se URL Externa):').classes('text-[10px] text-amber-4 font-bold')
+                        input_template_bg = ui.input(value=print_config['template_bg_url'], placeholder='https://.../fundo.png').props('dark outlined dense').classes('w-full')
+
+                ui.separator().classes('q-my-sm').style('border-color: rgba(255,255,255,0.08);')
+
+                # ── Linha 5: Ajustes Finais de Escala, Tamanho e Posicionamento X/Y ──
+                with ui.expansion('📐 Ajustes Finais de Escala, Tamanho (mm/pt) e Posicionamento Fino (X/Y)', icon='tune').classes('w-full bg-cyan-950/40 border border-cyan-500/20 rounded-lg text-cyan text-xs q-mb-sm'):
+                    with ui.row().classes('w-full gap-3 q-pa-sm wrap items-end'):
+                        with ui.column().classes('gap-0'):
+                            ui.label('Largura Logo (mm):').classes('text-[10px] text-grey-4')
+                            input_logo_width = ui.number(value=print_config['logo_width'], min=5, max=60, step=1).props('dark outlined dense').style('width: 110px;')
+                        with ui.column().classes('gap-0'):
+                            ui.label('Posição Logo X (mm):').classes('text-[10px] text-grey-4')
+                            input_logo_pos_x = ui.number(value=print_config['logo_pos_x'], min=0, max=60, step=1).props('dark outlined dense').style('width: 110px;')
+                        with ui.column().classes('gap-0'):
+                            ui.label('Posição Logo Y (mm):').classes('text-[10px] text-grey-4')
+                            input_logo_pos_y = ui.number(value=print_config['logo_pos_y'], min=0, max=40, step=1).props('dark outlined dense').style('width: 110px;')
+
+                        with ui.column().classes('gap-0'):
+                            ui.label('Tamanho QR Code (mm):').classes('text-[10px] text-grey-4')
+                            input_qr_size = ui.number(value=print_config['qr_size'], min=5, max=40, step=1).props('dark outlined dense').style('width: 120px;')
+                        with ui.column().classes('gap-0'):
+                            ui.label('Posição QR Code X (mm):').classes('text-[10px] text-grey-4')
+                            input_qr_pos_x = ui.number(value=print_config['qr_pos_x'], min=0, max=60, step=1).props('dark outlined dense').style('width: 120px;')
+                        with ui.column().classes('gap-0'):
+                            ui.label('Posição QR Code Y (mm):').classes('text-[10px] text-grey-4')
+                            input_qr_pos_y = ui.number(value=print_config['qr_pos_y'], min=0, max=40, step=1).props('dark outlined dense').style('width: 120px;')
+
+                        with ui.column().classes('gap-0'):
+                            ui.label('Fonte Nome (pt):').classes('text-[10px] text-grey-4')
+                            input_font_nome = ui.number(value=print_config['font_nome'], min=10, max=40, step=1).props('dark outlined dense').style('width: 100px;')
+                        with ui.column().classes('gap-0'):
+                            ui.label('Fonte Posto (pt):').classes('text-[10px] text-grey-4')
+                            input_font_posto = ui.number(value=print_config['font_posto'], min=8, max=30, step=1).props('dark outlined dense').style('width: 100px;')
+                        with ui.column().classes('gap-0'):
+                            ui.label('Fonte Reservado (pt):').classes('text-[10px] text-grey-4')
+                            input_font_reservado = ui.number(value=print_config['font_reservado'], min=10, max=36, step=1).props('dark outlined dense').style('width: 110px;')
+
+                def collect_current_print_config():
+                    return {
+                        'model': model_select.value,
+                        'items_per_sheet': input_items_per_sheet.value,
+                        'chk_only_confirmed': chk_only_confirmed.value,
+                        'chk_logo': chk_logo.value,
+                        'chk_qr': chk_qr.value,
+                        'chk_rank': chk_rank.value,
+                        'chk_border': chk_border.value,
+                        'header_line1': input_header1.value or '',
+                        'header_line2': input_header2.value or '',
+                        'termo_convidado': input_termo_conv.value or 'RESERVADO',
+                        'brasao_pos': sel_brasao_pos.value,
+                        'origin_logo_l': sel_origin_logo_l.value,
+                        'logo_preset_l': sel_logo_preset.value,
+                        'upload_brasao_left': upload_brasao_left.value or '',
+                        'qr_pos': sel_qr_pos.value,
+                        'origin_logo_r': sel_origin_logo_r.value,
+                        'logo_preset_r': sel_logo_r_preset.value,
+                        'upload_brasao_right': upload_brasao_right.value or '',
+                        'origin_bg': sel_origin_bg.value,
+                        'bg_preset': sel_bg_preset.value,
+                        'template_bg_url': input_template_bg.value or '',
+                        'logo_width': input_logo_width.value or 16,
+                        'logo_pos_x': input_logo_pos_x.value or 6,
+                        'logo_pos_y': input_logo_pos_y.value or 4,
+                        'qr_size': input_qr_size.value or 13,
+                        'qr_pos_x': input_qr_pos_x.value or 5,
+                        'qr_pos_y': input_qr_pos_y.value or 3,
+                        'font_nome': input_font_nome.value or 22,
+                        'font_posto': input_font_posto.value or 13,
+                        'font_reservado': input_font_reservado.value or 18,
                     }
 
-                    def resolve_asset_image(origin_type, bucket_val, custom_val):
-                        if origin_type == 'bucket' and bucket_val:
-                            if bucket_val in LOGO_URLS:
-                                return LOGO_URLS[bucket_val]
-                            return url_to_base64(resolve_logo_url(bucket_val))
-                        elif origin_type == 'url' and custom_val:
-                            return url_to_base64(custom_val.strip())
-                        return ""
+                def save_print_config_to_event(notify_user=True):
+                    try:
+                        import json
+                        from database import get_db_connection
+                        _db = get_db_connection()
 
-                    origin_l = sel_origin_logo_l.value if hasattr(sel_origin_logo_l, 'value') else 'bucket'
-                    preset_l = sel_logo_preset.value if hasattr(sel_logo_preset, 'value') else 'cfn'
-                    custom_l = upload_brasao_left.value if hasattr(upload_brasao_left, 'value') else ''
-                    resolved_logo_url = resolve_asset_image(origin_l, preset_l, custom_l) or url_to_base64('assets/brasao_cgcfn.png')
-
-
-                    origin_r = sel_origin_logo_r.value if hasattr(sel_origin_logo_r, 'value') else 'bucket'
-                    preset_r = sel_logo_r_preset.value if hasattr(sel_logo_r_preset, 'value') else 'mb'
-                    custom_r = upload_brasao_right.value if hasattr(upload_brasao_right, 'value') else ''
-                    brasao_r_url = resolve_asset_image(origin_r, preset_r, custom_r)
-
-                    origin_bg = sel_origin_bg.value if hasattr(sel_origin_bg, 'value') else 'none'
-                    preset_bg = sel_bg_preset.value if hasattr(sel_bg_preset, 'value') else ''
-                    custom_bg = input_template_bg.value if hasattr(input_template_bg, 'value') else ''
-                    bg_url = resolve_asset_image(origin_bg, preset_bg, custom_bg)
-                    use_bg = bool(bg_url) or current_model == 'template_custom'
-
-                    # Escala e Posicionamento Fino
-                    logo_w = float(input_logo_width.value or 16)
-                    logo_x = float(input_logo_pos_x.value or 6)
-                    logo_y = float(input_logo_pos_y.value or 4)
-
-                    qr_size = float(input_qr_size.value or 13)
-                    qr_x = float(input_qr_pos_x.value or 5)
-                    qr_y = float(input_qr_pos_y.value or 3)
-
-                    f_nome = float(input_font_nome.value or 22)
-                    f_posto = float(input_font_posto.value or 13)
-                    f_reservado = float(input_font_reservado.value or 18)
-
-                    # Filtro de impressão: só confirmados ou todos com placa
-                    def should_print(c):
-                        if only_confirmed:
-                            return c.get('status_placa') in ('pendente', 'em_producao', 'impressa', 'reimpressao')
-                        return True
-
-                    with ui.column().classes('w-full gap-4 print-area'):
-                        # 1. Coleta TODOS os cartões (alocados + não alocados) em uma única lista contínua
-                        all_cards = []
-                        seen_ids = set()
-                        main_guests_map = {g['id']: g for g in convidados if not g.get('convidado_principal_id')}
+                        cfg = collect_current_print_config()
+                        target_layout = layout if isinstance(layout, dict) else {}
+                        target_layout['print_config'] = cfg
                     
-                        # Se abriu o estúdio passando uma lista específica
-                        if convidados and len(convidados) > 0 and isinstance(convidados, list):
-                            for c in convidados:
+                        new_layout_str = json.dumps(target_layout, ensure_ascii=False)
+                        _db.table('jade_eventos').update({'layout_json': new_layout_str}).eq('id', event['id']).execute()
+                        if notify_user:
+                            ui.notify('💾 Configurações salvas como padrão deste evento!', color='positive', icon='check_circle')
+                    except Exception as s_err:
+                        print(f"[SAVE PRINT CONFIG ERR] {s_err}")
+                        if notify_user:
+                            ui.notify(f'❌ Erro ao salvar configurações: {s_err}', color='negative')
+
+                def on_update_and_preview():
+                    save_print_config_to_event(notify_user=False)
+                    preview_container.refresh()
+
+                with ui.row().classes('w-full justify-between items-center q-mt-sm'):
+                    ui.label('💡 As configurações salvas são gravadas como padrão deste evento.').classes('text-[11px] text-cyan-3 italic')
+                    with ui.row().classes('gap-2'):
+                        ui.button('💾 Salvar Configurações no Evento', icon='save', on_click=lambda: save_print_config_to_event(notify_user=True)).props('unelevated color=emerald text-color=white dense bold').classes('text-xs').tooltip('Salva o modelo, brasões, títulos e fontes como padrão permanente deste evento')
+                        ui.button('🔄 Atualizar Pré-Visualização', icon='refresh', on_click=on_update_and_preview).props('unelevated color=cyan text-color=black dense bold').classes('text-xs')
+
+            # ═══════════════════════════════════════════════════════════════
+            # CSS DE IMPRESSÃO
+            # ═══════════════════════════════════════════════════════════════
+            print_css = """
+            <style>
+            @media print {
+                body * { visibility: hidden !important; background: white !important; color: black !important; }
+                .print-area, .print-area * { visibility: visible !important; }
+                .print-area { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; }
+                .print-hide { display: none !important; }
+                .page-break { page-break-after: always !important; }
+                .jade-card { border: 2px solid #000 !important; margin-bottom: 16px !important; padding: 16px !important; background: #fff !important; color: #000 !important; border-radius: 8px !important; }
+                .jade-card-template { margin-bottom: 16px !important; page-break-inside: avoid !important; }
+                .jade-card-mesa { border: 2px dashed #666 !important; padding: 12px !important; background: #fff !important; color: #000 !important; margin-bottom: 16px !important; }
+                .jade-card-cred { border: 1px solid #000 !important; width: 300px !important; height: 420px !important; padding: 12px !important; margin: 8px !important; float: left !important; }
+                /* Placa Horizontal Oficial CGCFN */
+                .jade-horizontal-sheet { page-break-after: always !important; }
+                .jade-horizontal-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 12mm !important; padding: 8mm !important; }
+                .jade-placa-horiz {
+                    background: #ffffff !important; color: #1a1a6e !important;
+                    border: 2px solid #1a1a6e !important; border-radius: 4px !important;
+                    width: 100% !important; height: 72mm !important; overflow: hidden !important;
+                    page-break-inside: avoid !important; position: relative !important;
+                }
+                .jade-cut-line {
+                    border: 1px dashed #aaa !important;
+                    margin: 3mm 0 !important;
+                }
+            }
+            /* Preview screen */
+            .jade-placa-horiz {
+                background: #ffffff;
+                color: #1a1a6e;
+                border: 2px solid #1a1a6e;
+                border-radius: 4px;
+                position: relative;
+                overflow: hidden;
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                min-height: 110px;
+                gap: 0;
+            }
+            .jade-placa-horiz .jade-placa-left {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                padding: 12px 10px 12px 16px;
+                gap: 6px;
+                min-width: 90px;
+            }
+            .jade-placa-horiz .jade-placa-center {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                text-align: center;
+                padding: 12px 8px;
+                gap: 4px;
+            }
+            .jade-placa-horiz .jade-placa-right {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                padding: 12px 12px 12px 4px;
+                gap: 4px;
+            }
+            .jade-star { font-size: 22px; color: #1a1a6e; line-height: 1.1; }
+            .jade-reservado { font-size: 15px; font-weight: 900; color: #8B0000; letter-spacing: 2px; text-transform: uppercase; }
+            .jade-posto-ext { font-size: 11px; font-weight: 700; color: #1a1a6e; letter-spacing: 1px; text-transform: uppercase; }
+            .jade-nome-guerra { font-size: 22px; font-weight: 900; color: #1a1a6e; letter-spacing: 1.5px; text-transform: uppercase; }
+            .jade-assento-badge { font-size: 9px; font-weight: 800; color: #555; border: 1px solid #ccc; padding: 2px 6px; border-radius: 3px; margin-top: 4px; }
+            .jade-horizontal-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 16px;
+                padding: 8px 0;
+            }
+            /* Container de 1 dos 4 slots por folha A4 (210mm x 74.25mm) */
+            .prisma-card-a4-slot {
+                width: 100%;
+                max-width: 210mm;
+                height: 74.25mm;
+                box-sizing: border-box;
+                padding: 4mm 8mm;
+                position: relative;
+                background-color: #ffffff;
+                color: #000000;
+                border: 1.5pt solid #1a1a1a;
+                outline: 0.5pt solid #1a1a1a;
+                outline-offset: -2.5mm;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                page-break-inside: avoid;
+                margin-bottom: 3mm;
+            }
+            .prisma-canto-esquerdo {
+                position: absolute;
+                top: 4mm;
+                left: 6mm;
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                z-index: 10;
+            }
+            .prisma-brasao-om {
+                width: 14mm;
+                height: auto;
+                margin-bottom: 1.5mm;
+            }
+            .prisma-estrelas-esquerda {
+                font-size: 18pt;
+                font-weight: bold;
+                color: #000000;
+                letter-spacing: 2px;
+                line-height: 1;
+            }
+            .prisma-conteudo-central {
+                width: 100%;
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                text-align: center;
+                padding-left: 26mm;
+                padding-right: 26mm;
+                gap: 5mm;
+            }
+            .prisma-texto-reservado {
+                font-size: 18pt;
+                font-weight: 800;
+                text-transform: uppercase;
+                color: #000000;
+                line-height: 1;
+                margin: 0;
+                white-space: nowrap;
+            }
+            .prisma-posto-extenso {
+                font-size: 13pt;
+                font-weight: 600;
+                text-transform: uppercase;
+                color: #333333;
+                line-height: 1;
+                margin: 0;
+                white-space: nowrap;
+            }
+            .prisma-nome-autoridade {
+                font-size: 22pt;
+                font-weight: 800;
+                text-transform: uppercase;
+                color: #000000;
+                line-height: 1;
+                margin: 0;
+                white-space: nowrap;
+            }
+            .jade-template-card {
+                position: relative;
+                width: 100%;
+                min-height: 180px;
+                background-size: cover;
+                background-position: center;
+                background-repeat: no-repeat;
+                border-radius: 12px;
+                overflow: hidden;
+            }
+            .jade-template-overlay {
+                position: relative;
+                z-index: 2;
+                padding: 16px;
+                min-height: 180px;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                background: rgba(0,0,0,0.45);
+            }
+            .jade-insignia-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 2px 8px;
+                border-radius: 4px;
+                font-size: 10px;
+                font-weight: 800;
+                letter-spacing: 1px;
+            }
+            </style>
+            """
+            ui.add_head_html(print_css)
+
+            # ═══════════════════════════════════════════════════════════════
+            # ÁREA DE PRÉ-VISUALIZAÇÃO
+            # ═══════════════════════════════════════════════════════════════
+            @ui.refreshable
+            def preview_container():
+                current_model = model_select.value
+                h1 = input_header1.value or 'MARINHA DO BRASIL'
+                h2 = input_header2.value or ''
+                brasao_pos = sel_brasao_pos.value
+                qr_pos = sel_qr_pos.value
+                show_logo = chk_logo.value
+                show_qr = chk_qr.value
+                show_rank = chk_rank.value
+                only_confirmed = chk_only_confirmed.value
+                bg_url = ''
+                try:
+                    bg_url = input_template_bg.value.strip() if hasattr(input_template_bg, 'value') else ''
+                except Exception:
+                    bg_url = ''
+                SUPABASE_LOGOS_BUCKET_URL = "https://ruabgndnhgdverqlgvef.supabase.co/storage/v1/object/public/logos"
+
+                def resolve_logo_url(inp_val):
+                    if not inp_val:
+                        return ""
+                    val = str(inp_val).strip()
+                    if val.startswith('http://') or val.startswith('https://'):
+                        return val
+                    return f"{SUPABASE_LOGOS_BUCKET_URL}/{val.lstrip('/')}"
+
+                LOGO_URLS = {
+                    'cgcfn': url_to_base64('assets/brasao_cgcfn.png') or f"{SUPABASE_LOGOS_BUCKET_URL}/brasao_cgcfn.png",
+                    'mb':    url_to_base64('assets/brasao_marinha.png') or f"{SUPABASE_LOGOS_BUCKET_URL}/brasao_marinha.png",
+                    'cfn':   url_to_base64('assets/brasao_cgcfn.png'),
+                }
+
+                def resolve_asset_image(origin_type, bucket_val, custom_val):
+                    if origin_type == 'bucket' and bucket_val:
+                        if bucket_val in LOGO_URLS:
+                            return LOGO_URLS[bucket_val]
+                        return url_to_base64(resolve_logo_url(bucket_val))
+                    elif origin_type == 'url' and custom_val:
+                        return url_to_base64(custom_val.strip())
+                    return ""
+
+                origin_l = sel_origin_logo_l.value if hasattr(sel_origin_logo_l, 'value') else 'bucket'
+                preset_l = sel_logo_preset.value if hasattr(sel_logo_preset, 'value') else 'cfn'
+                custom_l = upload_brasao_left.value if hasattr(upload_brasao_left, 'value') else ''
+                resolved_logo_url = resolve_asset_image(origin_l, preset_l, custom_l) or url_to_base64('assets/brasao_cgcfn.png')
+
+
+                origin_r = sel_origin_logo_r.value if hasattr(sel_origin_logo_r, 'value') else 'bucket'
+                preset_r = sel_logo_r_preset.value if hasattr(sel_logo_r_preset, 'value') else 'mb'
+                custom_r = upload_brasao_right.value if hasattr(upload_brasao_right, 'value') else ''
+                brasao_r_url = resolve_asset_image(origin_r, preset_r, custom_r)
+
+                origin_bg = sel_origin_bg.value if hasattr(sel_origin_bg, 'value') else 'none'
+                preset_bg = sel_bg_preset.value if hasattr(sel_bg_preset, 'value') else ''
+                custom_bg = input_template_bg.value if hasattr(input_template_bg, 'value') else ''
+                bg_url = resolve_asset_image(origin_bg, preset_bg, custom_bg)
+                use_bg = bool(bg_url) or current_model == 'template_custom'
+
+                # Escala e Posicionamento Fino
+                logo_w = float(input_logo_width.value or 16)
+                logo_x = float(input_logo_pos_x.value or 6)
+                logo_y = float(input_logo_pos_y.value or 4)
+
+                qr_size = float(input_qr_size.value or 13)
+                qr_x = float(input_qr_pos_x.value or 5)
+                qr_y = float(input_qr_pos_y.value or 3)
+
+                f_nome = float(input_font_nome.value or 22)
+                f_posto = float(input_font_posto.value or 13)
+                f_reservado = float(input_font_reservado.value or 18)
+
+                # Filtro de impressão: só confirmados ou todos com placa
+                def should_print(c):
+                    if only_confirmed:
+                        return c.get('status_placa') in ('pendente', 'em_producao', 'impressa', 'reimpressao')
+                    return True
+
+                with ui.column().classes('w-full gap-4 print-area'):
+                    # 1. Coleta TODOS os cartões (alocados + não alocados) em uma única lista contínua
+                    all_cards = []
+                    seen_ids = set()
+                    main_guests_map = {g['id']: g for g in convidados if not g.get('convidado_principal_id')}
+                
+                    # Se abriu o estúdio passando uma lista específica
+                    if convidados and len(convidados) > 0 and isinstance(convidados, list):
+                        for c in convidados:
+                            if c['id'] not in seen_ids and should_print(c):
+                                seen_ids.add(c['id'])
+                                all_cards.append(c)
+                    else:
+                        for row_label, list_c_raw in allocated_by_row.items():
+                            for c in list_c_raw:
                                 if c['id'] not in seen_ids and should_print(c):
                                     seen_ids.add(c['id'])
                                     all_cards.append(c)
-                        else:
-                            for row_label, list_c_raw in allocated_by_row.items():
-                                for c in list_c_raw:
-                                    if c['id'] not in seen_ids and should_print(c):
-                                        seen_ids.add(c['id'])
-                                        all_cards.append(c)
 
-                        def sort_key_assento(c):
-                            ass = str(c.get('assento_id', '')).upper().strip()
-                            match = re.match(r'([A-Z]+)-?(\d+)', ass)
-                            if match:
-                                row, num = match.groups()
-                                return (row, int(num))
-                            return (ass if ass else 'ZZZ', 0)
-
-                        all_cards.sort(key=sort_key_assento)
-
-                        if not all_cards:
-                            with ui.column().classes('w-full items-center justify-center q-py-xl gap-3'):
-                                ui.icon('chair_alt', size='3rem', color='cyan-3')
-                                ui.label('Nenhum convidado confirmado para impressão nesta solenidade.').classes('text-sm text-grey-4 text-center')
-                            return
-
-                        # 2. Pega a quantidade solicitada de placas por folha A4 (configurável pelo operador, padrão 4)
-                        items_per_sheet = int(input_items_per_sheet.value or 4)
-                        total_pages = (len(all_cards) + items_per_sheet - 1) // items_per_sheet
-
-                        for page_idx in range(total_pages):
-                            batch = all_cards[page_idx * items_per_sheet : (page_idx + 1) * items_per_sheet]
-                        
-                            with ui.column().classes('w-full gap-2 page-break q-mb-md'):
-                                with ui.row().classes('w-full justify-between items-center bg-cyan-950/60 q-pa-sm rounded-lg border border-cyan-500/40 print-hide'):
-                                    first_seat = batch[0].get('assento_id') or 'Sem Assento'
-                                    last_seat = batch[-1].get('assento_id') or 'Sem Assento'
-                                    ui.label(f"📄 FOLHA A4 #{page_idx + 1} DE {total_pages} — {len(batch)} PLACAS ({first_seat} ATÉ {last_seat})").classes('text-sm font-bold text-cyan')
-                                    ui.badge(f"Folha {page_idx + 1} / {total_pages}").props('color=cyan text-color=black')
-
-                                # ═══ MODELO: PRISMA INSTITUCIONAL A4 (4 por Folha) ═══
-                                if current_model == 'prisma_a4_4slots':
-                                    termo_reservado = input_termo_conv.value or 'RESERVADO'
-                                    show_double_border = chk_border.value
-                                    with ui.column().classes('w-full gap-3'):
-                                        for c in batch:
-                                            is_acomp = bool(c.get('convidado_principal_id'))
-                                            main_g = main_guests_map.get(c.get('convidado_principal_id')) if is_acomp else None
-                                            posto = (c.get('posto_graduacao') or (main_g.get('posto_graduacao') if main_g else '') or '').strip()
-                                            almirantado_info = parse_almirantado_stars(posto)
-                                            nome_limpo = clean_authority_name(c['nome'])
-                                            target_logo = resolved_logo_url or brasao_l_url
-                                        
-                                            border_style = 'border: 1.5pt solid #1a1a1a; outline: 0.5pt solid #1a1a1a; outline-offset: -2.5mm;' if show_double_border else 'border: 1.5pt solid #1a1a1a;'
-                                        
-                                            with ui.element('div').classes('prisma-card-a4-slot').style(border_style):
-                                                # Canto Superior Esquerdo: Brasão + Estrelas / PNG Insígnias
-                                                with ui.element('div').style(f'position: absolute; top: {logo_y}mm; left: {logo_x}mm; z-index: 10; display: flex; flex-direction: column; align-items: flex-start; shadow: none;'):
-                                                    if show_logo and target_logo:
-                                                        ui.image(target_logo).style(f'width: {logo_w}mm; height: auto; object-fit: contain;')
-                                                    elif show_logo:
-                                                        ui.label('⚓').style(f'font-size: {logo_w}px; color: #000;')
-                                                
-                                                    # Insígnia/Estrelas impressas tanto para o titular quanto para os acompanhantes
-                                                    if show_rank:
-                                                        if almirantado_info['png_asset']:
-                                                            ui.image(almirantado_info['png_asset']).style(f'width: {logo_w}mm; height: auto; margin-top: 1mm;')
-                                                        elif almirantado_info['stars']:
-                                                            ui.label(almirantado_info['stars']).classes('prisma-estrelas-esquerda')
-
-                                                # Canto Superior Direito: QR Code (Base64 offline)
-                                                if show_qr:
-                                                    qr_url = gen_qr_base64(f"JADE|{event.get('id','')}|{c['id']}|{c.get('assento_id','')}")
-                                                    with ui.element('div').style(f'position: absolute; top: {qr_y}mm; right: {qr_x}mm; z-index: 10; font-size: 7px; text-align: center;'):
-                                                        ui.image(qr_url).style(f'width: {qr_size}mm; height: {qr_size}mm;')
-                                                        if c.get('assento_id'):
-                                                            ui.label(f"{c.get('assento_id', '')}").classes('text-[7px] font-mono text-black font-bold')
-
-                                                # Bloco Central - Totalmente Centralizado com Fontes Dinâmicas
-                                                with ui.element('div').classes('prisma-conteudo-central'):
-                                                    if is_acomp:
-                                                        ui.label(termo_reservado).classes('prisma-texto-reservado').style(f'font-size: {f_reservado}pt;')
-                                                        if almirantado_info['title']:
-                                                            ui.label(almirantado_info['title']).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
-                                                        elif posto:
-                                                            ui.label(posto.upper()).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
-                                                        ui.label(nome_limpo).classes('prisma-nome-autoridade').style(f'font-size: {f_nome}pt;')
-                                                    else:
-                                                        if almirantado_info['title']:
-                                                            ui.label(almirantado_info['title']).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
-                                                        elif posto:
-                                                            ui.label(posto.upper()).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
-                                                        ui.label(nome_limpo).classes('prisma-nome-autoridade').style(f'font-size: {f_nome}pt;')
-                                # ═══ MODELO: PRISMA DOBRÁVEL V (FRENTE E VERSO INVERTIDO 180°) ═══
-                                elif current_model == 'prisma_dobravel_v':
-                                    termo_reservado = input_termo_conv.value or 'RESERVADO'
-                                    with ui.column().classes('w-full gap-4'):
-                                        for c in batch:
-                                            is_acomp = bool(c.get('convidado_principal_id'))
-                                            posto = c.get('posto_graduacao') or ''
-                                            almirantado_info = parse_almirantado_stars(posto)
-                                            nome_limpo = clean_authority_name(c['nome'])
-                                            target_logo = resolved_logo_url or brasao_l_url
-                                        
-                                            # Geração local offline de QR Code
-                                            import qrcode, io, base64
-                                            qr_b64 = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={c['id']}"
-                                            try:
-                                                qr_obj = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=4, border=1)
-                                                qr_obj.add_data(f"JADE|{event.get('id','')}|{c['id']}|{c.get('assento_id','')}")
-                                                qr_obj.make(fit=True)
-                                                img_q = qr_obj.make_image(fill_color="black", back_color="white")
-                                                buf_q = io.BytesIO()
-                                                img_q.save(buf_q, format="PNG")
-                                                qr_b64 = f"data:image/png;base64,{base64.b64encode(buf_q.getvalue()).decode('utf-8')}"
-                                            except Exception:
-                                                pass
-
-                                            with ui.element('div').classes('w-full border border-black rounded-lg bg-white text-black q-pa-xs').style('min-height: 170mm; display: flex; flex-direction: column; justify-content: space-between; position: relative;'):
-                                                # Verso da Dobra (Texto Invertido 180° para quem olha de frente)
-                                                with ui.element('div').style('transform: rotate(180deg); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10mm 4mm;'):
-                                                    if show_logo and target_logo:
-                                                        ui.image(target_logo).style(f'width: {logo_w}mm; height: auto; object-fit: contain; margin-bottom: 2mm;')
-                                                    if is_acomp:
-                                                        ui.label(termo_reservado).classes('prisma-texto-reservado').style(f'font-size: {f_reservado}pt;')
-                                                    if almirantado_info['title']:
-                                                        ui.label(almirantado_info['title']).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
-                                                    elif posto:
-                                                        ui.label(posto.upper()).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
-                                                    ui.label(nome_limpo).classes('prisma-nome-autoridade').style(f'font-size: {f_nome}pt;')
-
-                                                # Linha de Dobra do Papel A4
-                                                ui.html('<div style="border-top: 2px dashed #000; text-align: center; margin: 4px 0;"><span style="background:#fff; padding: 0 8px; font-size: 8px; color: #666; font-family: monospace;">✂️ LINHA DE DOBRA DO PRISMA DE MESA (V-SHAPE)</span></div>')
-
-                                                # Frente da Dobra (Texto Normal 0° para quem olha do corredor)
-                                                with ui.element('div').style('display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10mm 4mm; position: relative;'):
-                                                    if show_logo and target_logo:
-                                                        ui.image(target_logo).style(f'width: {logo_w}mm; height: auto; object-fit: contain; margin-bottom: 2mm;')
-                                                    if is_acomp:
-                                                        ui.label(termo_reservado).classes('prisma-texto-reservado').style(f'font-size: {f_reservado}pt;')
-                                                    if almirantado_info['title']:
-                                                        ui.label(almirantado_info['title']).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
-                                                    elif posto:
-                                                        ui.label(posto.upper()).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
-                                                    ui.label(nome_limpo).classes('prisma-nome-autoridade').style(f'font-size: {f_nome}pt;')
-
-                                                    if show_qr:
-                                                        with ui.element('div').style('position: absolute; right: 4mm; bottom: 4mm; text-align: center;'):
-                                                            ui.image(qr_b64).style(f'width: {qr_size}mm; height: {qr_size}mm;')
-                                                            if c.get('assento_id'):
-                                                                ui.label(f"{c.get('assento_id', '')}").classes('text-[7px] font-mono text-black font-bold')
-
-                                # ═══ MODELO: PLACA HORIZONTAL CGCFN (PADRÃO OFICIAL) ═══
-                                elif current_model == 'jade_horizontal_a4':
-                                    with ui.element('div').classes('jade-horizontal-grid w-full'):
-                                        for c in batch:
-                                            is_acomp = bool(c.get('convidado_principal_id'))
-                                            posto_abrev = (c.get('posto_graduacao') or '').strip()
-                                            insignia_data = RANK_INSIGNIAS.get(posto_abrev, None)
-                                            posto_ext = insignia_data['title'] if insignia_data else posto_abrev
-                                            stars = insignia_data['stars'] if insignia_data else ''
-                                            nome_guerra = c['nome'].strip().upper()
-                                            assento = c.get('assento_id') or ''
-
-                                            import urllib.parse
-                                            qr_data = urllib.parse.quote(f"JADE|{event.get('id','')}|{c['id']}|{posto_abrev}|{c['nome']}|{assento}")
-                                            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=80x80&data={qr_data}&color=1a1a6e&bgcolor=ffffff"
-
-                                            logo_html = ''
-                                            if show_logo and resolved_logo_url:
-                                                logo_html = f'<img src="{resolved_logo_url}" style="width:{logo_w}mm;height:auto;object-fit:contain;" />'
-                                            else:
-                                                logo_html = f'<span style="font-size:{logo_w}px;">⚓</span>'
-
-                                            stars_html = ''
-                                            if stars and show_rank:
-                                                star_list = [s for s in stars]
-                                                stars_html = ''.join(f'<span class="jade-star">{s}</span>' for s in star_list)
-
-                                            reservado_html = '<div class="jade-reservado">RESERVADO</div>' if is_acomp else ''
-                                            assento_html = f'<div class="jade-assento-badge">ASSENTO {assento}</div>' if assento else ''
-                                            qr_html = f'<img src="{qr_url}" style="width:{qr_size}mm;height:{qr_size}mm;background:#fff;border-radius:3px;border:1px solid #ccc;" /><div style="font-size:7px;color:#888;font-family:monospace;">{assento}</div>' if show_qr else ''
-
-                                            ui.html(f'''
-                                            <div class="jade-placa-horiz">
-                                                <div class="jade-placa-left">
-                                                    {logo_html}
-                                                    <div style="display:flex;flex-direction:column;align-items:center;gap:1px;margin-top:4px;">
-                                                        {stars_html}
-                                                    </div>
-                                                </div>
-                                                <div class="jade-placa-center">
-                                                    {reservado_html}
-                                                    <div class="jade-posto-ext" style="font-size:{f_posto}pt;">{posto_ext}</div>
-                                                    <div class="jade-nome-guerra" style="font-size:{f_nome}pt;">{nome_guerra}</div>
-                                                    {assento_html}
-                                                </div>
-                                                <div class="jade-placa-right">
-                                                    {qr_html}
-                                                </div>
-                                            </div>
-                                            ''')
-
-                                # ═══ MODELO: TEMPLATE CUSTOMIZADO ═══
-                                elif current_model == 'template_custom' or use_bg:
-                                    with ui.grid(columns='1 sm:grid-cols-2').classes('w-full gap-4'):
-                                        for c in sorted(list_c, key=lambda x: x.get('assento_id', '')):
-                                            is_acomp = bool(c.get('convidado_principal_id'))
-                                            posto = c.get('posto_graduacao') or ''
-                                            insignia_data = RANK_INSIGNIAS.get(posto, None)
-                                            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=120x120&data={c['id']}&color=000000&bgcolor=ffffff"
-
-                                            bg_style = f"background-image: url('{bg_url}');" if bg_url else "background: linear-gradient(135deg, #0a1628 0%, #1a2744 50%, #0d1b2a 100%);"
-
-                                            with ui.card().classes('w-full jade-card-template jade-template-card').style(f'{bg_style} border: 2px solid rgba(0,229,255,0.3); border-radius: 12px;'):
-                                                with ui.column().classes('jade-template-overlay'):
-                                                    # TOPO: Brasões + Cabeçalho
-                                                    with ui.row().classes('w-full justify-between items-start'):
-                                                        if show_logo and brasao_pos in ('esquerda', 'ambos'):
-                                                            if brasao_l_url:
-                                                                ui.image(brasao_l_url).classes('w-10 h-10 rounded')
-                                                            else:
-                                                                ui.label('⚓').classes('text-2xl')
-                                                        with ui.column().classes('col items-center gap-0'):
-                                                            ui.label(h1).classes('text-[10px] font-black text-cyan tracking-[3px] text-center')
-                                                            if h2:
-                                                                ui.label(h2).classes('text-[9px] font-bold text-amber text-center')
-                                                            if show_logo and brasao_pos == 'centro':
-                                                                if brasao_l_url:
-                                                                    ui.image(brasao_l_url).classes('w-8 h-8 rounded q-mt-xs')
-                                                                else:
-                                                                    ui.label('⚓').classes('text-xl')
-                                                        if show_logo and brasao_pos in ('ambos',):
-                                                            if brasao_r_url:
-                                                                ui.image(brasao_r_url).classes('w-10 h-10 rounded')
-                                                            else:
-                                                                ui.label('⚓').classes('text-2xl')
-
-                                                    # MEIO: Insígnia + Nome + Assento
-                                                    with ui.column().classes('w-full items-center gap-1 q-my-sm'):
-                                                        if show_rank and insignia_data:
-                                                            ui.html(
-                                                                f'<span class="jade-insignia-badge" style="background:{insignia_data["color"]}22; color:{insignia_data["color"]}; border: 1px solid {insignia_data["color"]}44;">'
-                                                                f'{insignia_data["stars"]} {insignia_data["title"]}</span>'
-                                                            )
-                                                        nome_c = f"{posto} {c['nome']}".strip()
-                                                        ui.label(nome_c).classes('text-lg font-black text-white text-center leading-tight')
-                                                        sub = '(Acompanhante Oficial)' if is_acomp else (c.get('cargo_funcao') or c.get('categoria') or '')
-                                                        if sub:
-                                                            ui.label(sub).classes('text-[10px] text-grey-3 font-bold')
-                                                        ui.badge(f"ASSENTO {c['assento_id']}").props('color=cyan text-color=black bold').classes('text-xs q-mt-xs')
-
-                                                    # BASE: QR Code
-                                                    if show_qr:
-                                                        qr_align = 'justify-end' if qr_pos == 'direita' else ('justify-start' if qr_pos == 'esquerda' else 'justify-center')
-                                                        with ui.row().classes(f'w-full {qr_align} items-end'):
-                                                            with ui.column().classes('items-center gap-0'):
-                                                                ui.image(qr_url).classes('w-14 h-14 rounded bg-white p-1')
-                                                                ui.label(f"ID:{c['id']}").classes('text-[7px] font-mono text-grey-5')
-
-                                # ═══ MODELO: PLACA DE CADEIRA A4 ═══
-                                elif current_model == 'cadeira_a4':
-                                    with ui.grid(columns='1 sm:grid-cols-2').classes('w-full gap-4'):
-                                        for c in sorted(list_c, key=lambda x: x.get('assento_id', '')):
-                                            is_acomp = bool(c.get('convidado_principal_id'))
-                                            posto = c.get('posto_graduacao') or ''
-                                            insignia_data = RANK_INSIGNIAS.get(posto, None)
-                                            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=120x120&data={c['id']}&color=000000&bgcolor=ffffff"
-
-                                            with ui.card().classes('w-full q-pa-md jade-card bg-slate-900 border border-cyan-500/40 rounded-xl').style('border-left: 6px solid #00e5ff !important;'):
-                                                with ui.row().classes('w-full justify-between items-start no-wrap'):
-                                                    with ui.column().classes('gap-0 col'):
-                                                        # Brasão no topo
-                                                        if show_logo:
-                                                            with ui.row().classes('items-center gap-1'):
-                                                                if brasao_l_url:
-                                                                    ui.image(brasao_l_url).classes('w-5 h-5')
-                                                                ui.label(h1).classes('text-[10px] font-black text-cyan tracking-widest')
-
-                                                        ui.badge(f"ASSENTO {c['assento_id']}").props('color=cyan text-color=black bold').classes('text-xs w-fit q-my-xs')
-
-                                                        if show_rank and insignia_data:
-                                                            ui.html(
-                                                                f'<span class="jade-insignia-badge" style="background:{insignia_data["color"]}22; color:{insignia_data["color"]}; border: 1px solid {insignia_data["color"]}44;">'
-                                                                f'{insignia_data["stars"]} {insignia_data["title"]}</span>'
-                                                            )
-
-                                                        nome_c = f"{posto} {c['nome']}".strip()
-                                                        ui.label(nome_c).classes('text-md font-black text-white leading-tight q-mt-xs')
-                                                        sub = '(Acompanhante Oficial)' if is_acomp else (c.get('cargo_funcao') or c.get('categoria') or 'Convidado de Honra')
-                                                        ui.label(sub).classes('text-xs text-grey-4 font-bold q-mt-xs')
-                                                        if h2:
-                                                            ui.label(h2).classes('text-[9px] text-amber font-bold q-mt-xs')
-
-                                                    if show_qr:
-                                                        with ui.column().classes('items-center gap-0'):
-                                                            ui.image(qr_url).classes('w-16 h-16 rounded bg-white p-1')
-                                                            ui.label(f"ID:{c['id']}").classes('text-[8px] font-mono text-grey-5')
-
-                                # ═══ MODELO: MESA DOBRÁVEL A5 ═══
-                                elif current_model == 'mesa_a5_dobravel':
-                                    with ui.grid(columns='1 sm:grid-cols-2').classes('w-full gap-4'):
-                                        for c in sorted(list_c, key=lambda x: x.get('assento_id', '')):
-                                            is_acomp = bool(c.get('convidado_principal_id'))
-                                            posto = c.get('posto_graduacao') or ''
-                                            nome_c = f"{posto} {c['nome']}".strip()
-                                            sub = '(Acompanhante)' if is_acomp else (c.get('cargo_funcao') or 'Convidado')
-                                            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={c['id']}"
-
-                                            with ui.card().classes('w-full q-pa-md jade-card-mesa bg-slate-900 border-2 border-dashed border-cyan-500/40 rounded-xl text-center'):
-                                                ui.label('✂️ DOBRA DE MESA (FACE FRONTAL)').classes('text-[8px] text-grey-5 tracking-widest uppercase print-hide')
-                                                if show_logo:
-                                                    ui.label(h1).classes('text-[9px] font-black text-cyan tracking-widest')
-                                                ui.label(f"ASSENTO {c['assento_id']}").classes('text-sm font-black text-cyan')
-                                                ui.label(nome_c).classes('text-lg font-black text-white q-my-xs')
-                                                ui.label(sub).classes('text-xs text-grey-3 font-bold')
-
-                                                ui.separator().classes('q-my-sm print-hide').style('border-color: rgba(255,255,255,0.1);')
-                                                ui.label('✂️ DOBRA DE MESA (FACE TRASEIRA)').classes('text-[8px] text-grey-5 tracking-widest uppercase print-hide')
-                                                with ui.row().classes('w-full justify-center items-center gap-2 q-mt-xs'):
-                                                    if show_qr:
-                                                        ui.image(qr_url).classes('w-12 h-12 bg-white p-1 rounded')
-                                                    ui.label(f"FILEIRA {row_label} | {c['assento_id']}").classes('text-xs text-grey-4 font-mono font-bold')
-
-                                # ═══ MODELO: CREDENCIAL / CRACHÁ ═══
-                                elif current_model == 'credencial':
-                                    with ui.grid(columns='1 sm:grid-cols-2 md:grid-cols-3').classes('w-full gap-3'):
-                                        for c in sorted(list_c, key=lambda x: x.get('assento_id', '')):
-                                            is_acomp = bool(c.get('convidado_principal_id'))
-                                            main_g = main_guests_map.get(c.get('convidado_principal_id')) if is_acomp else None
-                                            posto = (c.get('posto_graduacao') or (main_g.get('posto_graduacao') if main_g else '') or '').strip()
-                                            almirantado_info = parse_almirantado_stars(posto)
-                                            nome_limpo = clean_authority_name(main_g.get('nome') if (is_acomp and main_g) else c['nome'])
-                                            target_logo = resolved_logo_url or brasao_l_url
-                                            insignia_data = RANK_INSIGNIAS.get(posto, None)
-                                            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={c['id']}"
-
-                                            with ui.card().classes('w-full jade-card-cred bg-slate-900 border border-amber-500/40 rounded-2xl q-pa-md items-center text-center justify-between').style('height: 300px;'):
-                                                with ui.column().classes('items-center gap-0 w-full'):
-                                                    if show_logo:
-                                                        with ui.row().classes('items-center gap-1'):
-                                                            if brasao_l_url:
-                                                                ui.image(brasao_l_url).classes('w-6 h-6')
-                                                            ui.label(h1).classes('text-[9px] font-black text-cyan tracking-widest')
-                                                            if brasao_r_url and brasao_pos == 'ambos':
-                                                                ui.image(brasao_r_url).classes('w-6 h-6')
-                                                    if h2:
-                                                        ui.label(h2).classes('text-[10px] font-bold text-amber truncate w-full')
-                                                    ui.separator().classes('q-my-xs w-full').style('border-color: rgba(255,255,255,0.1);')
-
-                                                with ui.column().classes('items-center gap-0 w-full'):
-                                                    ui.badge(f"FILEIRA {row_label} - {c['assento_id']}").props('color=cyan text-color=black bold').classes('text-xs q-mb-xs')
-                                                    if show_rank and insignia_data:
-                                                        ui.html(
-                                                            f'<span class="jade-insignia-badge" style="background:{insignia_data["color"]}22; color:{insignia_data["color"]}; border: 1px solid {insignia_data["color"]}44; font-size:8px;">'
-                                                            f'{insignia_data["stars"]} {insignia_data["title"]}</span>'
-                                                        )
-                                                    ui.label(nome_limpo).classes('text-sm font-black text-white leading-tight')
-                                                    sub = '(Acompanhante)' if is_acomp else (c.get('cargo_funcao') or c.get('categoria'))
-                                                    if sub:
-                                                        ui.label(sub).classes('text-[10px] text-grey-4 font-bold')
-
-                                                if show_qr:
-                                                    ui.image(qr_url).classes('w-14 h-14 bg-white p-1 rounded border border-cyan-500')
-
-                model_select.on('update:model-value', lambda: preview_container.refresh())
-                preview_container()
-
-                js_clean_print_cards = """
-                (function() {
-                    var area = document.querySelector('.print-area');
-                    if (!area) { window.print(); return; }
-
-                    var oldIframe = document.getElementById('jade_print_iframe');
-                    if (oldIframe) { oldIframe.remove(); }
-
-                    var iframe = document.createElement('iframe');
-                    iframe.id = 'jade_print_iframe';
-                    iframe.style.position = 'fixed';
-                    iframe.style.right = '0';
-                    iframe.style.bottom = '0';
-                    iframe.style.width = '0';
-                    iframe.style.height = '0';
-                    iframe.style.border = '0';
-                    document.body.appendChild(iframe);
-
-                    var doc = iframe.contentWindow.document;
-                    var cssStyles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
-                                         .map(s => s.outerHTML).join('\\n');
-
-                    doc.open();
-                    doc.write(`
-                        <!DOCTYPE html>
-                        <html>
-                        <head>
-                            <title>JADE - Impressão Oficial de Placas de Assento</title>
-                            ${cssStyles}
-                            <style>
-                                @page { size: A4 portrait; margin: 0mm !important; }
-                                * {
-                                    -webkit-print-color-adjust: exact !important;
-                                    print-color-adjust: exact !important;
-                                    color-adjust: exact !important;
-                                }
-                                body { margin: 0 !important; padding: 4mm 6mm !important; background: #ffffff !important; color: #000000 !important; font-family: Arial, sans-serif !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                                .print-hide, .q-header, .q-drawer, .q-footer { display: none !important; }
-                                .print-area { display: block !important; position: static !important; width: 100% !important; visibility: visible !important; }
-                                .prisma-card-a4-slot { height: 66mm !important; max-height: 66mm !important; border: 1.5pt solid #1a1a1a !important; outline: 0.5pt solid #1a1a1a !important; outline-offset: -2.5mm !important; margin-bottom: 4.5mm !important; page-break-inside: avoid !important; background: #ffffff !important; color: #000000 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; position: relative !important; box-sizing: border-box !important; }
-                                .prisma-conteudo-central { display: flex !important; flex-direction: column !items: center !important; justify-content: center !important; text-align: center !important; width: 100% !important; }
-                                .prisma-texto-reservado { font-weight: 900 !important; letter-spacing: 3px !important; text-transform: uppercase !important; color: #1f4e79 !important; font-size: 20pt !important; margin-bottom: 2px !important; }
-                                .prisma-posto-extenso { font-weight: bold !important; text-transform: uppercase !important; letter-spacing: 1.5px !important; font-size: 18pt !important; margin-bottom: 2px !important; }
-                                .prisma-nome-autoridade { font-weight: 900 !important; text-transform: uppercase !important; font-size: 32pt !important; line-height: 1.05 !important; }
-                                img { max-width: 100% !important; display: inline-block !important; visibility: visible !important; opacity: 1 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                            </style>
-                        </head>
-                        <body>
-                            <div class="print-area">
-                                ${area.innerHTML}
-                            </div>
-                        </body>
-                        </html>
-                    `);
-                    doc.close();
-
-                    function triggerPrintWhenReady() {
-                        var images = doc.images;
-                        var loaded = 0;
-                        var total = images.length;
-
-                        function doPrint() {
-                            iframe.contentWindow.focus();
-                            iframe.contentWindow.print();
-                        }
-
-                        if (total === 0) {
-                            setTimeout(doPrint, 800);
-                            return;
-                        }
-
-                        for (var i = 0; i < total; i++) {
-                            if (images[i].complete) {
-                                loaded++;
-                            } else {
-                                images[i].onload = images[i].onerror = function() {
-                                    loaded++;
-                                    if (loaded >= total) {
-                                        setTimeout(doPrint, 500);
-                                    }
-                                };
-                            }
-                        }
-
-                        if (loaded >= total) {
-                            setTimeout(doPrint, 800);
-                        } else {
-                            setTimeout(doPrint, 2500); // Fallback de segurança máximo
-                        }
-                    }
-
-                    setTimeout(triggerPrintWhenReady, 300);
-                })();
-                """
-
-
-                def on_trigger_print():
-                    save_print_config_to_event(notify_user=False)
-                    ui.run_javascript(js_clean_print_cards)
-
-                def on_trigger_pdf():
-                    save_print_config_to_event(notify_user=False)
-                    try:
-                        cfg_now = collect_current_print_config()
-                        pdf_bytes = gerar_pdf_placas_reportlab(event, convidados, current_model, only_confirmed, cfg_now)
-                        if pdf_bytes:
-                            import base64
-                            b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
-                            file_name = f"Placas_JADE_{event.get('nome_evento','Evento').replace(' ', '_')}.pdf"
-                            js_download = f"""
-                            var a = document.createElement('a');
-                            a.href = 'data:application/pdf;base64,{b64_pdf}';
-                            a.download = '{file_name}';
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                            """
-                            ui.run_javascript(js_download)
-                            ui.notify('📄 PDF Vetorial gerado com sucesso no servidor e baixado!', color='positive')
-                        else:
-                            ui.notify('Nenhum convidado selecionado para PDF.', color='warning')
-                    except Exception as pdf_err:
-                        print(f"[PDF REPORTLAB ERR] {pdf_err}")
-                        ui.notify(f"Erro ao gerar PDF no servidor: {pdf_err}. Usando fallback do navegador...", color='warning')
-                        ui.run_javascript(js_pdf_export_cards)
-
-                with ui.row().classes('w-full justify-between items-center q-mt-md print-hide'):
-                    ui.button('💾 Salvar Configurações no Evento', icon='save', on_click=lambda: save_print_config_to_event(notify_user=True)).props('unelevated color=emerald text-color=white bold dense').classes('text-xs').tooltip('Salva o modelo, brasões, títulos e fontes como padrão permanente deste evento')
-                    with ui.row().classes('gap-2'):
-                        ui.button('Fechar', on_click=diag.close).props('unelevated color=grey-8 dense')
-                        ui.button('📄 Baixar PDF Oficial (Servidor)', icon='picture_as_pdf', on_click=on_trigger_pdf).props('unelevated color=deep-purple text-color=white bold dense').tooltip('Gera arquivo PDF milimétrico vetorial A4 direto do servidor sem falhas de imagem')
-                        ui.button('🖨️ Imprimir Placas Selecionadas', icon='print', on_click=on_trigger_print).props('unelevated color=cyan text-color=black bold dense')
-            diag.open()
-
-
-        # ═══════════════════════════════════════════════════════════════
-        # FASE: PLANILHÃO DO EVENTO (Tabela Completa + CSV Export)
-        # ═══════════════════════════════════════════════════════════════
-        def open_event_spreadsheet_dialog(event, convidados):
-            """Abre a planilha completa do evento com filtros, status RSVP e exportação CSV."""
-
-            STATUS_CONF_LABELS = {
-                'confirmado':  ('✅ Confirmado',   'positive'),
-                'recusado':    ('❌ Recusado',      'negative'),
-                'justificado': ('📝 Justificado',   'warning'),
-                'provavel':    ('🕐 Provável',       'cyan'),
-                'pendente':    ('⏳ Pendente',       'grey-6'),
-            }
-            STATUS_PLACA_LABELS = {
-                'pendente':       ('🟡 Pendente',     'amber'),
-                'em_producao':    ('🔵 Em Produção',  'blue'),
-                'impressa':       ('🟢 Impressa',     'green'),
-                'reimpressao':    ('🔴 Reimpressão',  'red'),
-                'entregue':       ('⚪ Entregue',     'grey-4'),
-                'nao_necessaria': ('➖ N/A',           'grey-7'),
-            }
-
-            filter_conf = {'value': 'todos'}
-            filter_placa = {'value': 'todos'}
-            filter_search = {'value': ''}
-
-            with ui.dialog() as diag, ui.card().classes('q-pa-md').style(
-                f'min-width: 980px; max-width: 98vw; max-height: 92vh; overflow-y: auto; background: {THEME["bg_panel"]};'
-            ):
-                # Header
-                with ui.row().classes('w-full items-center justify-between q-mb-sm'):
-                    with ui.column().classes('gap-0'):
-                        ui.label(f'📊 PLANILHÃO DO EVENTO').classes('text-lg font-bold text-teal cyber-title')
-                        ui.label(f'{event.get("nome","")[:60]}  ·  {event.get("data_evento","")}'
-                                 ).classes('text-xs text-grey-4')
-                    ui.button(icon='close', on_click=diag.close).props('flat round dense text-color=grey')
-
-                # Métricas
-                titulares = [c for c in convidados if not c.get('convidado_principal_id')]
-                acompanhantes = [c for c in convidados if c.get('convidado_principal_id')]
-                n_conf = sum(1 for c in titulares if c.get('status_confirmacao') == 'confirmado')
-                n_rec  = sum(1 for c in titulares if c.get('status_confirmacao') == 'recusado')
-                n_pend = sum(1 for c in titulares if c.get('status_confirmacao') not in ('confirmado', 'recusado', 'justificado'))
-
-                with ui.row().classes('w-full gap-2 q-mb-sm wrap'):
-                    for label, val, color in [
-                        ('Total Titulares', len(titulares), 'cyan'),
-                        ('Acompanhantes', len(acompanhantes), 'indigo'),
-                        ('✅ Confirmados', n_conf, 'green'),
-                        ('❌ Recusados', n_rec, 'red'),
-                        ('⏳ Pendentes', n_pend, 'amber'),
-                    ]:
-                        with ui.card().classes(f'q-pa-sm border-l-4 border-{color}').style(
-                            f'background: rgba(255,255,255,0.04); border-left: 4px solid; border-left-color: var(--q-{color});'
-                        ):
-                            ui.label(str(val)).classes(f'text-2xl font-black text-{color}')
-                            ui.label(label).classes('text-[10px] text-grey-4 font-bold uppercase tracking-wider')
-
-                ui.separator().classes('q-my-xs')
-
-                # Filtros
-                with ui.row().classes('w-full items-center gap-3 q-mb-sm wrap'):
-                    search_inp = ui.input(placeholder='🔍 Buscar por nome, posto, assento...').props('dark outlined dense').classes('col-5')
-                    filt_conf_sel = ui.select(
-                        options={'todos': 'Todos os Status RSVP', 'confirmado': '✅ Confirmados', 'recusado': '❌ Recusados', 'provavel': '🕐 Prováveis', 'pendente': '⏳ Pendentes'},
-                        value='todos'
-                    ).props('dark outlined dense').style('min-width: 180px;').tooltip('Filtrar por Status de Confirmação')
-                    filt_placa_sel = ui.select(
-                        options={'todos': 'Todos os Status de Placa', 'pendente': '🟡 Pendente', 'em_producao': '🔵 Em Produção', 'impressa': '🟢 Impressa', 'entregue': '⚪ Entregue'},
-                        value='todos'
-                    ).props('dark outlined dense').style('min-width: 200px;').tooltip('Filtrar por Status de Placa')
-
-                @ui.refreshable
-                def render_table():
-                    busca = search_inp.value.lower().strip()
-                    sc = filt_conf_sel.value
-                    sp = filt_placa_sel.value
-
-                    lista = sorted(convidados, key=lambda c: (c.get('assento_id') or 'ZZZ', c.get('nome', '')))
-
-                    def matches(c):
-                        if busca:
-                            text = f"{c.get('nome','')} {c.get('posto_graduacao','')} {c.get('assento_id','')} {c.get('cargo_funcao','')}".lower()
-                            if busca not in text:
-                                return False
-                        if sc != 'todos':
-                            if sc == 'pendente':
-                                conf = c.get('status_confirmacao', 'pendente')
-                                if conf in ('confirmado', 'recusado', 'justificado', 'provavel'):
-                                    return False
-                            elif c.get('status_confirmacao') != sc:
-                                return False
-                        if sp != 'todos' and c.get('status_placa', 'pendente') != sp:
-                            return False
-                        return True
-
-                    visible = [c for c in lista if matches(c)]
-
-                    if not visible:
-                        with ui.column().classes('w-full items-center q-py-lg gap-2 text-grey-4'):
-                            ui.icon('search_off', size='3rem')
-                            ui.label('Nenhum convidado encontrado com esses filtros.').classes('text-sm')
-                        return
-
-                    # Tabela header
-                    with ui.element('div').classes('w-full overflow-x-auto'):
-                        with ui.element('table').classes('w-full').style(
-                            'border-collapse: collapse; font-size: 12px; font-family: monospace;'
-                        ):
-                            # Cabeçalho
-                            with ui.element('thead'):
-                                with ui.element('tr').style('background: rgba(0,200,200,0.12); color: #80deea;'):
-                                    for col in ['#', 'Assento', 'Posto/Grad.', 'Nome Completo', 'Cargo/Função', 'Tipo', 'RSVP', 'Placa', 'Acomp.']:
-                                        ui.element('th').style('padding: 6px 8px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); white-space: nowrap;').text(col)
-
-                            # Linhas
-                            with ui.element('tbody'):
-                                for idx, c in enumerate(visible, 1):
-                                    is_acomp = bool(c.get('convidado_principal_id'))
-                                    sc_label, sc_color = STATUS_CONF_LABELS.get(
-                                        c.get('status_confirmacao', 'pendente'),
-                                        ('⏳ Pendente', 'grey-6')
-                                    )
-                                    sp_label, sp_color = STATUS_PLACA_LABELS.get(
-                                        c.get('status_placa', 'pendente'),
-                                        ('🟡 Pendente', 'amber')
-                                    )
-                                    row_bg = 'rgba(255,255,255,0.02)' if idx % 2 == 0 else 'transparent'
-                                    nome_clean = clean_authority_name(c.get('nome', ''))
-
-                                    with ui.element('tr').style(f'background: {row_bg}; vertical-align: middle;'):
-                                        ui.element('td').style('padding: 5px 8px; color: #888; border-bottom: 1px solid rgba(255,255,255,0.04);').text(str(idx))
-                                        ui.element('td').style('padding: 5px 8px; font-weight: bold; color: #4dd0e1; border-bottom: 1px solid rgba(255,255,255,0.04);').text(c.get('assento_id') or '—')
-                                        ui.element('td').style('padding: 5px 8px; color: #ffd54f; border-bottom: 1px solid rgba(255,255,255,0.04); white-space: nowrap;').text(c.get('posto_graduacao') or '—')
-                                        with ui.element('td').style('padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.04);'):
-                                            ui.label(nome_clean).classes('text-white font-bold text-xs')
-                                        ui.element('td').style('padding: 5px 8px; color: #aaa; border-bottom: 1px solid rgba(255,255,255,0.04);').text((c.get('cargo_funcao') or '')[:35] + '…' if len(c.get('cargo_funcao') or '') > 35 else (c.get('cargo_funcao') or '—'))
-                                        with ui.element('td').style('padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.04);'):
-                                            ui.badge('ACOMP.' if is_acomp else 'TITULAR').props(f'color={"indigo" if is_acomp else "cyan"} text-color=white').classes('text-[9px]')
-                                        with ui.element('td').style('padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.04);'):
-                                            ui.badge(sc_label).props(f'color={sc_color} text-color=white').classes('text-[9px]')
-                                        with ui.element('td').style('padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.04);'):
-                                            ui.badge(sp_label).props(f'color={sp_color} text-color=white').classes('text-[9px]')
-                                        ui.element('td').style('padding: 5px 8px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.04); color: #81c784;').text(str(c.get('max_acompanhantes') or 0))
-
-                    ui.label(f'Exibindo {len(visible)} de {len(convidados)} registros').classes('text-[10px] text-grey-5 q-mt-xs')
-
-                render_table()
-
-                search_inp.on('update:model-value', lambda: render_table.refresh())
-                filt_conf_sel.on('update:model-value', lambda: render_table.refresh())
-                filt_placa_sel.on('update:model-value', lambda: render_table.refresh())
-
-                ui.separator().classes('q-my-sm')
-
-                # Botões de exportação
-                async def export_csv():
-                    import csv, io as csvio
-                    output = csvio.StringIO()
-                    writer = csv.writer(output)
-                    writer.writerow(['Assento', 'Posto/Graduação', 'Nome Completo', 'Cargo/Função', 'Tipo', 'Status RSVP', 'Status Placa', 'Acompanhantes Previstos'])
-                    for c in sorted(convidados, key=lambda x: (x.get('assento_id') or 'ZZZ', x.get('nome', ''))):
-                        sc_label, _ = STATUS_CONF_LABELS.get(c.get('status_confirmacao', 'pendente'), ('Pendente', ''))
-                        sp_label, _ = STATUS_PLACA_LABELS.get(c.get('status_placa', 'pendente'), ('Pendente', ''))
-                        writer.writerow([
-                            c.get('assento_id') or '',
-                            c.get('posto_graduacao') or '',
-                            clean_authority_name(c.get('nome', '')),
-                            c.get('cargo_funcao') or '',
-                            'Acompanhante' if c.get('convidado_principal_id') else 'Titular',
-                            sc_label,
-                            sp_label,
-                            str(c.get('max_acompanhantes') or 0),
-                        ])
-                    csv_data = output.getvalue()
-                    encoded = base64.b64encode(csv_data.encode('utf-8-sig')).decode()
-                    nome_ev = (event.get('nome') or 'evento').replace(' ', '_')[:30]
-                    fname = f"planilhao_{nome_ev}_{event.get('data_evento','')}.csv"
-                    await ui.run_javascript(f'''
-                        const a = document.createElement("a");
-                        a.href = "data:text/csv;charset=utf-8-sig;base64,{encoded}";
-                        a.download = "{fname}";
-                        a.click();
-                    ''')
-                    ui.notify('📥 CSV exportado com sucesso!', color='positive', position='top')
-
-                with ui.row().classes('w-full justify-end items-center gap-2'):
-                    ui.label(f'📋 {len(convidados)} registros totais').classes('text-xs text-grey-5 q-mr-auto')
-                    ui.button('🖨️ Imprimir Lista', icon='print', on_click=lambda: ui.run_javascript("window.print()")).props('unelevated color=light-blue-9 text-color=white dense bold').classes('text-xs')
-                    ui.button('📥 Exportar CSV', icon='download', on_click=export_csv).props('unelevated color=teal text-color=white dense bold').classes('text-xs')
-                    ui.button('Fechar', on_click=diag.close).props('unelevated color=grey-8 dense').classes('text-xs')
-
-            diag.open()
-
-        def open_tactical_scanner_dialog(event, convidados):
-
-            scanned_history = []
-
-            with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 620px; max-width: 95vw;'):
-                ui.label('🔍 SCANNER & CONFERÊNCIA TÁTICA').classes('text-md font-bold text-amber cyber-title q-mb-xs')
-                ui.label('Use a Câmera do Celular ou Leitor Físico para separar e bater a lista por Fileira').classes('text-xs text-grey-4 q-mb-md')
-            
-                with ui.row().classes('w-full gap-2 q-mb-md items-center'):
-                    scan_input = ui.input(placeholder='Bipe o QR Code ou digite ID/Nome/Assento (ex: G-5)...').props('dark outlined dense autofocus').classes('col')
-                    cam_btn = ui.button('📸 Câmera do Celular', icon='videocam').props('unelevated color=primary text-color=black dense').classes('text-xs')
-
-                # Injeta biblioteca HTML5-QRCode no head
-                ui.add_head_html('<script src="https://unpkg.com/html5-qrcode"></script>')
-
-                # Container da Câmera do Celular (HTML5 QR Scanner)
-                cam_container = ui.column().classes('w-full hidden q-mb-md border border-cyan-500/40 rounded-xl q-pa-sm bg-black/60')
-                with cam_container:
-                    ui.label('📸 Aponta a câmera para o QR Code impresso no cartão:').classes('text-xs font-bold text-cyan text-center w-full q-mb-xs')
-                    ui.html('<div id="qr-reader" style="width:100%; max-width:400px; margin:0 auto; background:#000; border-radius:8px;"></div>').classes('w-full flex justify-center')
-                    ui.button('🛑 Fechar Câmera', on_click=lambda: cam_container.classes(add='hidden')).props('flat color=grey dense').classes('w-full text-xs q-mt-xs')
-
-                def toggle_camera():
-                    cam_container.classes(remove='hidden')
-                    ui.run_javascript('''
-                        if (window.html5QrcodeScanner) {
-                            try { window.html5QrcodeScanner.clear(); } catch(e){}
-                        }
-                        window.html5QrcodeScanner = new Html5QrcodeScanner("qr-reader", { fps: 10, qrbox: {width: 250, height: 250} }, false);
-                        window.html5QrcodeScanner.render(function(decodedText, decodedResult) {
-                            let inp = document.querySelector('input[placeholder*="Bipe"]');
-                            if (inp) {
-                                inp.value = decodedText;
-                                inp.dispatchEvent(new KeyboardEvent('keydown', {'key': 'Enter', 'keyCode': 13, 'bubbles': true}));
-                            }
-                        }, function(error) {});
-                    ''')
-
-                cam_btn.on_click(toggle_camera)
-                feedback_container = ui.column().classes('w-full')
-
-                # Script de áudio para bipe sonoro tático
-                audio_script = """
-                function playBeep(type) {
-                    try {
-                        let ctx = new (window.AudioContext || window.webkitAudioContext)();
-                        let osc = ctx.createOscillator();
-                        let gain = ctx.createGain();
-                        osc.connect(gain);
-                        gain.connect(ctx.destination);
-                        if (type === 'success') {
-                            osc.frequency.value = 880;
-                            gain.gain.value = 0.12;
-                            osc.start();
-                            setTimeout(() => osc.stop(), 150);
-                        } else if (type === 'duplicate') {
-                            osc.frequency.value = 280;
-                            gain.gain.value = 0.25;
-                            osc.start();
-                            setTimeout(() => osc.stop(), 320);
-                        }
-                    } catch(e) {}
-                }
-                """
-                ui.add_head_html(f"<script>{audio_script}</script>")
-
-                def process_scan(val):
-                    if not val or not val.strip():
-                        return
-                    query = val.strip().lower()
-                    scan_input.value = ''
-                    feedback_container.clear()
-                
-                    # Busca convidado por ID exato do QR Code, Assento ou Nome
-                    matches = [
-                        c for c in convidados
-                        if str(c.get('id', '')) == query or
-                        query == str(c.get('assento_id', '')).lower() or
-                        query in c['nome'].lower() or
-                        (c.get('posto_graduacao') and query in f"{c.get('posto_graduacao')} {c['nome']}".lower())
-                    ]
-
-                    with feedback_container:
-                        if not matches:
-                            ui.run_javascript("playBeep('duplicate')")
-                            with ui.card().classes('w-full q-pa-md bg-red-950/80 border border-red-500 rounded-xl text-center'):
-                                ui.icon('cancel', color='red', size='3rem')
-                                ui.label('❌ CARTÃO / CONVIDADO NÃO ENCONTRADO!').classes('text-sm font-bold text-red-3')
-                                ui.label(f"Nenhum assento ou convidado registrado para o código: '{val}'").classes('text-xs text-grey-4')
-                        else:
-                            target = matches[0]
-                            seat = target.get('assento_id', 'NÃO ALOCADO')
-                            row_name = seat.split('-')[0] if '-' in seat else 'N/A'
-                            is_duplicate = target['id'] in scanned_history
-
-                            if is_duplicate:
-                                ui.run_javascript("playBeep('duplicate')")
-                                with ui.card().classes('w-full q-pa-md bg-amber-950/80 border border-amber-500 rounded-xl text-center'):
-                                    ui.icon('warning', color='amber', size='3rem')
-                                    ui.label('⚠️ ATENÇÃO: CARTÃO JÁ CONFERIDO & SEPARADO!').classes('text-sm font-bold text-amber-3')
-                                    ui.label(f"{target['nome']} — Assento: {seat} (Fileira {row_name})").classes('text-xs text-grey-3 font-bold')
-                                    ui.label('Este cartão já passou pela triagem anteriormente.').classes('text-[11px] text-amber-4 q-mt-xs')
-                            else:
-                                scanned_history.append(target['id'])
-                                ui.run_javascript("playBeep('success')")
-                            
-                                main_info = ""
-                                if target.get('convidado_principal_id'):
-                                    p_main = next((x for x in convidados if x['id'] == target['convidado_principal_id']), None)
-                                    if p_main:
-                                        main_info = f" (Acompanhante de {p_main['nome']})"
-
-                                with ui.card().classes('w-full q-pa-md bg-green-950/80 border border-green-500 rounded-xl text-center'):
-                                    ui.icon('check_circle', color='green', size='3rem')
-                                    ui.label('✅ CONFERIDO & SEPARADO COM SUCESSO!').classes('text-sm font-bold text-green-3')
-                                    ui.label(f"{target.get('posto_graduacao') or ''} {target['nome']}{main_info}").classes('text-md font-bold text-white')
-                                
-                                    with ui.row().classes('w-full justify-center items-center gap-2 q-mt-xs wrap'):
-                                        ui.badge(f"COLOCAR NA FILEIRA {row_name}").props('color=cyan text-color=black bold').classes('text-sm q-px-sm')
-                                        ui.badge(f"ASSENTO {seat}").props('color=green text-color=white bold').classes('text-sm q-px-sm')
-                                    
-                                        async def remap_seat_dialog(target_guest):
-                                            with ui.dialog() as r_diag, ui.card().classes('q-pa-md bg-cyan-950 border border-cyan-400 rounded-xl').style('min-width: 320px;'):
-                                                ui.label('🔀 REMAPEAR ASSENTO NO SALÃO').classes('text-xs font-bold text-cyan q-mb-xs')
-                                                ui.label(f"Convidado: {target_guest['nome']}").classes('text-[11px] text-grey-3 q-mb-sm')
-                                                new_seat_input = ui.input(label='Novo Código de Assento (ex: A-1, F-5)', value=target_guest.get('assento_id', '')).props('dark outlined dense').classes('w-full q-mb-md')
-                                            
-                                                async def confirm_remap():
-                                                    val_seat = new_seat_input.value.strip().upper()
-                                                    if val_seat:
-                                                        _db = get_service_db_connection() or get_db_connection()
-                                                        if _db:
-                                                            _db.table('jade_convidados').update({'assento_id': val_seat}).eq('id', target_guest['id']).execute()
-                                                            target_guest['assento_id'] = val_seat
-                                                            ui.notify(f"✅ Assento remapeado para {val_seat}!", color='positive')
-                                                            r_diag.close()
-                                                            process_scan(target_guest['id'])
-                                                            render_content.refresh()
-
-                                                with ui.row().classes('w-full justify-end gap-2'):
-                                                    ui.button('Cancelar', on_click=r_diag.close).props('flat dense color=grey')
-                                                    ui.button('Salvar Remapeamento', on_click=confirm_remap).props('unelevated color=cyan text-color=black dense bold')
-                                            r_diag.open()
-
-                                        ui.button('🔀 Mudar Assento', on_click=lambda tg=target: remap_seat_dialog(tg)).props('unelevated color=amber text-color=black dense bold').classes('text-xs').tooltip('Trocar assento desta placa no salão instantaneamente')
-
-                scan_input.on('keydown.enter', lambda: process_scan(scan_input.value))
-
-                with ui.row().classes('w-full justify-between items-center q-mt-md'):
-                    ui.label(f"Total Conferidos: {len(scanned_history)} de {len([c for c in convidados if c.get('assento_id')])} cartões").classes('text-xs text-cyan font-bold')
-                    ui.button('Concluir Conferência', on_click=diag.close).props('unelevated color=grey-8 dense')
-            diag.open()
-
-        def open_field_assembly_report_dialog(event, convidados):
-            """Gera relatório de prancheta de campo para a equipe de montagem de assentos no salão."""
-            with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 800px; max-width: 95vw; max-height: 90vh; overflow-y: auto;'):
-                with ui.row().classes('w-full justify-between items-center q-mb-md print-hide'):
-                    with ui.row().classes('items-center gap-2'):
-                        ui.icon('assignment', size='md', color='cyan')
-                        ui.label('📋 RELATÓRIO DE PRANCHETA DE MONTAGEM DO SALÃO').classes('text-md font-bold text-cyan cyber-title')
-                    with ui.row().classes('items-center gap-2'):
-                        ui.button('🖨️ Imprimir Prancheta', icon='print', on_click=lambda: ui.run_javascript('window.print()')).props('unelevated color=cyan text-color=black dense bold').classes('text-xs')
-                        ui.button(icon='close', on_click=diag.close).props('flat round dense color=grey-4')
-
-                with ui.column().classes('w-full print-area q-pa-sm'):
-                    allocated = [c for c in convidados if c.get('assento_id')]
-                
                     def sort_key_assento(c):
                         ass = str(c.get('assento_id', '')).upper().strip()
                         match = re.match(r'([A-Z]+)-?(\d+)', ass)
                         if match:
                             row, num = match.groups()
                             return (row, int(num))
-                        return (ass, 0)
+                        return (ass if ass else 'ZZZ', 0)
 
-                    allocated.sort(key=sort_key_assento)
+                    all_cards.sort(key=sort_key_assento)
 
-                    rows_html = ""
-                    for idx, c in enumerate(allocated, 1):
-                        assento = c.get('assento_id', 'N/I')
-                        posto = c.get('posto_graduacao', '') or ''
-                        nome = c.get('nome', '')
-                        is_acomp = bool(c.get('convidado_principal_id'))
-                        tipo_placa = "RESERVADO (Acompanhante)" if is_acomp else "Titular"
-                        st = c.get('status_placa', 'pendente').upper()
-                        bg_row = "#f9f9f9" if idx % 2 == 0 else "#ffffff"
+                    if not all_cards:
+                        with ui.column().classes('w-full items-center justify-center q-py-xl gap-3'):
+                            ui.icon('chair_alt', size='3rem', color='cyan-3')
+                            ui.label('Nenhum convidado confirmado para impressão nesta solenidade.').classes('text-sm text-grey-4 text-center')
+                        return
 
-                        rows_html += f'''
-                        <tr style="background: {bg_row};">
-                            <td style="padding: 6px; border: 1px solid #ccc; text-align: center; font-size: 14pt;">☐</td>
-                            <td style="padding: 6px; border: 1px solid #ccc; font-weight: bold; color: #1f4e79;">{assento}</td>
-                            <td style="padding: 6px; border: 1px solid #ccc; font-weight: bold;">{posto} {clean_authority_name(nome)}</td>
-                            <td style="padding: 6px; border: 1px solid #ccc;">{tipo_placa}</td>
-                            <td style="padding: 6px; border: 1px solid #ccc; font-size: 8pt;">{st}</td>
-                        </tr>
-                        '''
+                    # 2. Pega a quantidade solicitada de placas por folha A4 (configurável pelo operador, padrão 4)
+                    items_per_sheet = int(input_items_per_sheet.value or 4)
+                    total_pages = (len(all_cards) + items_per_sheet - 1) // items_per_sheet
 
-                    ui.html(f'''
-                    <div style="font-family: Arial, sans-serif; color: #000; background: #fff; padding: 16px; border-radius: 8px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px;">
-                            <div>
-                                <h2 style="margin: 0; font-size: 16pt; font-weight: bold; text-transform: uppercase;">📋 JADE — RELATÓRIO DE MONTAGEM DE ASSENTOS DE CAMPO</h2>
-                                <div style="font-size: 10pt; color: #444;">Solenidade: <strong>{event.get('nome','')}</strong> | Data: <strong>{event.get('data_evento','N/I')}</strong></div>
-                            </div>
-                            <div style="text-align: right; font-size: 9pt;">
-                                <div><strong>COMSOC / CERIMONIAL</strong></div>
-                                <div>Total: {len(allocated)} Assentos</div>
-                            </div>
+                    for page_idx in range(total_pages):
+                        batch = all_cards[page_idx * items_per_sheet : (page_idx + 1) * items_per_sheet]
+                    
+                        with ui.column().classes('w-full gap-2 page-break q-mb-md'):
+                            with ui.row().classes('w-full justify-between items-center bg-cyan-950/60 q-pa-sm rounded-lg border border-cyan-500/40 print-hide'):
+                                first_seat = batch[0].get('assento_id') or 'Sem Assento'
+                                last_seat = batch[-1].get('assento_id') or 'Sem Assento'
+                                ui.label(f"📄 FOLHA A4 #{page_idx + 1} DE {total_pages} — {len(batch)} PLACAS ({first_seat} ATÉ {last_seat})").classes('text-sm font-bold text-cyan')
+                                ui.badge(f"Folha {page_idx + 1} / {total_pages}").props('color=cyan text-color=black')
+
+                            # ═══ MODELO: PRISMA INSTITUCIONAL A4 (4 por Folha) ═══
+                            if current_model == 'prisma_a4_4slots':
+                                termo_reservado = input_termo_conv.value or 'RESERVADO'
+                                show_double_border = chk_border.value
+                                with ui.column().classes('w-full gap-3'):
+                                    for c in batch:
+                                        is_acomp = bool(c.get('convidado_principal_id'))
+                                        main_g = main_guests_map.get(c.get('convidado_principal_id')) if is_acomp else None
+                                        posto = (c.get('posto_graduacao') or (main_g.get('posto_graduacao') if main_g else '') or '').strip()
+                                        almirantado_info = parse_almirantado_stars(posto)
+                                        nome_limpo = clean_authority_name(c['nome'])
+                                        target_logo = resolved_logo_url or brasao_l_url
+                                    
+                                        border_style = 'border: 1.5pt solid #1a1a1a; outline: 0.5pt solid #1a1a1a; outline-offset: -2.5mm;' if show_double_border else 'border: 1.5pt solid #1a1a1a;'
+                                    
+                                        with ui.element('div').classes('prisma-card-a4-slot').style(border_style):
+                                            # Canto Superior Esquerdo: Brasão + Estrelas / PNG Insígnias
+                                            with ui.element('div').style(f'position: absolute; top: {logo_y}mm; left: {logo_x}mm; z-index: 10; display: flex; flex-direction: column; align-items: flex-start; shadow: none;'):
+                                                if show_logo and target_logo:
+                                                    ui.image(target_logo).style(f'width: {logo_w}mm; height: auto; object-fit: contain;')
+                                                elif show_logo:
+                                                    ui.label('⚓').style(f'font-size: {logo_w}px; color: #000;')
+                                            
+                                                # Insígnia/Estrelas impressas tanto para o titular quanto para os acompanhantes
+                                                if show_rank:
+                                                    if almirantado_info['png_asset']:
+                                                        ui.image(almirantado_info['png_asset']).style(f'width: {logo_w}mm; height: auto; margin-top: 1mm;')
+                                                    elif almirantado_info['stars']:
+                                                        ui.label(almirantado_info['stars']).classes('prisma-estrelas-esquerda')
+
+                                            # Canto Superior Direito: QR Code (Base64 offline)
+                                            if show_qr:
+                                                qr_url = gen_qr_base64(f"JADE|{event.get('id','')}|{c['id']}|{c.get('assento_id','')}")
+                                                with ui.element('div').style(f'position: absolute; top: {qr_y}mm; right: {qr_x}mm; z-index: 10; font-size: 7px; text-align: center;'):
+                                                    ui.image(qr_url).style(f'width: {qr_size}mm; height: {qr_size}mm;')
+                                                    if c.get('assento_id'):
+                                                        ui.label(f"{c.get('assento_id', '')}").classes('text-[7px] font-mono text-black font-bold')
+
+                                            # Bloco Central - Totalmente Centralizado com Fontes Dinâmicas
+                                            with ui.element('div').classes('prisma-conteudo-central'):
+                                                if is_acomp:
+                                                    ui.label(termo_reservado).classes('prisma-texto-reservado').style(f'font-size: {f_reservado}pt;')
+                                                    if almirantado_info['title']:
+                                                        ui.label(almirantado_info['title']).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
+                                                    elif posto:
+                                                        ui.label(posto.upper()).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
+                                                    ui.label(nome_limpo).classes('prisma-nome-autoridade').style(f'font-size: {f_nome}pt;')
+                                                else:
+                                                    if almirantado_info['title']:
+                                                        ui.label(almirantado_info['title']).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
+                                                    elif posto:
+                                                        ui.label(posto.upper()).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
+                                                    ui.label(nome_limpo).classes('prisma-nome-autoridade').style(f'font-size: {f_nome}pt;')
+                            # ═══ MODELO: PRISMA DOBRÁVEL V (FRENTE E VERSO INVERTIDO 180°) ═══
+                            elif current_model == 'prisma_dobravel_v':
+                                termo_reservado = input_termo_conv.value or 'RESERVADO'
+                                with ui.column().classes('w-full gap-4'):
+                                    for c in batch:
+                                        is_acomp = bool(c.get('convidado_principal_id'))
+                                        posto = c.get('posto_graduacao') or ''
+                                        almirantado_info = parse_almirantado_stars(posto)
+                                        nome_limpo = clean_authority_name(c['nome'])
+                                        target_logo = resolved_logo_url or brasao_l_url
+                                    
+                                        # Geração local offline de QR Code
+                                        import qrcode, io, base64
+                                        qr_b64 = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={c['id']}"
+                                        try:
+                                            qr_obj = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=4, border=1)
+                                            qr_obj.add_data(f"JADE|{event.get('id','')}|{c['id']}|{c.get('assento_id','')}")
+                                            qr_obj.make(fit=True)
+                                            img_q = qr_obj.make_image(fill_color="black", back_color="white")
+                                            buf_q = io.BytesIO()
+                                            img_q.save(buf_q, format="PNG")
+                                            qr_b64 = f"data:image/png;base64,{base64.b64encode(buf_q.getvalue()).decode('utf-8')}"
+                                        except Exception:
+                                            pass
+
+                                        with ui.element('div').classes('w-full border border-black rounded-lg bg-white text-black q-pa-xs').style('min-height: 170mm; display: flex; flex-direction: column; justify-content: space-between; position: relative;'):
+                                            # Verso da Dobra (Texto Invertido 180° para quem olha de frente)
+                                            with ui.element('div').style('transform: rotate(180deg); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10mm 4mm;'):
+                                                if show_logo and target_logo:
+                                                    ui.image(target_logo).style(f'width: {logo_w}mm; height: auto; object-fit: contain; margin-bottom: 2mm;')
+                                                if is_acomp:
+                                                    ui.label(termo_reservado).classes('prisma-texto-reservado').style(f'font-size: {f_reservado}pt;')
+                                                if almirantado_info['title']:
+                                                    ui.label(almirantado_info['title']).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
+                                                elif posto:
+                                                    ui.label(posto.upper()).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
+                                                ui.label(nome_limpo).classes('prisma-nome-autoridade').style(f'font-size: {f_nome}pt;')
+
+                                            # Linha de Dobra do Papel A4
+                                            ui.html('<div style="border-top: 2px dashed #000; text-align: center; margin: 4px 0;"><span style="background:#fff; padding: 0 8px; font-size: 8px; color: #666; font-family: monospace;">✂️ LINHA DE DOBRA DO PRISMA DE MESA (V-SHAPE)</span></div>')
+
+                                            # Frente da Dobra (Texto Normal 0° para quem olha do corredor)
+                                            with ui.element('div').style('display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10mm 4mm; position: relative;'):
+                                                if show_logo and target_logo:
+                                                    ui.image(target_logo).style(f'width: {logo_w}mm; height: auto; object-fit: contain; margin-bottom: 2mm;')
+                                                if is_acomp:
+                                                    ui.label(termo_reservado).classes('prisma-texto-reservado').style(f'font-size: {f_reservado}pt;')
+                                                if almirantado_info['title']:
+                                                    ui.label(almirantado_info['title']).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
+                                                elif posto:
+                                                    ui.label(posto.upper()).classes('prisma-posto-extenso').style(f'font-size: {f_posto}pt;')
+                                                ui.label(nome_limpo).classes('prisma-nome-autoridade').style(f'font-size: {f_nome}pt;')
+
+                                                if show_qr:
+                                                    with ui.element('div').style('position: absolute; right: 4mm; bottom: 4mm; text-align: center;'):
+                                                        ui.image(qr_b64).style(f'width: {qr_size}mm; height: {qr_size}mm;')
+                                                        if c.get('assento_id'):
+                                                            ui.label(f"{c.get('assento_id', '')}").classes('text-[7px] font-mono text-black font-bold')
+
+                            # ═══ MODELO: PLACA HORIZONTAL CGCFN (PADRÃO OFICIAL) ═══
+                            elif current_model == 'jade_horizontal_a4':
+                                with ui.element('div').classes('jade-horizontal-grid w-full'):
+                                    for c in batch:
+                                        is_acomp = bool(c.get('convidado_principal_id'))
+                                        posto_abrev = (c.get('posto_graduacao') or '').strip()
+                                        insignia_data = RANK_INSIGNIAS.get(posto_abrev, None)
+                                        posto_ext = insignia_data['title'] if insignia_data else posto_abrev
+                                        stars = insignia_data['stars'] if insignia_data else ''
+                                        nome_guerra = c['nome'].strip().upper()
+                                        assento = c.get('assento_id') or ''
+
+                                        import urllib.parse
+                                        qr_data = urllib.parse.quote(f"JADE|{event.get('id','')}|{c['id']}|{posto_abrev}|{c['nome']}|{assento}")
+                                        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=80x80&data={qr_data}&color=1a1a6e&bgcolor=ffffff"
+
+                                        logo_html = ''
+                                        if show_logo and resolved_logo_url:
+                                            logo_html = f'<img src="{resolved_logo_url}" style="width:{logo_w}mm;height:auto;object-fit:contain;" />'
+                                        else:
+                                            logo_html = f'<span style="font-size:{logo_w}px;">⚓</span>'
+
+                                        stars_html = ''
+                                        if stars and show_rank:
+                                            star_list = [s for s in stars]
+                                            stars_html = ''.join(f'<span class="jade-star">{s}</span>' for s in star_list)
+
+                                        reservado_html = '<div class="jade-reservado">RESERVADO</div>' if is_acomp else ''
+                                        assento_html = f'<div class="jade-assento-badge">ASSENTO {assento}</div>' if assento else ''
+                                        qr_html = f'<img src="{qr_url}" style="width:{qr_size}mm;height:{qr_size}mm;background:#fff;border-radius:3px;border:1px solid #ccc;" /><div style="font-size:7px;color:#888;font-family:monospace;">{assento}</div>' if show_qr else ''
+
+                                        ui.html(f'''
+                                        <div class="jade-placa-horiz">
+                                            <div class="jade-placa-left">
+                                                {logo_html}
+                                                <div style="display:flex;flex-direction:column;align-items:center;gap:1px;margin-top:4px;">
+                                                    {stars_html}
+                                                </div>
+                                            </div>
+                                            <div class="jade-placa-center">
+                                                {reservado_html}
+                                                <div class="jade-posto-ext" style="font-size:{f_posto}pt;">{posto_ext}</div>
+                                                <div class="jade-nome-guerra" style="font-size:{f_nome}pt;">{nome_guerra}</div>
+                                                {assento_html}
+                                            </div>
+                                            <div class="jade-placa-right">
+                                                {qr_html}
+                                            </div>
+                                        </div>
+                                        ''')
+
+                            # ═══ MODELO: TEMPLATE CUSTOMIZADO ═══
+                            elif current_model == 'template_custom' or use_bg:
+                                with ui.grid(columns='1 sm:grid-cols-2').classes('w-full gap-4'):
+                                    for c in sorted(list_c, key=lambda x: x.get('assento_id', '')):
+                                        is_acomp = bool(c.get('convidado_principal_id'))
+                                        posto = c.get('posto_graduacao') or ''
+                                        insignia_data = RANK_INSIGNIAS.get(posto, None)
+                                        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=120x120&data={c['id']}&color=000000&bgcolor=ffffff"
+
+                                        bg_style = f"background-image: url('{bg_url}');" if bg_url else "background: linear-gradient(135deg, #0a1628 0%, #1a2744 50%, #0d1b2a 100%);"
+
+                                        with ui.card().classes('w-full jade-card-template jade-template-card').style(f'{bg_style} border: 2px solid rgba(0,229,255,0.3); border-radius: 12px;'):
+                                            with ui.column().classes('jade-template-overlay'):
+                                                # TOPO: Brasões + Cabeçalho
+                                                with ui.row().classes('w-full justify-between items-start'):
+                                                    if show_logo and brasao_pos in ('esquerda', 'ambos'):
+                                                        if brasao_l_url:
+                                                            ui.image(brasao_l_url).classes('w-10 h-10 rounded')
+                                                        else:
+                                                            ui.label('⚓').classes('text-2xl')
+                                                    with ui.column().classes('col items-center gap-0'):
+                                                        ui.label(h1).classes('text-[10px] font-black text-cyan tracking-[3px] text-center')
+                                                        if h2:
+                                                            ui.label(h2).classes('text-[9px] font-bold text-amber text-center')
+                                                        if show_logo and brasao_pos == 'centro':
+                                                            if brasao_l_url:
+                                                                ui.image(brasao_l_url).classes('w-8 h-8 rounded q-mt-xs')
+                                                            else:
+                                                                ui.label('⚓').classes('text-xl')
+                                                    if show_logo and brasao_pos in ('ambos',):
+                                                        if brasao_r_url:
+                                                            ui.image(brasao_r_url).classes('w-10 h-10 rounded')
+                                                        else:
+                                                            ui.label('⚓').classes('text-2xl')
+
+                                                # MEIO: Insígnia + Nome + Assento
+                                                with ui.column().classes('w-full items-center gap-1 q-my-sm'):
+                                                    if show_rank and insignia_data:
+                                                        ui.html(
+                                                            f'<span class="jade-insignia-badge" style="background:{insignia_data["color"]}22; color:{insignia_data["color"]}; border: 1px solid {insignia_data["color"]}44;">'
+                                                            f'{insignia_data["stars"]} {insignia_data["title"]}</span>'
+                                                        )
+                                                    nome_c = f"{posto} {c['nome']}".strip()
+                                                    ui.label(nome_c).classes('text-lg font-black text-white text-center leading-tight')
+                                                    sub = '(Acompanhante Oficial)' if is_acomp else (c.get('cargo_funcao') or c.get('categoria') or '')
+                                                    if sub:
+                                                        ui.label(sub).classes('text-[10px] text-grey-3 font-bold')
+                                                    ui.badge(f"ASSENTO {c['assento_id']}").props('color=cyan text-color=black bold').classes('text-xs q-mt-xs')
+
+                                                # BASE: QR Code
+                                                if show_qr:
+                                                    qr_align = 'justify-end' if qr_pos == 'direita' else ('justify-start' if qr_pos == 'esquerda' else 'justify-center')
+                                                    with ui.row().classes(f'w-full {qr_align} items-end'):
+                                                        with ui.column().classes('items-center gap-0'):
+                                                            ui.image(qr_url).classes('w-14 h-14 rounded bg-white p-1')
+                                                            ui.label(f"ID:{c['id']}").classes('text-[7px] font-mono text-grey-5')
+
+                            # ═══ MODELO: PLACA DE CADEIRA A4 ═══
+                            elif current_model == 'cadeira_a4':
+                                with ui.grid(columns='1 sm:grid-cols-2').classes('w-full gap-4'):
+                                    for c in sorted(list_c, key=lambda x: x.get('assento_id', '')):
+                                        is_acomp = bool(c.get('convidado_principal_id'))
+                                        posto = c.get('posto_graduacao') or ''
+                                        insignia_data = RANK_INSIGNIAS.get(posto, None)
+                                        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=120x120&data={c['id']}&color=000000&bgcolor=ffffff"
+
+                                        with ui.card().classes('w-full q-pa-md jade-card bg-slate-900 border border-cyan-500/40 rounded-xl').style('border-left: 6px solid #00e5ff !important;'):
+                                            with ui.row().classes('w-full justify-between items-start no-wrap'):
+                                                with ui.column().classes('gap-0 col'):
+                                                    # Brasão no topo
+                                                    if show_logo:
+                                                        with ui.row().classes('items-center gap-1'):
+                                                            if brasao_l_url:
+                                                                ui.image(brasao_l_url).classes('w-5 h-5')
+                                                            ui.label(h1).classes('text-[10px] font-black text-cyan tracking-widest')
+
+                                                    ui.badge(f"ASSENTO {c['assento_id']}").props('color=cyan text-color=black bold').classes('text-xs w-fit q-my-xs')
+
+                                                    if show_rank and insignia_data:
+                                                        ui.html(
+                                                            f'<span class="jade-insignia-badge" style="background:{insignia_data["color"]}22; color:{insignia_data["color"]}; border: 1px solid {insignia_data["color"]}44;">'
+                                                            f'{insignia_data["stars"]} {insignia_data["title"]}</span>'
+                                                        )
+
+                                                    nome_c = f"{posto} {c['nome']}".strip()
+                                                    ui.label(nome_c).classes('text-md font-black text-white leading-tight q-mt-xs')
+                                                    sub = '(Acompanhante Oficial)' if is_acomp else (c.get('cargo_funcao') or c.get('categoria') or 'Convidado de Honra')
+                                                    ui.label(sub).classes('text-xs text-grey-4 font-bold q-mt-xs')
+                                                    if h2:
+                                                        ui.label(h2).classes('text-[9px] text-amber font-bold q-mt-xs')
+
+                                                if show_qr:
+                                                    with ui.column().classes('items-center gap-0'):
+                                                        ui.image(qr_url).classes('w-16 h-16 rounded bg-white p-1')
+                                                        ui.label(f"ID:{c['id']}").classes('text-[8px] font-mono text-grey-5')
+
+                            # ═══ MODELO: MESA DOBRÁVEL A5 ═══
+                            elif current_model == 'mesa_a5_dobravel':
+                                with ui.grid(columns='1 sm:grid-cols-2').classes('w-full gap-4'):
+                                    for c in sorted(list_c, key=lambda x: x.get('assento_id', '')):
+                                        is_acomp = bool(c.get('convidado_principal_id'))
+                                        posto = c.get('posto_graduacao') or ''
+                                        nome_c = f"{posto} {c['nome']}".strip()
+                                        sub = '(Acompanhante)' if is_acomp else (c.get('cargo_funcao') or 'Convidado')
+                                        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={c['id']}"
+
+                                        with ui.card().classes('w-full q-pa-md jade-card-mesa bg-slate-900 border-2 border-dashed border-cyan-500/40 rounded-xl text-center'):
+                                            ui.label('✂️ DOBRA DE MESA (FACE FRONTAL)').classes('text-[8px] text-grey-5 tracking-widest uppercase print-hide')
+                                            if show_logo:
+                                                ui.label(h1).classes('text-[9px] font-black text-cyan tracking-widest')
+                                            ui.label(f"ASSENTO {c['assento_id']}").classes('text-sm font-black text-cyan')
+                                            ui.label(nome_c).classes('text-lg font-black text-white q-my-xs')
+                                            ui.label(sub).classes('text-xs text-grey-3 font-bold')
+
+                                            ui.separator().classes('q-my-sm print-hide').style('border-color: rgba(255,255,255,0.1);')
+                                            ui.label('✂️ DOBRA DE MESA (FACE TRASEIRA)').classes('text-[8px] text-grey-5 tracking-widest uppercase print-hide')
+                                            with ui.row().classes('w-full justify-center items-center gap-2 q-mt-xs'):
+                                                if show_qr:
+                                                    ui.image(qr_url).classes('w-12 h-12 bg-white p-1 rounded')
+                                                ui.label(f"FILEIRA {row_label} | {c['assento_id']}").classes('text-xs text-grey-4 font-mono font-bold')
+
+                            # ═══ MODELO: CREDENCIAL / CRACHÁ ═══
+                            elif current_model == 'credencial':
+                                with ui.grid(columns='1 sm:grid-cols-2 md:grid-cols-3').classes('w-full gap-3'):
+                                    for c in sorted(list_c, key=lambda x: x.get('assento_id', '')):
+                                        is_acomp = bool(c.get('convidado_principal_id'))
+                                        main_g = main_guests_map.get(c.get('convidado_principal_id')) if is_acomp else None
+                                        posto = (c.get('posto_graduacao') or (main_g.get('posto_graduacao') if main_g else '') or '').strip()
+                                        almirantado_info = parse_almirantado_stars(posto)
+                                        nome_limpo = clean_authority_name(main_g.get('nome') if (is_acomp and main_g) else c['nome'])
+                                        target_logo = resolved_logo_url or brasao_l_url
+                                        insignia_data = RANK_INSIGNIAS.get(posto, None)
+                                        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={c['id']}"
+
+                                        with ui.card().classes('w-full jade-card-cred bg-slate-900 border border-amber-500/40 rounded-2xl q-pa-md items-center text-center justify-between').style('height: 300px;'):
+                                            with ui.column().classes('items-center gap-0 w-full'):
+                                                if show_logo:
+                                                    with ui.row().classes('items-center gap-1'):
+                                                        if brasao_l_url:
+                                                            ui.image(brasao_l_url).classes('w-6 h-6')
+                                                        ui.label(h1).classes('text-[9px] font-black text-cyan tracking-widest')
+                                                        if brasao_r_url and brasao_pos == 'ambos':
+                                                            ui.image(brasao_r_url).classes('w-6 h-6')
+                                                if h2:
+                                                    ui.label(h2).classes('text-[10px] font-bold text-amber truncate w-full')
+                                                ui.separator().classes('q-my-xs w-full').style('border-color: rgba(255,255,255,0.1);')
+
+                                            with ui.column().classes('items-center gap-0 w-full'):
+                                                ui.badge(f"FILEIRA {row_label} - {c['assento_id']}").props('color=cyan text-color=black bold').classes('text-xs q-mb-xs')
+                                                if show_rank and insignia_data:
+                                                    ui.html(
+                                                        f'<span class="jade-insignia-badge" style="background:{insignia_data["color"]}22; color:{insignia_data["color"]}; border: 1px solid {insignia_data["color"]}44; font-size:8px;">'
+                                                        f'{insignia_data["stars"]} {insignia_data["title"]}</span>'
+                                                    )
+                                                ui.label(nome_limpo).classes('text-sm font-black text-white leading-tight')
+                                                sub = '(Acompanhante)' if is_acomp else (c.get('cargo_funcao') or c.get('categoria'))
+                                                if sub:
+                                                    ui.label(sub).classes('text-[10px] text-grey-4 font-bold')
+
+                                            if show_qr:
+                                                ui.image(qr_url).classes('w-14 h-14 bg-white p-1 rounded border border-cyan-500')
+
+            model_select.on('update:model-value', lambda: preview_container.refresh())
+            preview_container()
+
+            js_clean_print_cards = """
+            (function() {
+                var area = document.querySelector('.print-area');
+                if (!area) { window.print(); return; }
+
+                var oldIframe = document.getElementById('jade_print_iframe');
+                if (oldIframe) { oldIframe.remove(); }
+
+                var iframe = document.createElement('iframe');
+                iframe.id = 'jade_print_iframe';
+                iframe.style.position = 'fixed';
+                iframe.style.right = '0';
+                iframe.style.bottom = '0';
+                iframe.style.width = '0';
+                iframe.style.height = '0';
+                iframe.style.border = '0';
+                document.body.appendChild(iframe);
+
+                var doc = iframe.contentWindow.document;
+                var cssStyles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+                                     .map(s => s.outerHTML).join('\\n');
+
+                doc.open();
+                doc.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>JADE - Impressão Oficial de Placas de Assento</title>
+                        ${cssStyles}
+                        <style>
+                            @page { size: A4 portrait; margin: 0mm !important; }
+                            * {
+                                -webkit-print-color-adjust: exact !important;
+                                print-color-adjust: exact !important;
+                                color-adjust: exact !important;
+                            }
+                            body { margin: 0 !important; padding: 4mm 6mm !important; background: #ffffff !important; color: #000000 !important; font-family: Arial, sans-serif !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                            .print-hide, .q-header, .q-drawer, .q-footer { display: none !important; }
+                            .print-area { display: block !important; position: static !important; width: 100% !important; visibility: visible !important; }
+                            .prisma-card-a4-slot { height: 66mm !important; max-height: 66mm !important; border: 1.5pt solid #1a1a1a !important; outline: 0.5pt solid #1a1a1a !important; outline-offset: -2.5mm !important; margin-bottom: 4.5mm !important; page-break-inside: avoid !important; background: #ffffff !important; color: #000000 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: center !important; position: relative !important; box-sizing: border-box !important; }
+                            .prisma-conteudo-central { display: flex !important; flex-direction: column !items: center !important; justify-content: center !important; text-align: center !important; width: 100% !important; }
+                            .prisma-texto-reservado { font-weight: 900 !important; letter-spacing: 3px !important; text-transform: uppercase !important; color: #1f4e79 !important; font-size: 20pt !important; margin-bottom: 2px !important; }
+                            .prisma-posto-extenso { font-weight: bold !important; text-transform: uppercase !important; letter-spacing: 1.5px !important; font-size: 18pt !important; margin-bottom: 2px !important; }
+                            .prisma-nome-autoridade { font-weight: 900 !important; text-transform: uppercase !important; font-size: 32pt !important; line-height: 1.05 !important; }
+                            img { max-width: 100% !important; display: inline-block !important; visibility: visible !important; opacity: 1 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="print-area">
+                            ${area.innerHTML}
                         </div>
+                    </body>
+                    </html>
+                `);
+                doc.close();
 
-                        <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
-                            <thead>
-                                <tr style="background: #1f4e79; color: #fff; text-align: left;">
-                                    <th style="padding: 6px; border: 1px solid #333; width: 40px; text-align: center;">[  ]</th>
-                                    <th style="padding: 6px; border: 1px solid #333; width: 90px;">Assento</th>
-                                    <th style="padding: 6px; border: 1px solid #333;">Posto / Graduação e Nome da Autoridade</th>
-                                    <th style="padding: 6px; border: 1px solid #333; width: 140px;">Tipo de Placa</th>
-                                    <th style="padding: 6px; border: 1px solid #333; width: 110px;">Status Placa</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {rows_html}
-                            </tbody>
-                        </table>
+                function triggerPrintWhenReady() {
+                    var images = doc.images;
+                    var loaded = 0;
+                    var total = images.length;
 
-                        <div style="margin-top: 20px; font-size: 9pt; display: flex; justify-content: space-between; border-top: 1px solid #999; padding-top: 8px;">
-                            <div>Responsável pela Montagem: _____________________________________</div>
-                            <div>Visto do Chefe do Cerimonial: _____________________________________</div>
+                    function doPrint() {
+                        iframe.contentWindow.focus();
+                        iframe.contentWindow.print();
+                    }
+
+                    if (total === 0) {
+                        setTimeout(doPrint, 800);
+                        return;
+                    }
+
+                    for (var i = 0; i < total; i++) {
+                        if (images[i].complete) {
+                            loaded++;
+                        } else {
+                            images[i].onload = images[i].onerror = function() {
+                                loaded++;
+                                if (loaded >= total) {
+                                    setTimeout(doPrint, 500);
+                                }
+                            };
+                        }
+                    }
+
+                    if (loaded >= total) {
+                        setTimeout(doPrint, 800);
+                    } else {
+                        setTimeout(doPrint, 2500); // Fallback de segurança máximo
+                    }
+                }
+
+                setTimeout(triggerPrintWhenReady, 300);
+            })();
+            """
+
+
+            def on_trigger_print():
+                save_print_config_to_event(notify_user=False)
+                ui.run_javascript(js_clean_print_cards)
+
+            def on_trigger_pdf():
+                save_print_config_to_event(notify_user=False)
+                try:
+                    cfg_now = collect_current_print_config()
+                    pdf_bytes = gerar_pdf_placas_reportlab(event, convidados, current_model, only_confirmed, cfg_now)
+                    if pdf_bytes:
+                        import base64
+                        b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
+                        file_name = f"Placas_JADE_{event.get('nome_evento','Evento').replace(' ', '_')}.pdf"
+                        js_download = f"""
+                        var a = document.createElement('a');
+                        a.href = 'data:application/pdf;base64,{b64_pdf}';
+                        a.download = '{file_name}';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        """
+                        ui.run_javascript(js_download)
+                        ui.notify('📄 PDF Vetorial gerado com sucesso no servidor e baixado!', color='positive')
+                    else:
+                        ui.notify('Nenhum convidado selecionado para PDF.', color='warning')
+                except Exception as pdf_err:
+                    print(f"[PDF REPORTLAB ERR] {pdf_err}")
+                    ui.notify(f"Erro ao gerar PDF no servidor: {pdf_err}. Usando fallback do navegador...", color='warning')
+                    ui.run_javascript(js_pdf_export_cards)
+
+            with ui.row().classes('w-full justify-between items-center q-mt-md print-hide'):
+                ui.button('💾 Salvar Configurações no Evento', icon='save', on_click=lambda: save_print_config_to_event(notify_user=True)).props('unelevated color=emerald text-color=white bold dense').classes('text-xs').tooltip('Salva o modelo, brasões, títulos e fontes como padrão permanente deste evento')
+                with ui.row().classes('gap-2'):
+                    ui.button('Fechar', on_click=diag.close).props('unelevated color=grey-8 dense')
+                    ui.button('📄 Baixar PDF Oficial (Servidor)', icon='picture_as_pdf', on_click=on_trigger_pdf).props('unelevated color=deep-purple text-color=white bold dense').tooltip('Gera arquivo PDF milimétrico vetorial A4 direto do servidor sem falhas de imagem')
+                    ui.button('🖨️ Imprimir Placas Selecionadas', icon='print', on_click=on_trigger_print).props('unelevated color=cyan text-color=black bold dense')
+        diag.open()
+
+
+    # ═══════════════════════════════════════════════════════════════
+    # FASE: PLANILHÃO DO EVENTO (Tabela Completa + CSV Export)
+    # ═══════════════════════════════════════════════════════════════
+    def open_event_spreadsheet_dialog(event, convidados):
+        """Abre a planilha completa do evento com filtros, status RSVP e exportação CSV."""
+
+        STATUS_CONF_LABELS = {
+            'confirmado':  ('✅ Confirmado',   'positive'),
+            'recusado':    ('❌ Recusado',      'negative'),
+            'justificado': ('📝 Justificado',   'warning'),
+            'provavel':    ('🕐 Provável',       'cyan'),
+            'pendente':    ('⏳ Pendente',       'grey-6'),
+        }
+        STATUS_PLACA_LABELS = {
+            'pendente':       ('🟡 Pendente',     'amber'),
+            'em_producao':    ('🔵 Em Produção',  'blue'),
+            'impressa':       ('🟢 Impressa',     'green'),
+            'reimpressao':    ('🔴 Reimpressão',  'red'),
+            'entregue':       ('⚪ Entregue',     'grey-4'),
+            'nao_necessaria': ('➖ N/A',           'grey-7'),
+        }
+
+        filter_conf = {'value': 'todos'}
+        filter_placa = {'value': 'todos'}
+        filter_search = {'value': ''}
+
+        with ui.dialog() as diag, ui.card().classes('q-pa-md').style(
+            f'min-width: 980px; max-width: 98vw; max-height: 92vh; overflow-y: auto; background: {THEME["bg_panel"]};'
+        ):
+            # Header
+            with ui.row().classes('w-full items-center justify-between q-mb-sm'):
+                with ui.column().classes('gap-0'):
+                    ui.label(f'📊 PLANILHÃO DO EVENTO').classes('text-lg font-bold text-teal cyber-title')
+                    ui.label(f'{event.get("nome","")[:60]}  ·  {event.get("data_evento","")}'
+                             ).classes('text-xs text-grey-4')
+                ui.button(icon='close', on_click=diag.close).props('flat round dense text-color=grey')
+
+            # Métricas
+            titulares = [c for c in convidados if not c.get('convidado_principal_id')]
+            acompanhantes = [c for c in convidados if c.get('convidado_principal_id')]
+            n_conf = sum(1 for c in titulares if c.get('status_confirmacao') == 'confirmado')
+            n_rec  = sum(1 for c in titulares if c.get('status_confirmacao') == 'recusado')
+            n_pend = sum(1 for c in titulares if c.get('status_confirmacao') not in ('confirmado', 'recusado', 'justificado'))
+
+            with ui.row().classes('w-full gap-2 q-mb-sm wrap'):
+                for label, val, color in [
+                    ('Total Titulares', len(titulares), 'cyan'),
+                    ('Acompanhantes', len(acompanhantes), 'indigo'),
+                    ('✅ Confirmados', n_conf, 'green'),
+                    ('❌ Recusados', n_rec, 'red'),
+                    ('⏳ Pendentes', n_pend, 'amber'),
+                ]:
+                    with ui.card().classes(f'q-pa-sm border-l-4 border-{color}').style(
+                        f'background: rgba(255,255,255,0.04); border-left: 4px solid; border-left-color: var(--q-{color});'
+                    ):
+                        ui.label(str(val)).classes(f'text-2xl font-black text-{color}')
+                        ui.label(label).classes('text-[10px] text-grey-4 font-bold uppercase tracking-wider')
+
+            ui.separator().classes('q-my-xs')
+
+            # Filtros
+            with ui.row().classes('w-full items-center gap-3 q-mb-sm wrap'):
+                search_inp = ui.input(placeholder='🔍 Buscar por nome, posto, assento...').props('dark outlined dense').classes('col-5')
+                filt_conf_sel = ui.select(
+                    options={'todos': 'Todos os Status RSVP', 'confirmado': '✅ Confirmados', 'recusado': '❌ Recusados', 'provavel': '🕐 Prováveis', 'pendente': '⏳ Pendentes'},
+                    value='todos'
+                ).props('dark outlined dense').style('min-width: 180px;').tooltip('Filtrar por Status de Confirmação')
+                filt_placa_sel = ui.select(
+                    options={'todos': 'Todos os Status de Placa', 'pendente': '🟡 Pendente', 'em_producao': '🔵 Em Produção', 'impressa': '🟢 Impressa', 'entregue': '⚪ Entregue'},
+                    value='todos'
+                ).props('dark outlined dense').style('min-width: 200px;').tooltip('Filtrar por Status de Placa')
+
+            @ui.refreshable
+            def render_table():
+                busca = search_inp.value.lower().strip()
+                sc = filt_conf_sel.value
+                sp = filt_placa_sel.value
+
+                lista = sorted(convidados, key=lambda c: (c.get('assento_id') or 'ZZZ', c.get('nome', '')))
+
+                def matches(c):
+                    if busca:
+                        text = f"{c.get('nome','')} {c.get('posto_graduacao','')} {c.get('assento_id','')} {c.get('cargo_funcao','')}".lower()
+                        if busca not in text:
+                            return False
+                    if sc != 'todos':
+                        if sc == 'pendente':
+                            conf = c.get('status_confirmacao', 'pendente')
+                            if conf in ('confirmado', 'recusado', 'justificado', 'provavel'):
+                                return False
+                        elif c.get('status_confirmacao') != sc:
+                            return False
+                    if sp != 'todos' and c.get('status_placa', 'pendente') != sp:
+                        return False
+                    return True
+
+                visible = [c for c in lista if matches(c)]
+
+                if not visible:
+                    with ui.column().classes('w-full items-center q-py-lg gap-2 text-grey-4'):
+                        ui.icon('search_off', size='3rem')
+                        ui.label('Nenhum convidado encontrado com esses filtros.').classes('text-sm')
+                    return
+
+                # Tabela header
+                with ui.element('div').classes('w-full overflow-x-auto'):
+                    with ui.element('table').classes('w-full').style(
+                        'border-collapse: collapse; font-size: 12px; font-family: monospace;'
+                    ):
+                        # Cabeçalho
+                        with ui.element('thead'):
+                            with ui.element('tr').style('background: rgba(0,200,200,0.12); color: #80deea;'):
+                                for col in ['#', 'Assento', 'Posto/Grad.', 'Nome Completo', 'Cargo/Função', 'Tipo', 'RSVP', 'Placa', 'Acomp.']:
+                                    ui.element('th').style('padding: 6px 8px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); white-space: nowrap;').text(col)
+
+                        # Linhas
+                        with ui.element('tbody'):
+                            for idx, c in enumerate(visible, 1):
+                                is_acomp = bool(c.get('convidado_principal_id'))
+                                sc_label, sc_color = STATUS_CONF_LABELS.get(
+                                    c.get('status_confirmacao', 'pendente'),
+                                    ('⏳ Pendente', 'grey-6')
+                                )
+                                sp_label, sp_color = STATUS_PLACA_LABELS.get(
+                                    c.get('status_placa', 'pendente'),
+                                    ('🟡 Pendente', 'amber')
+                                )
+                                row_bg = 'rgba(255,255,255,0.02)' if idx % 2 == 0 else 'transparent'
+                                nome_clean = clean_authority_name(c.get('nome', ''))
+
+                                with ui.element('tr').style(f'background: {row_bg}; vertical-align: middle;'):
+                                    ui.element('td').style('padding: 5px 8px; color: #888; border-bottom: 1px solid rgba(255,255,255,0.04);').text(str(idx))
+                                    ui.element('td').style('padding: 5px 8px; font-weight: bold; color: #4dd0e1; border-bottom: 1px solid rgba(255,255,255,0.04);').text(c.get('assento_id') or '—')
+                                    ui.element('td').style('padding: 5px 8px; color: #ffd54f; border-bottom: 1px solid rgba(255,255,255,0.04); white-space: nowrap;').text(c.get('posto_graduacao') or '—')
+                                    with ui.element('td').style('padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.04);'):
+                                        ui.label(nome_clean).classes('text-white font-bold text-xs')
+                                    ui.element('td').style('padding: 5px 8px; color: #aaa; border-bottom: 1px solid rgba(255,255,255,0.04);').text((c.get('cargo_funcao') or '')[:35] + '…' if len(c.get('cargo_funcao') or '') > 35 else (c.get('cargo_funcao') or '—'))
+                                    with ui.element('td').style('padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.04);'):
+                                        ui.badge('ACOMP.' if is_acomp else 'TITULAR').props(f'color={"indigo" if is_acomp else "cyan"} text-color=white').classes('text-[9px]')
+                                    with ui.element('td').style('padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.04);'):
+                                        ui.badge(sc_label).props(f'color={sc_color} text-color=white').classes('text-[9px]')
+                                    with ui.element('td').style('padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.04);'):
+                                        ui.badge(sp_label).props(f'color={sp_color} text-color=white').classes('text-[9px]')
+                                    ui.element('td').style('padding: 5px 8px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.04); color: #81c784;').text(str(c.get('max_acompanhantes') or 0))
+
+                ui.label(f'Exibindo {len(visible)} de {len(convidados)} registros').classes('text-[10px] text-grey-5 q-mt-xs')
+
+            render_table()
+
+            search_inp.on('update:model-value', lambda: render_table.refresh())
+            filt_conf_sel.on('update:model-value', lambda: render_table.refresh())
+            filt_placa_sel.on('update:model-value', lambda: render_table.refresh())
+
+            ui.separator().classes('q-my-sm')
+
+            # Botões de exportação
+            async def export_csv():
+                import csv, io as csvio
+                output = csvio.StringIO()
+                writer = csv.writer(output)
+                writer.writerow(['Assento', 'Posto/Graduação', 'Nome Completo', 'Cargo/Função', 'Tipo', 'Status RSVP', 'Status Placa', 'Acompanhantes Previstos'])
+                for c in sorted(convidados, key=lambda x: (x.get('assento_id') or 'ZZZ', x.get('nome', ''))):
+                    sc_label, _ = STATUS_CONF_LABELS.get(c.get('status_confirmacao', 'pendente'), ('Pendente', ''))
+                    sp_label, _ = STATUS_PLACA_LABELS.get(c.get('status_placa', 'pendente'), ('Pendente', ''))
+                    writer.writerow([
+                        c.get('assento_id') or '',
+                        c.get('posto_graduacao') or '',
+                        clean_authority_name(c.get('nome', '')),
+                        c.get('cargo_funcao') or '',
+                        'Acompanhante' if c.get('convidado_principal_id') else 'Titular',
+                        sc_label,
+                        sp_label,
+                        str(c.get('max_acompanhantes') or 0),
+                    ])
+                csv_data = output.getvalue()
+                encoded = base64.b64encode(csv_data.encode('utf-8-sig')).decode()
+                nome_ev = (event.get('nome') or 'evento').replace(' ', '_')[:30]
+                fname = f"planilhao_{nome_ev}_{event.get('data_evento','')}.csv"
+                await ui.run_javascript(f'''
+                    const a = document.createElement("a");
+                    a.href = "data:text/csv;charset=utf-8-sig;base64,{encoded}";
+                    a.download = "{fname}";
+                    a.click();
+                ''')
+                ui.notify('📥 CSV exportado com sucesso!', color='positive', position='top')
+
+            with ui.row().classes('w-full justify-end items-center gap-2'):
+                ui.label(f'📋 {len(convidados)} registros totais').classes('text-xs text-grey-5 q-mr-auto')
+                ui.button('🖨️ Imprimir Lista', icon='print', on_click=lambda: ui.run_javascript("window.print()")).props('unelevated color=light-blue-9 text-color=white dense bold').classes('text-xs')
+                ui.button('📥 Exportar CSV', icon='download', on_click=export_csv).props('unelevated color=teal text-color=white dense bold').classes('text-xs')
+                ui.button('Fechar', on_click=diag.close).props('unelevated color=grey-8 dense').classes('text-xs')
+
+        diag.open()
+
+    def open_tactical_scanner_dialog(event, convidados):
+
+        scanned_history = []
+
+        with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 620px; max-width: 95vw;'):
+            ui.label('🔍 SCANNER & CONFERÊNCIA TÁTICA').classes('text-md font-bold text-amber cyber-title q-mb-xs')
+            ui.label('Use a Câmera do Celular ou Leitor Físico para separar e bater a lista por Fileira').classes('text-xs text-grey-4 q-mb-md')
+        
+            with ui.row().classes('w-full gap-2 q-mb-md items-center'):
+                scan_input = ui.input(placeholder='Bipe o QR Code ou digite ID/Nome/Assento (ex: G-5)...').props('dark outlined dense autofocus').classes('col')
+                cam_btn = ui.button('📸 Câmera do Celular', icon='videocam').props('unelevated color=primary text-color=black dense').classes('text-xs')
+
+            # Injeta biblioteca HTML5-QRCode no head
+            ui.add_head_html('<script src="https://unpkg.com/html5-qrcode"></script>')
+
+            # Container da Câmera do Celular (HTML5 QR Scanner)
+            cam_container = ui.column().classes('w-full hidden q-mb-md border border-cyan-500/40 rounded-xl q-pa-sm bg-black/60')
+            with cam_container:
+                ui.label('📸 Aponta a câmera para o QR Code impresso no cartão:').classes('text-xs font-bold text-cyan text-center w-full q-mb-xs')
+                ui.html('<div id="qr-reader" style="width:100%; max-width:400px; margin:0 auto; background:#000; border-radius:8px;"></div>').classes('w-full flex justify-center')
+                ui.button('🛑 Fechar Câmera', on_click=lambda: cam_container.classes(add='hidden')).props('flat color=grey dense').classes('w-full text-xs q-mt-xs')
+
+            def toggle_camera():
+                cam_container.classes(remove='hidden')
+                ui.run_javascript('''
+                    if (window.html5QrcodeScanner) {
+                        try { window.html5QrcodeScanner.clear(); } catch(e){}
+                    }
+                    window.html5QrcodeScanner = new Html5QrcodeScanner("qr-reader", { fps: 10, qrbox: {width: 250, height: 250} }, false);
+                    window.html5QrcodeScanner.render(function(decodedText, decodedResult) {
+                        let inp = document.querySelector('input[placeholder*="Bipe"]');
+                        if (inp) {
+                            inp.value = decodedText;
+                            inp.dispatchEvent(new KeyboardEvent('keydown', {'key': 'Enter', 'keyCode': 13, 'bubbles': true}));
+                        }
+                    }, function(error) {});
+                ''')
+
+            cam_btn.on_click(toggle_camera)
+            feedback_container = ui.column().classes('w-full')
+
+            # Script de áudio para bipe sonoro tático
+            audio_script = """
+            function playBeep(type) {
+                try {
+                    let ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    let osc = ctx.createOscillator();
+                    let gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    if (type === 'success') {
+                        osc.frequency.value = 880;
+                        gain.gain.value = 0.12;
+                        osc.start();
+                        setTimeout(() => osc.stop(), 150);
+                    } else if (type === 'duplicate') {
+                        osc.frequency.value = 280;
+                        gain.gain.value = 0.25;
+                        osc.start();
+                        setTimeout(() => osc.stop(), 320);
+                    }
+                } catch(e) {}
+            }
+            """
+            ui.add_head_html(f"<script>{audio_script}</script>")
+
+            def process_scan(val):
+                if not val or not val.strip():
+                    return
+                query = val.strip().lower()
+                scan_input.value = ''
+                feedback_container.clear()
+            
+                # Busca convidado por ID exato do QR Code, Assento ou Nome
+                matches = [
+                    c for c in convidados
+                    if str(c.get('id', '')) == query or
+                    query == str(c.get('assento_id', '')).lower() or
+                    query in c['nome'].lower() or
+                    (c.get('posto_graduacao') and query in f"{c.get('posto_graduacao')} {c['nome']}".lower())
+                ]
+
+                with feedback_container:
+                    if not matches:
+                        ui.run_javascript("playBeep('duplicate')")
+                        with ui.card().classes('w-full q-pa-md bg-red-950/80 border border-red-500 rounded-xl text-center'):
+                            ui.icon('cancel', color='red', size='3rem')
+                            ui.label('❌ CARTÃO / CONVIDADO NÃO ENCONTRADO!').classes('text-sm font-bold text-red-3')
+                            ui.label(f"Nenhum assento ou convidado registrado para o código: '{val}'").classes('text-xs text-grey-4')
+                    else:
+                        target = matches[0]
+                        seat = target.get('assento_id', 'NÃO ALOCADO')
+                        row_name = seat.split('-')[0] if '-' in seat else 'N/A'
+                        is_duplicate = target['id'] in scanned_history
+
+                        if is_duplicate:
+                            ui.run_javascript("playBeep('duplicate')")
+                            with ui.card().classes('w-full q-pa-md bg-amber-950/80 border border-amber-500 rounded-xl text-center'):
+                                ui.icon('warning', color='amber', size='3rem')
+                                ui.label('⚠️ ATENÇÃO: CARTÃO JÁ CONFERIDO & SEPARADO!').classes('text-sm font-bold text-amber-3')
+                                ui.label(f"{target['nome']} — Assento: {seat} (Fileira {row_name})").classes('text-xs text-grey-3 font-bold')
+                                ui.label('Este cartão já passou pela triagem anteriormente.').classes('text-[11px] text-amber-4 q-mt-xs')
+                        else:
+                            scanned_history.append(target['id'])
+                            ui.run_javascript("playBeep('success')")
+                        
+                            main_info = ""
+                            if target.get('convidado_principal_id'):
+                                p_main = next((x for x in convidados if x['id'] == target['convidado_principal_id']), None)
+                                if p_main:
+                                    main_info = f" (Acompanhante de {p_main['nome']})"
+
+                            with ui.card().classes('w-full q-pa-md bg-green-950/80 border border-green-500 rounded-xl text-center'):
+                                ui.icon('check_circle', color='green', size='3rem')
+                                ui.label('✅ CONFERIDO & SEPARADO COM SUCESSO!').classes('text-sm font-bold text-green-3')
+                                ui.label(f"{target.get('posto_graduacao') or ''} {target['nome']}{main_info}").classes('text-md font-bold text-white')
+                            
+                                with ui.row().classes('w-full justify-center items-center gap-2 q-mt-xs wrap'):
+                                    ui.badge(f"COLOCAR NA FILEIRA {row_name}").props('color=cyan text-color=black bold').classes('text-sm q-px-sm')
+                                    ui.badge(f"ASSENTO {seat}").props('color=green text-color=white bold').classes('text-sm q-px-sm')
+                                
+                                    async def remap_seat_dialog(target_guest):
+                                        with ui.dialog() as r_diag, ui.card().classes('q-pa-md bg-cyan-950 border border-cyan-400 rounded-xl').style('min-width: 320px;'):
+                                            ui.label('🔀 REMAPEAR ASSENTO NO SALÃO').classes('text-xs font-bold text-cyan q-mb-xs')
+                                            ui.label(f"Convidado: {target_guest['nome']}").classes('text-[11px] text-grey-3 q-mb-sm')
+                                            new_seat_input = ui.input(label='Novo Código de Assento (ex: A-1, F-5)', value=target_guest.get('assento_id', '')).props('dark outlined dense').classes('w-full q-mb-md')
+                                        
+                                            async def confirm_remap():
+                                                val_seat = new_seat_input.value.strip().upper()
+                                                if val_seat:
+                                                    _db = get_service_db_connection() or get_db_connection()
+                                                    if _db:
+                                                        _db.table('jade_convidados').update({'assento_id': val_seat}).eq('id', target_guest['id']).execute()
+                                                        target_guest['assento_id'] = val_seat
+                                                        ui.notify(f"✅ Assento remapeado para {val_seat}!", color='positive')
+                                                        r_diag.close()
+                                                        process_scan(target_guest['id'])
+                                                        render_content.refresh()
+
+                                            with ui.row().classes('w-full justify-end gap-2'):
+                                                ui.button('Cancelar', on_click=r_diag.close).props('flat dense color=grey')
+                                                ui.button('Salvar Remapeamento', on_click=confirm_remap).props('unelevated color=cyan text-color=black dense bold')
+                                        r_diag.open()
+
+                                    ui.button('🔀 Mudar Assento', on_click=lambda tg=target: remap_seat_dialog(tg)).props('unelevated color=amber text-color=black dense bold').classes('text-xs').tooltip('Trocar assento desta placa no salão instantaneamente')
+
+            scan_input.on('keydown.enter', lambda: process_scan(scan_input.value))
+
+            with ui.row().classes('w-full justify-between items-center q-mt-md'):
+                ui.label(f"Total Conferidos: {len(scanned_history)} de {len([c for c in convidados if c.get('assento_id')])} cartões").classes('text-xs text-cyan font-bold')
+                ui.button('Concluir Conferência', on_click=diag.close).props('unelevated color=grey-8 dense')
+        diag.open()
+
+    def open_field_assembly_report_dialog(event, convidados):
+        """Gera relatório de prancheta de campo para a equipe de montagem de assentos no salão."""
+        with ui.dialog() as diag, ui.card().classes('q-pa-lg').style('min-width: 800px; max-width: 95vw; max-height: 90vh; overflow-y: auto;'):
+            with ui.row().classes('w-full justify-between items-center q-mb-md print-hide'):
+                with ui.row().classes('items-center gap-2'):
+                    ui.icon('assignment', size='md', color='cyan')
+                    ui.label('📋 RELATÓRIO DE PRANCHETA DE MONTAGEM DO SALÃO').classes('text-md font-bold text-cyan cyber-title')
+                with ui.row().classes('items-center gap-2'):
+                    ui.button('🖨️ Imprimir Prancheta', icon='print', on_click=lambda: ui.run_javascript('window.print()')).props('unelevated color=cyan text-color=black dense bold').classes('text-xs')
+                    ui.button(icon='close', on_click=diag.close).props('flat round dense color=grey-4')
+
+            with ui.column().classes('w-full print-area q-pa-sm'):
+                allocated = [c for c in convidados if c.get('assento_id')]
+            
+                def sort_key_assento(c):
+                    ass = str(c.get('assento_id', '')).upper().strip()
+                    match = re.match(r'([A-Z]+)-?(\d+)', ass)
+                    if match:
+                        row, num = match.groups()
+                        return (row, int(num))
+                    return (ass, 0)
+
+                allocated.sort(key=sort_key_assento)
+
+                rows_html = ""
+                for idx, c in enumerate(allocated, 1):
+                    assento = c.get('assento_id', 'N/I')
+                    posto = c.get('posto_graduacao', '') or ''
+                    nome = c.get('nome', '')
+                    is_acomp = bool(c.get('convidado_principal_id'))
+                    tipo_placa = "RESERVADO (Acompanhante)" if is_acomp else "Titular"
+                    st = c.get('status_placa', 'pendente').upper()
+                    bg_row = "#f9f9f9" if idx % 2 == 0 else "#ffffff"
+
+                    rows_html += f'''
+                    <tr style="background: {bg_row};">
+                        <td style="padding: 6px; border: 1px solid #ccc; text-align: center; font-size: 14pt;">☐</td>
+                        <td style="padding: 6px; border: 1px solid #ccc; font-weight: bold; color: #1f4e79;">{assento}</td>
+                        <td style="padding: 6px; border: 1px solid #ccc; font-weight: bold;">{posto} {clean_authority_name(nome)}</td>
+                        <td style="padding: 6px; border: 1px solid #ccc;">{tipo_placa}</td>
+                        <td style="padding: 6px; border: 1px solid #ccc; font-size: 8pt;">{st}</td>
+                    </tr>
+                    '''
+
+                ui.html(f'''
+                <div style="font-family: Arial, sans-serif; color: #000; background: #fff; padding: 16px; border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px;">
+                        <div>
+                            <h2 style="margin: 0; font-size: 16pt; font-weight: bold; text-transform: uppercase;">📋 JADE — RELATÓRIO DE MONTAGEM DE ASSENTOS DE CAMPO</h2>
+                            <div style="font-size: 10pt; color: #444;">Solenidade: <strong>{event.get('nome','')}</strong> | Data: <strong>{event.get('data_evento','N/I')}</strong></div>
+                        </div>
+                        <div style="text-align: right; font-size: 9pt;">
+                            <div><strong>COMSOC / CERIMONIAL</strong></div>
+                            <div>Total: {len(allocated)} Assentos</div>
                         </div>
                     </div>
-                    ''')
 
-            diag.open()
+                    <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
+                        <thead>
+                            <tr style="background: #1f4e79; color: #fff; text-align: left;">
+                                <th style="padding: 6px; border: 1px solid #333; width: 40px; text-align: center;">[  ]</th>
+                                <th style="padding: 6px; border: 1px solid #333; width: 90px;">Assento</th>
+                                <th style="padding: 6px; border: 1px solid #333;">Posto / Graduação e Nome da Autoridade</th>
+                                <th style="padding: 6px; border: 1px solid #333; width: 140px;">Tipo de Placa</th>
+                                <th style="padding: 6px; border: 1px solid #333; width: 110px;">Status Placa</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows_html}
+                        </tbody>
+                    </table>
 
-        def download_template():
-            """Gera o modelo oficial JADE com colunas compatíveis com o importador inteligente por blocos."""
-            try:
-                output = io.BytesIO()
-                import openpyxl
-                from openpyxl.styles import PatternFill, Font, Alignment, Border, Side, Protection
-                from openpyxl.utils import get_column_letter
+                    <div style="margin-top: 20px; font-size: 9pt; display: flex; justify-content: space-between; border-top: 1px solid #999; padding-top: 8px;">
+                        <div>Responsável pela Montagem: _____________________________________</div>
+                        <div>Visto do Chefe do Cerimonial: _____________________________________</div>
+                    </div>
+                </div>
+                ''')
 
-                wb = openpyxl.Workbook()
-                ws = wb.active
-                ws.title = 'LISTA DE CONVITE'
+        diag.open()
 
-                # ── Cores de cabeçalho ──
-                fill_header = PatternFill('solid', fgColor='1F4E79')
-                fill_bloco  = PatternFill('solid', fgColor='D6E4F7')
-                fill_conf   = PatternFill('solid', fgColor='00B050')   # Verde = Confirmado
-                fill_rec    = PatternFill('solid', fgColor='C00000')   # Vermelho = Recusado
-                fill_pend   = PatternFill('solid', fgColor='FFFFFF')   # Branco = Pendente
-                font_header = Font(bold=True, color='FFFFFF', size=10)
-                font_bloco  = Font(bold=True, color='1F4E79', size=10)
-                font_data   = Font(size=10)
-                align_c     = Alignment(horizontal='center', vertical='center', wrap_text=True)
-                align_l     = Alignment(horizontal='left', vertical='center', wrap_text=True)
-                thin        = Side(style='thin', color='BFBFBF')
-                border      = Border(left=thin, right=thin, top=thin, bottom=thin)
+    def download_template():
+        """Gera o modelo oficial JADE com colunas compatíveis com o importador inteligente por blocos."""
+        try:
+            output = io.BytesIO()
+            import openpyxl
+            from openpyxl.styles import PatternFill, Font, Alignment, Border, Side, Protection
+            from openpyxl.utils import get_column_letter
 
-                COLUNAS = [
-                    ('QTD / BLOCO', 8),
-                    ('POSTO / GRAD', 12),
-                    ('NOME', 35),
-                    ('CARGO / FUNÇÃO', 28),
-                    ('ENVIADO', 10),
-                    ('CONFIRMADO\n(verde=conf, vermelho=rec)', 14),
-                    ('CÔNJUGE\n(E = sim)', 10),
-                    ('TELEFONE', 18),
-                    ('E-MAIL', 30),
-                    ('Nº ANTIGUIDADE', 12),
-                ]
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = 'LISTA DE CONVITE'
 
-                # Linha 1: Título geral
-                ws.merge_cells('A1:J1')
-                titulo = ws['A1']
-                titulo.value = 'CONVIDADOS — SOLENIDADE [NOME DO EVENTO]'
-                titulo.font = Font(bold=True, color='FFFFFF', size=12)
-                titulo.fill = PatternFill('solid', fgColor='0D2B45')
-                titulo.alignment = align_c
-                ws.row_dimensions[1].height = 22
+            # ── Cores de cabeçalho ──
+            fill_header = PatternFill('solid', fgColor='1F4E79')
+            fill_bloco  = PatternFill('solid', fgColor='D6E4F7')
+            fill_conf   = PatternFill('solid', fgColor='00B050')   # Verde = Confirmado
+            fill_rec    = PatternFill('solid', fgColor='C00000')   # Vermelho = Recusado
+            fill_pend   = PatternFill('solid', fgColor='FFFFFF')   # Branco = Pendente
+            font_header = Font(bold=True, color='FFFFFF', size=10)
+            font_bloco  = Font(bold=True, color='1F4E79', size=10)
+            font_data   = Font(size=10)
+            align_c     = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            align_l     = Alignment(horizontal='left', vertical='center', wrap_text=True)
+            thin        = Side(style='thin', color='BFBFBF')
+            border      = Border(left=thin, right=thin, top=thin, bottom=thin)
 
-                # Linha 2: cabeçalho das colunas
-                for col_idx, (col_name, col_width) in enumerate(COLUNAS, start=1):
-                    cell = ws.cell(row=2, column=col_idx, value=col_name)
-                    cell.font = font_header
-                    cell.fill = fill_header
-                    cell.alignment = align_c
+            COLUNAS = [
+                ('QTD / BLOCO', 8),
+                ('POSTO / GRAD', 12),
+                ('NOME', 35),
+                ('CARGO / FUNÇÃO', 28),
+                ('ENVIADO', 10),
+                ('CONFIRMADO\n(verde=conf, vermelho=rec)', 14),
+                ('CÔNJUGE\n(E = sim)', 10),
+                ('TELEFONE', 18),
+                ('E-MAIL', 30),
+                ('Nº ANTIGUIDADE', 12),
+            ]
+
+            # Linha 1: Título geral
+            ws.merge_cells('A1:J1')
+            titulo = ws['A1']
+            titulo.value = 'CONVIDADOS — SOLENIDADE [NOME DO EVENTO]'
+            titulo.font = Font(bold=True, color='FFFFFF', size=12)
+            titulo.fill = PatternFill('solid', fgColor='0D2B45')
+            titulo.alignment = align_c
+            ws.row_dimensions[1].height = 22
+
+            # Linha 2: cabeçalho das colunas
+            for col_idx, (col_name, col_width) in enumerate(COLUNAS, start=1):
+                cell = ws.cell(row=2, column=col_idx, value=col_name)
+                cell.font = font_header
+                cell.fill = fill_header
+                cell.alignment = align_c
+                cell.border = border
+                ws.column_dimensions[get_column_letter(col_idx)].width = col_width
+            ws.row_dimensions[2].height = 30
+
+            # Linha 3: nome do bloco/categoria (lida automaticamente pelo importador)
+            ws.merge_cells('A3:J3')
+            bloco = ws['A3']
+            bloco.value = 'EX-COMANDANTES DA MARINHA'
+            bloco.font = font_bloco
+            bloco.fill = fill_bloco
+            bloco.alignment = align_c
+            ws.row_dimensions[3].height = 18
+
+            # Dados de exemplo
+            exemplos = [
+                (1, 'AE (Ref)', 'MAURO RODRIGUES PEREIRA',    'EX-MINISTRO DA MARINHA',    'E', 1,  'E', '(21) 99964-5831', 'exemplo@terra.com.br', 1, 'conf'),
+                (2, 'AE (Ref)', 'ROBERTO DE GUIMARÃES CARVALHO', 'EX-COMANDANTE DA MARINHA', 'E', '', 'E', '(21) 99872-2458', 'exemplo@gmail.com',    2, 'rec'),
+                (3, 'VA',       'CARLOS SOUZA NEVES',          'VICE-CHEFE DO ESTADO-MAIOR', '',  '', '',  '',                '',                     3, 'pend'),
+            ]
+
+            for row_num, (qtd, posto, nome, cargo, env, conf, conj, tel, email, ant, status) in enumerate(exemplos, start=4):
+                dados = [qtd, posto, nome, cargo, env, conf, conj, tel, email, ant]
+                for col_idx, val in enumerate(dados, start=1):
+                    cell = ws.cell(row=row_num, column=col_idx, value=val)
+                    cell.font = font_data
+                    cell.alignment = align_l if col_idx in (3, 4, 8, 9) else align_c
                     cell.border = border
-                    ws.column_dimensions[get_column_letter(col_idx)].width = col_width
-                ws.row_dimensions[2].height = 30
+                # Cor da célula de confirmação (coluna F = índice 6)
+                conf_cell = ws.cell(row=row_num, column=6)
+                if status == 'conf':
+                    conf_cell.fill = fill_conf
+                    conf_cell.font = Font(bold=True, color='FFFFFF', size=10)
+                elif status == 'rec':
+                    conf_cell.fill = fill_rec
+                    conf_cell.font = Font(bold=True, color='FFFFFF', size=10)
+                else:
+                    conf_cell.fill = fill_pend
+                ws.row_dimensions[row_num].height = 16
 
-                # Linha 3: nome do bloco/categoria (lida automaticamente pelo importador)
-                ws.merge_cells('A3:J3')
-                bloco = ws['A3']
-                bloco.value = 'EX-COMANDANTES DA MARINHA'
-                bloco.font = font_bloco
-                bloco.fill = fill_bloco
-                bloco.alignment = align_c
-                ws.row_dimensions[3].height = 18
+            # Linha de instrução final
+            inst_row = len(exemplos) + 4 + 1
+            ws.merge_cells(f'A{inst_row}:J{inst_row}')
+            inst = ws.cell(row=inst_row, column=1,
+                value='💡 INSTRUÇÕES: Coluna A = número ou nome do bloco/categoria. Coluna F = confirmação (célula VERDE = confirmado, VERMELHA = recusado, BRANCA/VAZIA = pendente). '
+                      'Coluna G = cônjuge/acompanhante (E = sim). Coluna J = número de antiguidade na lista. '
+                      'Não altere a estrutura das colunas. O sistema lê blocos por categorias automaticamente.')
+            inst.font = Font(italic=True, size=9, color='595959')
+            inst.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
+            ws.row_dimensions[inst_row].height = 40
 
-                # Dados de exemplo
-                exemplos = [
-                    (1, 'AE (Ref)', 'MAURO RODRIGUES PEREIRA',    'EX-MINISTRO DA MARINHA',    'E', 1,  'E', '(21) 99964-5831', 'exemplo@terra.com.br', 1, 'conf'),
-                    (2, 'AE (Ref)', 'ROBERTO DE GUIMARÃES CARVALHO', 'EX-COMANDANTE DA MARINHA', 'E', '', 'E', '(21) 99872-2458', 'exemplo@gmail.com',    2, 'rec'),
-                    (3, 'VA',       'CARLOS SOUZA NEVES',          'VICE-CHEFE DO ESTADO-MAIOR', '',  '', '',  '',                '',                     3, 'pend'),
-                ]
+            # Congelar cabeçalho
+            ws.freeze_panes = 'A3'
 
-                for row_num, (qtd, posto, nome, cargo, env, conf, conj, tel, email, ant, status) in enumerate(exemplos, start=4):
-                    dados = [qtd, posto, nome, cargo, env, conf, conj, tel, email, ant]
-                    for col_idx, val in enumerate(dados, start=1):
-                        cell = ws.cell(row=row_num, column=col_idx, value=val)
-                        cell.font = font_data
-                        cell.alignment = align_l if col_idx in (3, 4, 8, 9) else align_c
-                        cell.border = border
-                    # Cor da célula de confirmação (coluna F = índice 6)
-                    conf_cell = ws.cell(row=row_num, column=6)
-                    if status == 'conf':
-                        conf_cell.fill = fill_conf
-                        conf_cell.font = Font(bold=True, color='FFFFFF', size=10)
-                    elif status == 'rec':
-                        conf_cell.fill = fill_rec
-                        conf_cell.font = Font(bold=True, color='FFFFFF', size=10)
-                    else:
-                        conf_cell.fill = fill_pend
-                    ws.row_dimensions[row_num].height = 16
+            wb.save(output)
+            output.seek(0)
+            ui.download(output.read(), 'modelo_oficial_jade_convite.xlsx')
+            ui.notify('📥 Modelo oficial JADE baixado com sucesso!', color='positive')
+        except Exception as ex:
+            ui.notify(f'Erro ao gerar modelo: {ex}', color='negative')
+            print(f'[TEMPLATE ERR] {ex}')
 
-                # Linha de instrução final
-                inst_row = len(exemplos) + 4 + 1
-                ws.merge_cells(f'A{inst_row}:J{inst_row}')
-                inst = ws.cell(row=inst_row, column=1,
-                    value='💡 INSTRUÇÕES: Coluna A = número ou nome do bloco/categoria. Coluna F = confirmação (célula VERDE = confirmado, VERMELHA = recusado, BRANCA/VAZIA = pendente). '
-                          'Coluna G = cônjuge/acompanhante (E = sim). Coluna J = número de antiguidade na lista. '
-                          'Não altere a estrutura das colunas. O sistema lê blocos por categorias automaticamente.')
-                inst.font = Font(italic=True, size=9, color='595959')
-                inst.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
-                ws.row_dimensions[inst_row].height = 40
+    async def handle_import_list(e, event_id):
+        try:
+            import inspect, io
+            file_obj = getattr(e, 'file', None)
+            if not file_obj and hasattr(e, 'files') and e.files:
+                file_obj = e.files[0]
+        
+            if not file_obj:
+                ui.notify('❌ Nenhum arquivo de planilha detectado.', color='negative')
+                return
 
-                # Congelar cabeçalho
-                ws.freeze_panes = 'A3'
+            file_bytes = file_obj.read() if hasattr(file_obj, 'read') else getattr(file_obj, 'content', None)
+            if inspect.isawaitable(file_bytes):
+                file_bytes = await file_bytes
+            elif hasattr(file_bytes, 'read'):
+                file_bytes = file_bytes.read()
 
-                wb.save(output)
-                output.seek(0)
-                ui.download(output.read(), 'modelo_oficial_jade_convite.xlsx')
-                ui.notify('📥 Modelo oficial JADE baixado com sucesso!', color='positive')
-            except Exception as ex:
-                ui.notify(f'Erro ao gerar modelo: {ex}', color='negative')
-                print(f'[TEMPLATE ERR] {ex}')
+            if not file_bytes:
+                ui.notify('❌ Arquivo de planilha vazio.', color='negative')
+                return
 
-        async def handle_import_list(e, event_id):
-            try:
-                import inspect, io
-                file_obj = getattr(e, 'file', None)
-                if not file_obj and hasattr(e, 'files') and e.files:
-                    file_obj = e.files[0]
-            
-                if not file_obj:
-                    ui.notify('❌ Nenhum arquivo de planilha detectado.', color='negative')
-                    return
+            file_name = getattr(file_obj, 'name', 'planilha.xlsx').lower()
 
-                file_bytes = file_obj.read() if hasattr(file_obj, 'read') else getattr(file_obj, 'content', None)
-                if inspect.isawaitable(file_bytes):
-                    file_bytes = await file_bytes
-                elif hasattr(file_bytes, 'read'):
-                    file_bytes = file_bytes.read()
+            db = get_service_db_connection() or get_db_connection()
+            if not db:
+                ui.notify('❌ Banco de dados indisponível.', color='negative')
+                return
+        
+            res_exist = db.table('jade_convidados').select('*').eq('evento_id', event_id).execute()
+            existing_list = res_exist.data if res_exist.data else []
+        
+            existing_map = {}
+            for item in existing_list:
+                if not item.get('convidado_principal_id'):
+                    key = f"{(item.get('nome') or '').strip().upper()}|{(item.get('posto_graduacao') or '').strip().upper()}"
+                    existing_map[key] = item
 
-                if not file_bytes:
-                    ui.notify('❌ Arquivo de planilha vazio.', color='negative')
-                    return
+            count_inserted = 0
+            count_updated = 0
 
-                file_name = getattr(file_obj, 'name', 'planilha.xlsx').lower()
+            wb = None
+            if file_name.endswith('.xlsx') or file_name.endswith('.xlsm'):
+                try:
+                    import openpyxl
+                    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+                except Exception:
+                    wb = None
 
-                db = get_service_db_connection() or get_db_connection()
-                if not db:
-                    ui.notify('❌ Banco de dados indisponível.', color='negative')
-                    return
-            
-                res_exist = db.table('jade_convidados').select('*').eq('evento_id', event_id).execute()
-                existing_list = res_exist.data if res_exist.data else []
-            
-                existing_map = {}
-                for item in existing_list:
-                    if not item.get('convidado_principal_id'):
-                        key = f"{(item.get('nome') or '').strip().upper()}|{(item.get('posto_graduacao') or '').strip().upper()}"
-                        existing_map[key] = item
+            if wb:
+                sheet = wb.active
+                current_category = "Geral"
+                for r in range(1, sheet.max_row + 1):
+                    row_cells = [sheet.cell(row=r, column=c) for c in range(1, sheet.max_column + 1)]
+                    row_vals = [c.value for c in row_cells]
 
-                count_inserted = 0
-                count_updated = 0
+                    if not any(v is not None for v in row_vals):
+                        continue
 
-                wb = None
-                if file_name.endswith('.xlsx') or file_name.endswith('.xlsm'):
+                    c0 = str(row_vals[0]).strip() if len(row_vals) > 0 and row_vals[0] is not None else ""
+                    c1 = str(row_vals[1]).strip() if len(row_vals) > 1 and row_vals[1] is not None else ""
+                    c2 = str(row_vals[2]).strip() if len(row_vals) > 2 and row_vals[2] is not None else ""
+
+                    if c0.upper() in ('QTD', 'QUANTIDADE', 'QTD / BLOCO') or c1.upper() in ('POSTO', 'GRAU', 'POSTO / GRAD'):
+                        continue
+
+                    if str(row_vals[0]).startswith('CONVIDADOS') or str(row_vals[0]).startswith('💡 INSTRUÇÕES'):
+                        continue
+
+                    if c0 and not c0.isdigit() and c0.upper() not in ('QTD', 'QUANTIDADE', 'QTD / BLOCO'):
+                        current_category = c0
+                        continue
+
+                    nome = c2
+                    if not nome or nome.upper() in ('NOME', 'CONVITE', 'NONE', 'NAN'):
+                        continue
+
+                    posto = c1
+                    cargo = str(row_vals[3]).strip() if len(row_vals) > 3 and row_vals[3] is not None else ""
+                    conf_val = row_vals[5] if len(row_vals) > 5 else None
+                    conjuge_val = row_vals[6] if len(row_vals) > 6 else None
+                    ant_val = row_vals[9] if len(row_vals) > 9 else None
                     try:
-                        import openpyxl
-                        wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
-                    except Exception:
-                        wb = None
+                        numero_antiguidade = int(float(str(ant_val))) if ant_val not in (None, '', 'None') else None
+                    except (ValueError, TypeError):
+                        numero_antiguidade = None
 
-                if wb:
-                    sheet = wb.active
-                    current_category = "Geral"
-                    for r in range(1, sheet.max_row + 1):
-                        row_cells = [sheet.cell(row=r, column=c) for c in range(1, sheet.max_column + 1)]
-                        row_vals = [c.value for c in row_cells]
+                    conf_fill = ""
+                    if len(row_cells) > 5 and row_cells[5].fill and row_cells[5].fill.start_color:
+                        conf_fill = str(row_cells[5].fill.start_color.rgb or "")
 
-                        if not any(v is not None for v in row_vals):
-                            continue
+                    status_conf = "pendente"
+                    status_placa = "nao_necessaria"
 
-                        c0 = str(row_vals[0]).strip() if len(row_vals) > 0 and row_vals[0] is not None else ""
-                        c1 = str(row_vals[1]).strip() if len(row_vals) > 1 and row_vals[1] is not None else ""
-                        c2 = str(row_vals[2]).strip() if len(row_vals) > 2 and row_vals[2] is not None else ""
-
-                        if c0.upper() in ('QTD', 'QUANTIDADE', 'QTD / BLOCO') or c1.upper() in ('POSTO', 'GRAU', 'POSTO / GRAD'):
-                            continue
-
-                        if str(row_vals[0]).startswith('CONVIDADOS') or str(row_vals[0]).startswith('💡 INSTRUÇÕES'):
-                            continue
-
-                        if c0 and not c0.isdigit() and c0.upper() not in ('QTD', 'QUANTIDADE', 'QTD / BLOCO'):
-                            current_category = c0
-                            continue
-
-                        nome = c2
-                        if not nome or nome.upper() in ('NOME', 'CONVITE', 'NONE', 'NAN'):
-                            continue
-
-                        posto = c1
-                        cargo = str(row_vals[3]).strip() if len(row_vals) > 3 and row_vals[3] is not None else ""
-                        conf_val = row_vals[5] if len(row_vals) > 5 else None
-                        conjuge_val = row_vals[6] if len(row_vals) > 6 else None
-                        ant_val = row_vals[9] if len(row_vals) > 9 else None
-                        try:
-                            numero_antiguidade = int(float(str(ant_val))) if ant_val not in (None, '', 'None') else None
-                        except (ValueError, TypeError):
-                            numero_antiguidade = None
-
-                        conf_fill = ""
-                        if len(row_cells) > 5 and row_cells[5].fill and row_cells[5].fill.start_color:
-                            conf_fill = str(row_cells[5].fill.start_color.rgb or "")
-
-                        status_conf = "pendente"
+                    if any(g in conf_fill for g in ('00B050', '92D050', '00FF00')):
+                        status_conf = "confirmado"
+                        status_placa = "pendente"
+                    elif any(rc in conf_fill for rc in ('FF0000', 'FA1717', 'C00000', 'FF5555')):
+                        status_conf = "recusado"
                         status_placa = "nao_necessaria"
-
-                        if any(g in conf_fill for g in ('00B050', '92D050', '00FF00')):
+                    else:
+                        if conf_val in (1, 2, '1', '2', 'SIM', 'Sim', 'sim', 'CONFIRMADO', 'conf', 'CONF'):
                             status_conf = "confirmado"
                             status_placa = "pendente"
-                        elif any(rc in conf_fill for rc in ('FF0000', 'FA1717', 'C00000', 'FF5555')):
-                            status_conf = "recusado"
-                            status_placa = "nao_necessaria"
-                        else:
-                            if conf_val in (1, 2, '1', '2', 'SIM', 'Sim', 'sim', 'CONFIRMADO', 'conf', 'CONF'):
-                                status_conf = "confirmado"
-                                status_placa = "pendente"
 
-                        max_acomp = 0
-                        if isinstance(conf_val, int) and conf_val > 1:
-                            max_acomp = conf_val - 1
-                        elif str(conf_val).strip().isdigit() and int(str(conf_val).strip()) > 1:
-                            max_acomp = int(str(conf_val).strip()) - 1
-                        elif conjuge_val in ('E', '1', 1) or (isinstance(conjuge_val, str) and len(conjuge_val) > 2):
-                            max_acomp = 1
+                    max_acomp = 0
+                    if isinstance(conf_val, int) and conf_val > 1:
+                        max_acomp = conf_val - 1
+                    elif str(conf_val).strip().isdigit() and int(str(conf_val).strip()) > 1:
+                        max_acomp = int(str(conf_val).strip()) - 1
+                    elif conjuge_val in ('E', '1', 1) or (isinstance(conjuge_val, str) and len(conjuge_val) > 2):
+                        max_acomp = 1
 
-                        key = f"{nome.strip().upper()}|{posto.strip().upper()}"
+                    key = f"{nome.strip().upper()}|{posto.strip().upper()}"
+                
+                    conv_data = {
+                        'evento_id': event_id,
+                        'nome': nome,
+                        'posto_graduacao': posto,
+                        'cargo_funcao': cargo,
+                        'categoria': current_category,
+                        'status_confirmacao': status_conf,
+                        'max_acompanhantes': max_acomp,
+                    }
+                    if numero_antiguidade is not None:
+                        conv_data['numero_antiguidade'] = numero_antiguidade
+                
+                    conv_data_with_placa = dict(conv_data)
+                    conv_data_with_placa['status_placa'] = status_placa
+
+                    if key in existing_map:
+                        existing_id = existing_map[key]['id']
+                        try:
+                            db.table('jade_convidados').update(conv_data_with_placa).eq('id', existing_id).execute()
+                        except Exception:
+                            safe = {k: v for k, v in conv_data.items() if k != 'numero_antiguidade'}
+                            db.table('jade_convidados').update(safe).eq('id', existing_id).execute()
                     
-                        conv_data = {
+                        sync_companions(existing_id, nome, max_acomp, event_id, current_category)
+                        count_updated += 1
+                    else:
+                        res_ins = None
+                        try:
+                            res_ins = db.table('jade_convidados').insert(conv_data_with_placa).execute()
+                        except Exception:
+                            safe = {k: v for k, v in conv_data.items() if k != 'numero_antiguidade'}
+                            safe['status_placa'] = status_placa
+                            res_ins = db.table('jade_convidados').insert(safe).execute()
+                    
+                        if res_ins and res_ins.data:
+                            new_id = res_ins.data[0]['id']
+                            sync_companions(new_id, nome, max_acomp, event_id, current_category)
+                        count_inserted += 1
+
+            else:
+                # Leitor Pandas Universal (.csv, .tsv, .txt, .ods, .xls)
+                bio_p = io.BytesIO(file_bytes)
+                df_p = None
+                if file_name.endswith('.csv') or file_name.endswith('.tsv') or file_name.endswith('.txt'):
+                    for sep in [';', ',', '\t', '|']:
+                        try:
+                            bio_p.seek(0)
+                            df_test = pd.read_csv(bio_p, sep=sep, encoding='utf-8-sig', dtype=str)
+                            if len(df_test.columns) > 1:
+                                df_p = df_test
+                                break
+                        except Exception:
+                            pass
+                    if df_p is None:
+                        bio_p.seek(0)
+                        df_p = pd.read_csv(bio_p, encoding='utf-8-sig', dtype=str)
+                elif file_name.endswith('.xls'):
+                    try:
+                        df_p = pd.read_excel(bio_p, engine='xlrd', dtype=str)
+                    except Exception:
+                        df_p = pd.read_excel(bio_p, dtype=str)
+                elif file_name.endswith('.ods'):
+                    try:
+                        df_p = pd.read_excel(bio_p, engine='odf', dtype=str)
+                    except Exception:
+                        df_p = pd.read_excel(bio_p, dtype=str)
+                else:
+                    df_p = pd.read_excel(bio_p, dtype=str)
+
+                if df_p is not None:
+                    if 'Nome' not in df_p.columns and 'NOME' not in [str(c).upper() for c in df_p.columns]:
+                        for r_idx in range(min(5, len(df_p))):
+                            row_str = [str(val).upper() for val in df_p.iloc[r_idx].values]
+                            if any(k in row_str for k in ('NOME', 'AUTORIDADE', 'CONVIDADO')):
+                                df_p.columns = df_p.iloc[r_idx]
+                                df_p = df_p.iloc[r_idx + 1:]
+                                break
+
+                    col_map = {}
+                    for col in df_p.columns:
+                        c_clean = str(col).strip().upper()
+                        if c_clean in ('NOME', 'NOME COMPLETO', 'AUTORIDADE', 'NOME DA AUTORIDADE', 'NOME DO CONVIDADO', 'CONVIDADO'):
+                            col_map[col] = 'Nome'
+                        elif c_clean in ('POSTO', 'POSTO/GRADUAÇÃO', 'POSTO/GRADUACAO', 'POSTO / GRADUAÇÃO', 'POSTO / GRAD', 'GRADUAÇÃO', 'GRADUACAO', 'POSTO_GRADUACAO'):
+                            col_map[col] = 'Posto/Graduacao'
+                        elif c_clean in ('CARGO', 'CARGO/FUNÇÃO', 'CARGO/FUNCAO', 'CARGO / FUNÇÃO', 'FUNÇÃO', 'FUNCAO', 'TÍTULO', 'TITULO', 'CARGO_FUNCAO'):
+                            col_map[col] = 'Cargo/Função'
+                        elif c_clean in ('CATEGORIA', 'SETOR', 'BLOCO', 'GRUPO', 'QTD / BLOCO'):
+                            col_map[col] = 'Categoria'
+                        elif c_clean in ('MAX ACOMPANHANTES', 'ACOMPANHANTES', 'ACOMP', 'CÔNJUGE', 'CÔNJUGE\n(E = sim)', 'N_ACOMPANHANTES', 'QTD ACOMPANHANTES', 'QTD_ACOMP'):
+                            col_map[col] = 'Max Acompanhantes'
+                        elif c_clean in ('ANTIGUIDADE', 'Nº ANTIGUIDADE', 'NUMERO_ANTIGUIDADE'):
+                            col_map[col] = 'Antiguidade'
+                
+                    df_p = df_p.rename(columns=col_map)
+                
+                    if 'Nome' not in df_p.columns and len(df_p.columns) > 0:
+                        df_p = df_p.rename(columns={df_p.columns[0]: 'Nome'})
+
+                    for _, row in df_p.iterrows():
+                        nome_p = str(row.get('Nome', '')).strip().upper()
+                        if not nome_p or nome_p in ('NAN', 'NONE', 'NOME', 'NOME COMPLETO'):
+                            continue
+                        posto_p = str(row.get('Posto/Graduacao', '')).strip() if pd.notna(row.get('Posto/Graduacao')) and str(row.get('Posto/Graduacao')) != 'nan' else ''
+                        cargo_p = str(row.get('Cargo/Função', '')).strip() if pd.notna(row.get('Cargo/Função')) and str(row.get('Cargo/Função')) != 'nan' else ''
+                        cat_p = str(row.get('Categoria', 'Geral')).strip() if pd.notna(row.get('Categoria')) and str(row.get('Categoria')) != 'nan' else 'Geral'
+                        try:
+                            acomp_p = int(row.get('Max Acompanhantes', 0)) if pd.notna(row.get('Max Acompanhantes')) else 0
+                        except Exception:
+                            acomp_p = 0
+
+                        ant_p = None
+                        try:
+                            if pd.notna(row.get('Antiguidade')):
+                                ant_p = int(float(str(row.get('Antiguidade'))))
+                        except Exception:
+                            ant_p = None
+
+                        key_p = f"{nome_p}|{posto_p}"
+                        guest_data = {
                             'evento_id': event_id,
-                            'nome': nome,
-                            'posto_graduacao': posto,
-                            'cargo_funcao': cargo,
-                            'categoria': current_category,
-                            'status_confirmacao': status_conf,
-                            'max_acompanhantes': max_acomp,
+                            'nome': nome_p,
+                            'posto_graduacao': posto_p,
+                            'cargo_funcao': cargo_p,
+                            'categoria': cat_p,
+                            'status_confirmacao': 'confirmado',
+                            'status_placa': 'pendente',
+                            'max_acompanhantes': acomp_p
                         }
-                        if numero_antiguidade is not None:
-                            conv_data['numero_antiguidade'] = numero_antiguidade
-                    
-                        conv_data_with_placa = dict(conv_data)
-                        conv_data_with_placa['status_placa'] = status_placa
+                        if ant_p is not None:
+                            guest_data['numero_antiguidade'] = ant_p
 
-                        if key in existing_map:
-                            existing_id = existing_map[key]['id']
+                        if key_p in existing_map:
+                            e_id = existing_map[key_p]['id']
                             try:
-                                db.table('jade_convidados').update(conv_data_with_placa).eq('id', existing_id).execute()
+                                db.table('jade_convidados').update(guest_data).eq('id', e_id).execute()
                             except Exception:
-                                safe = {k: v for k, v in conv_data.items() if k != 'numero_antiguidade'}
-                                db.table('jade_convidados').update(safe).eq('id', existing_id).execute()
-                        
-                            sync_companions(existing_id, nome, max_acomp, event_id, current_category)
+                                safe = {k: v for k, v in guest_data.items() if k != 'numero_antiguidade'}
+                                db.table('jade_convidados').update(safe).eq('id', e_id).execute()
+                            sync_companions(e_id, nome_p, acomp_p, event_id, cat_p)
                             count_updated += 1
                         else:
-                            res_ins = None
+                            res_p = None
                             try:
-                                res_ins = db.table('jade_convidados').insert(conv_data_with_placa).execute()
+                                res_p = db.table('jade_convidados').insert(guest_data).execute()
                             except Exception:
-                                safe = {k: v for k, v in conv_data.items() if k != 'numero_antiguidade'}
-                                safe['status_placa'] = status_placa
-                                res_ins = db.table('jade_convidados').insert(safe).execute()
-                        
-                            if res_ins and res_ins.data:
-                                new_id = res_ins.data[0]['id']
-                                sync_companions(new_id, nome, max_acomp, event_id, current_category)
+                                safe = {k: v for k, v in guest_data.items() if k != 'numero_antiguidade'}
+                                res_p = db.table('jade_convidados').insert(safe).execute()
+                            if res_p and res_p.data:
+                                new_id = res_p.data[0]['id']
+                                sync_companions(new_id, nome_p, acomp_p, event_id, cat_p)
                             count_inserted += 1
 
-                else:
-                    # Leitor Pandas Universal (.csv, .tsv, .txt, .ods, .xls)
-                    bio_p = io.BytesIO(file_bytes)
-                    df_p = None
-                    if file_name.endswith('.csv') or file_name.endswith('.tsv') or file_name.endswith('.txt'):
-                        for sep in [';', ',', '\t', '|']:
-                            try:
-                                bio_p.seek(0)
-                                df_test = pd.read_csv(bio_p, sep=sep, encoding='utf-8-sig', dtype=str)
-                                if len(df_test.columns) > 1:
-                                    df_p = df_test
-                                    break
-                            except Exception:
-                                pass
-                        if df_p is None:
-                            bio_p.seek(0)
-                            df_p = pd.read_csv(bio_p, encoding='utf-8-sig', dtype=str)
-                    elif file_name.endswith('.xls'):
-                        try:
-                            df_p = pd.read_excel(bio_p, engine='xlrd', dtype=str)
-                        except Exception:
-                            df_p = pd.read_excel(bio_p, dtype=str)
-                    elif file_name.endswith('.ods'):
-                        try:
-                            df_p = pd.read_excel(bio_p, engine='odf', dtype=str)
-                        except Exception:
-                            df_p = pd.read_excel(bio_p, dtype=str)
-                    else:
-                        df_p = pd.read_excel(bio_p, dtype=str)
+            ui.notify(f"✅ Importados {count_inserted} novos convidados ({count_updated} atualizados) com sucesso!", color='positive')
+            render_content.refresh()
+        except Exception as ex:
+            print(f"[HANDLE IMPORT ERR] {ex}")
+            ui.notify(f"Erro ao importar planilha: {ex}", color='red')
 
-                    if df_p is not None:
-                        if 'Nome' not in df_p.columns and 'NOME' not in [str(c).upper() for c in df_p.columns]:
-                            for r_idx in range(min(5, len(df_p))):
-                                row_str = [str(val).upper() for val in df_p.iloc[r_idx].values]
-                                if any(k in row_str for k in ('NOME', 'AUTORIDADE', 'CONVIDADO')):
-                                    df_p.columns = df_p.iloc[r_idx]
-                                    df_p = df_p.iloc[r_idx + 1:]
-                                    break
-
-                        col_map = {}
-                        for col in df_p.columns:
-                            c_clean = str(col).strip().upper()
-                            if c_clean in ('NOME', 'NOME COMPLETO', 'AUTORIDADE', 'NOME DA AUTORIDADE', 'NOME DO CONVIDADO', 'CONVIDADO'):
-                                col_map[col] = 'Nome'
-                            elif c_clean in ('POSTO', 'POSTO/GRADUAÇÃO', 'POSTO/GRADUACAO', 'POSTO / GRADUAÇÃO', 'POSTO / GRAD', 'GRADUAÇÃO', 'GRADUACAO', 'POSTO_GRADUACAO'):
-                                col_map[col] = 'Posto/Graduacao'
-                            elif c_clean in ('CARGO', 'CARGO/FUNÇÃO', 'CARGO/FUNCAO', 'CARGO / FUNÇÃO', 'FUNÇÃO', 'FUNCAO', 'TÍTULO', 'TITULO', 'CARGO_FUNCAO'):
-                                col_map[col] = 'Cargo/Função'
-                            elif c_clean in ('CATEGORIA', 'SETOR', 'BLOCO', 'GRUPO', 'QTD / BLOCO'):
-                                col_map[col] = 'Categoria'
-                            elif c_clean in ('MAX ACOMPANHANTES', 'ACOMPANHANTES', 'ACOMP', 'CÔNJUGE', 'CÔNJUGE\n(E = sim)', 'N_ACOMPANHANTES', 'QTD ACOMPANHANTES', 'QTD_ACOMP'):
-                                col_map[col] = 'Max Acompanhantes'
-                            elif c_clean in ('ANTIGUIDADE', 'Nº ANTIGUIDADE', 'NUMERO_ANTIGUIDADE'):
-                                col_map[col] = 'Antiguidade'
-                    
-                        df_p = df_p.rename(columns=col_map)
-                    
-                        if 'Nome' not in df_p.columns and len(df_p.columns) > 0:
-                            df_p = df_p.rename(columns={df_p.columns[0]: 'Nome'})
-
-                        for _, row in df_p.iterrows():
-                            nome_p = str(row.get('Nome', '')).strip().upper()
-                            if not nome_p or nome_p in ('NAN', 'NONE', 'NOME', 'NOME COMPLETO'):
-                                continue
-                            posto_p = str(row.get('Posto/Graduacao', '')).strip() if pd.notna(row.get('Posto/Graduacao')) and str(row.get('Posto/Graduacao')) != 'nan' else ''
-                            cargo_p = str(row.get('Cargo/Função', '')).strip() if pd.notna(row.get('Cargo/Função')) and str(row.get('Cargo/Função')) != 'nan' else ''
-                            cat_p = str(row.get('Categoria', 'Geral')).strip() if pd.notna(row.get('Categoria')) and str(row.get('Categoria')) != 'nan' else 'Geral'
-                            try:
-                                acomp_p = int(row.get('Max Acompanhantes', 0)) if pd.notna(row.get('Max Acompanhantes')) else 0
-                            except Exception:
-                                acomp_p = 0
-
-                            ant_p = None
-                            try:
-                                if pd.notna(row.get('Antiguidade')):
-                                    ant_p = int(float(str(row.get('Antiguidade'))))
-                            except Exception:
-                                ant_p = None
-
-                            key_p = f"{nome_p}|{posto_p}"
-                            guest_data = {
-                                'evento_id': event_id,
-                                'nome': nome_p,
-                                'posto_graduacao': posto_p,
-                                'cargo_funcao': cargo_p,
-                                'categoria': cat_p,
-                                'status_confirmacao': 'confirmado',
-                                'status_placa': 'pendente',
-                                'max_acompanhantes': acomp_p
-                            }
-                            if ant_p is not None:
-                                guest_data['numero_antiguidade'] = ant_p
-
-                            if key_p in existing_map:
-                                e_id = existing_map[key_p]['id']
-                                try:
-                                    db.table('jade_convidados').update(guest_data).eq('id', e_id).execute()
-                                except Exception:
-                                    safe = {k: v for k, v in guest_data.items() if k != 'numero_antiguidade'}
-                                    db.table('jade_convidados').update(safe).eq('id', e_id).execute()
-                                sync_companions(e_id, nome_p, acomp_p, event_id, cat_p)
-                                count_updated += 1
-                            else:
-                                res_p = None
-                                try:
-                                    res_p = db.table('jade_convidados').insert(guest_data).execute()
-                                except Exception:
-                                    safe = {k: v for k, v in guest_data.items() if k != 'numero_antiguidade'}
-                                    res_p = db.table('jade_convidados').insert(safe).execute()
-                                if res_p and res_p.data:
-                                    new_id = res_p.data[0]['id']
-                                    sync_companions(new_id, nome_p, acomp_p, event_id, cat_p)
-                                count_inserted += 1
-
-                ui.notify(f"✅ Importados {count_inserted} novos convidados ({count_updated} atualizados) com sucesso!", color='positive')
-                render_content.refresh()
-            except Exception as ex:
-                print(f"[HANDLE IMPORT ERR] {ex}")
-                ui.notify(f"Erro ao importar planilha: {ex}", color='red')
-
-        ui.label('>>> TESTE ANTES DE RENDER_CONTENT <<<').classes('text-blue font-bold text-2xl')
     render_content()
 

@@ -1509,18 +1509,43 @@ def sync_rsvp_with_jade():
 
     # 2. Inserir/Sincronizar eventos em jade_eventos
     import json, datetime
+    
+    # Carregar eventos JADE já existentes para evitar duplicatas por (nome, data_evento)
+    existing_jade_evs = []
+    if conn:
+        try:
+            r_j = conn.table('jade_eventos').select('id, nome, data_evento').execute()
+            if r_j and r_j.data: existing_jade_evs.extend(r_j.data)
+        except Exception: pass
+    try:
+        r_jl = local_db.table('jade_eventos').select('id, nome, data_evento').execute()
+        if r_jl and r_jl.data:
+            e_ids = {e['id'] for e in existing_jade_evs}
+            for e in r_jl.data:
+                if e['id'] not in e_ids:
+                    existing_jade_evs.append(e)
+    except Exception: pass
+
+    jade_map = {}
+    for e in existing_jade_evs:
+        if e.get('nome') and e.get('data_evento'):
+            key = (str(e.get('nome')).strip().upper(), str(e.get('data_evento')).strip())
+            jade_map[key] = e['id']
+
     for ev in rsvp_evs:
+        ev_nome = str(ev.get('nome_evento') or ev.get('nome') or 'Evento Cerimonial').strip().upper()
+        ev_data = str(ev.get('data_evento') or datetime.datetime.now().strftime('%Y-%m-%d')).strip()
+
         j_ev_data = {
-            'nome': str(ev.get('nome_evento') or ev.get('nome') or 'Evento Cerimonial').upper(),
-            'data_evento': str(ev.get('data_evento') or datetime.datetime.now().strftime('%Y-%m-%d')),
+            'nome': ev_nome,
+            'data_evento': ev_data,
             'local': str(ev.get('local_evento') or ev.get('local') or ''),
             'layout_json': json.dumps({'tipo': 'auditorio', 'rows': 6, 'cols': 12})
         }
-        try:
-            if ev.get('id'):
-                j_ev_data['id'] = int(ev['id'])
-        except Exception:
-            pass
+        
+        key = (ev_nome, ev_data)
+        if key in jade_map:
+            j_ev_data['id'] = jade_map[key]
 
         if conn:
             try: conn.table('jade_eventos').upsert(j_ev_data).execute()
