@@ -267,7 +267,6 @@ def render_page():
     
     @ui.refreshable
     def render_content():
-        ui.label('>>> TESTE INÍCIO RENDER_CONTENT <<<').classes('text-red font-bold text-2xl')
         try:
             try:
                 from database import sync_rsvp_with_jade
