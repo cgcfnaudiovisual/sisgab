@@ -2737,10 +2737,10 @@ def render_page():
 
                     ui.button('🖨️ GERAR E IMPRIMIR PLACA EXPRESSA AGORA (1 CLIQUE)', icon='flash_on', on_click=create_and_print_avulso).props('unelevated color=deep-orange text-color=white bold').classes('w-full q-mt-sm')
 
-        with ui.row().classes('w-full justify-end q-mt-sm'):
-            ui.button('Fechar', icon='close', on_click=diag.close).props('unelevated color=grey-8 dense').classes('text-xs')
+            with ui.row().classes('w-full justify-end q-mt-sm'):
+                ui.button('Fechar', icon='close', on_click=diag.close).props('unelevated color=grey-8 dense').classes('text-xs')
 
-    diag.open()
+        diag.open()
 
     def gerar_pdf_placas_reportlab(event, convidados, current_model, only_confirmed, print_config):
         """Gera PDF vetorial em milímetros A4 nativamente no servidor Python via ReportLab."""
