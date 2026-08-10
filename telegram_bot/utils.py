@@ -353,27 +353,50 @@ async def _salvar_presenca_bot(bot, message, chat_id, state, sigla_code, obs_txt
         'updated_at': now_br.isoformat()
     }
     
-    # 1. Salva no Supabase se disponível
+    # 1. Salva no Supabase (escala_diaria principal + presenca_diaria se existir)
     try:
         from database import get_bot_db_connection
         db = get_bot_db_connection()
         if db:
+            # 1a. Upsert em escala_diaria (tabela nativa no Supabase)
+            try:
+                res_esc = db.table('escala_diaria').select('id').eq('data', dt_str).ilike('nome', f"%{nome_g}%").execute()
+                if res_esc and res_esc.data:
+                    db.table('escala_diaria').update({
+                        'cargo': sigla_code,
+                        'observacao': obs_txt.strip() if obs_txt else ''
+                    }).eq('id', res_esc.data[0]['id']).execute()
+                else:
+                    db.table('escala_diaria').insert({
+                        'data': dt_str,
+                        'cargo': sigla_code,
+                        'nome': nome_g,
+                        'observacao': obs_txt.strip() if obs_txt else ''
+                    }).execute()
+            except Exception as e_esc:
+                print(f"[SUPABASE ESCALA_DIARIA SAVE WARN] {e_esc}")
+
+            # 1b. Tenta salvar em presenca_diaria se a tabela existir
             try:
                 db.table('presenca_diaria').upsert(payload, on_conflict='id').execute()
-            except Exception as e_up1:
-                print(f"[PRESENCA SUPABASE UPSERT ERR] {e_up1}")
-                try:
-                    db.table('presenca_diaria').upsert(payload).execute()
-                except Exception as e_up2:
-                    print(f"[PRESENCA SUPABASE INSERT FALLBACK ERR] {e_up2}")
+            except Exception:
+                pass
     except Exception as sp_err:
         print(f"[PRESENCA BOT SUPABASE WARN] {sp_err}")
         
-    # 2. Salva no SQLite local
+    # 2. Salva no SQLite local (ambas as tabelas)
     try:
-        from sqlite_adapter import SQLiteDatabaseAdapter
-        local_db = SQLiteDatabaseAdapter()
+        from sqlite_adapter import LocalSQLiteClient
+        local_db = LocalSQLiteClient()
         local_db.table('presenca_diaria').upsert(payload, on_conflict='id').execute()
+        try:
+            res_loc_e = local_db.table('escala_diaria').select('id').eq('data', dt_str).eq('nome', nome_g).execute()
+            if res_loc_e and res_loc_e.data:
+                local_db.table('escala_diaria').update({'cargo': sigla_code, 'observacao': obs_txt.strip() if obs_txt else ''}).eq('id', res_loc_e.data[0]['id']).execute()
+            else:
+                local_db.table('escala_diaria').insert({'data': dt_str, 'cargo': sigla_code, 'nome': nome_g, 'observacao': obs_txt.strip() if obs_txt else ''}).execute()
+        except Exception:
+            pass
     except Exception as loc_err:
         print(f"[PRESENCA BOT LOCAL WARN] {loc_err}")
         

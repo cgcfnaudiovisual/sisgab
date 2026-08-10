@@ -602,8 +602,9 @@ class LocalSQLiteClient:
                     data TEXT NOT NULL,
                     hora_presenca TEXT,
                     status TEXT NOT NULL,
-                    observacao TEXT,
-                    criado_em TEXT
+                    data_fim TEXT,
+                    criado_em TEXT,
+                    updated_at TEXT
                 )
             ''',
             'jade_eventos': '''
@@ -740,6 +741,17 @@ class LocalSQLiteClient:
                 )
                 conn.commit()
                 
+            # Garante colunas data_fim e updated_at na tabela presenca_diaria
+            try:
+                cursor.execute("ALTER TABLE presenca_diaria ADD COLUMN data_fim TEXT")
+            except Exception:
+                pass
+            try:
+                cursor.execute("ALTER TABLE presenca_diaria ADD COLUMN updated_at TEXT")
+            except Exception:
+                pass
+            conn.commit()
+
             # Pre-popula datas comemorativas se tabela estiver vazia
             cursor.execute("SELECT COUNT(*) FROM datas_comemorativas")
             if cursor.fetchone()[0] == 0:
