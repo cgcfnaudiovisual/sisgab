@@ -1071,17 +1071,37 @@ def register_common_handlers(bot):
                     from .utils import sort_efetivo_by_rank
                     efetivo_list = sort_efetivo_by_rank(efetivo_list)
 
+                    # Buscar militares ja vinculados no banco
+                    current_ids = set()
+                    try:
+                        res_dem = db.table('demandas_comunicacao').select('notificar_militar_ids').eq('id', dem_id).execute()
+                        if res_dem and res_dem.data and res_dem.data[0].get('notificar_militar_ids'):
+                            raw_json = res_dem.data[0]['notificar_militar_ids']
+                            parsed_ids = json.loads(raw_json) if isinstance(raw_json, str) else raw_json
+                            current_ids = set(str(x) for x in parsed_ids if str(x).isdigit())
+                    except Exception as res_err:
+                        print(f"[FETCH CURRENT EQUIPE ERR] {res_err}")
+
                     chat_states[chat_id] = {
                         'action': 'assign_equipe',
                         'demanda_id': dem_id,
-                        'selected_ids': set(),
+                        'selected_ids': current_ids,
                         'efetivo_list': efetivo_list
                     }
+
+                    sel_nomes = []
+                    for ef in efetivo_list:
+                        if str(ef.get('id')) in current_ids:
+                            sel_nomes.append(f"{ef.get('posto_grad') or ''} {ef.get('nome_guerra', '')}".strip())
+
+                    nomes_txt = "\n".join([f"   • {n}" for n in sel_nomes]) if sel_nomes else "   • Nenhum selecionado ainda"
+
                     await bot.send_message(
                         chat_id,
                         f"👤 **ATRIBUIR EQUIPE OPERACIONAL (ID #{dem_id})**\n\n"
-                        f"Selecione um militar no teclado abaixo para vincular à pauta:",
-                        reply_markup=get_efetivo_linking_keyboard(efetivo_list),
+                        f"👥 **Militares Atualmente Selecionados ({len(current_ids)}):**\n{nomes_txt}\n\n"
+                        f"Clique nos botões de resposta rápida para alternar cada militar e em **➡️ CONCLUIR SELEÇÃO DA EQUIPE ➡️** ao terminar:",
+                        reply_markup=get_efetivo_linking_keyboard(efetivo_list, selected_ids=current_ids, is_multi=True),
                         parse_mode='Markdown'
                     )
                 except Exception as e:
@@ -1616,9 +1636,58 @@ def register_common_handlers(bot):
         if action == 'assign_equipe':
             dem_id = state.get('demanda_id')
             efetivo_list = state.get('efetivo_list', [])
-            selected_ids = state.get('selected_ids', set())
+            selected_ids = set(str(x) for x in state.get('selected_ids', set()))
+            user_name = profile.get('nome_guerra') or profile.get('nome') or 'Operador' if profile else 'Operador'
+            user_name = str(user_name).replace('None ', '').replace('None', '').strip().upper()
 
-            nome_digitado = text.replace('🎖️', '').strip().upper()
+            # 1. Se o usuário clicou no botão "CONCLUIR SELEÇÃO DA EQUIPE"
+            if "CONCLUIR" in text.upper() or "➡️" in text:
+                db = get_db_connection()
+                if db and dem_id:
+                    try:
+                        int_ids = [int(x) for x in selected_ids if str(x).isdigit()]
+                        db.table('demandas_comunicacao').update({
+                            'notificar_militar_ids': json.dumps(int_ids)
+                        }).eq('id', dem_id).execute()
+
+                        # Notificar militares escalados
+                        escalados_nomes = []
+                        for ef in efetivo_list:
+                            m_id = str(ef.get('id', ''))
+                            if m_id in selected_ids or (m_id.isdigit() and int(m_id) in int_ids):
+                                m_nome = f"{ef.get('posto_grad') or ''} {ef.get('nome_guerra', '')}".strip()
+                                escalados_nomes.append(m_nome)
+                                t_id = ef.get('telegram_id')
+                                if t_id:
+                                    try:
+                                        from notifications_manager import notify_telegram
+                                        notify_telegram(
+                                            f"🎖️ **VOCÊ FOI ESCALADO PARA UMA MISSÃO!**\n\n"
+                                            f"📌 Pauta ID #{dem_id}\n"
+                                            f"👨‍✈️ Escalado por: {user_name}",
+                                            "system",
+                                            custom_chat_id=t_id
+                                        )
+                                    except Exception as n_err:
+                                        print(f"[NOTIFY MILITAR ERR] {n_err}")
+
+                        clear_state(chat_id)
+                        equipe_lines = "\n".join([f"   • {n}" for n in escalados_nomes]) if escalados_nomes else "   • Nenhum militar escalado"
+                        await bot.reply_to(
+                            message,
+                            f"✅ **EQUIPE OPERACIONAL HOMOLOGADA COM SUCESSO!**\n\n"
+                            f"📌 **Pauta ID:** #{dem_id}\n"
+                            f"👨‍✈️ **Equipe Escalada ({len(escalados_nomes)}):**\n{equipe_lines}\n\n"
+                            f"Todos os militares vinculados foram notificados.",
+                            reply_markup=get_main_menu_keyboard(is_operator),
+                            parse_mode='Markdown'
+                        )
+                    except Exception as e_eq:
+                        await bot.reply_to(message, f"❌ Erro ao atribuir equipe: {e_eq}")
+                return
+
+            # 2. Alternar seleção do militar clicado
+            nome_digitado = text.replace('✅', '').replace('🎖️', '').strip().upper()
 
             militar_encontrado = None
             for ef in efetivo_list:
@@ -1629,39 +1698,36 @@ def register_common_handlers(bot):
                     militar_encontrado = ef
                     break
 
-            db = get_bot_db_connection()
-
-            if militar_encontrado and db and dem_id:
-                m_id = militar_encontrado.get('id')
-                m_nome = f"{militar_encontrado.get('posto_grad') or ''} {militar_encontrado.get('nome_guerra', '')}".strip()
-                selected_ids.add(m_id)
+            if militar_encontrado:
+                m_id = str(militar_encontrado.get('id', ''))
+                if m_id in selected_ids:
+                    selected_ids.remove(m_id)
+                else:
+                    selected_ids.add(m_id)
                 
-                try:
-                    import json
-                    db.table('demandas_comunicacao').update({
-                        'notificar_militar_ids': json.dumps([int(x) for x in selected_ids if str(x).isdigit()])
-                    }).eq('id', dem_id).execute()
+                state['selected_ids'] = selected_ids
+                
+                # Nomes dos militares selecionados atualmente
+                sel_nomes = []
+                for ef in efetivo_list:
+                    if str(ef.get('id', '')) in selected_ids:
+                        sel_nomes.append(f"{ef.get('posto_grad') or ''} {ef.get('nome_guerra', '')}".strip())
 
-                    t_id = militar_encontrado.get('telegram_id')
-                    if t_id:
-                        from notifications_manager import notify_telegram
-                        notify_telegram(f"🎖️ **VOCÊ FOI ESCALADO PARA UMA MISSÃO!**\nPauta ID #{dem_id}\nEscalado por: {user_name}", "system", custom_chat_id=t_id)
-
-                    clear_state(chat_id)
-                    await bot.reply_to(
-                        message,
-                        f"✅ **MILITAR ESCALADO COM SUCESSO!**\n\n"
-                        f"👨‍✈️ **{m_nome}** foi vinculado(a) à Pauta ID **#{dem_id}**.",
-                        reply_markup=get_main_menu_keyboard(is_operator),
-                        parse_mode='Markdown'
-                    )
-                except Exception as e_eq:
-                    await bot.reply_to(message, f"❌ Erro ao atribuir equipe: {e_eq}")
+                nomes_txt = "\n".join([f"   • {n}" for n in sel_nomes]) if sel_nomes else "   • Nenhum selecionado ainda"
+                
+                await bot.reply_to(
+                    message,
+                    f"👤 **ATRIBUIR EQUIPE OPERACIONAL (ID #{dem_id})**\n\n"
+                    f"👥 **Militares Selecionados ({len(selected_ids)}):**\n{nomes_txt}\n\n"
+                    f"Clique nos botões de resposta rápida para alternar e em **➡️ CONCLUIR SELEÇÃO DA EQUIPE ➡️** ao terminar:",
+                    reply_markup=get_efetivo_linking_keyboard(efetivo_list, selected_ids=selected_ids, is_multi=True),
+                    parse_mode='Markdown'
+                )
             else:
                 await bot.reply_to(
                     message,
                     f"⚠️ Militar **'{text}'** não encontrado.\nPor favor, escolha um militar no teclado abaixo:",
-                    reply_markup=get_efetivo_linking_keyboard(efetivo_list)
+                    reply_markup=get_efetivo_linking_keyboard(efetivo_list, selected_ids=selected_ids, is_multi=True)
                 )
             return
 

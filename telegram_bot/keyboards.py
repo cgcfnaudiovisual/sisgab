@@ -135,16 +135,28 @@ def get_multi_militar_inline_keyboard(efetivo_list, selected_ids=None, prefix="s
     markup.add(types.InlineKeyboardButton(text=f"➡️ CONFIRMAR ({cnt} SELECIONADOS) ➡️", callback_data=f"{prefix}:done"))
     return markup
 
-def get_efetivo_linking_keyboard(efetivo_lista):
+def get_efetivo_linking_keyboard(efetivo_lista, selected_ids=None, is_multi=False):
     from .utils import sort_efetivo_by_rank
     sorted_ef = sort_efetivo_by_rank(efetivo_lista)
+    selected_set = set(str(x) for x in (selected_ids or []))
     
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    if is_multi:
+        cnt = len(selected_set)
+        markup.row(types.KeyboardButton(f"➡️ CONCLUIR SELEÇÃO DA EQUIPE ({cnt}) ➡️"))
+        
     row = []
     for ef in sorted_ef:
+        m_id = str(ef.get('id', ''))
         nome_g = ef.get('nome_guerra') or ef.get('nome') or 'MILITAR'
         pg = ef.get('posto_grad') or ''
-        label = f"🎖️ {pg} {nome_g}".strip() if pg else f"🎖️ {nome_g}"
+        base_label = f"🎖️ {pg} {nome_g}".strip() if pg else f"🎖️ {nome_g}"
+        
+        if is_multi and m_id in selected_set:
+            label = f"✅ {base_label}"
+        else:
+            label = base_label
+            
         row.append(types.KeyboardButton(label))
         if len(row) == 2:
             markup.row(*row)
