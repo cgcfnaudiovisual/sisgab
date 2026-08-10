@@ -267,6 +267,7 @@ def render_page():
     
     @ui.refreshable
     def render_content():
+        ui.label('>>> TESTE INÍCIO RENDER_CONTENT <<<').classes('text-red font-bold text-2xl')
         try:
             try:
                 from database import sync_rsvp_with_jade
@@ -4970,5 +4971,6 @@ def open_print_cards_dialog(event, convidados, layout):
             print(f"[HANDLE IMPORT ERR] {ex}")
             ui.notify(f"Erro ao importar planilha: {ex}", color='red')
 
+    ui.label('>>> TESTE ANTES DE RENDER_CONTENT <<<').classes('text-blue font-bold text-2xl')
     render_content()
 
