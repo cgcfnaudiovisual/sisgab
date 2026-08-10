@@ -2834,15 +2834,21 @@ def render_page():
                 textColor=colors.HexColor('#d4af37'), alignment=TA_CENTER
             )
 
+            def should_print(c):
+                if only_confirmed:
+                    sp = (c.get('status_placa') or '').lower()
+                    sc = (c.get('status_confirmacao') or '').lower()
+                    return sp in ('pendente', 'em_producao', 'impressa', 'reimpressao') or sc in ('confirmado', 'sim', 'presenca_confirmada', '1', 'true')
+                return True
+
             # Coleta e ordena convidados
             all_cards = []
             seen_ids = set()
             for c in (convidados or []):
                 if c['id'] not in seen_ids:
-                    if only_confirmed and c.get('status_placa') not in ('pendente', 'em_producao', 'impressa', 'reimpressao'):
-                        continue
-                    seen_ids.add(c['id'])
-                    all_cards.append(c)
+                    if should_print(c):
+                        seen_ids.add(c['id'])
+                        all_cards.append(c)
 
             def sort_key_assento(c):
                 ass = str(c.get('assento_id', '')).upper().strip()
