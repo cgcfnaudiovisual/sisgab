@@ -258,7 +258,11 @@ def sync_companions(main_guest_id, main_guest_name, max_acomp, event_id, categor
 def render_page():
     ui.label('🪑 PROJETAR ASSENTOS (PLACAS JADE)').classes('text-2xl font-bold text-white cyber-title gt-xs q-mb-md q-ml-md')
     
-    user_data = app.storage.user.get('user_data', {})
+    user_data = {}
+    try:
+        user_data = app.storage.user.get('user_data', {})
+    except Exception:
+        user_data = {}
     user_name = user_data.get('nome_guerra', 'Operador')
     
     @ui.refreshable
@@ -269,57 +273,60 @@ def render_page():
         except Exception as sync_err:
             print(f"[RSVP JADE SYNC ERR] {sync_err}")
 
-        db = get_service_db_connection() or get_db_connection()
-        if not db:
-            with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
-                ui.icon('cloud_off', size='4rem')
-                ui.label('Banco de dados não disponível. Verifique a conexão.').classes('text-md font-bold')
-            return
+            db = get_service_db_connection() or get_db_connection()
+            if not db:
+                with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
+                    ui.icon('cloud_off', size='4rem')
+                    ui.label('Banco de dados não disponível. Verifique a conexão.').classes('text-md font-bold')
+                return
 
-        # 1. Carregar lista de eventos (Supabase com fallback para SQLite local)
-        eventos = []
-        try:
-            res_ev = db.table('jade_eventos').select('*').order('data_evento', desc=True).execute()
-            eventos = res_ev.data if res_ev and res_ev.data else []
-        except Exception as e:
-            print(f"[JADE EVENTS SUPABASE ERR] {e}")
-
-        if not eventos:
+            # 1. Carregar lista de eventos (Supabase com fallback para SQLite local)
+            eventos = []
             try:
-                from sqlite_adapter import SQLiteDatabaseAdapter
-                local_db = SQLiteDatabaseAdapter()
-                res_loc = local_db.table('jade_eventos').select('*').order('data_evento', desc=True).execute()
-                eventos = res_loc.data if res_loc and res_loc.data else []
-            except Exception as loc_err:
-                print(f"[JADE EVENTS LOCAL ERR] {loc_err}")
-
-        if not state.selected_event_id and eventos:
-            state.selected_event_id = eventos[0]['id']
-
-        current_event = next((e for e in eventos if e['id'] == state.selected_event_id), None)
-
-        convidados = []
-        layout = {}
-        if current_event:
-            try:
-                res_conv = db.table('jade_convidados').select('*').eq('evento_id', current_event['id']).order('id', desc=False).execute()
-                convidados = res_conv.data if res_conv and res_conv.data else []
+                res_ev = db.table('jade_eventos').select('*').order('data_evento', desc=True).execute()
+                eventos = res_ev.data if res_ev and res_ev.data else []
             except Exception as e:
-                print(f"[JADE GUESTS SUPABASE ERR] {e}")
+                print(f"[JADE EVENTS SUPABASE ERR] {e}")
 
-            if not convidados:
+            if not eventos:
                 try:
                     from sqlite_adapter import SQLiteDatabaseAdapter
                     local_db = SQLiteDatabaseAdapter()
-                    res_c_loc = local_db.table('jade_convidados').select('*').eq('evento_id', current_event['id']).order('id', desc=False).execute()
-                    convidados = res_c_loc.data if res_c_loc and res_c_loc.data else []
-                except Exception as loc_c_err:
-                    print(f"[JADE GUESTS LOCAL ERR] {loc_c_err}")
+                    res_loc = local_db.table('jade_eventos').select('*').order('data_evento', desc=True).execute()
+                    eventos = res_loc.data if res_loc and res_loc.data else []
+                except Exception as loc_err:
+                    print(f"[JADE EVENTS LOCAL ERR] {loc_err}")
 
-            try:
-                layout = json.loads(current_event['layout_json']) if current_event.get('layout_json') else {}
-            except Exception as e:
-                print(f"[LAYOUT PARSE ERR] {e}")
+            # Garante que selected_event_id seja válido entre os eventos existentes
+            if eventos:
+                valid_ids = [e['id'] for e in eventos]
+                if not getattr(state, 'selected_event_id', None) or state.selected_event_id not in valid_ids:
+                    state.selected_event_id = valid_ids[0]
+
+            current_event = next((e for e in eventos if e['id'] == state.selected_event_id), None) if eventos else None
+
+            convidados = []
+            layout = {}
+            if current_event:
+                try:
+                    res_conv = db.table('jade_convidados').select('*').eq('evento_id', current_event['id']).order('id', desc=False).execute()
+                    convidados = res_conv.data if res_conv and res_conv.data else []
+                except Exception as e:
+                    print(f"[JADE GUESTS SUPABASE ERR] {e}")
+
+                if not convidados:
+                    try:
+                        from sqlite_adapter import SQLiteDatabaseAdapter
+                        local_db = SQLiteDatabaseAdapter()
+                        res_c_loc = local_db.table('jade_convidados').select('*').eq('evento_id', current_event['id']).order('id', desc=False).execute()
+                        convidados = res_c_loc.data if res_c_loc and res_c_loc.data else []
+                    except Exception as loc_c_err:
+                        print(f"[JADE GUESTS LOCAL ERR] {loc_c_err}")
+
+                try:
+                    layout = json.loads(current_event['layout_json']) if current_event.get('layout_json') else {}
+                except Exception as e:
+                    print(f"[LAYOUT PARSE ERR] {e}")
 
         # --- CABEÇALHO DE CONTROLE DE EVENTOS ---
         with ui.card().classes('w-full q-pa-md no-shadow rounded-xl q-mb-md').style(

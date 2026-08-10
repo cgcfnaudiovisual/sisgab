@@ -1508,15 +1508,20 @@ def sync_rsvp_with_jade():
     except Exception: pass
 
     # 2. Inserir/Sincronizar eventos em jade_eventos
+    import json, datetime
     for ev in rsvp_evs:
         j_ev_data = {
-            'id': str(ev['id']),
-            'nome': str(ev.get('nome_evento') or ev.get('nome') or 'Evento Cerimonial'),
+            'nome': str(ev.get('nome_evento') or ev.get('nome') or 'Evento Cerimonial').upper(),
             'data_evento': str(ev.get('data_evento') or datetime.datetime.now().strftime('%Y-%m-%d')),
-            'local_evento': str(ev.get('local_evento') or ''),
-            'fileiras': 6,
-            'colunas': 12
+            'local': str(ev.get('local_evento') or ev.get('local') or ''),
+            'layout_json': json.dumps({'tipo': 'auditorio', 'rows': 6, 'cols': 12})
         }
+        try:
+            if ev.get('id'):
+                j_ev_data['id'] = int(ev['id'])
+        except Exception:
+            pass
+
         if conn:
             try: conn.table('jade_eventos').upsert(j_ev_data).execute()
             except Exception: pass
