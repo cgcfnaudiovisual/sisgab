@@ -64,14 +64,14 @@ async def _morning_attendance_loop():
                 if now.hour == 7 and now.minute == 0 and last_0700_date != today_str:
                     last_0700_date = today_str
                     print(f"[BOT MORNING CRON] Disparando Chamada Matutina das 07:00h para o efetivo...", flush=True)
-                    await trigger_daily_attendance_call(bot)
+                    asyncio.create_task(trigger_daily_attendance_call(bot))
                 
                 # 2. Cobrança Recorrente a cada 10 minutos (das 07:10h às 09:30h) para quem ainda estiver PENDENTE
                 is_janela = (now.hour == 7 and now.minute >= 10) or (now.hour == 8) or (now.hour == 9 and now.minute <= 30)
                 if is_janela and (now_ts - last_reminder_ts) >= 600:  # 10 minutos
                     last_reminder_ts = now_ts
                     print(f"[BOT MORNING CRON] Disparando cobrança de presença para pendentes às {now.strftime('%H:%M')}h...", flush=True)
-                    await trigger_10min_attendance_reminder(bot)
+                    asyncio.create_task(trigger_10min_attendance_reminder(bot))
                     
         except asyncio.CancelledError:
             break

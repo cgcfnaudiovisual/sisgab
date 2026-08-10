@@ -112,45 +112,52 @@ async def trigger_daily_attendance_call(bot):
     now = datetime.now(tz_gmt3)
     hoje_str = now.strftime('%Y-%m-%d')
     
-    try:
-        from database import get_bot_db_connection as get_db_connection
-        conn = get_db_connection()
-        if not conn: return
-        
-        res_ef = conn.table('efetivo').select('telegram_id, nome_guerra').execute()
-        if not res_ef.data: return
-
-        # Isenção por férias/licenças ativas
-        isentos = set()
+    def _fetch_call_data():
         try:
-            res_ext = conn.table('presenca_diaria').select('nome_guerra, data_fim').in_('status', ['FE', 'L', 'DM']).lte('data', hoje_str).execute()
-            if res_ext and res_ext.data:
-                for item in res_ext.data:
-                    df = item.get('data_fim')
-                    if df and df >= hoje_str:
-                        isentos.add(item.get('nome_guerra', '').upper())
-        except Exception as ext_err:
-            print(f"[ATTENDANCE CALL ISENTOS WARN] {ext_err}")
-        
-        from .keyboards import get_presenca_keyboard
-        msg = (
-            "🌅 **CHAMADA MATUTINA — CGCFN/SISGAB**\n\n"
-            "Bom dia Equipe LANÇAMENTO 🚀!\n"
-            "Solicito que todos acusem suas rotinas para hoje.\n\n"
-            "🚨 *Senhores o regresso é 07:30h e o pronto da presença para o CheGab é até 8h.*\n\n"
-            "Selecione a sua situação nos botões abaixo:"
-        )
-        
-        for m in res_ef.data:
-            nome_g = m.get('nome_guerra', '').upper()
-            tg_id = m.get('telegram_id')
-            if tg_id and nome_g not in isentos:
-                try:
-                    await bot.send_message(tg_id, msg, reply_markup=get_presenca_keyboard(), parse_mode='Markdown')
-                except Exception as e_send:
-                    print(f"[ATTENDANCE CALL SEND ERR] {tg_id}: {e_send}")
-    except Exception as e:
-        print(f"[ATTENDANCE CALL ERR] {e}")
+            from database import get_bot_db_connection as get_db_connection
+            conn = get_db_connection()
+            if not conn: return None, set()
+            
+            res_ef = conn.table('efetivo').select('telegram_id, nome_guerra').execute()
+            ef_data = res_ef.data if res_ef and res_ef.data else []
+
+            isentos = set()
+            try:
+                res_ext = conn.table('presenca_diaria').select('nome_guerra, data_fim').in_('status', ['FE', 'L', 'DM']).lte('data', hoje_str).execute()
+                if res_ext and res_ext.data:
+                    for item in res_ext.data:
+                        df = item.get('data_fim')
+                        if df and df >= hoje_str:
+                            isentos.add(item.get('nome_guerra', '').upper())
+            except Exception:
+                pass
+            return ef_data, isentos
+        except Exception as e_fetch:
+            print(f"[ATTENDANCE CALL FETCH ERR] {e_fetch}")
+            return None, set()
+
+    ef_data, isentos = await asyncio.to_thread(_fetch_call_data)
+    if not ef_data:
+        return
+
+    from .keyboards import get_presenca_keyboard
+    msg = (
+        "🌅 **CHAMADA MATUTINA — CGCFN/SISGAB**\n\n"
+        "Bom dia Equipe LANÇAMENTO 🚀!\n"
+        "Solicito que todos acusem suas rotinas para hoje.\n\n"
+        "🚨 *Senhores o regresso é 07:30h e o pronto da presença para o CheGab é até 8h.*\n\n"
+        "Selecione a sua situação nos botões abaixo:"
+    )
+    
+    for m in ef_data:
+        nome_g = str(m.get('nome_guerra') or '').upper()
+        tg_id = m.get('telegram_id')
+        if tg_id and nome_g not in isentos:
+            try:
+                await bot.send_message(str(tg_id).strip(), msg, reply_markup=get_presenca_keyboard(), parse_mode='Markdown')
+                await asyncio.sleep(0.02)  # Cede o controle ao loop do asyncio
+            except Exception as e_send:
+                print(f"[ATTENDANCE CALL SEND ERR] {tg_id}: {e_send}")
 
 
 async def trigger_10min_attendance_reminder(bot, force_now=False):
@@ -163,145 +170,132 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
     tz_gmt3 = timezone(timedelta(hours=-3))
     now = datetime.now(tz_gmt3)
     
-    # Se não for disparado manualmente, executa na janela matutina das 07:10h às 09:30h
     if not force_now and not (7 <= now.hour <= 9):
         return 0
         
-    try:
-        from database import get_bot_db_connection as get_db_connection
-        conn = get_db_connection()
-        if not conn: return 0
-        
-        hoje_str = now.strftime('%Y-%m-%d')
-        
-        res_ef = conn.table('efetivo').select('nome_guerra, telegram_id, posto_grad').execute()
-        if not res_ef.data: return 0
-        
-        # Busca respondidos no Supabase (escala_diaria + presenca_diaria)
-        respondidos = set()
-        
-        # 1. Tabela oficial escala_diaria
-        try:
-            res_esc = conn.table('escala_diaria').select('nome, cargo').eq('data', hoje_str).execute()
-            if res_esc and res_esc.data:
-                for item in res_esc.data:
-                    c_val = str(item.get('cargo') or '').strip().upper()
-                    if c_val and c_val not in ('PENDENTE', 'NONE', 'NULL'):
-                        n_val = str(item.get('nome') or '').strip().upper()
-                        if n_val:
-                            respondidos.add(n_val)
-        except Exception as e_esc:
-            print(f"[REMINDER CHECK ESCALA WARN] {e_esc}")
+    hoje_str = now.strftime('%Y-%m-%d')
 
-        # 2. Tabela presenca_diaria
+    def _fetch_reminder_data():
         try:
-            res_pr = conn.table('presenca_diaria').select('nome_guerra, status').eq('data', hoje_str).execute()
-            if res_pr and res_pr.data:
-                for p in res_pr.data:
-                    st = str(p.get('status') or '').strip().upper()
-                    if st and st not in ('PENDENTE', 'NONE', 'NULL'):
-                        ng = str(p.get('nome_guerra') or '').strip().upper()
-                        if ng:
-                            respondidos.add(ng)
-        except Exception as e_pr:
-            print(f"[REMINDER CHECK PRESENCA WARN] {e_pr}")
-        
-        # Inclui militares com isenção ativa de férias/licença no conjunto de respondidos
-        try:
-            res_ext = conn.table('presenca_diaria').select('nome_guerra, data_fim').in_('status', ['FE', 'L', 'DM']).lte('data', hoje_str).execute()
-            if res_ext and res_ext.data:
-                for item in res_ext.data:
-                    df = item.get('data_fim')
-                    if df and df >= hoje_str:
-                        respondidos.add(item.get('nome_guerra', '').upper())
-        except Exception as ext_err:
-            print(f"[REMINDER ISENTOS WARN] {ext_err}")
+            from database import get_bot_db_connection as get_db_connection
+            conn = get_db_connection()
+            if not conn: return None, set(), {}
             
-        # Mapeia telegram_id da tabela users caso a tabela efetivo esteja sem o campo preenchido
-        # Indexa por nome completo, nome de guerra (sem posto) e username
-        user_tg_map = {}
-        try:
-            res_u = conn.table('users').select('nome, username, telegram_id').execute()
-            if res_u and res_u.data:
-                for u_row in res_u.data:
-                    tid = u_row.get('telegram_id')
-                    if tid and str(tid).strip():
-                        tid_str = str(tid).strip()
-                        # Índice por username
-                        unm = str(u_row.get('username') or '').strip().upper()
-                        if unm:
-                            user_tg_map[unm] = tid_str
-                        # Índice por nome completo (ex: 'SO CARVALHO')
-                        nm = str(u_row.get('nome') or '').strip().upper()
-                        if nm:
-                            user_tg_map[nm] = tid_str
-                            # Índice por nome de guerra sem posto (último token ou parte após espaço)
-                            parts = nm.split()
-                            if len(parts) > 1:
-                                nome_guerra_only = parts[-1]  # ex: 'CARVALHO'
-                                user_tg_map[nome_guerra_only] = tid_str
-                                # Também tenta junção de último(s) token(s) para nomes compostos
-                                if len(parts) > 2:
-                                    user_tg_map[' '.join(parts[1:])] = tid_str
-        except Exception as u_map_err:
-            print(f"[REMINDER USER MAP WARN] {u_map_err}")
+            res_ef = conn.table('efetivo').select('nome_guerra, telegram_id, posto_grad').execute()
+            ef_data = res_ef.data if res_ef and res_ef.data else []
+            if not ef_data: return None, set(), {}
 
-        # Diagnóstico
-        tg_preenchidos = sum(1 for m in res_ef.data if m.get('telegram_id') or user_tg_map.get(str(m.get('nome_guerra') or '').strip().upper()))
-        print(f"[CHAMADA DEBUG] Total efetivo: {len(res_ef.data)} | Com Telegram ID (efetivo+users): {tg_preenchidos} | Respondidos hoje: {len(respondidos)}")
+            respondidos = set()
+            try:
+                res_esc = conn.table('escala_diaria').select('nome, cargo').eq('data', hoje_str).execute()
+                if res_esc and res_esc.data:
+                    for item in res_esc.data:
+                        c_val = str(item.get('cargo') or '').strip().upper()
+                        if c_val and c_val not in ('PENDENTE', 'NONE', 'NULL'):
+                            n_val = str(item.get('nome') or '').strip().upper()
+                            if n_val: respondidos.add(n_val)
+            except Exception:
+                pass
 
-        from .keyboards import get_presenca_keyboard
-        
-        # Mensagem insistente e contextual conforme o horário
-        if now.hour == 7 and now.minute < 30:
-            hdr = "⏰ *AVISO DE REGRESSO DE CHAMADA — CGCFN/SISGAB*"
-            body = (
-                f"🚨 O horário de regresso é até **07:30h** e o pronto ao CheGab é até **08:00h**.\n"
-                f"Você ainda **não acusou sua rotina** de hoje!\n\n"
-                f"Por favor, selecione sua situação nos botões abaixo:"
-            )
-        elif (now.hour == 7 and now.minute >= 30) or (now.hour == 8 and now.minute == 0):
-            hdr = "🚨 *URGENTE — REGRESSO VENCIDO / PRONTO AO CHEGAB*"
-            body = (
-                f"⚠️ *ATENÇÃO!* O regresso das 07:30h já passou e o limite do pronto para o CheGab é **08:00h**!\n\n"
-                f"Sua presença ainda consta como **PENDENTE**. Toque no seu status IMEDIATAMENTE:"
-            )
-        else:
-            hdr = "🔥 *ALERTA CRÍTICO — PRESENÇA EM ATRASO*"
-            body = (
-                f"❌ *ATENÇÃO URGENTE!* O horário limite das 08:00h JÁ VENCEU!\n\n"
-                f"Consta pendência no seu registro diário. Regularize sua situação para a sargenteação:"
-            )
-
-        notified_count = 0
-        for m in res_ef.data:
-            nome_g = str(m.get('nome_guerra') or '').strip().upper()
-            pg = str(m.get('posto_grad') or '').strip()
-            # Tenta telegram_id direto da tabela efetivo, depois fallback pelo mapa de users
-            tg_id = m.get('telegram_id')
-            if not tg_id or not str(tg_id).strip():
-                tg_id = (
-                    user_tg_map.get(nome_g)
-                    or user_tg_map.get(f"{pg} {nome_g}".strip())
-                    or user_tg_map.get(nome_g.split()[-1] if nome_g else '')
-                )
+            try:
+                res_pr = conn.table('presenca_diaria').select('nome_guerra, status').eq('data', hoje_str).execute()
+                if res_pr and res_pr.data:
+                    for p in res_pr.data:
+                        st = str(p.get('status') or '').strip().upper()
+                        if st and st not in ('PENDENTE', 'NONE', 'NULL'):
+                            ng = str(p.get('nome_guerra') or '').strip().upper()
+                            if ng: respondidos.add(ng)
+            except Exception:
+                pass
             
-            if nome_g and nome_g not in respondidos and tg_id and str(tg_id).strip():
-                try:
-                    personalized_msg = f"{hdr}\n\n👤 *Militar:* {pg} {nome_g}\n{body}"
-                    await bot.send_message(str(tg_id).strip(), personalized_msg, reply_markup=get_presenca_keyboard(), parse_mode='Markdown')
-                    notified_count += 1
-                except Exception as e_send:
-                    print(f"[ATTENDANCE REMIND ERR] {tg_id}: {e_send}")
+            try:
+                res_ext = conn.table('presenca_diaria').select('nome_guerra, data_fim').in_('status', ['FE', 'L', 'DM']).lte('data', hoje_str).execute()
+                if res_ext and res_ext.data:
+                    for item in res_ext.data:
+                        df = item.get('data_fim')
+                        if df and df >= hoje_str:
+                            respondidos.add(item.get('nome_guerra', '').upper())
+            except Exception:
+                pass
+                
+            user_tg_map = {}
+            try:
+                res_u = conn.table('users').select('nome, username, telegram_id').execute()
+                if res_u and res_u.data:
+                    for u_row in res_u.data:
+                        tid = u_row.get('telegram_id')
+                        if tid and str(tid).strip():
+                            tid_str = str(tid).strip()
+                            unm = str(u_row.get('username') or '').strip().upper()
+                            if unm: user_tg_map[unm] = tid_str
+                            nm = str(u_row.get('nome') or '').strip().upper()
+                            if nm:
+                                user_tg_map[nm] = tid_str
+                                parts = nm.split()
+                                if len(parts) > 1:
+                                    user_tg_map[parts[-1]] = tid_str
+                                    if len(parts) > 2:
+                                        user_tg_map[' '.join(parts[1:])] = tid_str
+            except Exception:
+                pass
 
-        total_militares = len(res_ef.data)
-        respondidos_count = len(respondidos)
-        print(f"[CHAMADA MATUTINA {now.strftime('%H:%M')}] 🔔 {notified_count} lembretes enviados | {respondidos_count}/{total_militares} já responderam.")
+            return ef_data, respondidos, user_tg_map
+        except Exception as e_f:
+            print(f"[REMINDER FETCH ERR] {e_f}")
+            return None, set(), {}
 
-        return notified_count
-    except Exception as e:
-        print(f"[ATTENDANCE REMINDER LOOP ERR] {e}")
+    ef_data, respondidos, user_tg_map = await asyncio.to_thread(_fetch_reminder_data)
+    if not ef_data:
         return 0
+
+    from .keyboards import get_presenca_keyboard
+    
+    if now.hour == 7 and now.minute < 30:
+        hdr = "⏰ *AVISO DE REGRESSO DE CHAMADA — CGCFN/SISGAB*"
+        body = (
+            f"🚨 O horário de regresso é até **07:30h** e o pronto ao CheGab é até **08:00h**.\n"
+            f"Você ainda **não acusou sua rotina** de hoje!\n\n"
+            f"Por favor, selecione sua situação nos botões abaixo:"
+        )
+    elif (now.hour == 7 and now.minute >= 30) or (now.hour == 8 and now.minute == 0):
+        hdr = "🚨 *URGENTE — REGRESSO VENCIDO / PRONTO AO CHEGAB*"
+        body = (
+            f"⚠️ *ATENÇÃO!* O regresso das 07:30h já passou e o limite do pronto para o CheGab é **08:00h**!\n\n"
+            f"Sua presença ainda consta como **PENDENTE**. Toque no seu status IMEDIATAMENTE:"
+        )
+    else:
+        hdr = "🔥 *ALERTA CRÍTICO — PRESENÇA EM ATRASO*"
+        body = (
+            f"❌ *ATENÇÃO URGENTE!* O horário limite das 08:00h JÁ VENCEU!\n\n"
+            f"Consta pendência no seu registro diário. Regularize sua situação para a sargenteação:"
+        )
+
+    notified_count = 0
+    for m in ef_data:
+        nome_g = str(m.get('nome_guerra') or '').strip().upper()
+        pg = str(m.get('posto_grad') or '').strip()
+        tg_id = m.get('telegram_id')
+        if not tg_id or not str(tg_id).strip():
+            tg_id = (
+                user_tg_map.get(nome_g)
+                or user_tg_map.get(f"{pg} {nome_g}".strip())
+                or user_tg_map.get(nome_g.split()[-1] if nome_g else '')
+            )
+        
+        if nome_g and nome_g not in respondidos and tg_id and str(tg_id).strip():
+            try:
+                personalized_msg = f"{hdr}\n\n👤 *Militar:* {pg} {nome_g}\n{body}"
+                await bot.send_message(str(tg_id).strip(), personalized_msg, reply_markup=get_presenca_keyboard(), parse_mode='Markdown')
+                notified_count += 1
+                await asyncio.sleep(0.02)  # Cede o controle ao loop do asyncio
+            except Exception as e_send:
+                print(f"[ATTENDANCE REMIND ERR] {tg_id}: {e_send}")
+
+    total_militares = len(ef_data)
+    respondidos_count = len(respondidos)
+    print(f"[CHAMADA MATUTINA {now.strftime('%H:%M')}] 🔔 {notified_count} lembretes enviados | {respondidos_count}/{total_militares} já responderam.")
+
+    return notified_count
 
 
 SENT_2H_REMINDERS = set()
