@@ -39,16 +39,27 @@ class DataService:
                         for key, table_name in tables.items()
                     }
                     
-                    for future in concurrent.futures.as_completed(future_to_key):
-                        key = future_to_key[future]
-                        try:
-                            df = future.result()
-                            data[key] = df
-                            if df.empty:
-                                logger.warning(f"Tabela {tables[key]} está vazia ou falhou")
-                        except Exception as exc:
-                            logger.error(f"Erro ao carregar {tables[key]} em paralelo: {exc}")
-                            data[key] = pd.DataFrame()
+                    try:
+                        for future in concurrent.futures.as_completed(future_to_key, timeout=3.0):
+                            key = future_to_key[future]
+                            try:
+                                df = future.result()
+                                data[key] = df
+                                if df.empty:
+                                    logger.warning(f"Tabela {tables[key]} está vazia ou falhou")
+                            except Exception as exc:
+                                logger.error(f"Erro ao carregar {tables[key]} em paralelo: {exc}")
+                                data[key] = pd.DataFrame()
+                    except concurrent.futures.TimeoutError:
+                        logger.warning("[DATA SERVICE] Timeout ao consultar Supabase. Recorrendo ao SQLite local...")
+                        from database import get_local_db_connection
+                        local_conn = get_local_db_connection()
+                        for key, table_name in tables.items():
+                            if key not in data or data[key].empty:
+                                try:
+                                    data[key] = load_data(table_name, local_conn)
+                                except Exception:
+                                    data[key] = pd.DataFrame()
                             
                 self._cache[cache_key] = data
                 logger.info("Dados essenciais carregados com sucesso em paralelo")
