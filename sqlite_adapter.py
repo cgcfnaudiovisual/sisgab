@@ -760,3 +760,6 @@ class LocalSQLiteClient:
             print(f"[SQLITE INITIALIZATION ERROR] {e}")
         finally:
             conn.close()
+
+# Alias de compatibilidade para imports do projeto
+SQLiteDatabaseAdapter = LocalSQLiteClient

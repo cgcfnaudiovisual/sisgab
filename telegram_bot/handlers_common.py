@@ -1278,7 +1278,8 @@ def register_common_handlers(bot):
                     return
 
             elif text == "/pronto" or text == "📋 Pronto CheGab":
-                dt_str = datetime.now().strftime('%Y-%m-%d')
+                now_br = datetime.utcnow() - timedelta(hours=3)
+                dt_str = now_br.strftime('%Y-%m-%d')
                 try:
                     from modulo_presenca import fetch_efetivo_and_presencas, gerar_texto_pronto_chegab
                     efetivo_lista, presencas_list = fetch_efetivo_and_presencas(dt_str)

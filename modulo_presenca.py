@@ -106,16 +106,23 @@ def fetch_efetivo_and_presencas(dt_str: str):
         except Exception as e:
             print(f"[PRESENCA LOAD DIARIA WARN] {e}")
 
-    # Fallback local via SQLite se o Supabase não respondeu ou não possui a tabela
+    # Busca e mescla presenças do SQLite local para garantir integridade caso Supabase oscile
     try:
-        from sqlite_adapter import SQLiteDatabaseAdapter
-        local_db = SQLiteDatabaseAdapter()
+        from sqlite_adapter import LocalSQLiteClient
+        local_db = LocalSQLiteClient()
         if not efetivo_lista:
             res_ef_loc = local_db.table('efetivo').select('*').order('nome_guerra').execute()
             efetivo_lista = res_ef_loc.data or []
-        if not presencas_list:
-            res_pr_loc = local_db.table('presenca_diaria').select('*').eq('data', dt_str).execute()
-            presencas_list = res_pr_loc.data or []
+            
+        res_pr_loc = local_db.table('presenca_diaria').select('*').eq('data', dt_str).execute()
+        local_pres = res_pr_loc.data or []
+        
+        seen_keys = {(p.get('nome_guerra') or '').strip().upper() for p in presencas_list if p.get('nome_guerra')}
+        for lp in local_pres:
+            l_ng = (lp.get('nome_guerra') or '').strip().upper()
+            if l_ng and l_ng not in seen_keys:
+                presencas_list.append(lp)
+                seen_keys.add(l_ng)
     except Exception as loc_err:
         print(f"[PRESENCA LOCAL FALLBACK WARN] {loc_err}")
 

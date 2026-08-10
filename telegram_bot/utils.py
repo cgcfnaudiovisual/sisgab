@@ -312,9 +312,10 @@ async def _salvar_presenca_bot(bot, message, chat_id, state, sigla_code, obs_txt
         nome_g = profile.get('nome_guerra') or profile.get('nome') or 'MILITAR'
         
     nome_g = str(nome_g).replace('None ', '').replace('None', '').strip().upper()
-    now = datetime.now()
-    dt_str = now.strftime('%Y-%m-%d')
-    hr_str = now.strftime('%H:%M:%S')
+    from datetime import datetime, timedelta
+    now_br = datetime.utcnow() - timedelta(hours=3)
+    dt_str = now_br.strftime('%Y-%m-%d')
+    hr_str = now_br.strftime('%H:%M:%S')
     
     # Buscar registro existente para (user_id/telegram_id/nome_guerra, data) antes de inserir
     pres_id = None
