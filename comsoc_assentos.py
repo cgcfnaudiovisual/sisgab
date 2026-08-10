@@ -2778,11 +2778,61 @@ def render_page():
                 textColor=colors.HexColor('#444444'), alignment=TA_CENTER
             )
 
-            logo_path = 'assets/brasao_cgcfn.png'
-            rl_logo = None
-            if os.path.exists(logo_path):
-                try: rl_logo = RLImage(logo_path, width=32, height=32)
+            import urllib.request
+
+            def resolve_rl_image(img_ref, width=36, height=36):
+                if not img_ref:
+                    return None
+                try:
+                    ref = str(img_ref).strip()
+                    if ref.startswith('data:image'):
+                        header, b64data = ref.split(',', 1)
+                        raw = base64.b64decode(b64data)
+                        return RLImage(io.BytesIO(raw), width=width, height=height)
+                    elif ref.startswith('http://') or ref.startswith('https://'):
+                        req = urllib.request.Request(ref, headers={'User-Agent': 'Mozilla/5.0'})
+                        with urllib.request.urlopen(req, timeout=5) as resp:
+                            raw = resp.read()
+                            return RLImage(io.BytesIO(raw), width=width, height=height)
+                    elif os.path.exists(ref):
+                        return RLImage(ref, width=width, height=height)
+                except Exception as err:
+                    print(f"[RL IMAGE FETCH ERR] {img_ref}: {err}")
+                return None
+
+            SUPABASE_LOGOS_BUCKET_URL = "https://ruabgndnhgdverqlgvef.supabase.co/storage/v1/object/public/logos"
+
+            def resolve_logo_url(inp_val):
+                if not inp_val: return ""
+                val = str(inp_val).strip()
+                if val.startswith('http://') or val.startswith('https://'): return val
+                return f"{SUPABASE_LOGOS_BUCKET_URL}/{val.lstrip('/')}"
+
+            preset_l = print_config.get('logo_preset_l', 'cfn')
+            custom_l = print_config.get('upload_brasao_left', '')
+            origin_l = print_config.get('origin_logo_l', 'bucket')
+
+            logo_url = ""
+            if origin_l == 'bucket' and preset_l:
+                if preset_l in ('cfn', 'cgcfn'): logo_url = f"{SUPABASE_LOGOS_BUCKET_URL}/brasao_cgcfn.png"
+                elif preset_l == 'mb': logo_url = f"{SUPABASE_LOGOS_BUCKET_URL}/brasao_marinha.png"
+                else: logo_url = resolve_logo_url(preset_l)
+            elif origin_l == 'url' and custom_l:
+                logo_url = custom_l
+
+            if not logo_url:
+                logo_url = f"{SUPABASE_LOGOS_BUCKET_URL}/brasao_cgcfn.png"
+
+            default_logo_img = resolve_rl_image(logo_url, width=36, height=36)
+            if not default_logo_img and os.path.exists('assets/brasao_cgcfn.png'):
+                try: default_logo_img = RLImage('assets/brasao_cgcfn.png', width=36, height=36)
                 except Exception: pass
+
+            star_style = ParagraphStyle(
+                'PrismaStars', parent=styles['Normal'],
+                fontName='Helvetica-Bold', fontSize=11, leading=13,
+                textColor=colors.HexColor('#d4af37'), alignment=TA_CENTER
+            )
 
             # Coleta e ordena convidados
             all_cards = []
@@ -2830,39 +2880,52 @@ def render_page():
                         q_buf = io.BytesIO()
                         img_q.save(q_buf, format="PNG")
                         q_buf.seek(0)
-                        qr_rl_img = RLImage(q_buf, width=36, height=36)
+                        qr_rl_img = RLImage(q_buf, width=38, height=38)
                     except Exception: pass
 
+                    # Coluna Esquerda: Brasão + Estrelas de Insígnia
+                    left_cell = []
+                    if default_logo_img:
+                        left_cell.append(default_logo_img)
+                    if almirantado_info.get('stars'):
+                        left_cell.append(Spacer(1, 3))
+                        left_cell.append(Paragraph(almirantado_info['stars'], star_style))
+
+                    # Coluna Central: Conteúdo Textual
                     cell_content = []
                     if is_acomp:
                         cell_content.append(Paragraph(termo_reservado, title_style))
-                        cell_content.append(Spacer(1, 4))
+                        cell_content.append(Spacer(1, 2))
 
                     tit_str = almirantado_info['title'] or posto.upper()
+                    if not tit_str and is_acomp and c.get('convidado_principal_id'):
+                        p_main = next((m for m in (convidados or []) if m['id'] == c['convidado_principal_id']), None)
+                        if p_main:
+                            main_info = parse_almirantado_stars(p_main.get('posto_graduacao'))
+                            tit_str = main_info['title'] or (p_main.get('posto_graduacao') or '').upper().strip()
+                            if main_info.get('stars') and not almirantado_info.get('stars'):
+                                left_cell.append(Spacer(1, 3))
+                                left_cell.append(Paragraph(main_info['stars'], star_style))
+
                     if tit_str:
                         cell_content.append(Paragraph(tit_str, posto_style))
-                        cell_content.append(Spacer(1, 4))
+                        cell_content.append(Spacer(1, 2))
 
                     cell_content.append(Paragraph(nome_limpo, nome_style))
             
                     if c.get('assento_id'):
-                        cell_content.append(Spacer(1, 4))
+                        cell_content.append(Spacer(1, 2))
                         cell_content.append(Paragraph(f"ASSENTO: {c.get('assento_id')}", sub_style))
 
-                    inner_row = []
-                    inner_row.append([rl_logo] if rl_logo else [''])
-                    inner_row.append(cell_content)
-                    inner_row.append([qr_rl_img] if qr_rl_img else [''])
-
                     inner_table = Table(
-                        [[inner_row[0][0], inner_row[1], inner_row[2][0]]],
-                        colWidths=[40, 480, 45]
+                        [[left_cell if left_cell else [''], cell_content, [qr_rl_img] if qr_rl_img else ['']]],
+                        colWidths=[55, 450, 55]
                     )
                     inner_table.setStyle(TableStyle([
                         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                        ('ALIGN', (0,0), (0,0), 'LEFT'),
+                        ('ALIGN', (0,0), (0,0), 'CENTER'),
                         ('ALIGN', (1,0), (1,0), 'CENTER'),
-                        ('ALIGN', (2,0), (2,0), 'RIGHT'),
+                        ('ALIGN', (2,0), (2,0), 'CENTER'),
                     ]))
 
                     table_data.append([inner_table])
