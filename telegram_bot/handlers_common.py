@@ -20,7 +20,6 @@ async def finalizar_solicitacao_acesso(bot, message, chat_id, state):
     reg_funcao = state['data'].get('reg_funcao', 'Gabinete')
     
     try:
-        from database import get_bot_db_connection as get_db_connection
         conn = get_db_connection()
         if conn:
             # Vincular no efetivo por e-mail e nome de guerra
@@ -158,7 +157,6 @@ def _format_militar_responsavel(ev, db=None):
 def _get_weekly_events_text():
     """Busca eventos dos próximos 7 dias na tabela demandas_comunicacao e retorna texto formatado com encarregados/responsáveis."""
     try:
-        from database import get_bot_db_connection as get_db_connection
         db = get_db_connection()
         if not db:
             return "⚠️ Banco de dados indisponível no momento."
@@ -244,7 +242,6 @@ def _get_weekly_events_text():
 
 async def mostrar_historico_usuarios_telegram(bot, message):
     chat_id = message.chat.id
-    from database import get_bot_db_connection as get_db_connection
     db = get_db_connection()
     if not db:
         await bot.send_message(chat_id, "⚠️ Banco de dados indisponível.")
@@ -291,7 +288,6 @@ async def mostrar_historico_usuarios_telegram(bot, message):
         btn_label = f"👤 #{idx} — {u_guerra} ({u_email.split('@')[0]})".strip()
         reply_markup.add(types.KeyboardButton(btn_label))
 
-    from .keyboards import get_main_menu_keyboard
     is_operator = str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design') if profile else False
     reply_markup.add(types.KeyboardButton("⬅️ Voltar"))
     
@@ -302,7 +298,6 @@ async def mostrar_historico_usuarios_telegram(bot, message):
 
 async def listar_cadastros_pendentes(bot, message):
     chat_id = message.chat.id
-    from database import get_bot_db_connection as get_db_connection
     from .utils import check_authorized_user
     profile = await check_authorized_user(message.from_user.id)
     db = get_db_connection()
@@ -439,7 +434,6 @@ def register_common_handlers(bot):
             state['step'] = 'observacoes'
             await bot.answer_callback_query(call.id, "Serviços salvos!")
             
-            from .keyboards import get_observations_keyboard
             await bot.send_message(
                 chat_id,
                 "[Passo Extra] 📝 **Observações ou Detalhes Adicionais**\n\n"
@@ -457,7 +451,6 @@ def register_common_handlers(bot):
                 selected_set.add(action_code)
                 await bot.answer_callback_query(call.id, "Adicionado")
 
-        from .keyboards import get_multi_service_inline_keyboard
         new_markup = get_multi_service_inline_keyboard(selected_set)
         try:
             await bot.edit_message_reply_markup(chat_id=chat_id, message_id=call.message.message_id, reply_markup=new_markup)
@@ -496,7 +489,6 @@ def register_common_handlers(bot):
             dem_id = parts[1]
             chat_id = call.message.chat.id
             
-            from database import get_bot_db_connection as get_db_connection
             db = get_db_connection()
             if not db:
                 await bot.answer_callback_query(call.id, "Banco indisponível.")
@@ -538,7 +530,6 @@ def register_common_handlers(bot):
     @bot.callback_query_handler(func=lambda call: call.data.startswith(('approve_req:', 'reject_req:', 'approve_role:')))
     async def handle_user_approval_callbacks(call):
         try:
-            from database import get_bot_db_connection as get_db_connection
             db = get_db_connection()
 
             if call.data.startswith('approve_req:'):
@@ -723,7 +714,6 @@ def register_common_handlers(bot):
     async def handle_all_messages(message):
         chat_id = message.chat.id
         
-        from database import get_bot_db_connection as get_db_connection
         db = get_db_connection()
         
         # Guard: mensagens sem texto (stickers, contatos, etc)
@@ -742,7 +732,6 @@ def register_common_handlers(bot):
             # --- Usuário NÃO autorizado ---
             if not profile:
                 if "vincular" in text.lower() or text == "🔗 Vincular Meu Nome":
-                    from database import get_bot_db_connection as get_db_connection
                     db = get_db_connection()
                     ef_lista = []
                     if db:
@@ -759,7 +748,6 @@ def register_common_handlers(bot):
                             'user': None,
                             'data': {}
                         }
-                        from .keyboards import get_efetivo_linking_keyboard
                         await bot.reply_to(
                             message,
                             "⚓ **VINCULAR CONTA DE MILITAR DO GABINETE**\n\n"
@@ -810,7 +798,6 @@ def register_common_handlers(bot):
                 if st_act in ('edit_titulo_demanda', 'edit_local_demanda', 'edit_hora_demanda', 'assign_equipe') and text.startswith(button_prefixes):
                     clear_state(chat_id)
 
-            from .keyboards import get_settings_keyboard
             if text == "⚙️ Configurações":
                 chat_states[chat_id] = {
                     'action': 'settings',
@@ -829,7 +816,6 @@ def register_common_handlers(bot):
                         'selected_services_set': set()
                     }
                 }
-                from .keyboards import get_om_keyboard
                 await bot.reply_to(
                     message, 
                     "📋 **NOVA SOLICITAÇÃO DE PAUTA — CGCFN**\n\n[Passo 1/9] ⚓ A solicitação é do **CGCFN** ou de **Outra OM**?", 
@@ -846,7 +832,6 @@ def register_common_handlers(bot):
                 return
 
             elif text in ("📋 Gerenciar Demandas", "📋 Voltar para Lista de Demandas", "/demandas", "/gerenciar"):
-                from database import get_bot_db_connection as get_db_connection
                 db = get_db_connection()
                 if not db:
                     await bot.reply_to(message, "⚠️ Banco de dados indisponível.")
@@ -969,7 +954,6 @@ def register_common_handlers(bot):
             elif text.startswith("🔎 Detalhes #"):
                 try:
                     dem_id = text.split('#')[1].strip()
-                    from database import get_bot_db_connection as get_db_connection
                     db = get_db_connection()
                     res_d = db.table('demandas_comunicacao').select('*').eq('id', dem_id).execute()
                     if res_d and res_d.data:
@@ -1001,7 +985,6 @@ def register_common_handlers(bot):
                             f"📝 **Observações:** {obs}\n"
                             f"━━━━━━━━━━━━━━━━━━"
                         )
-                        from .keyboards import get_demanda_actions_reply_keyboard
                         try:
                             await bot.send_message(chat_id, detail_msg, reply_markup=get_demanda_actions_reply_keyboard(dem_id, status=st.lower()), parse_mode='Markdown')
                         except Exception:
@@ -1013,7 +996,6 @@ def register_common_handlers(bot):
             elif text.startswith("🎯 Concluir Missão #"):
                 try:
                     dem_id = text.split('#')[1].strip()
-                    from database import get_bot_db_connection as get_db_connection
                     db = get_db_connection()
                     db.table('demandas_comunicacao').update({'status': 'concluida'}).eq('id', dem_id).execute()
                     await bot.reply_to(message, f"🎯 **MISSÃO CONCLUÍDA!**\nPauta ID #{dem_id} foi encerrada.", reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
@@ -1026,7 +1008,6 @@ def register_common_handlers(bot):
                 clear_state(chat_id)
                 try:
                     dem_id = text.split('#')[1].strip()
-                    from database import get_bot_db_connection as get_db_connection
                     db = get_db_connection()
                     db.table('demandas_comunicacao').update({'status': 'aprovada'}).eq('id', dem_id).execute()
                     await bot.reply_to(message, f"✅ **PAUTA APROVADA!**\nPauta ID #{dem_id} foi homologada.", reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
@@ -1039,7 +1020,6 @@ def register_common_handlers(bot):
                 clear_state(chat_id)
                 try:
                     dem_id = text.split('#')[1].strip()
-                    from database import get_bot_db_connection as get_db_connection
                     db = get_db_connection()
                     db.table('demandas_comunicacao').update({'status': 'rejeitado'}).eq('id', dem_id).execute()
                     await bot.reply_to(message, f"❌ **PAUTA REJEITADA!**\nPauta ID #{dem_id} foi marcada como rejeitada.", reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
@@ -1049,7 +1029,6 @@ def register_common_handlers(bot):
             elif text.startswith("🔄 Reabrir Pauta #"):
                 try:
                     dem_id = text.split('#')[1].strip()
-                    from database import get_bot_db_connection as get_db_connection
                     db = get_db_connection()
                     db.table('demandas_comunicacao').update({'status': 'aprovada'}).eq('id', dem_id).execute()
                     await bot.reply_to(message, f"🔄 **PAUTA REABERTA!**\nPauta ID #{dem_id} voltou ao status APROVADA.", reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
@@ -1086,7 +1065,6 @@ def register_common_handlers(bot):
             elif text.startswith("👤 Equipe #"):
                 dem_id = text.split('#')[1].strip()
                 try:
-                    from database import get_bot_db_connection as get_db_connection
                     db = get_db_connection()
                     res_ef = db.table('efetivo').select('*').execute()
                     efetivo_list = res_ef.data if res_ef.data else []
@@ -1099,7 +1077,6 @@ def register_common_handlers(bot):
                         'selected_ids': set(),
                         'efetivo_list': efetivo_list
                     }
-                    from .keyboards import get_efetivo_linking_keyboard
                     await bot.send_message(
                         chat_id,
                         f"👤 **ATRIBUIR EQUIPE OPERACIONAL (ID #{dem_id})**\n\n"
@@ -1111,7 +1088,6 @@ def register_common_handlers(bot):
                     await bot.reply_to(message, f"❌ Erro ao carregar efetivo: {e}")
 
             elif text in ("🪑 Placas JADE", "/jade", "/placas"):
-                from database import get_bot_db_connection as get_db_connection
                 db = get_db_connection()
                 if not db:
                     await bot.reply_to(message, "⚠️ Banco de dados indisponível.")
@@ -1147,13 +1123,11 @@ def register_common_handlers(bot):
                         msg_jade += "🎉 *Nenhuma placa pendente no momento!*\n"
 
                     msg_jade += "\n━━━━━━━━━━━━━━━━━━"
-                    from .keyboards import get_jade_menu_inline_keyboard
                     await bot.reply_to(message, msg_jade, reply_markup=get_jade_menu_inline_keyboard(), parse_mode='Markdown')
                 except Exception as e_j:
                     await bot.reply_to(message, f"❌ Erro ao consultar placas JADE: {e_j}")
 
             elif text in ("🔌 Cautelas Ativas", "/cautelas", "/cautela"):
-                from database import get_bot_db_connection as get_db_connection
                 db = get_db_connection()
                 if not db:
                     await bot.reply_to(message, "⚠️ Banco de dados indisponível.")
@@ -1190,7 +1164,6 @@ def register_common_handlers(bot):
                     'user': profile,
                     'selected_ids': set()
                 }
-                from .keyboards import get_cancel_keyboard
                 await bot.reply_to(
                     message,
                     "⚡ **CRIAR MISSÃO RÁPIDA**\n\n"
@@ -1206,7 +1179,6 @@ def register_common_handlers(bot):
                     'user': profile,
                     'data': {}
                 }
-                from .keyboards import get_gabarito_postos_keyboard
                 await bot.reply_to(
                     message,
                     "🏛️ **JADE — SOLICITAÇÃO EXPRESSA DE ASSENTO DE ÚLTIMA HORA**\n\n"
@@ -1237,7 +1209,6 @@ def register_common_handlers(bot):
                     'user': profile,
                     'data': {}
                 }
-                from .keyboards import get_presenca_keyboard
                 await bot.reply_to(
                     message,
                     "🌅 **CHAMADA MATUTINA — CGCFN/SISGAB**\n\n"
@@ -1277,11 +1248,9 @@ def register_common_handlers(bot):
                             'H': "✍️ Por favor, digite o hospital ou motivo para **(H) Hospital**:",
                             'OUTRO': "✍️ Por favor, descreva a sua situação/rotina de hoje:"
                         }
-                        from .keyboards import get_cancel_keyboard
                         await bot.reply_to(message, prompts.get(sigla_code, f"✍️ Por favor, digite a observação para **({sigla_code})**:"), reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
                     elif sigla_code in ('FE', 'L', 'DM'):
                         state['step'] = 'input_data_fim'
-                        from .keyboards import get_cancel_keyboard
                         await bot.reply_to(message, "🏖️ Por favor, informe a **data de término** das suas férias/licença\n(ex: `20/08`, `20/08/2026` ou número de dias ex: `10`):", reply_markup=get_cancel_keyboard(), parse_mode='Markdown')
                     else:
                         from .utils import _salvar_presenca_bot
@@ -1334,7 +1303,6 @@ def register_common_handlers(bot):
                 )
 
             elif text == "🔍 Buscar Minhas Fotos":
-                from database import get_bot_db_connection as get_db_connection
                 db = get_db_connection()
                 if not db:
                     await bot.reply_to(message, "⚠️ Banco offline.")
@@ -1432,7 +1400,6 @@ def register_common_handlers(bot):
                 return
             elif text in ("🔔 Notificações", "notificações"):
                 clear_state(chat_id)
-                from .keyboards import get_notifications_toggle_keyboard
                 from notifications_manager import get_user_preferences
                 u_id = profile.get('id') if profile else None
                 u_prefs = get_user_preferences(u_id) if u_id else {}
@@ -1494,7 +1461,6 @@ def register_common_handlers(bot):
                             'req_data': req_sel,
                             'user': profile
                         }
-                        from .keyboards import get_roles_selection_keyboard
                         req_nome = req_sel.get('nome_guerra') or req_sel.get('nome_completo') or req_sel.get('nome') or 'Militar'
                         await bot.reply_to(
                             message,
@@ -1534,7 +1500,6 @@ def register_common_handlers(bot):
                 u_guerra = req_sel.get('nome_guerra') or req_sel.get('nome_completo') or req_sel.get('nome') or "Militar"
                 u_tg_id = req_sel.get('telegram_id')
 
-                from database import get_bot_db_connection as get_db_connection
                 db = get_db_connection()
                 if db:
                     for tbl in ['RegistrationRequests', 'registration_requests']:
@@ -1589,7 +1554,6 @@ def register_common_handlers(bot):
                 return
             elif text in ("❌ 9. Rejeitar Cadastro", "Rejeitar"):
                 req_id = req_sel.get('id', '')
-                from database import get_bot_db_connection as get_db_connection
                 db = get_db_connection()
                 if db:
                     for tbl in ['RegistrationRequests', 'registration_requests']:
@@ -1613,7 +1577,6 @@ def register_common_handlers(bot):
         if action == 'edit_hora_demanda':
             dem_id = state.get('demanda_id')
             novahora = text.strip()
-            from database import get_bot_db_connection as get_db_connection
             db = get_db_connection()
             if db and dem_id:
                 try:
@@ -1627,7 +1590,6 @@ def register_common_handlers(bot):
         if action == 'edit_local_demanda':
             dem_id = state.get('demanda_id')
             novo_local = text.strip().upper()
-            from database import get_bot_db_connection as get_db_connection
             db = get_db_connection()
             if db and dem_id:
                 try:
@@ -1641,7 +1603,6 @@ def register_common_handlers(bot):
         if action == 'edit_titulo_demanda':
             dem_id = state.get('demanda_id')
             novo_titulo = text.strip().upper()
-            from database import get_bot_db_connection as get_db_connection
             db = get_db_connection()
             if db and dem_id:
                 try:
@@ -1668,7 +1629,6 @@ def register_common_handlers(bot):
                     militar_encontrado = ef
                     break
 
-            from database import get_bot_db_connection as get_db_connection
             db = get_bot_db_connection()
 
             if militar_encontrado and db and dem_id:
@@ -1698,7 +1658,6 @@ def register_common_handlers(bot):
                 except Exception as e_eq:
                     await bot.reply_to(message, f"❌ Erro ao atribuir equipe: {e_eq}")
             else:
-                from .keyboards import get_efetivo_linking_keyboard
                 await bot.reply_to(
                     message,
                     f"⚠️ Militar **'{text}'** não encontrado.\nPor favor, escolha um militar no teclado abaixo:",
@@ -1712,7 +1671,6 @@ def register_common_handlers(bot):
                 posto_sel = text.replace('⚓', '').replace('🎖️', '').replace('🏛️', '').replace('👤', '').strip()
                 state['data']['posto'] = posto_sel
                 state['step'] = 'input_nome'
-                from .keyboards import get_cancel_keyboard
                 await bot.reply_to(
                     message,
                     f"✅ **Posto/Cargo selecionado:** *{posto_sel}*\n\n"
@@ -1746,7 +1704,6 @@ def register_common_handlers(bot):
                 posto_val = state['data'].get('posto', '')
                 nome_val = state['data'].get('nome', '')
                 
-                from database import get_bot_db_connection as get_db_connection
                 db = get_db_connection()
                 if db:
                     try:
@@ -1781,7 +1738,6 @@ def register_common_handlers(bot):
                         print(f"[JADE SOLICITAR ASSENTO ERR] {db_e}")
 
                 del chat_states[chat_id]
-                from .keyboards import get_main_menu_keyboard
                 await bot.reply_to(
                     message,
                     f"🎉 **SOLICITAÇÃO DE ASSENTO REGISTRADA COM SUCESSO!**\n\n"
@@ -1950,7 +1906,6 @@ def register_common_handlers(bot):
                 elif '(OUTRO)' in sigla_txt or 'OUTRA SITUAÇÃO' in sigla_txt or 'OUTRO' in sigla_txt: sigla_code = 'OUTRO'
 
                 if not sigla_code:
-                    from .keyboards import get_presenca_keyboard
                     await bot.reply_to(
                         message,
                         "⚠️ Não reconheci a sigla ou rotina informada.\n"
@@ -1969,7 +1924,6 @@ def register_common_handlers(bot):
                         'H': "✍️ Por favor, digite o hospital ou motivo para **(H) Hospital**:",
                         'OUTRO': "✍️ Por favor, descreva a sua situação/rotina de hoje:"
                     }
-                    from .keyboards import get_cancel_keyboard
                     await bot.reply_to(
                         message,
                         prompts.get(sigla_code, f"✍️ Por favor, digite a observação para **({sigla_code})**:"),
@@ -1978,7 +1932,6 @@ def register_common_handlers(bot):
                     )
                 elif sigla_code in ('FE', 'L', 'DM'):
                     state['step'] = 'input_data_fim'
-                    from .keyboards import get_cancel_keyboard
                     await bot.reply_to(
                         message,
                         f"🏖️ Por favor, informe a **data de término** das suas férias/licença\n"
@@ -2009,7 +1962,6 @@ def register_common_handlers(bot):
         if action == 'vincular_efetivo':
             if step == 'select_militar':
                 nome_sel = text.replace('🎖️', '').strip().upper()
-                from database import get_bot_db_connection as get_db_connection
                 db = get_db_connection()
                 if db:
                     try:
@@ -2039,7 +1991,6 @@ def register_common_handlers(bot):
                     response_json = ai_helper.digest_demand_questionnaire(text)
                     dados = json.loads(response_json)
                     
-                    from database import get_bot_db_connection as get_db_connection
                     db = get_db_connection()
                     if db:
                         registro = {
@@ -2086,12 +2037,6 @@ def register_common_handlers(bot):
 
         # ----- WIZARD: Criar Demanda (Interativo com Botões em todas as Etapas) -----
         if action == 'criar_demanda':
-            from .keyboards import (
-                get_om_keyboard, get_date_keyboard, get_time_keyboard,
-                get_uniform_keyboard, get_authorities_keyboard, get_observations_keyboard,
-                get_multi_service_reply_keyboard, get_confirm_demanda_keyboard, get_cancel_keyboard
-            )
-            
             # Suporte ao botão "⬅️ Voltar"
             if text in ["⬅️ Voltar", "voltar"] and state.get('history_steps'):
                 prev_step, prev_data = state['history_steps'].pop()
@@ -2202,7 +2147,6 @@ def register_common_handlers(bot):
                 state['data']['autoridades'] = text
                 state['step'] = 'choose_coverage'
                 sel_set = state['data'].setdefault('selected_services_set', set())
-                from .keyboards import get_multi_service_reply_keyboard
                 try:
                     await bot.reply_to(
                         message, 
@@ -2256,7 +2200,6 @@ def register_common_handlers(bot):
                     state['data']['servicos_formatados'] = "\n".join([f"   • {labels_map[c]}" for c in sel_set if c in labels_map])
                     
                     state['step'] = 'observacoes'
-                    from .keyboards import get_observations_keyboard
                     try:
                         await bot.reply_to(
                             message,
@@ -2275,7 +2218,6 @@ def register_common_handlers(bot):
                     return
 
                 # Se apenas alternou o serviço, atualiza o teclado
-                from .keyboards import get_multi_service_reply_keyboard
                 await bot.reply_to(
                     message,
                     f"📸 **Serviços Selecionados ({len(sel_set)}):**\n"
@@ -2319,7 +2261,6 @@ def register_common_handlers(bot):
 
             elif step == 'review_confirm':
                 if "Confirmar" in text or "✅" in text:
-                    from database import get_bot_db_connection as get_db_connection
                     db = get_db_connection()
                     if db:
                         try:
@@ -2360,7 +2301,6 @@ def register_common_handlers(bot):
                     state['step'] = 'solicitante_om'
                     state['data'] = {'selected_services_set': set()}
                     state['history_steps'] = []
-                    from .keyboards import get_om_keyboard
                     await bot.reply_to(message, "✏️ **Formulação Reiniciada**\n\n[Passo 1/9] ⚓ A solicitação é do **CGCFN** ou de **Outra OM**?", reply_markup=get_om_keyboard(), parse_mode='Markdown')
                 else:
                     await bot.reply_to(message, "Selecione uma das opções nos botões abaixo:", reply_markup=get_confirm_demanda_keyboard())
@@ -2376,7 +2316,6 @@ def register_common_handlers(bot):
         except Exception:
             pass
 
-        from database import get_bot_db_connection as get_db_connection
         db = get_db_connection()
 
         if data == 'jade_refresh_queue':
@@ -2403,7 +2342,6 @@ def register_common_handlers(bot):
                     msg_jade += "🎉 *Nenhuma placa pendente no momento!*\n"
 
                 msg_jade += "\n━━━━━━━━━━━━━━━━━━"
-                from .keyboards import get_jade_menu_inline_keyboard
                 await bot.send_message(chat_id, msg_jade, reply_markup=get_jade_menu_inline_keyboard(), parse_mode='Markdown')
             return
 
@@ -2416,7 +2354,6 @@ def register_common_handlers(bot):
                     events_list = res_ev.data if res_ev and res_ev.data else []
 
                 if events_list:
-                    from .keyboards import get_jade_events_inline_keyboard
                     await bot.send_message(
                         chat_id,
                         "🏛️ **SELECIONE A SOLENIDADE / EVENTO:**\n"
@@ -2436,7 +2373,6 @@ def register_common_handlers(bot):
                 'event_id': ev_id,
                 'data': {}
             }
-            from .keyboards import get_gabarito_postos_keyboard
             await bot.send_message(
                 chat_id,
                 "✅ **Solenidade selecionada!**\n\n"
@@ -2452,7 +2388,6 @@ def register_common_handlers(bot):
                 'step': 'select_posto',
                 'data': {}
             }
-            from .keyboards import get_gabarito_postos_keyboard
             await bot.send_message(
                 chat_id,
                 "🪑 **SOLICITAÇÃO DE ASSENTO JADE**\n\n"
@@ -2468,7 +2403,6 @@ def register_common_handlers(bot):
                 'step': 'input_nome',
                 'data': {'posto': 'RESERVADO (Extra)'}
             }
-            from .keyboards import get_cancel_keyboard
             await bot.send_message(
                 chat_id,
                 "➕ **PLACA EXTRA DE ACOMPANHANTE**\n\n"
@@ -2481,7 +2415,6 @@ def register_common_handlers(bot):
         elif data == 'jade_cancel':
             if chat_id in chat_states:
                 del chat_states[chat_id]
-            from .keyboards import get_main_menu_keyboard
             await bot.send_message(chat_id, "❌ Operação cancelada.", reply_markup=get_main_menu_keyboard())
             return
 
@@ -2522,7 +2455,6 @@ def register_common_handlers(bot):
                 except Exception:
                     pass
 
-                from .keyboards import get_manage_demanda_inline_keyboard
                 await bot.edit_message_reply_markup(
                     chat_id=chat_id,
                     message_id=message_id,
@@ -2535,7 +2467,6 @@ def register_common_handlers(bot):
         elif data.startswith('fechar_opcoes_dem:'):
             dem_id = data.split(':')[1]
             try:
-                from .keyboards import get_demanda_summary_inline_keyboard
                 await bot.edit_message_reply_markup(
                     chat_id=chat_id,
                     message_id=message_id,
@@ -2590,7 +2521,6 @@ def register_common_handlers(bot):
                     'selected_ids': set(),
                     'efetivo_list': efetivo_list
                 }
-                from .keyboards import get_multi_militar_inline_keyboard
                 msg_txt = (
                     f"👤 **ATRIBUIR EQUIPE OPERACIONAL**\nDemanda ID #{dem_id}\n\n"
                     f"Selecione os militares que participarão da missão (ordenados por antiguidade):"
@@ -2664,7 +2594,6 @@ def register_common_handlers(bot):
                     sel.add(action_code)
                 st['selected_ids'] = sel
                 
-                from .keyboards import get_multi_militar_inline_keyboard
                 try:
                     await bot.edit_message_reply_markup(
                         chat_id=chat_id,
@@ -2734,7 +2663,6 @@ def register_common_handlers(bot):
                     sel.add(action_code)
                 st['selected_ids'] = sel
                 
-                from .keyboards import get_multi_militar_inline_keyboard
                 try:
                     await bot.edit_message_reply_markup(
                         chat_id=chat_id,
@@ -2934,7 +2862,6 @@ def register_common_handlers(bot):
                 
                 profile = state.get('user')
                 if profile:
-                    from database import get_bot_db_connection as get_db_connection
                     db = get_db_connection()
                     if db:
                         try:
@@ -2996,7 +2923,6 @@ def register_common_handlers(bot):
             local_ev = data.get('local_evento') or 'Gabinete'
             militares_citados = data.get('militares_citados', [])
 
-            from database import get_bot_db_connection as get_db_connection
             db = get_db_connection()
             d_id = 'OK'
             if db:
