@@ -1,5 +1,6 @@
 import os
 import warnings
+from datetime import datetime
 # Silenciar avisos de depreciação do pacote google.generativeai
 warnings.filterwarnings("ignore", category=FutureWarning)
 import google.generativeai as genai

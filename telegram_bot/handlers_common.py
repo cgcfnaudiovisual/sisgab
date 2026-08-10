@@ -1153,7 +1153,7 @@ def register_common_handlers(bot):
                     await bot.reply_to(message, "⚠️ Banco de dados indisponível.")
                     return
                 try:
-                    res_caut = db.table('cautela_equipamentos').select('*').eq('status', 'retirado').order('created_at', desc=True).execute()
+                    res_caut = db.table('cautela_equipamentos').select('*').eq('status', 'retirado').execute()
                     cautelas = res_caut.data if res_caut and res_caut.data else []
                     
                     if not cautelas:
