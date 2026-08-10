@@ -723,6 +723,9 @@ def register_common_handlers(bot):
     async def handle_all_messages(message):
         chat_id = message.chat.id
         
+        from database import get_bot_db_connection as get_db_connection
+        db = get_db_connection()
+        
         # Guard: mensagens sem texto (stickers, contatos, etc)
         if not message.text:
             return
@@ -2086,7 +2089,7 @@ def register_common_handlers(bot):
             from .keyboards import (
                 get_om_keyboard, get_date_keyboard, get_time_keyboard,
                 get_uniform_keyboard, get_authorities_keyboard, get_observations_keyboard,
-                get_multi_service_reply_keyboard, get_confirm_demanda_keyboard
+                get_multi_service_reply_keyboard, get_confirm_demanda_keyboard, get_cancel_keyboard
             )
             
             # Suporte ao botão "⬅️ Voltar"

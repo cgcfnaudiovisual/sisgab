@@ -316,15 +316,22 @@ async def _salvar_presenca_bot(bot, message, chat_id, state, sigla_code, obs_txt
     dt_str = now.strftime('%Y-%m-%d')
     hr_str = now.strftime('%H:%M:%S')
     
-    # Buscar registro existente para (user_id, data) antes de inserir
+    # Buscar registro existente para (user_id/telegram_id/nome_guerra, data) antes de inserir
     pres_id = None
     try:
         from database import get_bot_db_connection
         db_check = get_bot_db_connection()
         if db_check:
-            res_existing = db_check.table('presenca_diaria').select('id').eq('user_id', str(user_id)).eq('data', dt_str).limit(1).execute()
-            if res_existing and res_existing.data:
-                pres_id = res_existing.data[0].get('id')
+            # Tenta buscar por telegram_id ou user_id ou nome_guerra para a data de hoje
+            res_all = db_check.table('presenca_diaria').select('id, user_id, telegram_id, nome_guerra').eq('data', dt_str).execute()
+            if res_all and res_all.data:
+                for row in res_all.data:
+                    r_tg = str(row.get('telegram_id') or '').strip()
+                    r_uid = str(row.get('user_id') or '').strip()
+                    r_ng = str(row.get('nome_guerra') or '').strip().upper()
+                    if (r_tg and r_tg == str(chat_id)) or (r_uid and r_uid == str(user_id)) or (r_ng and r_ng == nome_g):
+                        pres_id = row.get('id')
+                        break
     except Exception as chk_err:
         print(f"[PRESENCA CHECK EXISTING ERR] {chk_err}")
     

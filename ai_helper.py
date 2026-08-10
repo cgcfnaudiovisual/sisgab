@@ -88,52 +88,74 @@ def improve_text(text: str, style: str = 'military') -> str:
 
 def digest_demand_questionnaire(raw_text: str) -> str:
     """Processa respostas brutas de um questionário de pauta e retorna um JSON estruturado com os dados."""
-    if not _get_google_api_key():
-        return "{}"
+    import re, json
     
+    now_str = datetime.now().strftime('%Y-%m-%d')
+    extracted = {
+        "solicitante_nome": "CGCFN",
+        "setor": "GABINETE",
+        "contato": "Ramal Gabinete",
+        "titulo_evento": "Pauta via Questionário",
+        "data_evento": now_str,
+        "hora_evento": "09:00",
+        "local_evento": "Gabinete",
+        "autoridades": "Nenhuma",
+        "pre_checklist": "Questionário recebido via Telegram."
+    }
+
+    # Extração via regras (fallback garantido)
     try:
-        system_prompt = """Você é uma Inteligência Artificial encarregada de extrair informações de questionários brutos respondidos por militares e estruturá-las em um objeto JSON válido.
+        lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
+        if lines:
+            extracted['titulo_evento'] = lines[0].replace('*', '').replace('#', '').strip().upper()[:60]
+        for line in lines:
+            line_u = line.upper()
+            if any(k in line_u for k in ['EVENTO:', 'PAUTA:', 'TÍTULO:', 'TITULO:', 'NOME DO EVENTO:']):
+                val = line.split(':')[-1].replace('*','').replace('#','').strip().upper()
+                if val: extracted['titulo_evento'] = val[:60]
+            elif any(k in line_u for k in ['SOLICITANTE:', 'MILITAR:', 'RESPONSÁVEL:', 'RESPONSAVEL:']):
+                val = line.split(':')[-1].replace('*','').strip().upper()
+                if val: extracted['solicitante_nome'] = val[:40]
+            elif any(k in line_u for k in ['LOCAL:', 'ENDEREÇO:', 'ENDERECO:']):
+                val = line.split(':')[-1].replace('*','').strip().upper()
+                if val: extracted['local_evento'] = val[:60]
+            elif any(k in line_u for k in ['HORA:', 'HORÁRIO:', 'HORARIO:']):
+                m_hr = re.search(r'\b([0-2]?\d[:hH][0-5]\d)\b', line)
+                if m_hr: extracted['hora_evento'] = m_hr.group(1).replace('h',':').replace('H',':')
+    except Exception as ex_rule:
+        print(f"[DIGEST REGEX WARN] {ex_rule}")
+
+    if _get_google_api_key():
+        try:
+            system_prompt = """Você é uma IA encarregada de extrair informações de questionários brutos respondidos por militares e estruturá-las em um objeto JSON válido.
 Extraia as seguintes chaves do texto:
 - solicitante_nome: Nome do solicitante militar (ex: TEN COSTA, SG SILVA)
 - setor: Setor ou divisão solicitante (ex: GABINETE, COMSOC, SECAD)
 - contato: Ramal ou telefone informado
 - titulo_evento: Um título conciso e profissional para o evento/demanda
-- data_evento: Data do evento no formato AAAA-MM-DD. Tente deduzir a data atual se for mencionado "amanhã", "próxima quarta", etc., sabendo que hoje é 18 de Julho de 2026.
+- data_evento: Data do evento no formato AAAA-MM-DD.
 - hora_evento: Hora no formato HH:MM (ex: 09:30, 14:00)
 - local_evento: Local do evento
-- autoridades: Autoridades presentes (ex: Almirante, Comandante, Prefeito)
-- pre_checklist: Uma breve observação sobre viabilidade baseada no texto (ex: se mencionaram que transporte está garantido ou se faltam detalhes).
+- autoridades: Autoridades presentes
 
-Retorne APENAS um objeto JSON válido, sem cercas de markdown (```json), sem explicações ou comentários adicionais. Exemplo de saída:
-{
-  "solicitante_nome": "SG SILVA",
-  "setor": "COMSOC",
-  "contato": "2199",
-  "titulo_evento": "Passagem de Comando",
-  "data_evento": "2026-07-20",
-  "hora_evento": "10:00",
-  "local_evento": "Pátio Principal",
-  "autoridades": "Almirante de Esquadra Silva, Comandante",
-  "pre_checklist": "Transporte e pessoal ok."
-}"""
-        model = genai.GenerativeModel(_get_gemini_model_name(), system_instruction=system_prompt)
-        user_content = f"Questionário Bruto:\n---\n{raw_text}\n---"
-        response = model.generate_content(user_content)
-        
-        output = response.candidates[0].content.parts[0].text.strip()
-        # Remove eventuais cercas de código markdown caso a IA ignore o system prompt
-        if output.startswith("```"):
-            lines = output.splitlines()
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines[-1].startswith("```"):
-                lines = lines[:-1]
-            output = "\n".join(lines).strip()
+Retorne APENAS um objeto JSON válido, sem cercas de markdown (```json), sem explicações."""
+            model = genai.GenerativeModel(_get_gemini_model_name(), system_instruction=system_prompt)
+            user_content = f"Questionário Bruto:\n---\n{raw_text}\n---"
+            response = model.generate_content(user_content)
             
-        return output
-    except Exception as e:
-        print(f"[DIGEST IA ERR] {e}")
-        return "{}"
+            output = response.candidates[0].content.parts[0].text.strip()
+            output = re.sub(r'^```(?:json)?\s*', '', output)
+            output = re.sub(r'\s*```$', '', output).strip()
+            
+            ai_data = json.loads(output)
+            if isinstance(ai_data, dict):
+                for k, v in ai_data.items():
+                    if v and str(v).strip() and str(v).strip().lower() != 'null':
+                        extracted[k] = str(v).strip()
+        except Exception as e:
+            print(f"[DIGEST IA ERR] {e}")
+
+    return json.dumps(extracted, ensure_ascii=False)
 
 
 def parse_multiple_events(raw_text: str) -> str:
@@ -405,15 +427,15 @@ def _get_google_api_key() -> str:
     return GOOGLE_API_KEY
 
 
-DEFAULT_RECOMMENDED_MODEL = "gemini-3.6-flash"
-
 def _get_gemini_model_name() -> str:
-    """Retorna o modelo de IA configurado ou o padrão 'gemini-3.6-flash'"""
+    """Retorna o modelo de IA configurado ou o padrão válido 'gemini-2.5-flash'."""
     global GEMINI_MODEL_NAME
     if not GEMINI_MODEL_NAME:
-        GEMINI_MODEL_NAME = get_config_value("gemini_model_name", DEFAULT_RECOMMENDED_MODEL)
+        GEMINI_MODEL_NAME = get_config_value("gemini_model_name", "gemini-2.5-flash")
         if not GEMINI_MODEL_NAME:
-            GEMINI_MODEL_NAME = DEFAULT_RECOMMENDED_MODEL
+            GEMINI_MODEL_NAME = "gemini-2.5-flash"
+    if "3.6" in str(GEMINI_MODEL_NAME):
+        return "gemini-2.5-flash"
     return GEMINI_MODEL_NAME
 
 
