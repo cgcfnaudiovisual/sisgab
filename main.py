@@ -1,14 +1,6 @@
 import os
 import socket
 
-# Monkeypatch socket.getaddrinfo para forçar IPv4 e evitar timeouts de IPv6 no Hugging Face
-original_getaddrinfo = socket.getaddrinfo
-def forced_ipv4_getaddrinfo(*args, **kwargs):
-    responses = original_getaddrinfo(*args, **kwargs)
-    filtered = [r for r in responses if r[0] == socket.AF_INET]
-    return filtered if filtered else responses
-socket.getaddrinfo = forced_ipv4_getaddrinfo
-
 from nicegui import ui, app
 from fastapi import Request
 from dotenv import load_dotenv
