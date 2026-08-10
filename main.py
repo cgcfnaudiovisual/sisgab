@@ -12,6 +12,7 @@ socket.getaddrinfo = forced_ipv4_getaddrinfo
 from nicegui import ui, app
 from fastapi import Request
 from dotenv import load_dotenv
+import asyncio
 
 
 # Mapeia a pasta local de assets para servir arquivos estáticos no navegador
@@ -1798,20 +1799,21 @@ app.on_startup(start_19h_briefing_scheduler)
 # Loop de liberação periódica de memória RAM para manter o pico sob 400MB
 async def _memory_cleanup_task():
     import gc
-    import asyncio
     while True:
         await asyncio.sleep(300) # Coleta a cada 5 minutos
         gc.collect()
 
 def start_memory_cleanup():
-    asyncio.create_task(_memory_cleanup_task())
+    try:
+        asyncio.create_task(_memory_cleanup_task())
+    except Exception as e:
+        print(f"[MEMORY CLEANUP ERR] {e}")
 
 app.on_startup(start_memory_cleanup)
 
 # Loop de Auto-Ping para manter a aplicacao no Render online 24/7 sem entrar em Sleep Mode
 async def _render_keepalive_task():
     import urllib.request
-    import asyncio
     render_url = os.environ.get('RENDER_EXTERNAL_URL')
     if not render_url:
         return
@@ -1826,7 +1828,10 @@ async def _render_keepalive_task():
 
 def start_render_keepalive():
     if os.environ.get('RENDER_EXTERNAL_URL'):
-        asyncio.create_task(_render_keepalive_task())
+        try:
+            asyncio.create_task(_render_keepalive_task())
+        except Exception as e:
+            print(f"[RENDER KEEPALIVE ERR] {e}")
 
 app.on_startup(start_render_keepalive)
 
