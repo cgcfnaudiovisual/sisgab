@@ -1796,29 +1796,39 @@ app.on_startup(AlertsManager.start_alerts_scheduler)
 app.on_startup(start_19h_briefing_scheduler)
 
 # Loop de liberação periódica de memória RAM para manter o pico sob 400MB
-async def memory_cleanup_loop():
+async def _memory_cleanup_task():
     import gc
     import asyncio
     while True:
         await asyncio.sleep(300) # Coleta a cada 5 minutos
         gc.collect()
-app.on_startup(memory_cleanup_loop)
+
+def start_memory_cleanup():
+    asyncio.create_task(_memory_cleanup_task())
+
+app.on_startup(start_memory_cleanup)
 
 # Loop de Auto-Ping para manter a aplicacao no Render online 24/7 sem entrar em Sleep Mode
-async def render_keepalive_loop():
+async def _render_keepalive_task():
     import urllib.request
     import asyncio
-    render_url = os.environ.get('RENDER_EXTERNAL_URL') or "https://sisgab.onrender.com"
+    render_url = os.environ.get('RENDER_EXTERNAL_URL')
+    if not render_url:
+        return
     ping_endpoint = f"{render_url}/ping"
     while True:
         await asyncio.sleep(240)  # Pinga a cada 4 minutos para impedir o Sleep Mode no Render
         try:
             req = urllib.request.Request(ping_endpoint, headers={'User-Agent': 'SisGAB-KeepAlive/1.0'})
-            urllib.request.urlopen(req, timeout=10)
+            await asyncio.to_thread(urllib.request.urlopen, req, timeout=10)
         except Exception as e:
             print(f"[KEEPALIVE PING] {e}")
 
-app.on_startup(render_keepalive_loop)
+def start_render_keepalive():
+    if os.environ.get('RENDER_EXTERNAL_URL'):
+        asyncio.create_task(_render_keepalive_task())
+
+app.on_startup(start_render_keepalive)
 
 # Garante o encerramento limpo da sessão do bot do Telegram ao desligar ou recarregar
 app.on_shutdown(telegram_bot.stop_bot)
