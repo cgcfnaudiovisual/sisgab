@@ -1824,7 +1824,7 @@ app.on_startup(render_keepalive_loop)
 app.on_shutdown(telegram_bot.stop_bot)
 
 # Configuração dinâmica para deploy na nuvem (Render, Railway, Hugging Face, etc.)
-port_env = int(os.environ.get('PORT', 7860))
+port_env = int(os.environ.get('PORT', 8080))
 host_env = os.environ.get('HOST', '0.0.0.0')
 # SEGURANÇA: Exige STORAGE_SECRET no ambiente para segurança de sessão
 secret_env = os.environ.get('STORAGE_SECRET') or "sisgab-secret-key-cgcfn-audiovisual-2026-prod-fallback"
