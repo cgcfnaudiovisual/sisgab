@@ -501,6 +501,37 @@ def send_daily_19h_telegram_briefing() -> bool:
         return False
 
 
+def _get_last_19h_sent_date() -> str:
+    """Busca a última data de envio do relatório das 19h no banco de dados ou memória."""
+    global _LAST_19H_SENT_DATE
+    if _LAST_19H_SENT_DATE:
+        return _LAST_19H_SENT_DATE
+    try:
+        from database import get_bot_db_connection
+        conn = get_bot_db_connection()
+        if conn:
+            res = conn.table('config').select('valor').eq('chave', 'telegram_briefing_19h_last_date').execute()
+            if res and res.data and res.data[0].get('valor'):
+                _LAST_19H_SENT_DATE = res.data[0]['valor'].strip()
+                return _LAST_19H_SENT_DATE
+    except Exception as e:
+        print(f"[19H READ LAST DATE ERR] {e}")
+    return _LAST_19H_SENT_DATE or ""
+
+
+def _set_last_19h_sent_date(date_str: str):
+    """Salva a última data de envio do relatório das 19h no banco de dados e memória."""
+    global _LAST_19H_SENT_DATE
+    _LAST_19H_SENT_DATE = date_str
+    try:
+        from database import get_bot_db_connection
+        conn = get_bot_db_connection()
+        if conn:
+            conn.table('config').upsert({'chave': 'telegram_briefing_19h_last_date', 'valor': date_str}, on_conflict='chave').execute()
+    except Exception as e:
+        print(f"[19H SAVE LAST DATE ERR] {e}")
+
+
 def start_19h_briefing_scheduler():
     """Inicia a thread em background que verifica se deu 19:00 BRT e despacha o relatório."""
     global _SCHEDULER_19H_STARTED
@@ -509,7 +540,6 @@ def start_19h_briefing_scheduler():
     _SCHEDULER_19H_STARTED = True
 
     def _loop():
-        global _LAST_19H_SENT_DATE
         import time
         from datetime import datetime, timedelta
         print("[19H SCHEDULER] Loop agendador do relatório das 19:00h iniciado com sucesso.", flush=True)
@@ -517,10 +547,11 @@ def start_19h_briefing_scheduler():
             try:
                 now_br = datetime.utcnow() - timedelta(hours=3)
                 today_str = now_br.strftime('%Y-%m-%d')
+                last_sent = _get_last_19h_sent_date()
                 
                 # Se for 19:00 BRT ou mais tarde e ainda não disparou hoje
-                if now_br.hour >= 19 and _LAST_19H_SENT_DATE != today_str:
-                    _LAST_19H_SENT_DATE = today_str
+                if now_br.hour >= 19 and last_sent != today_str:
+                    _set_last_19h_sent_date(today_str)
                     print(f"[19H SCHEDULER] Disparando relatório diário automático das 19:00h ({today_str})...", flush=True)
                     send_daily_19h_telegram_briefing()
             except Exception as loop_err:
