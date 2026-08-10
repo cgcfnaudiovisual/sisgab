@@ -39,11 +39,51 @@ async def _tactical_reminder_loop():
             break
         except Exception as e:
             print(f"[TACTICAL REMINDER LOOP ERR] {e}")
-        await asyncio.sleep(600)  # Checa a cada 10 min
+async def _morning_attendance_loop():
+    """Loop que monitora a chamada matutina (07:00) e cobranças recorrentes (07:10 às 09:30) via Telegram."""
+    from datetime import datetime
+    from .scheduled_jobs import trigger_daily_attendance_call, trigger_10min_attendance_reminder
+    
+    last_0700_date = None
+    last_reminder_ts = 0
+    
+    while True:
+        try:
+            if bot:
+                try:
+                    from timezone import timezone, timedelta
+                except Exception:
+                    from datetime import timezone, timedelta
+                
+                tz_gmt3 = timezone(timedelta(hours=-3))
+                now = datetime.now(tz_gmt3)
+                today_str = now.strftime('%Y-%m-%d')
+                now_ts = now.timestamp()
+                
+                # 1. Chamada Matutina Geral exatamente às 07:00 (disparada 1 vez por dia)
+                if now.hour == 7 and now.minute == 0 and last_0700_date != today_str:
+                    last_0700_date = today_str
+                    print(f"[BOT MORNING CRON] Disparando Chamada Matutina das 07:00h para o efetivo...", flush=True)
+                    await trigger_daily_attendance_call(bot)
+                
+                # 2. Cobrança Recorrente a cada 10 minutos (das 07:10h às 09:30h) para quem ainda estiver PENDENTE
+                is_janela = (now.hour == 7 and now.minute >= 10) or (now.hour == 8) or (now.hour == 9 and now.minute <= 30)
+                if is_janela and (now_ts - last_reminder_ts) >= 600:  # 10 minutos
+                    last_reminder_ts = now_ts
+                    print(f"[BOT MORNING CRON] Disparando cobrança de presença para pendentes às {now.strftime('%H:%M')}h...", flush=True)
+                    await trigger_10min_attendance_reminder(bot)
+                    
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"[MORNING ATTENDANCE LOOP ERR] {e}", flush=True)
+            
+        await asyncio.sleep(20)  # Checa a cada 20 segundos
 
 
 async def _run_resilient_polling(bot_instance):
     asyncio.create_task(_tactical_reminder_loop())
+    asyncio.create_task(_morning_attendance_loop())
     while True:
         try:
             if not bot_instance or bot is not bot_instance:

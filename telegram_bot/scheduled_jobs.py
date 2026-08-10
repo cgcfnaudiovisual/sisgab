@@ -177,15 +177,34 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
         res_ef = conn.table('efetivo').select('nome_guerra, telegram_id, posto_grad').execute()
         if not res_ef.data: return 0
         
-        res_pr = conn.table('presenca_diaria').select('nome_guerra, status').eq('data', hoje_str).execute()
+        # Busca respondidos no Supabase (escala_diaria + presenca_diaria)
         respondidos = set()
-        if res_pr and res_pr.data:
-            for p in res_pr.data:
-                st = str(p.get('status') or '').strip().upper()
-                if st and st not in ('PENDENTE', 'NONE', 'NULL'):
-                    ng = str(p.get('nome_guerra') or '').strip().upper()
-                    if ng:
-                        respondidos.add(ng)
+        
+        # 1. Tabela oficial escala_diaria
+        try:
+            res_esc = conn.table('escala_diaria').select('nome, cargo').eq('data', hoje_str).execute()
+            if res_esc and res_esc.data:
+                for item in res_esc.data:
+                    c_val = str(item.get('cargo') or '').strip().upper()
+                    if c_val and c_val not in ('PENDENTE', 'NONE', 'NULL'):
+                        n_val = str(item.get('nome') or '').strip().upper()
+                        if n_val:
+                            respondidos.add(n_val)
+        except Exception as e_esc:
+            print(f"[REMINDER CHECK ESCALA WARN] {e_esc}")
+
+        # 2. Tabela presenca_diaria
+        try:
+            res_pr = conn.table('presenca_diaria').select('nome_guerra, status').eq('data', hoje_str).execute()
+            if res_pr and res_pr.data:
+                for p in res_pr.data:
+                    st = str(p.get('status') or '').strip().upper()
+                    if st and st not in ('PENDENTE', 'NONE', 'NULL'):
+                        ng = str(p.get('nome_guerra') or '').strip().upper()
+                        if ng:
+                            respondidos.add(ng)
+        except Exception as e_pr:
+            print(f"[REMINDER CHECK PRESENCA WARN] {e_pr}")
         
         # Inclui militares com isenção ativa de férias/licença no conjunto de respondidos
         try:
