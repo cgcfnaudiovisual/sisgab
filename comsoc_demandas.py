@@ -219,36 +219,39 @@ def render_page(autofill: str = None):
         # Busca efetivo militar do banco para notificação / designação de equipe
         efetivo_options = {}
         db_ef = get_service_db_connection() or get_db_connection()
+        ef_data_raw = []
         if db_ef:
             try:
-                res_ef = db_ef.table('efetivo').select('id, nome_guerra, role, posto_grad').execute()
-                if res_ef.data:
-                    try:
-                        from database import sort_efetivo_list
-                        sorted_ef = sort_efetivo_list(res_ef.data)
-                    except Exception:
-                        sorted_ef = res_ef.data
-                    
-                    efetivo_options = {
-                        str(item['id']): f"{(item.get('posto_grad') or '').strip()} {(item.get('nome_guerra') or '').strip()} ({(item.get('role') or 'membro').upper()})".strip()
-                        for item in sorted_ef if item.get('nome_guerra')
-                    }
+                res_ef = db_ef.table('efetivo').select('*').execute()
+                ef_data_raw = res_ef.data or []
             except Exception as e:
                 print(f"[EFETIVO LOAD ERR] {e}")
 
         # Fallback local via SQLite se o Supabase estiver offline/vazio
-        if not efetivo_options:
+        if not ef_data_raw:
             try:
                 from sqlite_adapter import SQLiteDatabaseAdapter
                 local_db = SQLiteDatabaseAdapter()
-                res_ef = local_db.table('efetivo').select('id, nome_guerra, role, posto_grad').execute()
-                if res_ef.data:
-                    efetivo_options = {
-                        str(item['id']): f"{(item.get('posto_grad') or '').strip()} {(item.get('nome_guerra') or '').strip()} ({(item.get('role') or 'membro').upper()})".strip()
-                        for item in res_ef.data if item.get('nome_guerra')
-                    }
+                res_ef = local_db.table('efetivo').select('*').execute()
+                ef_data_raw = res_ef.data or []
             except Exception as loc_err:
                 print(f"[EFETIVO LOCAL LOAD ERR] {loc_err}")
+
+        if ef_data_raw:
+            try:
+                from telegram_bot.utils import sort_efetivo_by_rank
+                sorted_ef = sort_efetivo_by_rank(ef_data_raw)
+            except Exception:
+                sorted_ef = ef_data_raw
+
+            for item in sorted_ef:
+                if item.get('nome_guerra'):
+                    m_id = str(item['id'])
+                    pg = (item.get('posto_grad') or item.get('posto') or '').strip()
+                    ng = (item.get('nome_guerra') or item.get('nome') or '').strip()
+                    r_raw = str(item.get('role') or 'praca_gab').lower()
+                    r_tag = 'ADMIN' if r_raw == 'admin' else 'SUPERVISOR' if r_raw == 'supervisor' else 'COMSOC' if r_raw == 'comsoc' else 'COMSOC_DESIGN' if r_raw == 'comsoc_design' else 'OFICIAL' if 'oficial' in r_raw else 'GABINETE'
+                    efetivo_options[m_id] = f"{pg} {ng} ({r_tag})".strip()
 
         with ui.column().classes('w-full gap-4'):
 

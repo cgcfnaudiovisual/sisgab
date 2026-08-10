@@ -1296,8 +1296,14 @@ def render_page():
                     if not users_data:
                         ui.label('Nenhum operador cadastrado.').classes('italic q-py-md text-sm').style(f'color: {THEME["text_dim"]}')
                     else:
+                        try:
+                            from telegram_bot.utils import sort_efetivo_by_rank
+                            users_data = sort_efetivo_by_rank(users_data)
+                        except Exception:
+                            pass
+
                         with ui.column().classes('w-full gap-3'):
-                            for u in users_data:
+                            for u_idx, u in enumerate(users_data, 1):
                                 with ui.card().classes('w-full q-pa-sm border bg-black/10 hover:border-cyan-500/20 transition-all').style(f'border-color: rgba(0, 229, 255, 0.1);'):
                                     with ui.row().classes('w-full items-center justify-between wrap gap-4'):
                                         # 1. Informações básicas + Foto de Perfil Quadrada
@@ -1320,7 +1326,8 @@ def render_page():
                                             # Foto de Perfil Tática
                                             user_photo = u.get('url_foto') or ''
                                             user_avatar_src = user_photo if isinstance(user_photo, str) and user_photo.startswith('http') else 'https://cdn.quasar.dev/img/boy-avatar.png'
-                                            role_color = '#00e676' if u.get('role') == 'admin' else '#00b0ff' if u.get('role') == 'supervisor' else '#e040fb' if u.get('role') == 'comcia' else '#ff9100' if u.get('role') == 'aluno' else '#d500f9' if u.get('role') == 'ajosca' else '#90a4ae'
+                                            u_role_raw = str(u.get('role', 'praca_gab')).lower()
+                                            role_color = '#00e676' if u_role_raw == 'admin' else '#00b0ff' if u_role_raw == 'supervisor' else '#ab47bc' if u_role_raw == 'oficial_gab' else '#7e57c2' if u_role_raw == 'oficial' else '#29b6f6' if u_role_raw == 'comsoc' else '#f06292' if u_role_raw == 'comsoc_design' else '#ff9100'
                                             ui.element('div').classes('shadow border shrink-0').style(
                                                 f"width: 48px; height: 48px; background-image: url('{user_avatar_src}'); "
                                                 f"background-size: cover; background-repeat: no-repeat; "
@@ -1330,12 +1337,11 @@ def render_page():
                                             with ui.column().classes('gap-0.5'):
                                                 with ui.row().classes('items-center gap-2'):
                                                     ui.label(u['nome']).classes('font-black text-sm uppercase').style(f'color: {THEME["text_main"]}')
-                                                    role_text = ROLE_OPTIONS.get(u.get('role', 'compel'), 'Compel').split(' (')[0]
+                                                    role_text = ROLE_OPTIONS.get(u_role_raw, 'Praça do Gabinete').split(' (')[0]
                                                     ui.label(role_text.upper()).classes('text-[9px] font-bold px-1.5 py-0.5 rounded border').style(
                                                         f"color: {role_color}; border-color: {role_color}40; background: {role_color}10;"
                                                     )
-                                                    ant_badge_num = u.get('antiguidade_num') or u.get('numero_antiguidade') or u.get('ordem_precedencia') or '99'
-                                                    ui.label(f"🎖️ Precedência: #{ant_badge_num}").classes('text-[9px] font-bold px-1.5 py-0.5 rounded border border-amber-500/40 text-amber-400 bg-amber-500/10').tooltip('Ordem de precedência militar no grupo')
+                                                    ui.label(f"🎖️ Precedência: #{u_idx}").classes('text-[9px] font-bold px-1.5 py-0.5 rounded border border-amber-500/40 text-amber-400 bg-amber-500/10').tooltip('Ordem de precedência militar no grupo')
                                                 with ui.row().classes('items-center gap-4 text-[11px]').style(f'color: {THEME["text_dim"]}'):
                                                     ui.label(f"User: {u['username']}")
                                                     if u.get('telegram_id'):
