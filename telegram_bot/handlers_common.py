@@ -1223,16 +1223,40 @@ def register_common_handlers(bot):
 
 
             elif text == "📋 Dar Presença" or text == "🟢 Dar Presença" or text == "/presenca":
+                now_br = datetime.utcnow() - timedelta(hours=3)
+                dt_str = now_br.strftime('%Y-%m-%d')
+                dt_br = now_br.strftime('%d/%m/%Y')
+
                 chat_states[chat_id] = {
                     'action': 'presenca_diaria',
                     'step': 'choose_sigla',
                     'user': profile,
                     'data': {}
                 }
+
+                # Buscar status de presenca atual do militar para hoje
+                status_atual_txt = ""
+                try:
+                    from modulo_presenca import fetch_efetivo_and_presencas, find_presence_for_militar
+                    ef_list, p_list = fetch_efetivo_and_presencas(dt_str)
+                    p_user = find_presence_for_militar(profile, p_list)
+                    if p_user and p_user.get('status'):
+                        st_code = p_user.get('status', '').upper()
+                        obs_curr = p_user.get('observacao', '').strip()
+                        obs_info = f" ({obs_curr})" if obs_curr else ""
+                        status_atual_txt = f"\n\n📌 **Seu status atual gravado para hoje ({dt_br}):** *({st_code})*{obs_info}\n*Para alterar ou confirmar, selecione uma sigla abaixo:*"
+                except Exception as st_err:
+                    print(f"[CHECK PRESENCE CURRENT ERR] {st_err}")
+
+                msg_prompt = (
+                    f"🌅 **CHAMADA MATUTINA — CGCFN/SISGAB**\n"
+                    f"📅 Data: **{dt_br}**"
+                    f"{status_atual_txt}\n\n"
+                    f"Por favor, selecione a sigla da sua rotina para hoje:"
+                )
                 await bot.reply_to(
                     message,
-                    "🌅 **CHAMADA MATUTINA — CGCFN/SISGAB**\n\n"
-                    "Por favor, selecione a sigla da sua rotina para hoje:",
+                    msg_prompt,
                     reply_markup=get_presenca_keyboard(),
                     parse_mode='Markdown'
                 )

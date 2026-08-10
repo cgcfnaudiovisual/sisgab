@@ -349,8 +349,8 @@ async def _salvar_presenca_bot(bot, message, chat_id, state, sigla_code, obs_txt
         'status': sigla_code,
         'observacao': obs_txt.strip() if obs_txt else '',
         'data_fim': data_fim if data_fim else None,
-        'criado_em': now.isoformat(),
-        'updated_at': now.isoformat()
+        'criado_em': now_br.isoformat(),
+        'updated_at': now_br.isoformat()
     }
     
     # 1. Salva no Supabase se disponível
