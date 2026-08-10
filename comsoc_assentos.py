@@ -268,531 +268,545 @@ def render_page():
     @ui.refreshable
     def render_content():
         try:
-            from database import sync_rsvp_with_jade
-            sync_rsvp_with_jade()
-        except Exception as sync_err:
-            print(f"[RSVP JADE SYNC ERR] {sync_err}")
-
-        db = get_service_db_connection() or get_db_connection()
-        if not db:
-            with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
-                ui.icon('cloud_off', size='4rem')
-                ui.label('Banco de dados não disponível. Verifique a conexão.').classes('text-md font-bold')
-            return
-
-        # 1. Carregar lista de eventos (Supabase com fallback para SQLite local)
-        eventos = []
-        try:
-            res_ev = db.table('jade_eventos').select('*').order('data_evento', desc=True).execute()
-            eventos = res_ev.data if res_ev and res_ev.data else []
-        except Exception as e:
-            print(f"[JADE EVENTS SUPABASE ERR] {e}")
-
-        if not eventos:
             try:
-                from sqlite_adapter import SQLiteDatabaseAdapter
-                local_db = SQLiteDatabaseAdapter()
-                res_loc = local_db.table('jade_eventos').select('*').order('data_evento', desc=True).execute()
-                eventos = res_loc.data if res_loc and res_loc.data else []
-            except Exception as loc_err:
-                print(f"[JADE EVENTS LOCAL ERR] {loc_err}")
+                from database import sync_rsvp_with_jade
+                sync_rsvp_with_jade()
+            except Exception as sync_err:
+                print(f"[RSVP JADE SYNC ERR] {sync_err}")
 
-        # Garante que selected_event_id seja válido entre os eventos existentes
-        if eventos:
-            valid_ids = [e['id'] for e in eventos]
-            if not getattr(state, 'selected_event_id', None) or state.selected_event_id not in valid_ids:
-                state.selected_event_id = valid_ids[0]
+            db = get_service_db_connection() or get_db_connection()
+            if not db:
+                with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
+                    ui.icon('cloud_off', size='4rem')
+                    ui.label('Banco de dados não disponível. Verifique a conexão.').classes('text-md font-bold')
+                return
 
-        current_event = next((e for e in eventos if e['id'] == state.selected_event_id), None) if eventos else None
-
-        convidados = []
-        layout = {}
-        if current_event:
+            # 1. Carregar lista de eventos (Supabase com fallback para SQLite local)
+            eventos = []
             try:
-                res_conv = db.table('jade_convidados').select('*').eq('evento_id', current_event['id']).order('id', desc=False).execute()
-                convidados = res_conv.data if res_conv and res_conv.data else []
+                res_ev = db.table('jade_eventos').select('*').order('data_evento', desc=True).execute()
+                eventos = res_ev.data if res_ev and res_ev.data else []
             except Exception as e:
-                print(f"[JADE GUESTS SUPABASE ERR] {e}")
+                print(f"[JADE EVENTS SUPABASE ERR] {e}")
 
-            if not convidados:
+            if not eventos:
                 try:
                     from sqlite_adapter import SQLiteDatabaseAdapter
                     local_db = SQLiteDatabaseAdapter()
-                    res_c_loc = local_db.table('jade_convidados').select('*').eq('evento_id', current_event['id']).order('id', desc=False).execute()
-                    convidados = res_c_loc.data if res_c_loc and res_c_loc.data else []
-                except Exception as loc_c_err:
-                    print(f"[JADE GUESTS LOCAL ERR] {loc_c_err}")
+                    res_loc = local_db.table('jade_eventos').select('*').order('data_evento', desc=True).execute()
+                    eventos = res_loc.data if res_loc and res_loc.data else []
+                except Exception as loc_err:
+                    print(f"[JADE EVENTS LOCAL ERR] {loc_err}")
 
-            try:
-                layout = json.loads(current_event['layout_json']) if current_event.get('layout_json') else {}
-            except Exception as e:
-                print(f"[LAYOUT PARSE ERR] {e}")
+            # Garante que selected_event_id seja válido entre os eventos existentes
+            if eventos:
+                valid_ids = [e['id'] for e in eventos]
+                if not getattr(state, 'selected_event_id', None) or state.selected_event_id not in valid_ids:
+                    state.selected_event_id = valid_ids[0]
 
-        # --- CABEÇALHO DE CONTROLE DE EVENTOS ---
-        with ui.card().classes('w-full q-pa-md no-shadow rounded-xl q-mb-md').style(
-            f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
-        ):
+            current_event = next((e for e in eventos if e['id'] == state.selected_event_id), None) if eventos else None
 
-            # ── Linha 1: Seletor + Gestão do Evento ──
-            with ui.row().classes('w-full items-center gap-3 q-mb-sm wrap'):
-                ui.label('Solenidade Ativa:').classes('text-xs text-grey-4 font-bold')
-                if eventos:
-                    event_options = {e['id']: f"{e['nome']} ({e['data_evento']})" for e in eventos}
-                    ui.select(
-                        options=event_options,
-                        value=state.selected_event_id,
-                        on_change=lambda e: select_event(e.value)
-                    ).props('dark outlined dense').style('min-width: 300px;')
-                else:
-                    ui.label('Nenhum evento cadastrado.').classes('text-sm text-amber font-bold')
-
-                ui.space()
-                # Controles do Evento
-                ui.button('＋ Novo Evento', icon='add', on_click=lambda: open_create_event_dialog()).props('unelevated color=primary text-color=black dense').classes('q-px-sm text-xs')
-                if current_event:
-                    ui.button('✏️ Editar', icon='edit', on_click=lambda: open_edit_event_dialog(current_event, layout)).props('unelevated color=grey-7 text-color=white dense').classes('q-px-sm text-xs')
-                    ui.button('🗑️', icon='delete', on_click=lambda: confirm_delete_event(current_event)).props('unelevated color=negative text-color=white dense').classes('q-px-xs text-xs').tooltip('Excluir Evento')
-
+            convidados = []
+            layout = {}
             if current_event:
-                ui.separator().classes('q-my-xs').style('border-color: rgba(255,255,255,0.06);')
+                try:
+                    res_conv = db.table('jade_convidados').select('*').eq('evento_id', current_event['id']).order('id', desc=False).execute()
+                    convidados = res_conv.data if res_conv and res_conv.data else []
+                except Exception as e:
+                    print(f"[JADE GUESTS SUPABASE ERR] {e}")
 
-                # ── Linha 2: Grupo Placas + Grupo Dados + Grupo Campo ──
-                with ui.row().classes('w-full items-center gap-2 wrap'):
-                    # GRUPO 1: Impressão de Placas (alta prioridade)
-                    ui.badge('PLACAS').props('color=cyan text-color=black').classes('text-[9px] font-bold q-mr-xs')
-                    ui.button('⚡ Placa Express', icon='bolt', on_click=lambda: open_express_plate_dialog(current_event, convidados, layout)).props('unelevated color=deep-orange text-color=white dense bold').classes('q-px-sm text-xs').tooltip('Buscar ou criar placa avulsa de emergência (1 clique para impressora)')
-                    ui.button('🖨️ Imprimir Placas', icon='print', on_click=lambda: open_print_cards_dialog(current_event, convidados, layout)).props('unelevated color=cyan text-color=black dense bold').classes('q-px-sm text-xs').tooltip('Central de impressão: modelos, brasões, fontes, lote completo')
-                    ui.button('✅ Confirmar', icon='how_to_reg', on_click=lambda: open_mass_confirmation_dialog(current_event, convidados)).props('unelevated color=green text-color=white dense bold').classes('q-px-sm text-xs').tooltip('Confirmar Presenças em Massa')
+                if not convidados:
+                    try:
+                        from sqlite_adapter import SQLiteDatabaseAdapter
+                        local_db = SQLiteDatabaseAdapter()
+                        res_c_loc = local_db.table('jade_convidados').select('*').eq('evento_id', current_event['id']).order('id', desc=False).execute()
+                        convidados = res_c_loc.data if res_c_loc and res_c_loc.data else []
+                    except Exception as loc_c_err:
+                        print(f"[JADE GUESTS LOCAL ERR] {loc_c_err}")
 
-                    ui.separator().props('vertical').classes('q-mx-xs').style('height: 24px; border-color: rgba(255,255,255,0.12);')
+                try:
+                    layout = json.loads(current_event['layout_json']) if current_event.get('layout_json') else {}
+                except Exception as e:
+                    print(f"[LAYOUT PARSE ERR] {e}")
 
-                    # GRUPO 2: Dados e Cadastro
-                    ui.badge('DADOS').props('color=indigo text-color=white').classes('text-[9px] font-bold q-mr-xs')
-                    ui.button('📥 Importar Excel', icon='file_upload', on_click=lambda: open_smart_excel_import_dialog(current_event)).props('unelevated color=deep-purple text-color=white dense bold').classes('q-px-sm text-xs')
-                    ui.button('🏛️ Mestre', icon='account_balance', on_click=lambda: open_master_authorities_dialog(current_event)).props('unelevated color=indigo text-color=white dense bold').classes('q-px-sm text-xs').tooltip('Cadastro Mestre de Autoridades')
-                    ui.button('📊 Planilhão', icon='table_chart', on_click=lambda: open_event_spreadsheet_dialog(current_event, convidados)).props('unelevated color=teal text-color=white dense bold').classes('q-px-sm text-xs').tooltip('Planilhão completo do evento com exportação CSV')
+            # --- CABEÇALHO DE CONTROLE DE EVENTOS ---
+            with ui.card().classes('w-full q-pa-md no-shadow rounded-xl q-mb-md').style(
+                f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
+            ):
 
-                    ui.separator().props('vertical').classes('q-mx-xs').style('height: 24px; border-color: rgba(255,255,255,0.12);')
-
-
-                    # GRUPO 3: Operações de Campo
-                    ui.badge('CAMPO').props('color=amber text-color=black').classes('text-[9px] font-bold q-mr-xs')
-                    ui.button('🔍 Scanner', icon='qr_code_scanner', on_click=lambda: open_tactical_scanner_dialog(current_event, convidados)).props('unelevated color=amber text-color=black dense bold').classes('q-px-sm text-xs').tooltip('Scanner & Conferência Tática por QR Code')
-                    ui.button('📋 Checklist', icon='checklist', on_click=lambda: open_production_checklist_dialog(current_event, convidados)).props('unelevated color=amber-9 text-color=black dense bold').classes('q-px-sm text-xs').tooltip('Checklist de Produção de Placas')
-                    ui.button('🎖️ Precedência', icon='verified', on_click=lambda: open_seniority_checklist_dialog(current_event, convidados)).props('unelevated color=blue-grey-7 text-color=white dense bold').classes('q-px-sm text-xs').tooltip('Ordenação por Precedência / Antiguidade')
-                    ui.button('📄 Montagem', icon='assignment', on_click=lambda: open_field_assembly_report_dialog(current_event, convidados)).props('unelevated color=light-blue-9 text-color=white dense bold').classes('q-px-sm text-xs').tooltip('Relatório de Montagem de Campo')
-
-
-
-        # ═══════════════════════════════════════════════════════════════
-        # FASE 1: PAINEL DE FILA DE PRODUÇÃO DE PLACAS JADE
-        # ═══════════════════════════════════════════════════════════════
-        if current_event and convidados:
-            # Contadores de status de placa
-            count_pending = sum(1 for c in convidados if c.get('status_placa') == 'pendente')
-            count_producing = sum(1 for c in convidados if c.get('status_placa') == 'em_producao')
-            count_printed = sum(1 for c in convidados if c.get('status_placa') == 'impressa')
-            count_reprint = sum(1 for c in convidados if c.get('status_placa') == 'reimpressao')
-            count_delivered = sum(1 for c in convidados if c.get('status_placa') == 'entregue')
-            count_not_needed = sum(1 for c in convidados if c.get('status_placa', 'nao_necessaria') == 'nao_necessaria')
-            
-            # Contadores de confirmação
-            count_confirmed = sum(1 for c in convidados if c.get('status_confirmacao') == 'confirmado')
-            count_refused = sum(1 for c in convidados if c.get('status_confirmacao') == 'recusado')
-            count_probable = sum(1 for c in convidados if c.get('status_confirmacao') == 'provavel')
-            count_conf_pending = len(convidados) - count_confirmed - count_refused - count_probable
-            
-            total_plates_active = count_pending + count_producing + count_reprint
-
-            if total_plates_active > 0 or count_printed > 0 or count_confirmed > 0:
-                with ui.card().classes('w-full q-pa-sm no-shadow rounded-xl q-mb-md').style(
-                    f'background: linear-gradient(135deg, rgba(0,20,40,0.9) 0%, rgba(0,40,60,0.8) 100%); border: 1px solid rgba(0,229,255,0.3);'
-                ):
-                    with ui.row().classes('w-full items-center justify-between wrap gap-2'):
-                        with ui.row().classes('items-center gap-1'):
-                            ui.icon('print', color='cyan').classes('text-lg')
-                            ui.label('FILA DE PRODUÇÃO JADE').classes('text-xs font-bold text-cyan tracking-widest')
-                        
-                        with ui.row().classes('items-center gap-2 wrap'):
-                            # Badges de status com cores
-                            if count_pending > 0:
-                                with ui.badge(f'🟡 {count_pending} Pendentes').props('color=amber text-color=black').classes('text-xs cursor-pointer'):
-                                    pass
-                            if count_producing > 0:
-                                with ui.badge(f'🔵 {count_producing} Em Produção').props('color=blue text-color=white').classes('text-xs'):
-                                    pass
-                            if count_printed > 0:
-                                with ui.badge(f'🟢 {count_printed} Impressas').props('color=green text-color=white').classes('text-xs'):
-                                    pass
-                            if count_reprint > 0:
-                                with ui.badge(f'🔴 {count_reprint} Reimpressão').props('color=red text-color=white').classes('text-xs'):
-                                    pass
-                            if count_delivered > 0:
-                                with ui.badge(f'✅ {count_delivered} Entregues').props('color=teal text-color=white').classes('text-xs'):
-                                    pass
-                        
-                        with ui.row().classes('items-center gap-1'):
-                            ui.label(f'👥 {count_confirmed} conf. | {count_conf_pending} pend. | {count_refused} rec.').classes('text-[10px] text-grey-4')
-                            
-                            # Botões de ação rápida
-                            async def mark_pending_as_producing():
-                                _db = get_service_db_connection() or get_db_connection()
-                                if _db:
-                                    for c in convidados:
-                                        if c.get('status_placa') == 'pendente':
-                                            try:
-                                                _db.table('jade_convidados').update({'status_placa': 'em_producao'}).eq('id', c['id']).execute()
-                                            except Exception:
-                                                pass
-                                    ui.notify(f'🔵 {count_pending} placas movidas para "Em Produção"', color='info')
-                                    render_content.refresh()
-                            
-                            async def mark_producing_as_printed():
-                                _db = get_service_db_connection() or get_db_connection()
-                                if _db:
-                                    for c in convidados:
-                                        if c.get('status_placa') == 'em_producao':
-                                            try:
-                                                _db.table('jade_convidados').update({'status_placa': 'impressa'}).eq('id', c['id']).execute()
-                                            except Exception:
-                                                pass
-                                    ui.notify(f'🟢 {count_producing} placas marcadas como "Impressas"', color='success')
-                                    render_content.refresh()
-                            
-                            if count_pending > 0:
-                                ui.button('▶ Iniciar Produção', on_click=mark_pending_as_producing).props('unelevated color=blue-8 text-color=white dense').classes('text-[10px] q-px-xs')
-                            if count_producing > 0:
-                                ui.button('✅ Marcar Impressas', on_click=mark_producing_as_printed).props('unelevated color=green-8 text-color=white dense').classes('text-[10px] q-px-xs')
-
-        if not current_event:
-            with ui.column().classes('w-full items-center justify-center q-py-xl gap-4'):
-                ui.icon('event_seat', size='5rem', color='cyan')
-                ui.label('Por favor, crie um evento para iniciar o mapeamento de assentos.').classes('text-md text-white font-bold')
-                ui.button('Criar Primeiro Evento', icon='add', on_click=lambda: open_create_event_dialog()).props('unelevated color=primary text-color=black')
-            return
-            
-        rows_count = layout.get('rows', 5)
-        cols_count = layout.get('cols', 8)
-        blocked_seats = layout.get('blocked_seats', [])
-
-        categories = sorted(list(set(c['categoria'] for c in convidados if c.get('categoria'))))
-        category_options = ["Todos"] + categories
-
-        allocated_map = {c['assento_id']: c for c in convidados if c.get('assento_id')}
-
-        # Parse dos setores / blocos de assentos
-        sectors = layout.get('sectors', [])
-        
-        # Se existirem setores, garante que o cols_count abranja até a última coluna cadastrada nos setores
-        if sectors:
-            max_sector_col = max(s.get('end_col', 1) for s in sectors)
-            if max_sector_col > cols_count:
-                cols_count = max_sector_col
-        else:
-            if cols_count >= 4:
-                sectors = [
-                    {'name': 'SETOR ALPHA (ESQUERDA)', 'start_col': 1, 'end_col': max(1, cols_count // 3)},
-                    {'name': 'SETOR NOBRE (CENTRO)', 'start_col': max(1, cols_count // 3) + 1, 'end_col': max(1, (cols_count * 2) // 3)},
-                    {'name': 'SETOR BRAVO (DIREITA)', 'start_col': max(1, (cols_count * 2) // 3) + 1, 'end_col': cols_count}
-                ]
-
-        # Determinar faixa de colunas ativas conforme filtro de setor
-        active_start_col = 1
-        active_end_col = cols_count
-
-        if getattr(state, 'selected_sector', 'Todos') != "Todos" and sectors:
-            target_sec = next((s for s in sectors if s['name'] == state.selected_sector), None)
-            if target_sec:
-                active_start_col = target_sec['start_col']
-                active_end_col = target_sec['end_col']
-
-        display_cols = list(range(active_start_col, active_end_col + 1))
-        display_cols_count = len(display_cols)
-
-        # --- CABEÇALHO DO MAPA DE ASSENTOS COM FILTRO DE SETOR ---
-        with ui.card().classes('w-full q-pa-md no-shadow rounded-xl q-mb-md').style(
-            f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
-        ):
-            with ui.row().classes('w-full items-center justify-between q-mb-sm wrap-mobile gap-2'):
-                with ui.column().classes('gap-0'):
-                    ui.label('🗺️ MAPA DE ASSENTOS DA SOLENIDADE').classes('text-md font-bold text-cyan cyber-title')
-                    ui.label(f"Grid: {rows_count} fileiras × {cols_count} colunas • Exibindo: {getattr(state, 'selected_sector', 'Todos').upper()} ({display_cols_count} colunas)").classes('text-[11px] text-grey-4')
-                
-                    with ui.row().classes('items-center gap-2 wrap'):
-                        # SELETOR DE SETOR ATIVO NO MESMO EVENTO
-                        if sectors:
-                            sector_options = {'Todos': '🌐 Todos os Setores'}
-                            for s in sectors:
-                                sector_options[s['name']] = f"📍 {s['name']}"
-                                
-                            ui.select(
-                                options=sector_options,
-                                value=getattr(state, 'selected_sector', 'Todos'),
-                                on_change=lambda e: [setattr(state, 'selected_sector', e.value), render_content.refresh()]
-                            ).props('dark outlined dense').style('min-width: 200px;').classes('text-xs')
-
-                        # SELETOR DE ZOOM / TAMANHO DOS ASSENTOS (COMPACTO / NORMAL / AMPLO)
+                # ── Linha 1: Seletor + Gestão do Evento ──
+                with ui.row().classes('w-full items-center gap-3 q-mb-sm wrap'):
+                    ui.label('Solenidade Ativa:').classes('text-xs text-grey-4 font-bold')
+                    if eventos:
+                        event_options = {e['id']: f"{e['nome']} ({e['data_evento']})" for e in eventos}
                         ui.select(
-                            options={'compact': '🔍 Zoom: Compacto', 'normal': '🔍 Zoom: Normal', 'large': '🔍 Zoom: Amplo'},
-                            value=getattr(state, 'zoom_level', 'normal'),
-                            on_change=lambda e: [setattr(state, 'zoom_level', e.value), render_content.refresh()]
-                        ).props('dark outlined dense').style('width: 145px;').classes('text-xs')
+                            options=event_options,
+                            value=state.selected_event_id,
+                            on_change=lambda e: select_event(e.value)
+                        ).props('dark outlined dense').style('min-width: 300px;')
+                    else:
+                        ui.label('Nenhum evento cadastrado.').classes('text-sm text-amber font-bold')
 
-                        # Seletor de Modo de Edição
-                        with ui.row().classes('items-center bg-black/30 rounded-lg q-pa-xs border border-white/10'):
-                            ui.button('Alocação Rápida', icon='event_seat', on_click=lambda: toggle_mode("alocacao")).props(f'dense unelevated {"color=primary text-color=black" if state.edit_mode == "alocacao" else "flat text-color=grey"}').classes('text-xs q-px-sm')
-                            ui.button('Editor de Layout / Corredores', icon='edit_road', on_click=lambda: toggle_mode("layout")).props(f'dense unelevated {"color=primary text-color=black" if state.edit_mode == "layout" else "flat text-color=grey"}').classes('text-xs q-px-sm')
+                    ui.space()
+                    # Controles do Evento
+                    ui.button('＋ Novo Evento', icon='add', on_click=lambda: open_create_event_dialog()).props('unelevated color=primary text-color=black dense').classes('q-px-sm text-xs')
+                    if current_event:
+                        ui.button('✏️ Editar', icon='edit', on_click=lambda: open_edit_event_dialog(current_event, layout)).props('unelevated color=grey-7 text-color=white dense').classes('q-px-sm text-xs')
+                        ui.button('🗑️', icon='delete', on_click=lambda: confirm_delete_event(current_event)).props('unelevated color=negative text-color=white dense').classes('q-px-xs text-xs').tooltip('Excluir Evento')
 
-            # Dimensões dinâmicas conforme Zoom
-            zoom = getattr(state, 'zoom_level', 'normal')
-            if zoom == 'compact':
-                seat_w, seat_h, font_name, font_sub = '52px', '38px', '8px', '6px'
-            elif zoom == 'large':
-                seat_w, seat_h, font_name, font_sub = '90px', '58px', '11px', '8px'
-            else:
-                seat_w, seat_h, font_name, font_sub = '70px', '48px', '9px', '7px'
+                if current_event:
+                    ui.separator().classes('q-my-xs').style('border-color: rgba(255,255,255,0.06);')
 
-            # Renderizador de Grid de Assentos por Setores com Rolagem Dupla Completa
-            with ui.column().classes('w-full items-start justify-start q-py-md scroll-container').style('overflow-x: auto; overflow-y: auto; max-height: 580px;'):
-                ref_top = layout.get('ref_top', 'PALCO PRINCIPAL')
-                if ref_top:
-                    with ui.row().classes('w-full justify-center q-mb-sm'):
-                        ui.label(f"▲ {ref_top.upper()} ▲").classes('text-[10px] font-black tracking-widest text-cyan px-4 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/5')
+                    # ── Linha 2: Grupo Placas + Grupo Dados + Grupo Campo ──
+                    with ui.row().classes('w-full items-center gap-2 wrap'):
+                        # GRUPO 1: Impressão de Placas (alta prioridade)
+                        ui.badge('PLACAS').props('color=cyan text-color=black').classes('text-[9px] font-bold q-mr-xs')
+                        ui.button('⚡ Placa Express', icon='bolt', on_click=lambda: open_express_plate_dialog(current_event, convidados, layout)).props('unelevated color=deep-orange text-color=white dense bold').classes('q-px-sm text-xs').tooltip('Buscar ou criar placa avulsa de emergência (1 clique para impressora)')
+                        ui.button('🖨️ Imprimir Placas', icon='print', on_click=lambda: open_print_cards_dialog(current_event, convidados, layout)).props('unelevated color=cyan text-color=black dense bold').classes('q-px-sm text-xs').tooltip('Central de impressão: modelos, brasões, fontes, lote completo')
+                        ui.button('✅ Confirmar', icon='how_to_reg', on_click=lambda: open_mass_confirmation_dialog(current_event, convidados)).props('unelevated color=green text-color=white dense bold').classes('q-px-sm text-xs').tooltip('Confirmar Presenças em Massa')
 
-                # Cálculo de largura mínima necessária para caber TODAS as colunas sem cortar
-                num_px = int(seat_w.replace('px',''))
-                min_grid_w = max(600, (display_cols_count + 1) * (num_px + 8) + 60)
+                        ui.separator().props('vertical').classes('q-mx-xs').style('height: 24px; border-color: rgba(255,255,255,0.12);')
 
-                # Cores vibrantes e bem visíveis para diferenciar nitidamente os setores do auditório
-                sector_colors = [
-                    {'bg': 'rgba(0, 229, 255, 0.18)', 'border': 'rgba(0, 229, 255, 0.45)', 'text': '#00e5ff'},   # Setor 1: Cyan Forte
-                    {'bg': 'rgba(255, 183, 77, 0.20)', 'border': 'rgba(255, 183, 77, 0.50)', 'text': '#ffb74d'},  # Setor 2: Amber/Dourado Vívido
-                    {'bg': 'rgba(171, 71, 188, 0.20)', 'border': 'rgba(171, 71, 188, 0.50)', 'text': '#ab47bc'},  # Setor 3: Roxo Marcante
-                    {'bg': 'rgba(102, 187, 106, 0.20)', 'border': 'rgba(102, 187, 106, 0.50)', 'text': '#66bb6a'}, # Setor 4: Verde Intenso
-                    {'bg': 'rgba(239, 83, 80, 0.20)', 'border': 'rgba(239, 83, 80, 0.50)', 'text': '#ef5350'}     # Setor 5: Vermelho Vibrante
-                ]
+                        # GRUPO 2: Dados e Cadastro
+                        ui.badge('DADOS').props('color=indigo text-color=white').classes('text-[9px] font-bold q-mr-xs')
+                        ui.button('📥 Importar Excel', icon='file_upload', on_click=lambda: open_smart_excel_import_dialog(current_event)).props('unelevated color=deep-purple text-color=white dense bold').classes('q-px-sm text-xs')
+                        ui.button('🏛️ Mestre', icon='account_balance', on_click=lambda: open_master_authorities_dialog(current_event)).props('unelevated color=indigo text-color=white dense bold').classes('q-px-sm text-xs').tooltip('Cadastro Mestre de Autoridades')
+                        ui.button('📊 Planilhão', icon='table_chart', on_click=lambda: open_event_spreadsheet_dialog(current_event, convidados)).props('unelevated color=teal text-color=white dense bold').classes('q-px-sm text-xs').tooltip('Planilhão completo do evento com exportação CSV')
 
-                def get_seat_sector_info(col_num, row_num):
-                    if not sectors:
-                        return {'bg': 'rgba(0, 230, 118, 0.12)', 'border': 'rgba(0, 230, 118, 0.35)', 'text': '#00e676', 'active': True}
-                    for idx, sec in enumerate(sectors):
-                        if sec['start_col'] <= col_num <= sec['end_col']:
-                            sec_rows = sec.get('rows_count', rows_count)
-                            is_active = row_num < sec_rows
-                            style_info = sector_colors[idx % len(sector_colors)].copy()
-                            style_info['active'] = is_active
-                            return style_info
-                    return {'bg': 'rgba(255, 255, 255, 0.05)', 'border': 'rgba(255, 255, 255, 0.15)', 'text': '#9e9e9e', 'active': True}
+                        ui.separator().props('vertical').classes('q-mx-xs').style('height: 24px; border-color: rgba(255,255,255,0.12);')
 
-                with ui.grid(columns=display_cols_count + 1).classes('gap-2 items-center').style(f'min-width: {min_grid_w}px;'):
-                    ui.label('').classes('text-center font-bold text-grey-5').style('width: 40px;')
-                    
-                    for col in display_cols:
-                        ui.label(str(col)).classes('text-center font-bold text-grey-5').style(f'width: {seat_w}; font-size: 11px;')
-                        
-                    for r in range(rows_count):
-                        row_label = get_row_label(r)
-                        ui.label(row_label).classes('text-center font-bold text-grey-5 text-md').style('width: 40px;')
-                        
-                        for col in display_cols:
-                            seat_id = f"{row_label}-{col}"
-                            is_blocked = seat_id in blocked_seats
-                            guest = allocated_map.get(seat_id)
-                            sec_info = get_seat_sector_info(col, r)
-                            
-                            # Se a fileira estiver fora da quantidade de fileiras deste setor específico
-                            if not sec_info['active']:
-                                ui.label('').style(f'width: {seat_w}; height: {seat_h};')
-                                continue
 
-                            if is_blocked:
-                                if state.edit_mode == "layout":
-                                    with ui.column().classes('items-center justify-center cursor-pointer transition-all hover:scale-105').style(
-                                        f'width: {seat_w}; height: {seat_h}; border: 1px dashed rgba(255,255,255,0.15); border-radius: 4px; background: rgba(255,255,255,0.02); gap: 0;'
-                                    ).on('click', lambda s=seat_id: toggle_seat_block(s, current_event, layout)):
-                                        ui.label(seat_id).classes('text-[8px] text-grey-5 font-mono')
-                                        ui.label('CORREDOR').classes('text-[7px] text-grey-6 font-bold')
-                                else:
-                                    ui.label('').style(f'width: {seat_w}; height: {seat_h};')
-                            else:
-                                if guest:
-                                    display_name = f"{guest.get('posto_graduacao') or ''} {guest['nome']}".strip()
-                                    if len(display_name) > 12:
-                                        display_name = display_name[:10] + '..'
-                                        
-                                    is_vip = guest.get('categoria') == 'VIP'
-                                    is_acomp = bool(guest.get('convidado_principal_id'))
-                                    
-                                    border_c = THEME['primary'] if is_vip else ('#ffb74d' if is_acomp else THEME['accent'])
-                                    bg_c = 'rgba(0, 229, 255, 0.25)' if is_vip else ('rgba(255, 183, 77, 0.22)' if is_acomp else 'rgba(0, 162, 255, 0.25)')
-                                    text_c = THEME['primary'] if is_vip else ('#ffb74d' if is_acomp else THEME['accent'])
-                                    
-                                    with ui.column().classes('items-center justify-between q-pa-xs cursor-pointer transition-all hover:scale-105 border').style(
-                                        f'width: {seat_w}; height: {seat_h}; border-radius: 4px; border-color: {border_c} !important; background: {bg_c}; gap: 0;'
-                                    ).on('click', lambda s=seat_id, g=guest: open_seat_actions_dialog(s, g, convidados, current_event['id'])):
-                                        ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono leading-none')
-                                        ui.label(display_name).classes(f'font-bold text-center leading-none text-white overflow-hidden w-full').style(f'font-size: {font_name};')
-                                        
-                                        category_label = 'ACOMP' if is_acomp else str(guest.get('categoria', 'Geral')).upper()
-                                        if len(category_label) > 10:
-                                            category_label = category_label[:8] + '..'
-                                        ui.label(category_label).classes(f'text-center leading-none').style(f'color: {text_c}; font-weight: bold; font-size: {font_sub};')
-                                else:
-                                    if state.edit_mode == "layout":
-                                        with ui.column().classes('items-center justify-center cursor-pointer transition-all hover:scale-105 border').style(
-                                            f'width: {seat_w}; height: {seat_h}; border-radius: 4px; border-color: rgba(255,255,255,0.15) !important; background: #1b2535; gap: 0;'
-                                        ).on('click', lambda s=seat_id: toggle_seat_block(s, current_event, layout)):
-                                            ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono')
-                                            ui.label('BLOQUEAR').classes('text-[7px] text-grey-5 font-bold')
-                                    else:
-                                        with ui.column().classes('items-center justify-between q-pa-xs cursor-pointer transition-all hover:scale-105 border').style(
-                                            f'width: {seat_w}; height: {seat_h}; border-radius: 4px; border-color: {sec_info["border"]} !important; background: {sec_info["bg"]}; gap: 0;'
-                                        ).on('click', lambda s=seat_id: open_allocate_seat_dialog(s, convidados, current_event['id'])):
-                                            ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono leading-none')
-                                            ui.label('LIVRE').classes('font-bold text-center leading-none').style(f'color: {sec_info["text"]}; font-size: {font_name};')
-                                            ui.label('(vazio)').classes('text-grey-4 text-center leading-none').style(f'font-size: {font_sub};')
+                        # GRUPO 3: Operações de Campo
+                        ui.badge('CAMPO').props('color=amber text-color=black').classes('text-[9px] font-bold q-mr-xs')
+                        ui.button('🔍 Scanner', icon='qr_code_scanner', on_click=lambda: open_tactical_scanner_dialog(current_event, convidados)).props('unelevated color=amber text-color=black dense bold').classes('q-px-sm text-xs').tooltip('Scanner & Conferência Tática por QR Code')
+                        ui.button('📋 Checklist', icon='checklist', on_click=lambda: open_production_checklist_dialog(current_event, convidados)).props('unelevated color=amber-9 text-color=black dense bold').classes('q-px-sm text-xs').tooltip('Checklist de Produção de Placas')
+                        ui.button('🎖️ Precedência', icon='verified', on_click=lambda: open_seniority_checklist_dialog(current_event, convidados)).props('unelevated color=blue-grey-7 text-color=white dense bold').classes('q-px-sm text-xs').tooltip('Ordenação por Precedência / Antiguidade')
+                        ui.button('📄 Montagem', icon='assignment', on_click=lambda: open_field_assembly_report_dialog(current_event, convidados)).props('unelevated color=light-blue-9 text-color=white dense bold').classes('q-px-sm text-xs').tooltip('Relatório de Montagem de Campo')
 
-                ref_bottom = layout.get('ref_bottom', 'ENTRADA / FACHADA')
-                if ref_bottom:
-                    with ui.row().classes('w-full justify-center q-mt-sm q-mb-sm'):
-                        ui.label(f"▼ {ref_bottom.upper()} ▼").classes('text-[10px] font-black tracking-widest text-cyan px-4 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/5')
 
-            # Faixa Informativa de Legenda e Dimensões do Auditório na Base
-            with ui.row().classes('w-full justify-between items-center wrap-mobile gap-2 q-mt-sm bg-black/40 q-pa-xs px-3 rounded-lg border border-cyan-500/20'):
-                with ui.row().classes('items-center gap-3'):
-                    ui.label(f"🏛️ Dimensão Total: {rows_count} Fileiras × {cols_count} Colunas").classes('text-xs text-cyan font-bold')
-                    ui.separator().props('vertical').classes('q-my-none').style('height: 16px; border-color: rgba(255,255,255,0.1);')
-                    ui.label('💡 Clique nos lugares vagos para alocar convidados. A estrutura de setores é gerida no menu "Editar Evento".').classes('text-[11px] text-grey-4 italic')
 
-        # =========================================================================
-        # SEÇÃO 2 (ABAIXO DO GRID): LISTA DE CONVIDADOS HIERÁRQUICA E ACOMPANHANTES
-        # =========================================================================
-        with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
-            f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
-        ):
-            with ui.row().classes('w-full justify-between items-center wrap-mobile gap-2 q-mb-md'):
-                ui.label('👥 PAINEL DE CONVIDADOS E ACOMPANHANTES').classes('text-md font-bold text-cyan cyber-title')
-                
-                with ui.row().classes('items-center gap-2'):
-                    ui.button('Modelo Excel', icon='download', on_click=lambda: download_template()).props('unelevated color=cyan dense outline').classes('text-xs')
-
-                    # ui.upload com aparência de botão
-                    ui.upload(
-                        on_upload=lambda e: handle_import_list(e, current_event['id']),
-                        multiple=False,
-                        auto_upload=True
-                    ).props('accept=.xlsx,.xls,.xlsm,.csv,.tsv,.txt,.ods flat color=primary text-color=black dense label="Importar Lista" icon=upload').classes('text-xs')
-
-                    ui.button('➕ Adicionar Convidado Principal', icon='person_add', on_click=lambda: open_edit_guest_dialog(None, current_event['id'])).props('unelevated color=primary text-color=black dense').classes('text-xs')
-
-            # Estado de colapsar tudo / expandir tudo se desejado
-            if not hasattr(state, 'filter_seat_status'):
-                state.filter_seat_status = "Todos"
-
-            # Filtros de Convidados
-            with ui.row().classes('w-full gap-2 items-center q-mb-md wrap-mobile'):
-                ui.input(
-                    placeholder='Buscar autoridade, convidado ou acompanhante...',
-                    on_change=lambda e: update_search(e.value)
-                ).props('dark outlined dense clearable').classes('col')
-                
-                ui.select(
-                    options=category_options,
-                    value=state.filter_category,
-                    on_change=lambda e: update_filter_category(e.value),
-                    label='Categoria'
-                ).props('dark outlined dense').style('width: 140px;')
-                
-                ui.select(
-                    options={'Todos': 'Status: Todos', 'pendentes': '⏳ Com Pendências', 'completos': '✅ Assentos Completos'},
-                    value=getattr(state, 'filter_seat_status', 'Todos'),
-                    on_change=lambda e: update_filter_seat_status(e.value)
-                ).props('dark outlined dense').style('width: 170px;')
-
-            # Filtra autoridades principais (sem convidado_principal_id)
-            principais = [c for c in convidados if not c.get('convidado_principal_id')]
+            # ═══════════════════════════════════════════════════════════════
+            # FASE 1: PAINEL DE FILA DE PRODUÇÃO DE PLACAS JADE
+            # ═══════════════════════════════════════════════════════════════
+            if current_event and convidados:
+                # Contadores de status de placa
+                count_pending = sum(1 for c in convidados if c.get('status_placa') == 'pendente')
+                count_producing = sum(1 for c in convidados if c.get('status_placa') == 'em_producao')
+                count_printed = sum(1 for c in convidados if c.get('status_placa') == 'impressa')
+                count_reprint = sum(1 for c in convidados if c.get('status_placa') == 'reimpressao')
+                count_delivered = sum(1 for c in convidados if c.get('status_placa') == 'entregue')
+                count_not_needed = sum(1 for c in convidados if c.get('status_placa', 'nao_necessaria') == 'nao_necessaria')
             
-            # Filtro por busca de texto
-            if state.search_query:
-                q = state.search_query.lower()
-                filtered_principais = []
-                for p in principais:
-                    acomp_p = [c for c in convidados if c.get('convidado_principal_id') == p['id']]
-                    match_p = q in p['nome'].lower() or (p.get('cargo_funcao') and q in p['cargo_funcao'].lower()) or (p.get('posto_graduacao') and q in p['posto_graduacao'].lower())
-                    match_ac = any(q in a['nome'].lower() for a in acomp_p)
-                    if match_p or match_ac:
-                        filtered_principais.append(p)
-                principais = filtered_principais
+                # Contadores de confirmação
+                count_confirmed = sum(1 for c in convidados if c.get('status_confirmacao') == 'confirmado')
+                count_refused = sum(1 for c in convidados if c.get('status_confirmacao') == 'recusado')
+                count_probable = sum(1 for c in convidados if c.get('status_confirmacao') == 'provavel')
+                count_conf_pending = len(convidados) - count_confirmed - count_refused - count_probable
+            
+                total_plates_active = count_pending + count_producing + count_reprint
 
-            if state.filter_category != "Todos":
-                principais = [p for p in principais if p.get('categoria') == state.filter_category]
-
-            # Filtro por status de alocação (Pendente x Completo)
-            status_filter = getattr(state, 'filter_seat_status', 'Todos')
-            if status_filter == 'pendentes':
-                # Tem pendência se a própria autoridade ou algum acompanhante não tem assento
-                principais = [
-                    p for p in principais 
-                    if not p.get('assento_id') or any(not c.get('assento_id') for c in convidados if c.get('convidado_principal_id') == p['id'])
-                ]
-            elif status_filter == 'completos':
-                # 100% alocado se a autoridade E todos os seus acompanhantes têm assento
-                principais = [
-                    p for p in principais 
-                    if p.get('assento_id') and all(c.get('assento_id') for c in convidados if c.get('convidado_principal_id') == p['id'])
-                ]
-
-            if principais:
-                with ui.column().classes('w-full gap-3 scroll-container q-pr-xs').style('max-height: 680px; overflow-y: auto;'):
-                    with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
-                        for p in principais:
-                            acomp_list = [c for c in convidados if c.get('convidado_principal_id') == p['id']]
+                if total_plates_active > 0 or count_printed > 0 or count_confirmed > 0:
+                    with ui.card().classes('w-full q-pa-sm no-shadow rounded-xl q-mb-md').style(
+                        f'background: linear-gradient(135deg, rgba(0,20,40,0.9) 0%, rgba(0,40,60,0.8) 100%); border: 1px solid rgba(0,229,255,0.3);'
+                    ):
+                        with ui.row().classes('w-full items-center justify-between wrap gap-2'):
+                            with ui.row().classes('items-center gap-1'):
+                                ui.icon('print', color='cyan').classes('text-lg')
+                                ui.label('FILA DE PRODUÇÃO JADE').classes('text-xs font-bold text-cyan tracking-widest')
+                        
+                            with ui.row().classes('items-center gap-2 wrap'):
+                                # Badges de status com cores
+                                if count_pending > 0:
+                                    with ui.badge(f'🟡 {count_pending} Pendentes').props('color=amber text-color=black').classes('text-xs cursor-pointer'):
+                                        pass
+                                if count_producing > 0:
+                                    with ui.badge(f'🔵 {count_producing} Em Produção').props('color=blue text-color=white').classes('text-xs'):
+                                        pass
+                                if count_printed > 0:
+                                    with ui.badge(f'🟢 {count_printed} Impressas').props('color=green text-color=white').classes('text-xs'):
+                                        pass
+                                if count_reprint > 0:
+                                    with ui.badge(f'🔴 {count_reprint} Reimpressão').props('color=red text-color=white').classes('text-xs'):
+                                        pass
+                                if count_delivered > 0:
+                                    with ui.badge(f'✅ {count_delivered} Entregues').props('color=teal text-color=white').classes('text-xs'):
+                                        pass
+                        
+                            with ui.row().classes('items-center gap-1'):
+                                ui.label(f'👥 {count_confirmed} conf. | {count_conf_pending} pend. | {count_refused} rec.').classes('text-[10px] text-grey-4')
                             
-                            is_p_allocated = bool(p.get('assento_id'))
-                            all_acomp_allocated = len(acomp_list) > 0 and all(bool(ac.get('assento_id')) for ac in acomp_list)
-                            is_group_complete = is_p_allocated and (len(acomp_list) == 0 or all_acomp_allocated)
-
-                            card_border = 'rgba(0, 230, 118, 0.4)' if is_group_complete else ('rgba(0, 229, 255, 0.4)' if is_p_allocated else 'rgba(255, 255, 255, 0.08)')
-                            header_icon = '✅' if is_group_complete else ('⏳' if is_p_allocated else '⚠️')
+                                # Botões de ação rápida
+                                async def mark_pending_as_producing():
+                                    _db = get_service_db_connection() or get_db_connection()
+                                    if _db:
+                                        for c in convidados:
+                                            if c.get('status_placa') == 'pendente':
+                                                try:
+                                                    _db.table('jade_convidados').update({'status_placa': 'em_producao'}).eq('id', c['id']).execute()
+                                                except Exception:
+                                                    pass
+                                        ui.notify(f'🔵 {count_pending} placas movidas para "Em Produção"', color='info')
+                                        render_content.refresh()
                             
-                            nome_p = f"{p.get('posto_graduacao') or ''} {p['nome']}".strip()
-                            cargo_p = p.get('cargo_funcao') or p.get('categoria') or 'Autoridade'
+                                async def mark_producing_as_printed():
+                                    _db = get_service_db_connection() or get_db_connection()
+                                    if _db:
+                                        for c in convidados:
+                                            if c.get('status_placa') == 'em_producao':
+                                                try:
+                                                    _db.table('jade_convidados').update({'status_placa': 'impressa'}).eq('id', c['id']).execute()
+                                                except Exception:
+                                                    pass
+                                        ui.notify(f'🟢 {count_producing} placas marcadas como "Impressas"', color='success')
+                                        render_content.refresh()
                             
-                            with ui.expansion().classes('w-full rounded-xl border no-shadow').style(
-                                f'background: rgba(19, 26, 38, 0.95); border-color: {card_border} !important;'
-                            ) as exp:
-                                with exp.add_slot('header'):
-                                    with ui.row().classes('w-full justify-between items-center no-wrap gap-2'):
-                                        with ui.column().classes('gap-0 col'):
-                                            ui.label(f"{header_icon} {nome_p}").classes('text-sm font-bold text-white cyber-title')
-                                            ui.label(f"[{p.get('categoria', 'Geral')}] {cargo_p}").classes('text-xs text-grey-4')
+                                if count_pending > 0:
+                                    ui.button('▶ Iniciar Produção', on_click=mark_pending_as_producing).props('unelevated color=blue-8 text-color=white dense').classes('text-[10px] q-px-xs')
+                                if count_producing > 0:
+                                    ui.button('✅ Marcar Impressas', on_click=mark_producing_as_printed).props('unelevated color=green-8 text-color=white dense').classes('text-[10px] q-px-xs')
 
-                                        with ui.row().classes('items-center gap-1'):
-                                            if is_p_allocated:
-                                                ui.badge(f"Assento {p['assento_id']}").props('color=cyan text-color=black bold').classes('text-[10px]')
-                                            else:
-                                                ui.badge('Sem Assento').props('color=grey-8').classes('text-[10px]')
+            if not current_event:
+                with ui.column().classes('w-full items-center justify-center q-py-xl gap-4'):
+                    ui.icon('event_seat', size='5rem', color='cyan')
+                    ui.label('Por favor, crie um evento para iniciar o mapeamento de assentos.').classes('text-md text-white font-bold')
+                    ui.button('Criar Primeiro Evento', icon='add', on_click=lambda: open_create_event_dialog()).props('unelevated color=primary text-color=black')
+                return
+            
+            rows_count = layout.get('rows', 5)
+            cols_count = layout.get('cols', 8)
+            blocked_seats = layout.get('blocked_seats', [])
 
-                                # --- CONTEÚDO DO CARD COLAPSÁVEL ---
-                                with ui.column().classes('w-full q-pa-sm gap-2'):
-                                    # Ações da Autoridade
-                                    with ui.row().classes('w-full justify-between items-center bg-black/30 q-pa-xs rounded-lg'):
-                                        ui.label('Ações da Autoridade:').classes('text-[11px] text-grey-4 font-bold')
-                                        with ui.row().classes('items-center gap-1'):
-                                            if is_p_allocated:
-                                                ui.button('Desalocar', icon='cancel', on_click=lambda p=p: remove_guest_allocation(p)).props('unelevated color=danger dense flat').classes('text-xs')
-                                            ui.button('Editar', icon='edit', on_click=lambda p=p: open_edit_guest_dialog(p)).props('unelevated color=primary dense flat').classes('text-xs')
-                                            ui.button('Excluir', icon='delete', on_click=lambda p=p: confirm_delete_guest(p)).props('unelevated color=danger dense flat').classes('text-xs')
+            categories = sorted(list(set(c['categoria'] for c in convidados if c.get('categoria'))))
+            category_options = ["Todos"] + categories
 
-                                    # Controle Quantitativo (+ / -)
-                                    max_ac = p.get('max_acompanhantes', 0)
-                                    with ui.row().classes('w-full justify-between items-center q-py-xs bg-black/20 px-2 rounded-lg'):
-                                        ui.label(f"Acompanhantes Vagas: {max_ac}").classes('text-xs text-amber font-bold')
+            allocated_map = {c['assento_id']: c for c in convidados if c.get('assento_id')}
+
+            # Parse dos setores / blocos de assentos
+            sectors = layout.get('sectors', [])
+        
+            # Se existirem setores, garante que o cols_count abranja até a última coluna cadastrada nos setores
+            if sectors:
+                max_sector_col = max(s.get('end_col', 1) for s in sectors)
+                if max_sector_col > cols_count:
+                    cols_count = max_sector_col
+            else:
+                if cols_count >= 4:
+                    sectors = [
+                        {'name': 'SETOR ALPHA (ESQUERDA)', 'start_col': 1, 'end_col': max(1, cols_count // 3)},
+                        {'name': 'SETOR NOBRE (CENTRO)', 'start_col': max(1, cols_count // 3) + 1, 'end_col': max(1, (cols_count * 2) // 3)},
+                        {'name': 'SETOR BRAVO (DIREITA)', 'start_col': max(1, (cols_count * 2) // 3) + 1, 'end_col': cols_count}
+                    ]
+
+            # Determinar faixa de colunas ativas conforme filtro de setor
+            active_start_col = 1
+            active_end_col = cols_count
+
+            if getattr(state, 'selected_sector', 'Todos') != "Todos" and sectors:
+                target_sec = next((s for s in sectors if s['name'] == state.selected_sector), None)
+                if target_sec:
+                    active_start_col = target_sec['start_col']
+                    active_end_col = target_sec['end_col']
+
+            display_cols = list(range(active_start_col, active_end_col + 1))
+            display_cols_count = len(display_cols)
+
+            # --- CABEÇALHO DO MAPA DE ASSENTOS COM FILTRO DE SETOR ---
+            with ui.card().classes('w-full q-pa-md no-shadow rounded-xl q-mb-md').style(
+                f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
+            ):
+                with ui.row().classes('w-full items-center justify-between q-mb-sm wrap-mobile gap-2'):
+                    with ui.column().classes('gap-0'):
+                        ui.label('🗺️ MAPA DE ASSENTOS DA SOLENIDADE').classes('text-md font-bold text-cyan cyber-title')
+                        ui.label(f"Grid: {rows_count} fileiras × {cols_count} colunas • Exibindo: {getattr(state, 'selected_sector', 'Todos').upper()} ({display_cols_count} colunas)").classes('text-[11px] text-grey-4')
+                
+                        with ui.row().classes('items-center gap-2 wrap'):
+                            # SELETOR DE SETOR ATIVO NO MESMO EVENTO
+                            if sectors:
+                                sector_options = {'Todos': '🌐 Todos os Setores'}
+                                for s in sectors:
+                                    sector_options[s['name']] = f"📍 {s['name']}"
+                                
+                                ui.select(
+                                    options=sector_options,
+                                    value=getattr(state, 'selected_sector', 'Todos'),
+                                    on_change=lambda e: [setattr(state, 'selected_sector', e.value), render_content.refresh()]
+                                ).props('dark outlined dense').style('min-width: 200px;').classes('text-xs')
+
+                            # SELETOR DE ZOOM / TAMANHO DOS ASSENTOS (COMPACTO / NORMAL / AMPLO)
+                            ui.select(
+                                options={'compact': '🔍 Zoom: Compacto', 'normal': '🔍 Zoom: Normal', 'large': '🔍 Zoom: Amplo'},
+                                value=getattr(state, 'zoom_level', 'normal'),
+                                on_change=lambda e: [setattr(state, 'zoom_level', e.value), render_content.refresh()]
+                            ).props('dark outlined dense').style('width: 145px;').classes('text-xs')
+
+                            # Seletor de Modo de Edição
+                            with ui.row().classes('items-center bg-black/30 rounded-lg q-pa-xs border border-white/10'):
+                                ui.button('Alocação Rápida', icon='event_seat', on_click=lambda: toggle_mode("alocacao")).props(f'dense unelevated {"color=primary text-color=black" if state.edit_mode == "alocacao" else "flat text-color=grey"}').classes('text-xs q-px-sm')
+                                ui.button('Editor de Layout / Corredores', icon='edit_road', on_click=lambda: toggle_mode("layout")).props(f'dense unelevated {"color=primary text-color=black" if state.edit_mode == "layout" else "flat text-color=grey"}').classes('text-xs q-px-sm')
+
+                # Dimensões dinâmicas conforme Zoom
+                zoom = getattr(state, 'zoom_level', 'normal')
+                if zoom == 'compact':
+                    seat_w, seat_h, font_name, font_sub = '52px', '38px', '8px', '6px'
+                elif zoom == 'large':
+                    seat_w, seat_h, font_name, font_sub = '90px', '58px', '11px', '8px'
+                else:
+                    seat_w, seat_h, font_name, font_sub = '70px', '48px', '9px', '7px'
+
+                # Renderizador de Grid de Assentos por Setores com Rolagem Dupla Completa
+                with ui.column().classes('w-full items-start justify-start q-py-md scroll-container').style('overflow-x: auto; overflow-y: auto; max-height: 580px;'):
+                    ref_top = layout.get('ref_top', 'PALCO PRINCIPAL')
+                    if ref_top:
+                        with ui.row().classes('w-full justify-center q-mb-sm'):
+                            ui.label(f"▲ {ref_top.upper()} ▲").classes('text-[10px] font-black tracking-widest text-cyan px-4 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/5')
+
+                    # Cálculo de largura mínima necessária para caber TODAS as colunas sem cortar
+                    num_px = int(seat_w.replace('px',''))
+                    min_grid_w = max(600, (display_cols_count + 1) * (num_px + 8) + 60)
+
+                    # Cores vibrantes e bem visíveis para diferenciar nitidamente os setores do auditório
+                    sector_colors = [
+                        {'bg': 'rgba(0, 229, 255, 0.18)', 'border': 'rgba(0, 229, 255, 0.45)', 'text': '#00e5ff'},   # Setor 1: Cyan Forte
+                        {'bg': 'rgba(255, 183, 77, 0.20)', 'border': 'rgba(255, 183, 77, 0.50)', 'text': '#ffb74d'},  # Setor 2: Amber/Dourado Vívido
+                        {'bg': 'rgba(171, 71, 188, 0.20)', 'border': 'rgba(171, 71, 188, 0.50)', 'text': '#ab47bc'},  # Setor 3: Roxo Marcante
+                        {'bg': 'rgba(102, 187, 106, 0.20)', 'border': 'rgba(102, 187, 106, 0.50)', 'text': '#66bb6a'}, # Setor 4: Verde Intenso
+                        {'bg': 'rgba(239, 83, 80, 0.20)', 'border': 'rgba(239, 83, 80, 0.50)', 'text': '#ef5350'}     # Setor 5: Vermelho Vibrante
+                    ]
+
+                    def get_seat_sector_info(col_num, row_num):
+                        if not sectors:
+                            return {'bg': 'rgba(0, 230, 118, 0.12)', 'border': 'rgba(0, 230, 118, 0.35)', 'text': '#00e676', 'active': True}
+                        for idx, sec in enumerate(sectors):
+                            if sec['start_col'] <= col_num <= sec['end_col']:
+                                sec_rows = sec.get('rows_count', rows_count)
+                                is_active = row_num < sec_rows
+                                style_info = sector_colors[idx % len(sector_colors)].copy()
+                                style_info['active'] = is_active
+                                return style_info
+                        return {'bg': 'rgba(255, 255, 255, 0.05)', 'border': 'rgba(255, 255, 255, 0.15)', 'text': '#9e9e9e', 'active': True}
+
+                    with ui.grid(columns=display_cols_count + 1).classes('gap-2 items-center').style(f'min-width: {min_grid_w}px;'):
+                        ui.label('').classes('text-center font-bold text-grey-5').style('width: 40px;')
+                    
+                        for col in display_cols:
+                            ui.label(str(col)).classes('text-center font-bold text-grey-5').style(f'width: {seat_w}; font-size: 11px;')
+                        
+                        for r in range(rows_count):
+                            row_label = get_row_label(r)
+                            ui.label(row_label).classes('text-center font-bold text-grey-5 text-md').style('width: 40px;')
+                        
+                            for col in display_cols:
+                                seat_id = f"{row_label}-{col}"
+                                is_blocked = seat_id in blocked_seats
+                                guest = allocated_map.get(seat_id)
+                                sec_info = get_seat_sector_info(col, r)
+                            
+                                # Se a fileira estiver fora da quantidade de fileiras deste setor específico
+                                if not sec_info['active']:
+                                    ui.label('').style(f'width: {seat_w}; height: {seat_h};')
+                                    continue
+
+                                if is_blocked:
+                                    if state.edit_mode == "layout":
+                                        with ui.column().classes('items-center justify-center cursor-pointer transition-all hover:scale-105').style(
+                                            f'width: {seat_w}; height: {seat_h}; border: 1px dashed rgba(255,255,255,0.15); border-radius: 4px; background: rgba(255,255,255,0.02); gap: 0;'
+                                        ).on('click', lambda s=seat_id: toggle_seat_block(s, current_event, layout)):
+                                            ui.label(seat_id).classes('text-[8px] text-grey-5 font-mono')
+                                            ui.label('CORREDOR').classes('text-[7px] text-grey-6 font-bold')
+                                    else:
+                                        ui.label('').style(f'width: {seat_w}; height: {seat_h};')
+                                else:
+                                    if guest:
+                                        display_name = f"{guest.get('posto_graduacao') or ''} {guest['nome']}".strip()
+                                        if len(display_name) > 12:
+                                            display_name = display_name[:10] + '..'
                                         
-                                        with ui.row().classes('items-center gap-1'):
-                                            if max_ac > 0:
-                                                def dec_acomp(p_ref=p):
-                                                    new_ac = max(0, p_ref.get('max_acompanhantes', 0) - 1)
+                                        is_vip = guest.get('categoria') == 'VIP'
+                                        is_acomp = bool(guest.get('convidado_principal_id'))
+                                    
+                                        border_c = THEME['primary'] if is_vip else ('#ffb74d' if is_acomp else THEME['accent'])
+                                        bg_c = 'rgba(0, 229, 255, 0.25)' if is_vip else ('rgba(255, 183, 77, 0.22)' if is_acomp else 'rgba(0, 162, 255, 0.25)')
+                                        text_c = THEME['primary'] if is_vip else ('#ffb74d' if is_acomp else THEME['accent'])
+                                    
+                                        with ui.column().classes('items-center justify-between q-pa-xs cursor-pointer transition-all hover:scale-105 border').style(
+                                            f'width: {seat_w}; height: {seat_h}; border-radius: 4px; border-color: {border_c} !important; background: {bg_c}; gap: 0;'
+                                        ).on('click', lambda s=seat_id, g=guest: open_seat_actions_dialog(s, g, convidados, current_event['id'])):
+                                            ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono leading-none')
+                                            ui.label(display_name).classes(f'font-bold text-center leading-none text-white overflow-hidden w-full').style(f'font-size: {font_name};')
+                                        
+                                            category_label = 'ACOMP' if is_acomp else str(guest.get('categoria', 'Geral')).upper()
+                                            if len(category_label) > 10:
+                                                category_label = category_label[:8] + '..'
+                                            ui.label(category_label).classes(f'text-center leading-none').style(f'color: {text_c}; font-weight: bold; font-size: {font_sub};')
+                                    else:
+                                        if state.edit_mode == "layout":
+                                            with ui.column().classes('items-center justify-center cursor-pointer transition-all hover:scale-105 border').style(
+                                                f'width: {seat_w}; height: {seat_h}; border-radius: 4px; border-color: rgba(255,255,255,0.15) !important; background: #1b2535; gap: 0;'
+                                            ).on('click', lambda s=seat_id: toggle_seat_block(s, current_event, layout)):
+                                                ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono')
+                                                ui.label('BLOQUEAR').classes('text-[7px] text-grey-5 font-bold')
+                                        else:
+                                            with ui.column().classes('items-center justify-between q-pa-xs cursor-pointer transition-all hover:scale-105 border').style(
+                                                f'width: {seat_w}; height: {seat_h}; border-radius: 4px; border-color: {sec_info["border"]} !important; background: {sec_info["bg"]}; gap: 0;'
+                                            ).on('click', lambda s=seat_id: open_allocate_seat_dialog(s, convidados, current_event['id'])):
+                                                ui.label(seat_id).classes('text-[8px] text-grey-4 font-mono leading-none')
+                                                ui.label('LIVRE').classes('font-bold text-center leading-none').style(f'color: {sec_info["text"]}; font-size: {font_name};')
+                                                ui.label('(vazio)').classes('text-grey-4 text-center leading-none').style(f'font-size: {font_sub};')
+
+                    ref_bottom = layout.get('ref_bottom', 'ENTRADA / FACHADA')
+                    if ref_bottom:
+                        with ui.row().classes('w-full justify-center q-mt-sm q-mb-sm'):
+                            ui.label(f"▼ {ref_bottom.upper()} ▼").classes('text-[10px] font-black tracking-widest text-cyan px-4 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/5')
+
+                # Faixa Informativa de Legenda e Dimensões do Auditório na Base
+                with ui.row().classes('w-full justify-between items-center wrap-mobile gap-2 q-mt-sm bg-black/40 q-pa-xs px-3 rounded-lg border border-cyan-500/20'):
+                    with ui.row().classes('items-center gap-3'):
+                        ui.label(f"🏛️ Dimensão Total: {rows_count} Fileiras × {cols_count} Colunas").classes('text-xs text-cyan font-bold')
+                        ui.separator().props('vertical').classes('q-my-none').style('height: 16px; border-color: rgba(255,255,255,0.1);')
+                        ui.label('💡 Clique nos lugares vagos para alocar convidados. A estrutura de setores é gerida no menu "Editar Evento".').classes('text-[11px] text-grey-4 italic')
+
+            # =========================================================================
+            # SEÇÃO 2 (ABAIXO DO GRID): LISTA DE CONVIDADOS HIERÁRQUICA E ACOMPANHANTES
+            # =========================================================================
+            with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
+                f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
+            ):
+                with ui.row().classes('w-full justify-between items-center wrap-mobile gap-2 q-mb-md'):
+                    ui.label('👥 PAINEL DE CONVIDADOS E ACOMPANHANTES').classes('text-md font-bold text-cyan cyber-title')
+                
+                    with ui.row().classes('items-center gap-2'):
+                        ui.button('Modelo Excel', icon='download', on_click=lambda: download_template()).props('unelevated color=cyan dense outline').classes('text-xs')
+
+                        # ui.upload com aparência de botão
+                        ui.upload(
+                            on_upload=lambda e: handle_import_list(e, current_event['id']),
+                            multiple=False,
+                            auto_upload=True
+                        ).props('accept=.xlsx,.xls,.xlsm,.csv,.tsv,.txt,.ods flat color=primary text-color=black dense label="Importar Lista" icon=upload').classes('text-xs')
+
+                        ui.button('➕ Adicionar Convidado Principal', icon='person_add', on_click=lambda: open_edit_guest_dialog(None, current_event['id'])).props('unelevated color=primary text-color=black dense').classes('text-xs')
+
+                # Estado de colapsar tudo / expandir tudo se desejado
+                if not hasattr(state, 'filter_seat_status'):
+                    state.filter_seat_status = "Todos"
+
+                # Filtros de Convidados
+                with ui.row().classes('w-full gap-2 items-center q-mb-md wrap-mobile'):
+                    ui.input(
+                        placeholder='Buscar autoridade, convidado ou acompanhante...',
+                        on_change=lambda e: update_search(e.value)
+                    ).props('dark outlined dense clearable').classes('col')
+                
+                    ui.select(
+                        options=category_options,
+                        value=state.filter_category,
+                        on_change=lambda e: update_filter_category(e.value),
+                        label='Categoria'
+                    ).props('dark outlined dense').style('width: 140px;')
+                
+                    ui.select(
+                        options={'Todos': 'Status: Todos', 'pendentes': '⏳ Com Pendências', 'completos': '✅ Assentos Completos'},
+                        value=getattr(state, 'filter_seat_status', 'Todos'),
+                        on_change=lambda e: update_filter_seat_status(e.value)
+                    ).props('dark outlined dense').style('width: 170px;')
+
+                # Filtra autoridades principais (sem convidado_principal_id)
+                principais = [c for c in convidados if not c.get('convidado_principal_id')]
+            
+                # Filtro por busca de texto
+                if state.search_query:
+                    q = state.search_query.lower()
+                    filtered_principais = []
+                    for p in principais:
+                        acomp_p = [c for c in convidados if c.get('convidado_principal_id') == p['id']]
+                        match_p = q in p['nome'].lower() or (p.get('cargo_funcao') and q in p['cargo_funcao'].lower()) or (p.get('posto_graduacao') and q in p['posto_graduacao'].lower())
+                        match_ac = any(q in a['nome'].lower() for a in acomp_p)
+                        if match_p or match_ac:
+                            filtered_principais.append(p)
+                    principais = filtered_principais
+
+                if state.filter_category != "Todos":
+                    principais = [p for p in principais if p.get('categoria') == state.filter_category]
+
+                # Filtro por status de alocação (Pendente x Completo)
+                status_filter = getattr(state, 'filter_seat_status', 'Todos')
+                if status_filter == 'pendentes':
+                    # Tem pendência se a própria autoridade ou algum acompanhante não tem assento
+                    principais = [
+                        p for p in principais 
+                        if not p.get('assento_id') or any(not c.get('assento_id') for c in convidados if c.get('convidado_principal_id') == p['id'])
+                    ]
+                elif status_filter == 'completos':
+                    # 100% alocado se a autoridade E todos os seus acompanhantes têm assento
+                    principais = [
+                        p for p in principais 
+                        if p.get('assento_id') and all(c.get('assento_id') for c in convidados if c.get('convidado_principal_id') == p['id'])
+                    ]
+
+                if principais:
+                    with ui.column().classes('w-full gap-3 scroll-container q-pr-xs').style('max-height: 680px; overflow-y: auto;'):
+                        with ui.grid(columns='1 md:grid-cols-2 lg:grid-cols-3').classes('w-full gap-4'):
+                            for p in principais:
+                                acomp_list = [c for c in convidados if c.get('convidado_principal_id') == p['id']]
+                            
+                                is_p_allocated = bool(p.get('assento_id'))
+                                all_acomp_allocated = len(acomp_list) > 0 and all(bool(ac.get('assento_id')) for ac in acomp_list)
+                                is_group_complete = is_p_allocated and (len(acomp_list) == 0 or all_acomp_allocated)
+
+                                card_border = 'rgba(0, 230, 118, 0.4)' if is_group_complete else ('rgba(0, 229, 255, 0.4)' if is_p_allocated else 'rgba(255, 255, 255, 0.08)')
+                                header_icon = '✅' if is_group_complete else ('⏳' if is_p_allocated else '⚠️')
+                            
+                                nome_p = f"{p.get('posto_graduacao') or ''} {p['nome']}".strip()
+                                cargo_p = p.get('cargo_funcao') or p.get('categoria') or 'Autoridade'
+                            
+                                with ui.expansion().classes('w-full rounded-xl border no-shadow').style(
+                                    f'background: rgba(19, 26, 38, 0.95); border-color: {card_border} !important;'
+                                ) as exp:
+                                    with exp.add_slot('header'):
+                                        with ui.row().classes('w-full justify-between items-center no-wrap gap-2'):
+                                            with ui.column().classes('gap-0 col'):
+                                                ui.label(f"{header_icon} {nome_p}").classes('text-sm font-bold text-white cyber-title')
+                                                ui.label(f"[{p.get('categoria', 'Geral')}] {cargo_p}").classes('text-xs text-grey-4')
+
+                                            with ui.row().classes('items-center gap-1'):
+                                                if is_p_allocated:
+                                                    ui.badge(f"Assento {p['assento_id']}").props('color=cyan text-color=black bold').classes('text-[10px]')
+                                                else:
+                                                    ui.badge('Sem Assento').props('color=grey-8').classes('text-[10px]')
+
+                                    # --- CONTEÚDO DO CARD COLAPSÁVEL ---
+                                    with ui.column().classes('w-full q-pa-sm gap-2'):
+                                        # Ações da Autoridade
+                                        with ui.row().classes('w-full justify-between items-center bg-black/30 q-pa-xs rounded-lg'):
+                                            ui.label('Ações da Autoridade:').classes('text-[11px] text-grey-4 font-bold')
+                                            with ui.row().classes('items-center gap-1'):
+                                                if is_p_allocated:
+                                                    ui.button('Desalocar', icon='cancel', on_click=lambda p=p: remove_guest_allocation(p)).props('unelevated color=danger dense flat').classes('text-xs')
+                                                ui.button('Editar', icon='edit', on_click=lambda p=p: open_edit_guest_dialog(p)).props('unelevated color=primary dense flat').classes('text-xs')
+                                                ui.button('Excluir', icon='delete', on_click=lambda p=p: confirm_delete_guest(p)).props('unelevated color=danger dense flat').classes('text-xs')
+
+                                        # Controle Quantitativo (+ / -)
+                                        max_ac = p.get('max_acompanhantes', 0)
+                                        with ui.row().classes('w-full justify-between items-center q-py-xs bg-black/20 px-2 rounded-lg'):
+                                            ui.label(f"Acompanhantes Vagas: {max_ac}").classes('text-xs text-amber font-bold')
+                                        
+                                            with ui.row().classes('items-center gap-1'):
+                                                if max_ac > 0:
+                                                    def dec_acomp(p_ref=p):
+                                                        new_ac = max(0, p_ref.get('max_acompanhantes', 0) - 1)
+                                                        reg = {
+                                                            'nome': p_ref['nome'],
+                                                            'posto_graduacao': p_ref.get('posto_graduacao'),
+                                                            'cargo_funcao': p_ref.get('cargo_funcao'),
+                                                            'categoria': p_ref.get('categoria', 'Geral'),
+                                                            'max_acompanhantes': new_ac
+                                                        }
+                                                        save_guest(p_ref['id'], reg, current_event['id'])
+                                                
+                                                    ui.button('-', on_click=dec_acomp).props('unelevated color=amber text-color=black dense round').style('width: 22px; height: 22px; font-weight: bold;')
+
+                                                def inc_acomp(p_ref=p):
+                                                    new_ac = p_ref.get('max_acompanhantes', 0) + 1
                                                     reg = {
                                                         'nome': p_ref['nome'],
                                                         'posto_graduacao': p_ref.get('posto_graduacao'),
@@ -801,45 +815,40 @@ def render_page():
                                                         'max_acompanhantes': new_ac
                                                     }
                                                     save_guest(p_ref['id'], reg, current_event['id'])
+
+                                                ui.button('+', on_click=inc_acomp).props('unelevated color=amber text-color=black dense round').style('width: 22px; height: 22px; font-weight: bold;')
+
+                                        # Lista de Acompanhantes
+                                        if acomp_list:
+                                            with ui.column().classes('w-full gap-1 q-mt-xs pl-2 border-l-2 border-amber-500/40'):
+                                                for ac in acomp_list:
+                                                    is_ac_allocated = bool(ac.get('assento_id'))
+                                                    ac_bg = 'rgba(255, 183, 77, 0.08)' if is_ac_allocated else 'rgba(255, 255, 255, 0.02)'
                                                 
-                                                ui.button('-', on_click=dec_acomp).props('unelevated color=amber text-color=black dense round').style('width: 22px; height: 22px; font-weight: bold;')
-
-                                            def inc_acomp(p_ref=p):
-                                                new_ac = p_ref.get('max_acompanhantes', 0) + 1
-                                                reg = {
-                                                    'nome': p_ref['nome'],
-                                                    'posto_graduacao': p_ref.get('posto_graduacao'),
-                                                    'cargo_funcao': p_ref.get('cargo_funcao'),
-                                                    'categoria': p_ref.get('categoria', 'Geral'),
-                                                    'max_acompanhantes': new_ac
-                                                }
-                                                save_guest(p_ref['id'], reg, current_event['id'])
-
-                                            ui.button('+', on_click=inc_acomp).props('unelevated color=amber text-color=black dense round').style('width: 22px; height: 22px; font-weight: bold;')
-
-                                    # Lista de Acompanhantes
-                                    if acomp_list:
-                                        with ui.column().classes('w-full gap-1 q-mt-xs pl-2 border-l-2 border-amber-500/40'):
-                                            for ac in acomp_list:
-                                                is_ac_allocated = bool(ac.get('assento_id'))
-                                                ac_bg = 'rgba(255, 183, 77, 0.08)' if is_ac_allocated else 'rgba(255, 255, 255, 0.02)'
-                                                
-                                                with ui.card().classes('w-full q-pa-xs px-2 no-shadow rounded-md').style(f'background: {ac_bg}; border: 1px solid rgba(255,183,77,0.2);'):
-                                                    with ui.row().classes('w-full justify-between items-center no-wrap'):
-                                                        with ui.column().classes('gap-0'):
-                                                            ui.label(ac['nome']).classes('text-xs text-grey-2 font-medium')
-                                                            ui.label('(Acompanhante)').classes('text-[9px] text-amber-4 italic')
+                                                    with ui.card().classes('w-full q-pa-xs px-2 no-shadow rounded-md').style(f'background: {ac_bg}; border: 1px solid rgba(255,183,77,0.2);'):
+                                                        with ui.row().classes('w-full justify-between items-center no-wrap'):
+                                                            with ui.column().classes('gap-0'):
+                                                                ui.label(ac['nome']).classes('text-xs text-grey-2 font-medium')
+                                                                ui.label('(Acompanhante)').classes('text-[9px] text-amber-4 italic')
                                                         
-                                                        if is_ac_allocated:
-                                                            with ui.row().classes('items-center gap-1'):
-                                                                ui.badge(f"Assento {ac['assento_id']}").props('color=amber text-color=black').classes('text-[9px]')
-                                                                ui.button(icon='cancel', on_click=lambda ac=ac: remove_guest_allocation(ac)).props('unelevated color=danger dense flat round').classes('text-xs')
-                                                        else:
-                                                            ui.badge('Sem Assento').props('color=grey-8').classes('text-[9px]')
-            else:
-                with ui.column().classes('w-full items-center justify-center q-py-xl text-grey'):
-                    ui.icon('person_off', size='3rem')
-                    ui.label('Nenhuma autoridade ou convidado encontrado.').classes('text-sm q-mt-xs')
+                                                            if is_ac_allocated:
+                                                                with ui.row().classes('items-center gap-1'):
+                                                                    ui.badge(f"Assento {ac['assento_id']}").props('color=amber text-color=black').classes('text-[9px]')
+                                                                    ui.button(icon='cancel', on_click=lambda ac=ac: remove_guest_allocation(ac)).props('unelevated color=danger dense flat round').classes('text-xs')
+                                                            else:
+                                                                ui.badge('Sem Assento').props('color=grey-8').classes('text-[9px]')
+                else:
+                    with ui.column().classes('w-full items-center justify-center q-py-xl text-grey'):
+                        ui.icon('person_off', size='3rem')
+                        ui.label('Nenhuma autoridade ou convidado encontrado.').classes('text-sm q-mt-xs')
+
+        except Exception as render_err:
+            import traceback
+            traceback.print_exc()
+            print(f"[RENDER JADE ERR] {render_err}")
+            with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-red-4'):
+                ui.icon('error', size='4rem')
+                ui.label(f'Erro de renderização no JADE: {render_err}').classes('text-md font-bold')
 
     # Métodos utilitários do painel
     def select_event(event_id):
