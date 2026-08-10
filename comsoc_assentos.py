@@ -4971,5 +4971,5 @@ def render_page():
                 ui.notify(f"Erro ao importar planilha: {ex}", color='red')
 
         ui.label('>>> TESTE ANTES DE RENDER_CONTENT <<<').classes('text-blue font-bold text-2xl')
-        render_content()
+    render_content()
 
