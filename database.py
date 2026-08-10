@@ -27,6 +27,26 @@ def get_local_db_connection():
 db: Any = None
 
 
+def get_demanda_drive_url(demanda: dict) -> str:
+    """Extrai com resiliência o link da pasta do Google Drive/Nuvem de uma pauta."""
+    if not demanda or not isinstance(demanda, dict):
+        return ""
+    if demanda.get('drive_url') and str(demanda['drive_url']).strip():
+        return str(demanda['drive_url']).strip()
+    if demanda.get('link_drive') and str(demanda['link_drive']).strip():
+        return str(demanda['link_drive']).strip()
+    
+    obs = str(demanda.get('autoridades') or demanda.get('observacoes') or '')
+    if '[DRIVE:' in obs:
+        try:
+            url_part = obs.split('[DRIVE:')[1].split(']')[0].strip()
+            if url_part.startswith('http'):
+                return url_part
+        except Exception:
+            pass
+    return ""
+
+
 def get_bot_db_connection():
     """Retorna uma conexão dedicada para tarefas de segundo plano (como o Bot do Telegram).
     Usa a SUPABASE_SERVICE_ROLE_KEY para contornar RLS se configurada, caso contrário cai no fallback."""

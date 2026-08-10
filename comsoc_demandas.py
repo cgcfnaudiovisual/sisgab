@@ -956,6 +956,7 @@ def render_page(autofill: str = None):
                         else:
                             militar_select = None
 
+                        in_drive_url = ui.input('📁 Link da Pasta no Google Drive / Acervo (Opcional)', placeholder='https://drive.google.com/drive/folders/...').props('dark outlined dense w-full')
                         observacoes_exec = ui.textarea('📝 Briefing / Instruções de Execução').props('dark outlined dense w-full rows=2')
 
                         # Anexos
@@ -1051,6 +1052,14 @@ def render_page(autofill: str = None):
                                         else:
                                             aut_single = f"Obs: {obs_single}"
 
+                                    d_url_val = str(in_drive_url.value or '').strip()
+                                    if d_url_val:
+                                        if '[DRIVE:' in aut_single:
+                                            import re
+                                            aut_single = re.sub(r'\[DRIVE:[^\]]+\]', f'[DRIVE: {d_url_val}]', aut_single)
+                                        else:
+                                            aut_single = f"{aut_single} [DRIVE: {d_url_val}]".strip()
+
                                     cat_final_db = json.dumps(cat_selected) if len(cat_selected) > 1 else (cat_selected[0] if cat_selected else 'design_arte')
 
                                     registro = {
@@ -1067,6 +1076,7 @@ def render_page(autofill: str = None):
                                         'local_evento': loc_ev,
                                         'tipo_cobertura': json.dumps(coberturas),
                                         'autoridades': aut_single,
+                                        'drive_url': d_url_val,
                                         'score_esforco': calcular_score(),
                                         'sigiloso': 1 if chk_sigilo.value else 0,
                                         'status': 'aprovado' if eh_evento_interno else status_inicial,

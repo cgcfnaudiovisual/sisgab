@@ -113,6 +113,19 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                     placeholder='Digite orientações da missão, fardamento, roteiro, autoridades presentes e observações gerais...'
                 ).props('dark outlined dense w-full rows=3').classes('w-full q-mt-xs')
 
+                # Campo de Link da Pasta do Google Drive / Acervo na Nuvem
+                from database import get_demanda_drive_url
+                cur_drive_url = get_demanda_drive_url(demanda)
+                with ui.column().classes('w-full gap-1 p-2 bg-blue-950/30 rounded-lg border border-blue-500/20 q-my-xs'):
+                    with ui.row().classes('w-full items-center justify-between'):
+                        ui.label('📁 Link da Pasta no Google Drive / Acervo Nuvem').classes('text-xs font-bold text-blue-4')
+                        if cur_drive_url:
+                            ui.button('📁 Abrir Drive', on_click=lambda u=cur_drive_url: ui.open(u, new_tab=True)).props('unelevated color=blue icon=open_in_new dense').classes('text-[10px] px-2')
+                    in_drive_url = ui.input(
+                        placeholder='https://drive.google.com/drive/folders/...',
+                        value=cur_drive_url
+                    ).props('dark outlined dense w-full').classes('w-full')
+
                 st_val = str(demanda.get('status', 'pendente') or 'pendente').lower()
                 if st_val not in ('pendente', 'aprovada', 'aprovado', 'ajustes', 'concluida', 'rejeitado', 'rejeitada'):
                     st_val = 'pendente'
@@ -290,11 +303,13 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                                 else:
                                     aut_extra.append(f"[Design: {str(des_val).strip()}]")
 
-                            aut_final = in_autoridades.value.strip()
-                            if aut_extra:
-                                for a_ex in aut_extra:
-                                    if a_ex not in aut_final:
-                                        aut_final = f"{aut_final} {a_ex}".strip()
+                            d_url_val = str(in_drive_url.value or '').strip()
+                            if d_url_val:
+                                if '[DRIVE:' in aut_final:
+                                    import re
+                                    aut_final = re.sub(r'\[DRIVE:[^\]]+\]', f'[DRIVE: {d_url_val}]', aut_final)
+                                else:
+                                    aut_final = f"{aut_final} [DRIVE: {d_url_val}]".strip()
 
                             update_payload = {
                                 'titulo_evento': in_titulo.value.strip(),
@@ -306,6 +321,7 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                                 'data_fim': in_data_fim.value or in_data_inicio.value,
                                 'hora_evento': in_hora.value or '09:00',
                                 'autoridades': aut_final,
+                                'drive_url': d_url_val,
                                 'status': in_status.value,
                                 'categoria_demanda': in_categoria.value,
                                 'produto_especifico': in_produto.value.strip(),
@@ -316,7 +332,23 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                             dem_id = demanda['id']
                             if isinstance(dem_id, str) and dem_id.isdigit():
                                 dem_id = int(dem_id)
-                            res = db.table('demandas_comunicacao').update(update_payload).eq('id', dem_id).execute()
+                            try:
+                                res = db.table('demandas_comunicacao').update(update_payload).eq('id', dem_id).execute()
+                            except Exception as e_sup:
+                                if 'drive_url' in str(e_sup):
+                                    update_payload.pop('drive_url', None)
+                                    res = db.table('demandas_comunicacao').update(update_payload).eq('id', dem_id).execute()
+                                else:
+                                    raise e_sup
+
+                            # Sincroniza também no banco SQLite local
+                            try:
+                                from sqlite_adapter import LocalSQLiteClient
+                                loc_db = LocalSQLiteClient()
+                                loc_db.table('demandas_comunicacao').update(update_payload).eq('id', dem_id).execute()
+                            except Exception:
+                                pass
+
                             print(f"[EDIT PAUTA SAVE RES] ID: {dem_id}, data: {res.data if hasattr(res, 'data') else res}")
                             ui.notify('✅ Pauta editada e salva com sucesso!', color='positive')
                             edit_dialog.close()
@@ -428,25 +460,48 @@ def open_concluir_missao_dialog(demanda, user_name_guerra="SUPERVISOR", callback
                             else:
                                 aut_extra.append(f"[Design: {str(des_val).strip()}]")
 
+                        drive_url_val = str(drive_input.value or '').strip()
                         update_payload = {
                             'status': 'concluida',
+                            'drive_url': drive_url_val,
                             'notificar_militar_ids': json.dumps(list(set(militar_ids)))
                         }
                         if enc_save:
                             update_payload['encarregado_id'] = enc_save
 
+                        aut_atual = demanda.get('autoridades') or ''
                         if aut_extra:
-                            aut_atual = demanda.get('autoridades') or ''
                             for a_ex in aut_extra:
                                 if a_ex not in aut_atual:
                                     aut_atual = f"{aut_atual} {a_ex}".strip()
-                            update_payload['autoridades'] = aut_atual
+                        if drive_url_val:
+                            if '[DRIVE:' in aut_atual:
+                                import re
+                                aut_atual = re.sub(r'\[DRIVE:[^\]]+\]', f'[DRIVE: {drive_url_val}]', aut_atual)
+                            else:
+                                aut_atual = f"{aut_atual} [DRIVE: {drive_url_val}]".strip()
+                        update_payload['autoridades'] = aut_atual
 
                         dem_id = demanda['id']
                         if isinstance(dem_id, str) and dem_id.isdigit():
                             dem_id = int(dem_id)
 
-                        db_c.table('demandas_comunicacao').update(update_payload).eq('id', dem_id).execute()
+                        try:
+                            db_c.table('demandas_comunicacao').update(update_payload).eq('id', dem_id).execute()
+                        except Exception as e_sup_c:
+                            if 'drive_url' in str(e_sup_c):
+                                update_payload.pop('drive_url', None)
+                                db_c.table('demandas_comunicacao').update(update_payload).eq('id', dem_id).execute()
+                            else:
+                                raise e_sup_c
+
+                        # Sincroniza também no banco SQLite local
+                        try:
+                            from sqlite_adapter import LocalSQLiteClient
+                            loc_db = LocalSQLiteClient()
+                            loc_db.table('demandas_comunicacao').update(update_payload).eq('id', dem_id).execute()
+                        except Exception:
+                            pass
 
                         # Monta descrição da equipe de cobertura
                         equipe_str_list = []
@@ -865,6 +920,9 @@ def render_page():
                         with ui.row().classes('items-center gap-1'):
                             ui.button('✏️', on_click=lambda cur_d=d: open_editar_pauta_dialog(cur_d, render_content.refresh)).props('flat round dense color=cyan size=sm').tooltip('Editar Pauta')
                             ui.button('📅', on_click=lambda: ui.navigate.to('/agenda_geral')).props('flat round dense color=cyan size=sm').tooltip('Ver na Agenda Geral')
+                            cur_d_url = get_demanda_drive_url(d)
+                            if cur_d_url:
+                                ui.button('📁 Drive', on_click=lambda u=cur_d_url: ui.open(u, new_tab=True)).props('unelevated color=blue icon=open_in_new dense').classes('text-[10px] q-px-xs').tooltip('Abrir Pasta no Google Drive / Acervo')
 
                         with ui.row().classes('items-center gap-1'):
                             if status_type == 'pendente':

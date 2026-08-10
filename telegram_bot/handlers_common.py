@@ -501,7 +501,23 @@ def register_common_handlers(bot):
             elif action == 'conc_dem':
                 db.table('demandas_comunicacao').update({'status': 'concluida'}).eq('id', dem_id).execute()
                 await bot.answer_callback_query(call.id, "Missão concluída!")
-                await bot.send_message(chat_id, f"🎯 **MISSÃO #{dem_id} CONCLUÍDA!**", parse_mode='Markdown')
+                
+                from database import get_demanda_drive_url
+                res_d = db.table('demandas_comunicacao').select('*').eq('id', dem_id).execute()
+                d_obj = res_d.data[0] if (res_d and res_d.data) else {}
+                d_url = get_demanda_drive_url(d_obj)
+                
+                markup_c = types.InlineKeyboardMarkup()
+                if d_url:
+                    markup_c.add(types.InlineKeyboardButton("📁 Abrir Pasta no Google Drive", url=d_url))
+                
+                await bot.send_message(
+                    chat_id,
+                    f"🎯 **MISSÃO #{dem_id} CONCLUÍDA COM SUCESSO!**\n\n"
+                    f"💡 *Dica:* Para anexar ou alterar o link do acervo no Google Drive, edite a pauta no painel Web ou envie a URL aqui.",
+                    parse_mode='Markdown',
+                    reply_markup=markup_c if d_url else None
+                )
             elif action == 'rej_dem':
                 db.table('demandas_comunicacao').update({'status': 'rejeitado'}).eq('id', dem_id).execute()
                 await bot.answer_callback_query(call.id, "Pauta rejeitada.")
@@ -515,6 +531,9 @@ def register_common_handlers(bot):
                 res_d = db.table('demandas_comunicacao').select('*').eq('id', dem_id).execute()
                 if res_d and res_d.data:
                     d = res_d.data[0]
+                    from database import get_demanda_drive_url
+                    d_url = get_demanda_drive_url(d)
+                    
                     det_txt = (
                         f"🔎 **DETALHES DA PAUTA #{dem_id}**\n\n"
                         f"📌 **Título:** {d.get('titulo_evento')}\n"
@@ -523,7 +542,14 @@ def register_common_handlers(bot):
                         f"⚡ **Status:** {str(d.get('status')).upper()}\n"
                         f"👤 **Solicitante:** {d.get('solicitante_nome')} ({d.get('setor', 'CGCFN')})"
                     )
-                    await bot.send_message(chat_id, det_txt, parse_mode='Markdown')
+                    if d_url:
+                        det_txt += f"\n\n📁 **Link do Drive / Acervo:** {d_url}"
+                        
+                    markup_det = types.InlineKeyboardMarkup()
+                    if d_url:
+                        markup_det.add(types.InlineKeyboardButton("📁 Abrir Pasta no Google Drive", url=d_url))
+                    
+                    await bot.send_message(chat_id, det_txt, parse_mode='Markdown', reply_markup=markup_det if d_url else None)
         except Exception as e:
             print(f"[INLINE DEMANDA ACTION ERR] {e}")
 

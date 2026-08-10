@@ -469,8 +469,11 @@ def send_daily_19h_telegram_briefing() -> bool:
                 enc_nome = get_encarregado_nome(p.get('encarregado_id'))
                 cobs_txt = format_coberturas(p)
                 obs_txt = str(p.get('autoridades') or p.get('observacoes') or '').strip().upper()
+                from database import get_demanda_drive_url
+                p_drive = get_demanda_drive_url(p)
 
                 linha_obs = f"\n   📝 Briefing: {obs_txt}" if obs_txt else ""
+                linha_drive = f"\n   📁 Acervo Drive: {p_drive}" if p_drive else ""
 
                 blocos.append(
                     f"🔹 *{idx}. {hr}h — {tit}*\n"
@@ -479,6 +482,7 @@ def send_daily_19h_telegram_briefing() -> bool:
                     f"   🎖️ Encarregado: {enc_nome}\n"
                     f"   👤 Solicitante: {sol}"
                     f"{linha_obs}"
+                    f"{linha_drive}"
                 )
 
             resumo_pautas = "\n\n".join(blocos)

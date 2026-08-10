@@ -187,6 +187,11 @@ def render_page():
                                     'flat round dense color=cyan size=sm'
                                 ).tooltip('Editar Pauta')
 
+                                from database import get_demanda_drive_url
+                                ev_d_url = get_demanda_drive_url(ev)
+                                if ev_d_url:
+                                    ui.button(icon='folder', on_click=lambda u=ev_d_url: ui.open(u, new_tab=True)).props('flat round dense color=blue size=sm').tooltip('Abrir Pasta no Google Drive / Acervo')
+
                                 gcal_url = make_gcal_sync_url(
                                     title=ev.get('titulo_evento', ''),
                                     date_str=ev.get('data_evento', datetime.now().strftime('%Y-%m-%d')),

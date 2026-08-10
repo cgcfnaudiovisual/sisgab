@@ -476,7 +476,8 @@ class LocalSQLiteClient:
                     notificar_militar_ids TEXT,
                     encarregado_id TEXT,
                     arquivo_url TEXT,
-                    arquivo_nome TEXT
+                    arquivo_nome TEXT,
+                    drive_url TEXT
                 )
             ''',
             'demandas_historico_tramitacao': '''
@@ -748,6 +749,10 @@ class LocalSQLiteClient:
                 pass
             try:
                 cursor.execute("ALTER TABLE presenca_diaria ADD COLUMN updated_at TEXT")
+            except Exception:
+                pass
+            try:
+                cursor.execute("ALTER TABLE demandas_comunicacao ADD COLUMN drive_url TEXT")
             except Exception:
                 pass
             conn.commit()

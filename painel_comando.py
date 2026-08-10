@@ -629,6 +629,10 @@ def render_page():
                                 from comsoc_homologar import open_editar_pauta_dialog
                                 open_editar_pauta_dialog(dem, render_events)
                             ui.button(icon='edit', on_click=_edit).props('flat round dense color=cyan size=sm').tooltip('Editar Pauta')
+                            from database import get_demanda_drive_url
+                            ev_d_url = get_demanda_drive_url(ev)
+                            if ev_d_url:
+                                ui.button(icon='folder', on_click=lambda u=ev_d_url: ui.open(u, new_tab=True)).props('flat round dense color=blue size=sm').tooltip('Abrir Pasta no Google Drive / Acervo')
 
                             def _send_tg(dem=ev):
                                 try:
