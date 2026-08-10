@@ -14,7 +14,9 @@ ROLE_OPTIONS = {
     'praca_gab': 'Praça do Gabinete',
     'comsoc': 'Equipe COMSOC (Fotografia/Vídeo)',
     'comsoc_design': 'Equipe COMSOC (Artes Gráficas/Canva)',
-    'militar': 'Militar / Efetivo em Geral'
+    'militar': 'Militar / Efetivo em Geral',
+    'operador': 'Militar / Efetivo em Geral',
+    'compel': 'Militar / Efetivo em Geral'
 }
 
 ROLE_DESCRIPTIONS = {

@@ -456,30 +456,40 @@ ANTIGUIDADE_OFICIAL_EXATA = [
 ]
 
 def sort_efetivo_by_rank(ef_list: list) -> list:
-    """Ordena uma lista de militares estritamente segundo a relação oficial de antiguidade."""
+    """Ordena uma lista de militares priorizando 1º a Equipe COMSOC e 2º Demais Praças, ambos pela antiguidade oficial."""
     def sort_key(item):
+        role = str(item.get('role', '')).strip().lower()
+        setor = str(item.get('setor', '')).strip().upper()
+        secao = str(item.get('secao', '')).strip().upper()
+        funcao = str(item.get('funcao', '')).strip().upper()
+
+        is_comsoc = (
+            role in ('admin', 'supervisor', 'comsoc', 'comsoc_design') or
+            'COMSOC' in setor or 'COMSOC' in secao or 'COMSOC' in funcao
+        )
+        group_priority = 0 if is_comsoc else 1
+
         pg = str(item.get('posto_grad') or item.get('posto') or '').strip().upper()
         ng = str(item.get('nome_guerra') or item.get('nome') or '').strip().upper()
         full = f"{pg} {ng}".strip().upper()
 
-        # 1. Busca exata de posto_grad + nome_guerra
+        ant_idx = 999
         for idx, target in enumerate(ANTIGUIDADE_OFICIAL_EXATA):
             if full == target:
-                return (0, idx)
+                ant_idx = idx
+                break
+        if ant_idx == 999:
+            for idx, target in enumerate(ANTIGUIDADE_OFICIAL_EXATA):
+                parts = target.split(maxsplit=1)
+                if len(parts) == 2 and ng == parts[1]:
+                    ant_idx = idx
+                    break
+        if ant_idx == 999:
+            for idx, target in enumerate(ANTIGUIDADE_OFICIAL_EXATA):
+                if ng in target or target in ng:
+                    ant_idx = idx
+                    break
 
-        # 2. Busca por nome_guerra se o posto for compatível
-        for idx, target in enumerate(ANTIGUIDADE_OFICIAL_EXATA):
-            parts = target.split(maxsplit=1)
-            if len(parts) == 2 and ng == parts[1]:
-                return (0, idx)
-
-        # 3. Busca por sub-string de nome_guerra
-        for idx, target in enumerate(ANTIGUIDADE_OFICIAL_EXATA):
-            if ng in target or target in ng:
-                return (0, idx)
-
-        # 4. Fallback por posto de graduação genérico
-        seniority = get_rank_seniority(full)
-        return (1, seniority, ng)
+        return (group_priority, ant_idx, ng)
 
     return sorted(ef_list, key=sort_key)
