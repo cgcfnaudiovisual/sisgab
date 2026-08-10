@@ -348,7 +348,7 @@ def render_page():
 
                 ui.space()
                 # Controles do Evento
-                ui.button('＋ Novo Evento', icon='add', on_click=open_create_event_dialog).props('unelevated color=primary text-color=black dense').classes('q-px-sm text-xs')
+                ui.button('＋ Novo Evento', icon='add', on_click=lambda: open_create_event_dialog()).props('unelevated color=primary text-color=black dense').classes('q-px-sm text-xs')
                 if current_event:
                     ui.button('✏️ Editar', icon='edit', on_click=lambda: open_edit_event_dialog(current_event, layout)).props('unelevated color=grey-7 text-color=white dense').classes('q-px-sm text-xs')
                     ui.button('🗑️', icon='delete', on_click=lambda: confirm_delete_event(current_event)).props('unelevated color=negative text-color=white dense').classes('q-px-xs text-xs').tooltip('Excluir Evento')
@@ -468,7 +468,7 @@ def render_page():
             with ui.column().classes('w-full items-center justify-center q-py-xl gap-4'):
                 ui.icon('event_seat', size='5rem', color='cyan')
                 ui.label('Por favor, crie um evento para iniciar o mapeamento de assentos.').classes('text-md text-white font-bold')
-                ui.button('Criar Primeiro Evento', icon='add', on_click=open_create_event_dialog).props('unelevated color=primary text-color=black')
+                ui.button('Criar Primeiro Evento', icon='add', on_click=lambda: open_create_event_dialog()).props('unelevated color=primary text-color=black')
             return
             
         rows_count = layout.get('rows', 5)
@@ -674,7 +674,7 @@ def render_page():
                 ui.label('👥 PAINEL DE CONVIDADOS E ACOMPANHANTES').classes('text-md font-bold text-cyan cyber-title')
                 
                 with ui.row().classes('items-center gap-2'):
-                    ui.button('Modelo Excel', icon='download', on_click=download_template).props('unelevated color=cyan dense outline').classes('text-xs')
+                    ui.button('Modelo Excel', icon='download', on_click=lambda: download_template()).props('unelevated color=cyan dense outline').classes('text-xs')
 
                     # ui.upload com aparência de botão
                     ui.upload(
