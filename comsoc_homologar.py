@@ -177,10 +177,13 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                         res_ef = db_ef.table('efetivo').select('id, nome_guerra, role, posto_grad').execute()
                         if res_ef.data:
                             sorted_ef = sort_efetivo_list(res_ef.data)
-                            efetivo_options = {
-                                item['id']: f"{item.get('posto_grad') or ''} {item['nome_guerra']} ({item['role'].upper()})".strip()
-                                for item in sorted_ef
-                            }
+                            seen_ef_labels = set()
+                            efetivo_options = {}
+                            for item in sorted_ef:
+                                lbl = f"{item.get('posto_grad') or ''} {item['nome_guerra']} ({str(item.get('role', 'gabinete')).upper()})".strip()
+                                if lbl not in seen_ef_labels:
+                                    seen_ef_labels.add(lbl)
+                                    efetivo_options[item['id']] = lbl
                     except Exception as e_ef:
                         print(f"[EFETIVO LOAD ERR] {e_ef}")
 
@@ -388,10 +391,13 @@ def open_concluir_missao_dialog(demanda, user_name_guerra="SUPERVISOR", callback
             res_ef = db.table('efetivo').select('id, nome_guerra, role, posto_grad').execute()
             if res_ef.data:
                 sorted_ef = sort_efetivo_list(res_ef.data)
-                efetivo_options = {
-                    item['id']: f"{item.get('posto_grad') or ''} {item['nome_guerra']} ({item['role'].upper()})".strip()
-                    for item in sorted_ef
-                }
+                seen_ef_labels = set()
+                efetivo_options = {}
+                for item in sorted_ef:
+                    lbl = f"{item.get('posto_grad') or ''} {item['nome_guerra']} ({str(item.get('role', 'gabinete')).upper()})".strip()
+                    if lbl not in seen_ef_labels:
+                        seen_ef_labels.add(lbl)
+                        efetivo_options[item['id']] = lbl
         except Exception as e:
             print(f"[EFETIVO CONCLUIR ERR] {e}")
 
@@ -587,10 +593,13 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
             res_ef = db.table('efetivo').select('id, nome_guerra, role, posto_grad').execute()
             if res_ef.data:
                 sorted_ef = sort_efetivo_list(res_ef.data)
-                efetivo_options = {
-                    item['id']: f"{item.get('posto_grad') or ''} {item['nome_guerra']} ({item['role'].upper()})".strip()
-                    for item in sorted_ef
-                }
+                seen_ef_labels = set()
+                efetivo_options = {}
+                for item in sorted_ef:
+                    lbl = f"{item.get('posto_grad') or ''} {item['nome_guerra']} ({str(item.get('role', 'gabinete')).upper()})".strip()
+                    if lbl not in seen_ef_labels:
+                        seen_ef_labels.add(lbl)
+                        efetivo_options[item['id']] = lbl
         except Exception as e:
             print(f"[EFETIVO LOAD ERR] {e}")
 

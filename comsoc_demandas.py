@@ -244,6 +244,7 @@ def render_page(autofill: str = None):
             except Exception:
                 sorted_ef = ef_data_raw
 
+            seen_ef_labels = set()
             for item in sorted_ef:
                 if item.get('nome_guerra'):
                     m_id = str(item['id'])
@@ -251,7 +252,10 @@ def render_page(autofill: str = None):
                     ng = (item.get('nome_guerra') or item.get('nome') or '').strip()
                     r_raw = str(item.get('role') or 'praca_gab').lower()
                     r_tag = 'ADMIN' if r_raw == 'admin' else 'SUPERVISOR' if r_raw == 'supervisor' else 'COMSOC' if r_raw == 'comsoc' else 'COMSOC_DESIGN' if r_raw == 'comsoc_design' else 'OFICIAL' if 'oficial' in r_raw else 'GABINETE'
-                    efetivo_options[m_id] = f"{pg} {ng} ({r_tag})".strip()
+                    label = f"{pg} {ng} ({r_tag})".strip()
+                    if label not in seen_ef_labels:
+                        seen_ef_labels.add(label)
+                        efetivo_options[m_id] = label
 
         with ui.column().classes('w-full gap-4'):
 
@@ -1086,9 +1090,23 @@ def render_page(autofill: str = None):
                                         'arquivo_nome': uploaded_file_name
                                     }
                                     
+                                    def _safe_execute_db(operation_func, data_dict):
+                                        try:
+                                            return operation_func(dict(data_dict)).execute()
+                                        except Exception as e_save:
+                                            err_s = str(e_save)
+                                            if 'drive_url' in err_s or 'PGRST204' in err_s:
+                                                data_copy = dict(data_dict)
+                                                d_val = data_copy.pop('drive_url', None)
+                                                if d_val:
+                                                    aut_c = data_copy.get('autoridades', '')
+                                                    data_copy['autoridades'] = f"{aut_c} [DRIVE: {d_val}]".strip()
+                                                return operation_func(data_copy).execute()
+                                            raise e_save
+
                                     nonlocal edit_id
                                     if edit_id:
-                                        db.table('demandas_comunicacao').update(registro).eq('id', edit_id).execute()
+                                        _safe_execute_db(lambda d_payload: db.table('demandas_comunicacao').update(d_payload).eq('id', edit_id), registro)
                                         hist = {
                                             'demanda_id': edit_id,
                                             'data_hora': datetime.now().isoformat(),
@@ -1100,7 +1118,7 @@ def render_page(autofill: str = None):
                                         ui.notify('Demanda atualizada com sucesso!', color='success')
                                         edit_id = None
                                     else:
-                                        res = db.table('demandas_comunicacao').insert(registro).execute()
+                                        res = _safe_execute_db(lambda d_payload: db.table('demandas_comunicacao').insert(d_payload), registro)
                                         if eh_evento_interno:
                                             dem_id = res.data[0]['id'] if (res.data and isinstance(res.data, list) and len(res.data) > 0) else None
                                             if dem_id:
