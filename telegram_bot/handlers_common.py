@@ -2382,6 +2382,16 @@ def register_common_handlers(bot):
                     if db:
                         try:
                             d = state['data']
+                            aut_val = str(d.get('autoridades', '') or '').strip()
+                            obs_val = str(d.get('observacoes', '') or '').strip()
+                            if obs_val and obs_val.lower() != "nenhuma":
+                                if aut_val and aut_val.lower() != "nenhuma autoridade especial":
+                                    aut_final = f"{aut_val} | Obs: {obs_val}"
+                                else:
+                                    aut_final = f"Obs: {obs_val}"
+                            else:
+                                aut_final = aut_val
+
                             registro = {
                                 'solicitante_nome': d.get('solicitante_nome', 'CGCFN').upper(),
                                 'setor': d.get('setor', 'CGCFN').upper(),
@@ -2392,8 +2402,7 @@ def register_common_handlers(bot):
                                 'hora_evento': d.get('hora_evento', '09:00'),
                                 'local_evento': d.get('local', 'Gabinete').upper(),
                                 'tipo_cobertura': d.get('tipo_cobertura', '["foto"]'),
-                                'autoridades': d.get('autoridades', ''),
-                                'observacoes': d.get('observacoes', ''),
+                                'autoridades': aut_final,
                                 'score_esforco': 1.5,
                                 'status': 'pendente'
                             }
