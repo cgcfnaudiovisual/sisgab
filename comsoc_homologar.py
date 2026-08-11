@@ -303,6 +303,7 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                                 else:
                                     aut_extra.append(f"[Design: {str(des_val).strip()}]")
 
+                            aut_final = str(in_autoridades.value or '').strip()
                             d_url_val = str(in_drive_url.value or '').strip()
                             if d_url_val:
                                 if '[DRIVE:' in aut_final:
