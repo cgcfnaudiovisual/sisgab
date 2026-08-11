@@ -262,6 +262,7 @@ import comsoc_assentos
 import estudio_grafico
 import comsoc_rsvp
 import modulo_presenca
+import qrcode_generator
 from database import authenticate_user, get_user_by_id
 
 from services import data_service
@@ -311,6 +312,7 @@ sisgab_menu_categories = [
             {'name': 'Arquivo e Histórico', 'icon': 'history', 'path': '/comsoc_historico', 'roles': ['admin', 'supervisor', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Busca e links de coberturas passadas'},
             {'name': 'Aniversariantes & Datas', 'icon': 'cake', 'path': '/comsoc_aniversariantes', 'roles': ['admin', 'supervisor', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Mensagens com IA e impressão'},
             {'name': 'Monitor TV (COMSOC TV)', 'icon': 'tv', 'path': '/sisgab_tv', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'tv', 'tv_comcia'], 'subtitle': 'Modo TV tático', 'new_tab': True},
+            {'name': 'Gerador de QR Code', 'icon': 'qr_code_2', 'path': '/qrcode_generator', 'roles': ['admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar'], 'subtitle': 'Gerar QR Codes para links e eventos'},
         ]
     },
     {
@@ -896,6 +898,12 @@ def smart_editor_page():
 def comsoc_rsvp_page():
     app.storage.user['current_path'] = '/comsoc_rsvp'
     build_layout(comsoc_rsvp.render_page)()
+
+
+@ui.page('/qrcode_generator')
+def qrcode_generator_page():
+    app.storage.user['current_path'] = '/qrcode_generator'
+    build_layout(qrcode_generator.render_page)()
 
 
 @ui.page('/rsvp/{token}')
@@ -1779,7 +1787,7 @@ def sync_menu_permissions_db():
 
 # Inicializa o Bot do Telegram e Agendadores em tarefas desacopladas para nao bloquear a inicializacao da NiceGUI
 from alerts_manager import AlertsManager
-from notifications_manager import start_19h_briefing_scheduler
+from notifications_manager import start_19h_briefing_scheduler, start_15h_demand_scheduler
 from database import seed_default_admin, seed_efetivo_gabinete
 
 async def _non_blocking_startup():
@@ -1798,6 +1806,7 @@ async def _non_blocking_startup():
     try:
         AlertsManager.start_alerts_scheduler()
         start_19h_briefing_scheduler()
+        start_15h_demand_scheduler()
     except Exception as e:
         print(f"[STARTUP SCHEDULERS ERR] {e}", flush=True)
 

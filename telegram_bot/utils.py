@@ -353,52 +353,22 @@ async def _salvar_presenca_bot(bot, message, chat_id, state, sigla_code, obs_txt
         'updated_at': now_br.isoformat()
     }
     
-    # 1. Salva no Supabase (escala_diaria principal + presenca_diaria se existir)
+    # Chama a função unificada para garantir sincronia em todos os bancos
     try:
-        from database import get_bot_db_connection
-        db = get_bot_db_connection()
-        if db:
-            # 1a. Upsert em escala_diaria (tabela nativa no Supabase)
-            try:
-                res_esc = db.table('escala_diaria').select('id').eq('data', dt_str).ilike('nome', f"%{nome_g}%").execute()
-                if res_esc and res_esc.data:
-                    db.table('escala_diaria').update({
-                        'cargo': sigla_code,
-                        'observacao': obs_txt.strip() if obs_txt else ''
-                    }).eq('id', res_esc.data[0]['id']).execute()
-                else:
-                    db.table('escala_diaria').insert({
-                        'data': dt_str,
-                        'cargo': sigla_code,
-                        'nome': nome_g,
-                        'observacao': obs_txt.strip() if obs_txt else ''
-                    }).execute()
-            except Exception as e_esc:
-                print(f"[SUPABASE ESCALA_DIARIA SAVE WARN] {e_esc}")
-
-            # 1b. Tenta salvar em presenca_diaria se a tabela existir
-            try:
-                db.table('presenca_diaria').upsert(payload, on_conflict='id').execute()
-            except Exception:
-                pass
-    except Exception as sp_err:
-        print(f"[PRESENCA BOT SUPABASE WARN] {sp_err}")
-        
-    # 2. Salva no SQLite local (ambas as tabelas)
-    try:
-        from sqlite_adapter import LocalSQLiteClient
-        local_db = LocalSQLiteClient()
-        local_db.table('presenca_diaria').upsert(payload, on_conflict='id').execute()
-        try:
-            res_loc_e = local_db.table('escala_diaria').select('id').eq('data', dt_str).eq('nome', nome_g).execute()
-            if res_loc_e and res_loc_e.data:
-                local_db.table('escala_diaria').update({'cargo': sigla_code, 'observacao': obs_txt.strip() if obs_txt else ''}).eq('id', res_loc_e.data[0]['id']).execute()
-            else:
-                local_db.table('escala_diaria').insert({'data': dt_str, 'cargo': sigla_code, 'nome': nome_g, 'observacao': obs_txt.strip() if obs_txt else ''}).execute()
-        except Exception:
-            pass
-    except Exception as loc_err:
-        print(f"[PRESENCA BOT LOCAL WARN] {loc_err}")
+        import sys, os
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from modulo_presenca import salvar_presenca_unificada
+        salvar_presenca_unificada(
+            dt_str=dt_str,
+            nome_guerra=nome_g,
+            status_code=sigla_code,
+            observacao=obs_txt,
+            user_id=str(user_id).strip() if user_id else None,
+            telegram_id=str(chat_id).strip(),
+            data_fim=data_fim
+        )
+    except Exception as err_uni:
+        print(f"[UNIFICADO SAVE ERR] {err_uni}")
         
     is_operator = str(profile.get('role', '')).strip().lower() in ('admin', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'operador')
     clear_state(chat_id)

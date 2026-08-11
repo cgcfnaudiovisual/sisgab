@@ -17,7 +17,10 @@ def render_page():
         'termo': '',
         'local': '',
         'autoridade': '',
-        'tipo_cobertura': 'todos'
+        'tipo_cobertura': 'todos',
+        'data_inicio': '',
+        'data_fim': '',
+        'categoria': 'todos'
     }
 
     with ui.tabs().classes('w-full text-cyan q-mb-md') as tabs:
@@ -46,6 +49,10 @@ def render_page():
                         placeholder='Ex: Fortaleza, Gabinete...'
                     ).props('dark outlined dense').classes('w-44').style('min-width: 140px;')
                     
+                    dt_inicio = ui.input(label='Data Início').props('type=date dark outlined dense').classes('w-32').style('min-width: 130px;')
+                    
+                    dt_fim = ui.input(label='Data Fim').props('type=date dark outlined dense').classes('w-32').style('min-width: 130px;')
+                    
                     sel_cob = ui.select(
                         {
                             'todos': 'Todas Coberturas',
@@ -57,10 +64,28 @@ def render_page():
                         label='Escopo de Cobertura'
                     ).props('dark outlined dense option-dark').classes('w-44').style('min-width: 140px;')
 
+                    sel_cat = ui.select(
+                        {
+                            'todos': '📋 Todas',
+                            'audiovisual': '📸 Audiovisual',
+                            'design_arte': '🎨 Design',
+                            'impressos_albuns': '📕 Impressos',
+                            'redacao_textos': '✍️ Redação',
+                            'brindes_lembrancas': '🎁 Brindes',
+                            'suporte_evento': '📦 Suporte',
+                            'outra_tarefa': '⚡ Outras'
+                        },
+                        value='todos',
+                        label='Categoria'
+                    ).props('dark outlined dense option-dark').classes('w-44').style('min-width: 140px;')
+
                     def aplicar_filtros():
                         filter_state['termo'] = txt_busca.value or ''
                         filter_state['local'] = txt_local.value or ''
                         filter_state['tipo_cobertura'] = sel_cob.value
+                        filter_state['data_inicio'] = dt_inicio.value or ''
+                        filter_state['data_fim'] = dt_fim.value or ''
+                        filter_state['categoria'] = sel_cat.value
                         render_event_cards.refresh()
 
                     ui.button(
@@ -96,11 +121,20 @@ def render_page():
                 local = filter_state['local'].strip().lower()
                 autoridade = filter_state['autoridade'].strip().lower()
                 tipo_cob = filter_state['tipo_cobertura']
+                data_inicio = filter_state['data_inicio']
+                data_fim = filter_state['data_fim']
+                categoria = filter_state['categoria']
                 
                 pautas_filtradas = []
                 for p in pautas:
-                    if termo and not (termo in p['titulo_evento'].lower() or termo in p['solicitante_nome'].lower() or termo in p['setor'].lower()):
-                        continue
+                    if termo:
+                        tit = str(p.get('titulo_evento', '')).lower()
+                        sol = str(p.get('solicitante_nome', '')).lower()
+                        setor = str(p.get('setor', '')).lower()
+                        aut = str(p.get('autoridades', '')).lower()
+                        prod = str(p.get('produto_especifico', '')).lower()
+                        if not (termo in tit or termo in sol or termo in setor or termo in aut or termo in prod):
+                            continue
                     if local and not (local in (p.get('local_evento') or '').lower()):
                         continue
                     if autoridade and not (autoridade in (p.get('autoridades') or '').lower()):
@@ -112,6 +146,12 @@ def render_page():
                                 continue
                         except Exception:
                             continue
+                    if data_inicio and p.get('data_evento', '') < data_inicio:
+                        continue
+                    if data_fim and p.get('data_evento', '') > data_fim:
+                        continue
+                    if categoria != 'todos' and p.get('categoria_demanda', '') != categoria:
+                        continue
                     pautas_filtradas.append(p)
 
                 if pautas_filtradas:

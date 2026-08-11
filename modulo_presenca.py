@@ -63,8 +63,8 @@ def salvar_presenca_unificada(dt_str: str, nome_guerra: str, status_code: str, o
                     pres_id = res_p.data[0]['id']
                 db_s.table('presenca_diaria').upsert({
                     'id': pres_id,
-                    'user_id': str(user_id) if user_id else None,
-                    'telegram_id': str(telegram_id) if telegram_id else None,
+                    'user_id': str(user_id).strip() if user_id else None,
+                    'telegram_id': str(telegram_id).strip() if telegram_id else None,
                     'nome_guerra': nome_clean,
                     'data': dt_str,
                     'hora_presenca': hr_str,
@@ -93,8 +93,8 @@ def salvar_presenca_unificada(dt_str: str, nome_guerra: str, status_code: str, o
             
         local_db.table('presenca_diaria').upsert({
             'id': pres_id_loc,
-            'user_id': str(user_id) if user_id else None,
-            'telegram_id': str(telegram_id) if telegram_id else None,
+            'user_id': str(user_id).strip() if user_id else None,
+            'telegram_id': str(telegram_id).strip() if telegram_id else None,
             'nome_guerra': nome_clean,
             'data': dt_str,
             'hora_presenca': hr_str,

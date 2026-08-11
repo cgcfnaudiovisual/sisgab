@@ -570,3 +570,173 @@ def start_19h_briefing_scheduler():
 start_19h_briefing_scheduler()
 
 
+# ─────────────────────────────────────────────────────────────
+#  AGENDADOR AUTOMÁTICO DAS DEMANDAS DAS 15:00H (TELEGRAM)
+# ─────────────────────────────────────────────────────────────
+
+_SCHEDULER_15H_STARTED = False
+_LAST_15H_SENT_DATE = None
+
+def _get_last_15h_sent_date() -> str:
+    """Busca a última data de envio do relatório das 15h no banco de dados ou memória."""
+    global _LAST_15H_SENT_DATE
+    if _LAST_15H_SENT_DATE:
+        return _LAST_15H_SENT_DATE
+    try:
+        from database import get_bot_db_connection
+        conn = get_bot_db_connection()
+        if conn:
+            res = conn.table('config').select('valor').eq('chave', 'telegram_demand_15h_last_date').execute()
+            if res and res.data and res.data[0].get('valor'):
+                _LAST_15H_SENT_DATE = res.data[0]['valor'].strip()
+                return _LAST_15H_SENT_DATE
+    except Exception as e:
+        print(f"[15H READ LAST DATE ERR] {e}")
+    return _LAST_15H_SENT_DATE or ""
+
+
+def _set_last_15h_sent_date(date_str: str):
+    """Salva a última data de envio do relatório das 15h no banco de dados e memória."""
+    global _LAST_15H_SENT_DATE
+    _LAST_15H_SENT_DATE = date_str
+    try:
+        from database import get_bot_db_connection
+        conn = get_bot_db_connection()
+        if conn:
+            conn.table('config').upsert({'chave': 'telegram_demand_15h_last_date', 'valor': date_str}, on_conflict='chave').execute()
+    except Exception as e:
+        print(f"[15H SAVE LAST DATE ERR] {e}")
+
+
+def send_daily_15h_demand_check() -> bool:
+    """Busca as pautas agendadas para o dia seguinte e envia notificação no Telegram às 15h."""
+    try:
+        from database import get_service_db_connection, get_db_connection
+        from datetime import datetime, timedelta
+        import json
+
+        db = get_service_db_connection() or get_db_connection()
+        if not db:
+            print("[15H DEMAND CHECK] Erro: Sem conexão ativa com o banco de dados.", flush=True)
+            return False
+
+        now_br = datetime.utcnow() - timedelta(hours=3)
+        amanha = (now_br + timedelta(days=1))
+        amanha_str = amanha.strftime('%Y-%m-%d')
+        data_fmt = amanha.strftime("%d/%m/%Y")
+
+        res = db.table('demandas_comunicacao').select('*').eq('data_evento', amanha_str).execute()
+        pautas = res.data if res.data else []
+
+        pautas_ativas = []
+        for p in pautas:
+            st = str(p.get('status', '')).strip().lower()
+            if st in ('aprovado', 'aprovada', 'pendente'):
+                pautas_ativas.append(p)
+
+        pautas_ativas.sort(key=lambda x: str(x.get('hora_evento', '09:00'))[:5])
+
+        if not pautas_ativas:
+            return True
+
+        res_ef = db.table('efetivo').select('id, nome_guerra, posto_grad').execute()
+        efetivo_map = {}
+        if res_ef and res_ef.data:
+            for ef in res_ef.data:
+                pg = ef.get('posto_grad', '')
+                ng = ef.get('nome_guerra', '')
+                efetivo_map[str(ef.get('id'))] = f"{pg} {ng}".strip().upper()
+
+        blocos = []
+        sem_resp_count = 0
+
+        for idx, p in enumerate(pautas_ativas, 1):
+            tit = str(p.get('titulo_evento', 'Sem Título')).upper()
+            hr = str(p.get('hora_evento', '09:00'))[:5]
+            loc = str(p.get('local_evento', 'Gabinete')).upper()
+            cat = str(p.get('categoria_demanda', 'Pauta')).lower()
+
+            cat_label = "📌 Pauta"
+            if 'audiovisual' in cat: cat_label = "📸 Audiovisual"
+            elif 'design' in cat or 'arte' in cat: cat_label = "🎨 Design"
+            elif 'redacao' in cat or 'textos' in cat: cat_label = "✍️ Redação"
+
+            responsaveis = []
+            
+            enc_id = str(p.get('encarregado_id', ''))
+            if enc_id and enc_id != 'None':
+                responsaveis.append(efetivo_map.get(enc_id, f"MILITAR #{enc_id}"))
+
+            notif_ids = p.get('notificar_militar_ids')
+            if notif_ids:
+                try:
+                    if isinstance(notif_ids, str):
+                        notif_ids = json.loads(notif_ids)
+                    for nid in notif_ids:
+                        nid_str = str(nid)
+                        if nid_str != enc_id:
+                            responsaveis.append(efetivo_map.get(nid_str, f"MILITAR #{nid_str}"))
+                except Exception:
+                    pass
+
+            if not responsaveis:
+                sem_resp_count += 1
+                resp_str = "⚠️ SEM RESPONSÁVEL DESIGNADO"
+            else:
+                resp_str = ", ".join(responsaveis)
+
+            blocos.append(
+                f"{idx}. 🎖️ {tit}\n"
+                f"   {cat_label} | 📍 {loc} | ⏰ {hr}\n"
+                f"   👤 Responsável: {resp_str}"
+            )
+
+        resumo_pautas = "\n\n".join(blocos)
+        qtd = len(pautas_ativas)
+        
+        aviso_sem_resp = f"\n\n⚠️ {sem_resp_count} pautas sem responsável!" if sem_resp_count > 0 else ""
+
+        msg = (
+            f"⏰ VERIFICAÇÃO DAS 15h — DEMANDAS DE AMANHÃ ({data_fmt})\n\n"
+            f"📋 {qtd} pautas agendadas:\n\n"
+            f"{resumo_pautas}"
+            f"{aviso_sem_resp}"
+        )
+
+        notify_telegram(msg, 'demandas_15h', role_required='admin')
+        print(f"[15H SCHEDULER] Relatório de 15h enviado no Telegram para {data_fmt} ({qtd} pautas).", flush=True)
+        return True
+    except Exception as err:
+        print(f"[15H SCHEDULER ERROR] Erro ao gerar/enviar relatório das 15h: {err}", flush=True)
+        return False
+
+
+def start_15h_demand_scheduler():
+    """Inicia a thread em background que verifica se deu 15:00 BRT e despacha a verificação de demandas."""
+    global _SCHEDULER_15H_STARTED
+    if _SCHEDULER_15H_STARTED:
+        return
+    _SCHEDULER_15H_STARTED = True
+
+    def _loop():
+        import time, threading
+        from datetime import datetime, timedelta
+        print("[15H SCHEDULER] Loop agendador do relatório das 15:00h iniciado com sucesso.", flush=True)
+        while True:
+            try:
+                now_br = datetime.utcnow() - timedelta(hours=3)
+                today_str = now_br.strftime('%Y-%m-%d')
+                last_sent = _get_last_15h_sent_date()
+                
+                if now_br.hour == 15 and now_br.minute == 0 and last_sent != today_str:
+                    _set_last_15h_sent_date(today_str)
+                    print(f"[15H SCHEDULER] Disparando relatório diário de demandas das 15:00h ({today_str})...", flush=True)
+                    send_daily_15h_demand_check()
+            except Exception as loop_err:
+                print(f"[15H SCHEDULER LOOP ERR] {loop_err}", flush=True)
+            time.sleep(30)
+
+    t = threading.Thread(target=_loop, daemon=True)
+    t.start()
+
+start_15h_demand_scheduler()

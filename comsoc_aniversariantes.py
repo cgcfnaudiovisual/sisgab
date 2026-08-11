@@ -1,12 +1,14 @@
 # modules/comsoc_aniversariantes.py
 import json
 import os
+import io
 from datetime import datetime
 from nicegui import ui, app
 import theme
-from database import get_db_connection
+from db_utils import get_db_connection, get_service_db_connection
 import ai_helper
 from logo_base64 import LOGO_BASE64
+import pandas as pd
 
 THEME = theme.colors
 
@@ -170,8 +172,128 @@ def render_page():
                                     ui.button('Cancelar', on_click=diag.close).props('flat color=grey')
                                     ui.button('Salvar', on_click=cadastrar).props('unelevated color=primary text-color=black')
                             diag.open()
+
+                        def abrir_importacao():
+                            with ui.dialog() as diag, ui.card().classes('w-[800px] q-pa-md').style(f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]}; max-width: 95vw;'):
+                                ui.label('📥 Importar Planilha do Suboficial').classes('text-white text-md font-bold cyber-title q-mb-sm')
+                                ui.label('A planilha (Excel .xlsx) deve conter as colunas "nome_guerra" e "data_nascimento".').classes('text-xs text-grey-3 q-mb-md')
+                                
+                                state_import = {'df': None, 'parsed_data': []}
+                                
+                                upload_ui = ui.upload(label='Selecione a planilha (.xlsx)', auto_upload=True).props('dark accept=".xlsx" max-files="1"')
+                                
+                                preview_container = ui.column().classes('w-full gap-2 q-mt-md').style('display: none;')
+                                
+                                with preview_container:
+                                    ui.label('Pré-visualização dos Dados:').classes('text-sm font-bold text-cyan')
+                                    table = ui.table(
+                                        columns=[
+                                            {'name': 'nome', 'label': 'Nome de Guerra', 'field': 'nome', 'align': 'left'},
+                                            {'name': 'data', 'label': 'Data de Nascimento', 'field': 'data', 'align': 'left'},
+                                            {'name': 'status', 'label': 'Status', 'field': 'status', 'align': 'left'}
+                                        ],
+                                        rows=[],
+                                        row_key='nome'
+                                    ).classes('w-full').props('dark dense flat')
+                                
+                                def on_upload(e):
+                                    content = e.content.read()
+                                    try:
+                                        df = pd.read_excel(io.BytesIO(content), engine='openpyxl')
+                                        col_nome = next((c for c in df.columns if str(c).strip().lower() in ['nome_guerra', 'nome guerra', 'nome']), None)
+                                        col_data = next((c for c in df.columns if str(c).strip().lower() in ['data_nascimento', 'data nascimento', 'nascimento', 'aniversario', 'aniversário']), None)
+                                        
+                                        if not col_nome or not col_data:
+                                            ui.notify('Colunas "nome_guerra" e/ou "data_nascimento" não encontradas.', color='red')
+                                            return
+                                            
+                                        state_import['df'] = df
+                                        state_import['parsed_data'] = []
+                                        
+                                        rows = []
+                                        for index, row in df.iterrows():
+                                            nome = str(row[col_nome]).strip().upper()
+                                            raw_data = row[col_data]
+                                            
+                                            if not nome or pd.isna(raw_data) or str(raw_data).strip() == '' or nome == 'NAN':
+                                                continue
+                                                
+                                            data_nasc_str = ''
+                                            try:
+                                                if isinstance(raw_data, datetime):
+                                                    data_nasc_str = raw_data.strftime('%Y-%m-%d')
+                                                elif isinstance(raw_data, pd.Timestamp):
+                                                    data_nasc_str = raw_data.strftime('%Y-%m-%d')
+                                                else:
+                                                    raw_str = str(raw_data).strip()
+                                                    try:
+                                                        parsed_date = pd.to_datetime(raw_str, dayfirst=True)
+                                                        data_nasc_str = parsed_date.strftime('%Y-%m-%d')
+                                                    except:
+                                                        parsed_date = pd.to_datetime(raw_str)
+                                                        data_nasc_str = parsed_date.strftime('%Y-%m-%d')
+                                                
+                                                state_import['parsed_data'].append({'nome': nome, 'data': data_nasc_str})
+                                                rows.append({'nome': nome, 'data': data_nasc_str, 'status': 'Pronto para importar'})
+                                            except Exception as ex:
+                                                rows.append({'nome': nome, 'data': str(raw_data), 'status': f'Erro: {str(ex)}'})
+                                                
+                                        table.rows = rows
+                                        preview_container.style('display: flex;')
+                                        btn_confirm.enable()
+                                        
+                                    except Exception as ex:
+                                        ui.notify(f"Erro ao ler planilha: {ex}", color='red')
+                                        
+                                upload_ui.on('upload', on_upload)
+
+                                def confirmar_importacao():
+                                    if not state_import['parsed_data']:
+                                        ui.notify('Nenhum dado válido para importar.', color='warning')
+                                        return
+                                        
+                                    atualizados = 0
+                                    nao_encontrados = []
+                                    erros = []
+                                    conn = get_db_connection()
+                                    if not conn:
+                                        ui.notify('Erro de conexão com o banco.', color='red')
+                                        return
+                                        
+                                    for item in state_import['parsed_data']:
+                                        nome = item['nome']
+                                        data_nasc_str = item['data']
+                                        try:
+                                            res = conn.table('efetivo').select('id, nome_guerra').ilike('nome_guerra', f'%{nome}%').execute()
+                                            if res.data and len(res.data) > 0:
+                                                target_id = res.data[0]['id']
+                                                conn.table('efetivo').update({'data_nascimento': data_nasc_str}).eq('id', target_id).execute()
+                                                atualizados += 1
+                                            else:
+                                                nao_encontrados.append(nome)
+                                        except Exception as ex:
+                                            erros.append(f"{nome}: {str(ex)}")
+                                            
+                                    msg_ok = f"✅ {atualizados} militares atualizados com sucesso."
+                                    ui.notify(msg_ok, color='success', timeout=5000)
+                                    if nao_encontrados:
+                                        ui.notify(f"⚠️ {len(nao_encontrados)} não encontrados no cadastro.", color='warning', timeout=7000)
+                                    if erros:
+                                        ui.notify(f"❌ {len(erros)} erros ao processar.", color='red', timeout=7000)
+                                        
+                                    diag.close()
+                                    render_content.refresh()
+
+                                with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
+                                    ui.button('Cancelar', on_click=diag.close).props('flat color=grey')
+                                    btn_confirm = ui.button('✅ Confirmar Importação', on_click=confirmar_importacao).props('unelevated color=primary text-color=black')
+                                    btn_confirm.disable()
+
+                            diag.open()
                             
-                        ui.button('Adicionar Pessoa', icon='person_add', on_click=abrir_cadastro).props('unelevated color=primary text-color=black bold dense').classes('text-xs q-px-sm')
+                        with ui.row().classes('gap-2'):
+                            ui.button('Importar Planilha do Suboficial', icon='file_download', on_click=abrir_importacao).props('unelevated color=secondary text-color=white bold dense').classes('text-xs q-px-sm')
+                            ui.button('Adicionar Pessoa', icon='person_add', on_click=abrir_cadastro).props('unelevated color=primary text-color=black bold dense').classes('text-xs q-px-sm')
 
                     if aniversariantes_filtrados:
                         with ui.column().classes('w-full gap-2'):

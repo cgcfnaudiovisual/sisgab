@@ -185,7 +185,7 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
             ef_data = res_ef.data if res_ef and res_ef.data else []
             if not ef_data: return None, set(), {}
 
-            respondidos = set()
+            respondidos = {}
             try:
                 res_esc = conn.table('escala_diaria').select('nome, cargo').eq('data', hoje_str).execute()
                 if res_esc and res_esc.data:
@@ -193,7 +193,7 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
                         c_val = str(item.get('cargo') or '').strip().upper()
                         if c_val and c_val not in ('PENDENTE', 'NONE', 'NULL'):
                             n_val = str(item.get('nome') or '').strip().upper()
-                            if n_val: respondidos.add(n_val)
+                            if n_val: respondidos[n_val] = c_val
             except Exception:
                 pass
 
@@ -204,7 +204,7 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
                         st = str(p.get('status') or '').strip().upper()
                         if st and st not in ('PENDENTE', 'NONE', 'NULL'):
                             ng = str(p.get('nome_guerra') or '').strip().upper()
-                            if ng: respondidos.add(ng)
+                            if ng: respondidos[ng] = st
             except Exception:
                 pass
             
@@ -214,7 +214,7 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
                     for item in res_ext.data:
                         df = item.get('data_fim')
                         if df and df >= hoje_str:
-                            respondidos.add(item.get('nome_guerra', '').upper())
+                            respondidos[item.get('nome_guerra', '').upper()] = 'AFASTADO'
             except Exception:
                 pass
                 
@@ -242,7 +242,7 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
             return ef_data, respondidos, user_tg_map
         except Exception as e_f:
             print(f"[REMINDER FETCH ERR] {e_f}")
-            return None, set(), {}
+            return None, {}, {}
 
     ef_data, respondidos, user_tg_map = await asyncio.to_thread(_fetch_reminder_data)
     if not ef_data:
@@ -282,14 +282,19 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
                 or user_tg_map.get(nome_g.split()[-1] if nome_g else '')
             )
         
-        if nome_g and nome_g not in respondidos and tg_id and str(tg_id).strip():
-            try:
-                personalized_msg = f"{hdr}\n\n👤 *Militar:* {pg} {nome_g}\n{body}"
-                await bot.send_message(str(tg_id).strip(), personalized_msg, reply_markup=get_presenca_keyboard(), parse_mode='Markdown')
-                notified_count += 1
-                await asyncio.sleep(0.02)  # Cede o controle ao loop do asyncio
-            except Exception as e_send:
-                print(f"[ATTENDANCE REMIND ERR] {tg_id}: {e_send}")
+        if nome_g and tg_id and str(tg_id).strip():
+            tid = str(tg_id).strip()
+            if nome_g in respondidos:
+                status = respondidos[nome_g]
+                print(f'[15MIN-CHECK] Militar {nome_g} telegram_id={tid} -> status={status}, skipping reminder')
+            else:
+                try:
+                    personalized_msg = f"{hdr}\n\n👤 *Militar:* {pg} {nome_g}\n{body}"
+                    await bot.send_message(tid, personalized_msg, reply_markup=get_presenca_keyboard(), parse_mode='Markdown')
+                    notified_count += 1
+                    await asyncio.sleep(0.02)  # Cede o controle ao loop do asyncio
+                except Exception as e_send:
+                    print(f"[ATTENDANCE REMIND ERR] {tid}: {e_send}")
 
     total_militares = len(ef_data)
     respondidos_count = len(respondidos)
