@@ -520,3 +520,65 @@ async def upload_photos_to_drive(bot, chat_id, photos_info, demanda):
             
     return success_count
 
+async def enviar_links_acervo(bot, chat_id, demanda):
+    """Envia mensagem formatada no Telegram com links da pasta completa e SELEÇÃO."""
+    import drive_service
+    
+    titulo = demanda.get('titulo_evento', 'Evento').upper()
+    data_ev = demanda.get('data_evento', '')
+    local = demanda.get('local_evento', 'CGCFN')
+    drive_url = demanda.get('drive_url', '')
+    
+    msg = f"📸 *ACERVO FOTOGRÁFICO: {titulo}*\n"
+    msg += f"📅 Data: {data_ev} | 📍 Local: {local}\n\n"
+    
+    if drive_url:
+        msg += f"📁 *Pasta Completa no Google Drive:*\n{drive_url}\n\n"
+    else:
+        msg += "⚠️ *Link do Drive não disponível.*\n\n"
+        
+    msg += "📱 *Gerado pelo SisGAB — COMSOC / CGCFN*"
+    
+    try:
+        await bot.send_message(chat_id, msg, parse_mode='Markdown')
+        return True
+    except Exception as e:
+        print(f"[BOT] Erro ao enviar links do acervo: {e}")
+        return False
+
+async def enviar_album_hd_drive(bot, chat_id, selecao_folder_id, max_photos=10):
+    """
+    Baixa as melhores fotos da pasta SELEÇÃO no Drive e envia como Álbum HD (send_media_group) no Telegram.
+    Envia em lotes de até 10 fotos.
+    """
+    import drive_service
+    import telebot
+    from telebot.types import InputMediaPhoto
+    
+    if not selecao_folder_id:
+        print("[BOT] ID da pasta SELEÇÃO é nulo.")
+        return False
+        
+    files = drive_service.list_files(selecao_folder_id, mime_filter='image/', page_size=max_photos)
+    if not files:
+        print("[BOT] Nenhuma foto encontrada na pasta SELEÇÃO.")
+        return False
+        
+    try:
+        media_group = []
+        for i, f in enumerate(files[:max_photos]):
+            file_bytes = drive_service.download_file(f['id'])
+            if file_bytes:
+                caption = f"📸 Foto {i+1}/{len(files)}" if i == 0 else ""
+                media_group.append(InputMediaPhoto(file_bytes, caption=caption))
+                
+        if media_group:
+            for k in range(0, len(media_group), 10):
+                batch = media_group[k:k+10]
+                await bot.send_media_group(chat_id, batch)
+            return len(media_group)
+    except Exception as e:
+        print(f"[BOT] Erro ao enviar álbum HD: {e}")
+        return False
+    return False
+

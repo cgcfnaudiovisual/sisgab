@@ -40,11 +40,16 @@ def render_page(evento_id: str = None, **kwargs):
     evento_selecionado = str(evento_id) if evento_id and str(evento_id) in pautas_options else list(pautas_options.keys())[0]
     
     page_state = {
-        'pauta_id': evento_selecionado
+        'pauta_id': evento_selecionado,
+        'curation_mode': False,
+        'selected_files': set()
     }
 
     with ui.card().classes('w-full q-pa-md no-shadow rounded-xl q-mb-md').style(f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'):
-        ui.label('Selecione o Evento').classes('text-xs font-bold text-cyan q-mb-xs')
+        with ui.row().classes('w-full justify-between items-center q-mb-xs'):
+            ui.label('Selecione o Evento').classes('text-xs font-bold text-cyan')
+            if is_operator:
+                ui.button('📲 Distribuir Acervo', on_click=lambda: abrir_dialog_distribuir()).props('dense rounded flat color=emerald').classes('text-xs font-bold bg-cyan-9 text-white px-3')
         
         def on_event_change(e):
             page_state['pauta_id'] = e.value
@@ -55,6 +60,98 @@ def render_page(evento_id: str = None, **kwargs):
             value=page_state['pauta_id'],
             on_change=on_event_change
         ).props('dark outlined dense w-full option-dark')
+
+    def abrir_dialog_distribuir():
+        pauta_id = page_state.get('pauta_id')
+        demanda = pautas_data.get(str(pauta_id))
+        if not demanda:
+            ui.notify('Selecione um evento válido', color='warning')
+            return
+            
+        destinatarios = {}
+        db = get_db_connection()
+        if db:
+            try:
+                res_ef = db.table('efetivo').select('nome_guerra, posto_grad, telegram_id').not_('telegram_id', 'is', 'null').execute()
+                if res_ef.data:
+                    for ef in res_ef.data:
+                        tg_id = ef.get('telegram_id')
+                        if tg_id:
+                            destinatarios[str(tg_id)] = f"{ef.get('posto_grad', '')} {ef.get('nome_guerra', '')} (ID: {tg_id})"
+            except Exception as e:
+                print(f"[DB] Erro buscando destinatários: {e}")
+                
+        destinatarios['manual'] = 'Inserir ID Manualmente...'
+        
+        dialog_state = {'dest_id': list(destinatarios.keys())[0] if destinatarios else None, 'manual_id': ''}
+        
+        with ui.dialog() as dlg, ui.card().classes('q-pa-md max-w-sm w-full').style(f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'):
+            ui.label('Distribuir Acervo no Telegram').classes('text-lg font-bold text-cyan q-mb-md')
+            
+            sel = ui.select(destinatarios, label='Destinatário', value=dialog_state['dest_id']).props('dark outlined dense w-full option-dark q-mb-sm')
+            man_input = ui.input('ID Telegram (Manual)').props('dark outlined dense w-full q-mb-md').bind_visibility_from(sel, 'value', value=lambda v: v == 'manual')
+            
+            def get_target_chat_id():
+                return man_input.value if sel.value == 'manual' else sel.value
+                
+            async def do_distribuir(acao):
+                chat_id = get_target_chat_id()
+                if not chat_id:
+                    ui.notify('Selecione um destinatário válido.', color='warning')
+                    return
+                
+                import telegram_bot
+                from telegram_bot.utils import enviar_links_acervo, enviar_album_hd_drive
+                import drive_service
+                
+                bot_inst = telegram_bot.bot
+                
+                if not bot_inst:
+                    ui.notify('Bot não inicializado.', color='negative')
+                    return
+                
+                dlg.close()
+                ui.notify('Iniciando distribuição... aguarde.', color='info')
+                
+                try:
+                    if acao in ['links', 'ambos']:
+                        res = await enviar_links_acervo(bot_inst, chat_id, demanda)
+                        if res:
+                            ui.notify(f'✅ Links enviados para {chat_id}!', color='success')
+                        else:
+                            ui.notify('❌ Erro ao enviar links.', color='negative')
+                            
+                    if acao in ['album', 'ambos']:
+                        drive_folder_id = demanda.get('drive_folder_id')
+                        if not drive_folder_id and demanda.get('drive_url'):
+                            url = demanda.get('drive_url')
+                            if 'folders/' in url:
+                                drive_folder_id = url.split('folders/')[-1].split('?')[0]
+                                
+                        if not drive_folder_id:
+                            ui.notify('❌ ID da pasta principal não encontrado.', color='negative')
+                            return
+                            
+                        selecao_id = drive_service.find_folder('SELEÇÃO', drive_folder_id)
+                        if not selecao_id:
+                            ui.notify('❌ Pasta SELEÇÃO não encontrada no Drive.', color='negative')
+                            return
+                            
+                        count = await enviar_album_hd_drive(bot_inst, chat_id, selecao_id)
+                        if count:
+                            ui.notify(f'✅ Álbum HD de {count} fotos enviado para {chat_id}!', color='success')
+                        else:
+                            ui.notify('❌ Erro ou sem fotos para enviar Álbum HD.', color='negative')
+                except Exception as e:
+                    ui.notify(f'Erro na distribuição: {e}', color='negative')
+
+            with ui.column().classes('w-full gap-2 mt-2'):
+                ui.button('🔗 Enviar Links no Telegram', on_click=lambda: do_distribuir('links')).props('unelevated w-full color=primary text-color=black bold')
+                ui.button('📸 Enviar Álbum HD (SELEÇÃO)', on_click=lambda: do_distribuir('album')).props('unelevated w-full color=secondary text-color=black bold')
+                ui.button('📲 Enviar Ambos (Links + Álbum)', on_click=lambda: do_distribuir('ambos')).props('unelevated w-full color=accent text-color=white bold')
+                ui.button('Cancelar', on_click=dlg.close).props('flat w-full color=grey')
+                
+        dlg.open()
 
     def open_preview_modal(file_info):
         with ui.dialog() as modal, ui.card().classes('q-pa-md max-w-4xl max-h-[90vh] overflow-hidden').style(f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'):
@@ -108,14 +205,31 @@ def render_page(evento_id: str = None, **kwargs):
         if fotos:
             with ui.grid().classes('w-full gap-4 q-mt-md').style('grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));'):
                 for f in fotos:
-                    border_style = 'border: 1px solid rgba(255, 193, 7, 0.8);' if is_selecao else 'border: 1px solid rgba(0, 229, 255, 0.15);'
-                    with ui.card().classes('w-[180px] cursor-pointer hover:scale-105 transition-all').style(
+                    fid = f.get('id')
+                    is_selected = fid in page_state['selected_files']
+                    if page_state['curation_mode'] and is_selected:
+                        border_style = 'border: 2px solid rgba(255, 193, 7, 1);'
+                    elif is_selecao:
+                        border_style = 'border: 1px solid rgba(255, 193, 7, 0.8);'
+                    else:
+                        border_style = 'border: 1px solid rgba(0, 229, 255, 0.15);'
+
+                    with ui.card().classes('w-[180px] cursor-pointer hover:scale-105 transition-all relative q-pa-none').style(
                         f'background: #091326; {border_style} border-radius: 12px; overflow: hidden;'
-                    ).on('click', lambda _, file_info=f: open_preview_modal(file_info)):
-                        if f.get('thumbnailLink'):
-                            ui.image(f['thumbnailLink']).classes('w-full h-[130px] object-cover')
+                    ):
+                        if page_state['curation_mode']:
+                            def toggle_sel(e, file_id=fid):
+                                if file_id in page_state['selected_files']:
+                                    page_state['selected_files'].remove(file_id)
+                                else:
+                                    page_state['selected_files'].add(file_id)
+                                render_drive_tabs.refresh()
+                            ui.checkbox('', value=is_selected, on_change=toggle_sel).classes('absolute top-1 left-1 z-10').props('dark color=amber')
+                            img = ui.image(f.get('thumbnailLink', '')).classes('w-full h-[130px] object-cover')
+                            img.on('click', toggle_sel)
                         else:
-                            ui.icon('photo').classes('text-6xl text-grey-6 q-pa-lg w-full text-center')
+                            img = ui.image(f.get('thumbnailLink', '')).classes('w-full h-[130px] object-cover')
+                            img.on('click', lambda _, file_info=f: open_preview_modal(file_info))
                         
                         with ui.column().classes('q-pa-xs gap-0 w-full'):
                             ui.label(f.get('name', '')[:25]).classes('text-[10px] text-grey-3 truncate')
@@ -148,8 +262,76 @@ def render_page(evento_id: str = None, **kwargs):
         fotos_todas = drive_service.list_files(drive_folder_id, mime_filter='image/')
         fotos_selecao = drive_service.list_files(selecao_folder_id, mime_filter='image/') if selecao_folder_id else []
 
-        with ui.row().classes('w-full justify-center q-my-sm bg-black/30 q-pa-sm rounded-lg border border-white/10'):
+        with ui.row().classes('w-full justify-between items-center q-my-sm bg-black/30 q-pa-sm rounded-lg border border-white/10'):
             ui.label(f"📸 {len(fotos_todas)} fotos na pasta | ⭐ {len(fotos_selecao)} na SELEÇÃO").classes('text-sm font-bold text-amber-5')
+            if is_operator:
+                def toggle_curation():
+                    page_state['curation_mode'] = not page_state['curation_mode']
+                    page_state['selected_files'].clear()
+                    render_drive_tabs.refresh()
+                btn_color = 'amber' if page_state['curation_mode'] else 'grey-8'
+                ui.button('✏️ Modo Curadoria', on_click=toggle_curation).props(f'unelevated color={btn_color} text-color=black bold').classes('text-xs')
+
+        if page_state['curation_mode']:
+            with ui.row().classes('w-full justify-between items-center q-pa-sm bg-amber-9/20 rounded-lg border border-amber-500/50 q-mb-md'):
+                with ui.row().classes('gap-2'):
+                    def select_all():
+                        for f in fotos_todas:
+                            page_state['selected_files'].add(f.get('id'))
+                        for f in fotos_selecao:
+                            page_state['selected_files'].add(f.get('id'))
+                        render_drive_tabs.refresh()
+                    def deselect_all():
+                        page_state['selected_files'].clear()
+                        render_drive_tabs.refresh()
+                    ui.button('☑️ Selecionar Todas', on_click=select_all).props('outline color=amber dense').classes('text-xs')
+                    ui.button('☐ Desmarcar Todas', on_click=deselect_all).props('outline color=grey dense').classes('text-xs')
+                
+                with ui.row().classes('gap-2'):
+                    async def mover_para_selecao():
+                        if not page_state['selected_files']: return
+                        if not selecao_folder_id:
+                            ui.notify('Pasta SELEÇÃO não encontrada.', color='negative')
+                            return
+                        n = len(page_state['selected_files'])
+                        notif = ui.notification(f"Movendo {n} arquivos para SELEÇÃO...", timeout=0, spinner=True)
+                        
+                        db = get_db_connection()
+                        wm_enabled = False
+                        wm_text = 'COMSOC / CGCFN'
+                        if db:
+                            res1 = db.table('config').select('value').eq('key', 'drive_watermark_enabled').execute()
+                            if res1.data and res1.data[0].get('value') == 'True':
+                                wm_enabled = True
+                            res2 = db.table('config').select('value').eq('key', 'drive_watermark_text').execute()
+                            if res2.data:
+                                wm_text = res2.data[0].get('value', wm_text)
+                                
+                        for fid in list(page_state['selected_files']):
+                            if wm_enabled:
+                                import asyncio
+                                await asyncio.to_thread(drive_service.copy_and_watermark_to_selecao, fid, selecao_folder_id, wm_text)
+                            else:
+                                drive_service.move_file(fid, selecao_folder_id)
+                        notif.dismiss()
+                        ui.notify(f'{n} arquivos movidos para SELEÇÃO!', color='success')
+                        page_state['selected_files'].clear()
+                        render_drive_tabs.refresh()
+                        
+                    async def devolver_selecao():
+                        if not page_state['selected_files']: return
+                        n = len(page_state['selected_files'])
+                        notif = ui.notification(f"Devolvendo {n} arquivos para pasta principal...", timeout=0, spinner=True)
+                        for fid in list(page_state['selected_files']):
+                            drive_service.move_file(fid, drive_folder_id)
+                        notif.dismiss()
+                        ui.notify(f'{n} arquivos devolvidos!', color='success')
+                        page_state['selected_files'].clear()
+                        render_drive_tabs.refresh()
+                        
+                    n_sel = len(page_state['selected_files'])
+                    ui.button(f'⭐ Mover para SELEÇÃO ({n_sel})', on_click=mover_para_selecao).props('unelevated color=amber text-color=black bold').classes('text-xs')
+                    ui.button(f'↩️ Devolver ({n_sel})', on_click=devolver_selecao).props('unelevated color=grey text-color=white bold').classes('text-xs')
 
         with ui.tabs().classes('w-full text-cyan flex-wrap') as drive_tabs:
             tab_t = ui.tab('📸 Todas as Fotos')

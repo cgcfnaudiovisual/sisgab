@@ -1382,6 +1382,8 @@ def render_page():
                     db = get_service_db_connection() or get_db_connection()
                     cur_sa = ""
                     cur_folder = ""
+                    cur_wm_enabled = False
+                    cur_wm_text = "COMSOC / CGCFN"
                     if db:
                         try:
                             # Load values from config table
@@ -1391,11 +1393,21 @@ def render_page():
                             folder_res = db.table('config').select('value').eq('key', 'drive_pasta_mae_id').execute()
                             if folder_res and folder_res.data:
                                 cur_folder = folder_res.data[0].get('value', '')
+                            wm_en_res = db.table('config').select('value').eq('key', 'drive_watermark_enabled').execute()
+                            if wm_en_res and wm_en_res.data:
+                                cur_wm_enabled = wm_en_res.data[0].get('value') == 'True'
+                            wm_txt_res = db.table('config').select('value').eq('key', 'drive_watermark_text').execute()
+                            if wm_txt_res and wm_txt_res.data:
+                                cur_wm_text = wm_txt_res.data[0].get('value', 'COMSOC / CGCFN')
                         except Exception as e:
                             print(f"[DRIVE CONFIG LOAD ERR] {e}")
 
                     in_sa_json = ui.textarea('JSON da Service Account', value=cur_sa).props('dark outlined w-full rows=4').classes('w-full text-xs font-mono')
                     in_folder_id = ui.input('ID da Pasta Mãe do Google Drive', value=cur_folder).props('dark outlined dense w-full')
+                    
+                    with ui.row().classes('w-full items-center gap-4'):
+                        in_wm_enabled = ui.checkbox('Marca d\'Água Automática na SELEÇÃO', value=cur_wm_enabled).props('dark')
+                        in_wm_text = ui.input('Texto da Marca d\'Água', value=cur_wm_text).props('dark outlined dense').classes('col-grow')
 
                     drive_status = ui.label('').classes('text-xs text-amber font-bold q-mt-xs')
 
@@ -1424,6 +1436,20 @@ def render_page():
                                     db_s.table('config').update({'value': in_folder_id.value.strip()}).eq('key', 'drive_pasta_mae_id').execute()
                                 else:
                                     db_s.table('config').insert({'key': 'drive_pasta_mae_id', 'value': in_folder_id.value.strip()}).execute()
+                                    
+                                # Upsert drive_watermark_enabled
+                                res_wm_en = db_s.table('config').select('id').eq('key', 'drive_watermark_enabled').execute()
+                                if res_wm_en and res_wm_en.data:
+                                    db_s.table('config').update({'value': str(in_wm_enabled.value)}).eq('key', 'drive_watermark_enabled').execute()
+                                else:
+                                    db_s.table('config').insert({'key': 'drive_watermark_enabled', 'value': str(in_wm_enabled.value)}).execute()
+                                    
+                                # Upsert drive_watermark_text
+                                res_wm_tx = db_s.table('config').select('id').eq('key', 'drive_watermark_text').execute()
+                                if res_wm_tx and res_wm_tx.data:
+                                    db_s.table('config').update({'value': in_wm_text.value.strip()}).eq('key', 'drive_watermark_text').execute()
+                                else:
+                                    db_s.table('config').insert({'key': 'drive_watermark_text', 'value': in_wm_text.value.strip()}).execute()
 
                                 drive_service.reset_drive_service()
                                 ui.notify('✅ Configurações do Drive salvas!', color='success')

@@ -12,6 +12,11 @@ from datetime import datetime, timedelta
 
 # Google Drive API imports
 try:
+    from PIL import Image, ImageDraw, ImageFont, ImageEnhance
+except ImportError:
+    print("[DRIVE_SERVICE] WARN: Pillow não instalado. Marca d'água indisponível.")
+
+try:
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
     from google.oauth2.service_account import Credentials
@@ -343,3 +348,74 @@ def get_file_info(file_id):
     except Exception as e:
         print(f"[DRIVE_SERVICE] Erro ao obter info do arquivo {file_id}: {e}")
         return None
+
+
+# ─── Funções de Marca d'Água ──────────────────────────────────────────────
+
+def apply_watermark(image_bytes, text="COMSOC / CGCFN", opacity=0.45):
+    """
+    Applies a semi-transparent text/badge watermark on the bottom-right corner of an image.
+    Returns watermarked image bytes (PNG/JPEG format).
+    """
+    try:
+        from PIL import Image, ImageDraw, ImageFont, ImageEnhance
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
+        width, height = img.size
+        
+        # Create transparent overlay
+        overlay = Image.new("RGBA", img.size, (255, 255, 255, 0))
+        draw = ImageDraw.Draw(overlay)
+        
+        # Font size relative to image size
+        font_size = max(16, int(height * 0.035))
+        try:
+            font = ImageFont.truetype("arial.ttf", font_size)
+        except Exception:
+            font = ImageFont.load_default()
+            
+        # Watermark text
+        full_text = f"  {text}  "
+        
+        # Draw bounding box on bottom right
+        margin = int(width * 0.02)
+        text_bbox = draw.textbbox((0, 0), full_text, font=font)
+        text_w = text_bbox[2] - text_bbox[0]
+        text_h = text_bbox[3] - text_bbox[1]
+        
+        x = width - text_w - margin - 20
+        y = height - text_h - margin - 20
+        
+        # Draw dark semi-transparent rectangle badge
+        alpha = int(255 * opacity)
+        draw.rectangle([x, y, x + text_w + 16, y + text_h + 12], fill=(0, 20, 40, int(alpha * 0.85)))
+        # Draw cyan text
+        draw.text((x + 8, y + 4), full_text, fill=(0, 229, 255, alpha), font=font)
+        
+        # Composite image
+        watermarked = Image.alpha_composite(img, overlay)
+        output = io.BytesIO()
+        watermarked.convert("RGB").save(output, format="JPEG", quality=92)
+        output.seek(0)
+        return output.read()
+    except Exception as e:
+        print(f"[DRIVE_SERVICE] Erro ao aplicar marca d'água: {e}")
+        return image_bytes
+
+def copy_and_watermark_to_selecao(file_id, selecao_folder_id, watermark_text="COMSOC / CGCFN"):
+    """
+    Baixa um arquivo, aplica a marca d'água e faz upload na pasta de SELEÇÃO.
+    """
+    file_info = get_file_info(file_id)
+    if not file_info:
+        return None
+    
+    original_name = file_info.get('name', 'imagem.jpg')
+    file_bytes = download_file(file_id)
+    if not file_bytes:
+        return None
+        
+    watermarked_bytes = apply_watermark(file_bytes, watermark_text)
+    new_name = f"WM_{original_name}"
+    
+    uploaded = upload_file(watermarked_bytes, new_name, selecao_folder_id)
+    return uploaded
