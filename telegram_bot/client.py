@@ -39,6 +39,8 @@ async def _tactical_reminder_loop():
             break
         except Exception as e:
             print(f"[TACTICAL REMINDER LOOP ERR] {e}")
+        await asyncio.sleep(600)  # Checa a cada 10 minutos
+
 async def _morning_attendance_loop():
     """Loop que monitora a chamada matutina (07:00) e cobranças recorrentes (07:10 às 09:30) via Telegram."""
     from datetime import datetime
