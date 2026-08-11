@@ -157,6 +157,8 @@ async def init_bot():
                 types.BotCommand("menu", "Exibe o menu de comandos e teclado"),
                 types.BotCommand("relatorio", "Gera o Relatório Executivo do mês"),
                 types.BotCommand("settings", "Acessa as configurações e notificações"),
+                types.BotCommand("cadastrar_face", "Cadastra biometria facial para reconhecimento"),
+                types.BotCommand("minhas_fotos", "Visualiza suas fotos nos eventos da Marinha"),
                 types.BotCommand("cancelar", "Cancela a operação atual")
             ])
 

@@ -13,7 +13,78 @@ GALERIA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets',
 os.makedirs(GALERIA_DIR, exist_ok=True)
 
 def render_page(evento_id: str = None, **kwargs):
-    ui.label('🔥 GALERIA DE FOTOS').classes('text-2xl font-bold text-white cyber-title gt-xs q-mb-md q-ml-md')
+    user_data = app.storage.user.get('user_data', {})
+    
+    with ui.row().classes('w-full justify-between items-center q-mb-md q-ml-md q-pr-md'):
+        ui.label('🔥 GALERIA DE FOTOS').classes('text-2xl font-bold text-white cyber-title gt-xs')
+        
+        def abrir_cadastrar_biometria():
+            with ui.dialog() as dlg, ui.card().classes('q-pa-md max-w-sm w-full').style(f'background: {THEME["bg_panel"]};'):
+                ui.label('👤 Cadastrar Biometria Facial').classes('text-lg font-bold text-cyan q-mb-md')
+                ui.label('Envie uma selfie clara do seu rosto.').classes('text-xs text-grey-4 q-mb-sm')
+                
+                async def handle_upload(e):
+                    file_bytes = e.content.read()
+                    try:
+                        import sisgab_face_worker
+                        is_valid, msg, embedding = sisgab_face_worker.evaluate_selfie_quality(file_bytes)
+                        if not is_valid:
+                            ui.notify(f'❌ {msg}', color='negative')
+                            return
+                            
+                        db = get_db_connection()
+                        if db:
+                            db.table('face_embeddings').insert({
+                                'user_id': user_data.get('id'),
+                                'nome_guerra': user_data.get('nome_guerra', ''),
+                                'telegram_id': user_data.get('telegram_id', ''),
+                                'embedding': embedding
+                            }).execute()
+                            ui.notify('✅ Biometria facial cadastrada com sucesso!', color='positive')
+                            dlg.close()
+                    except Exception as ex:
+                        ui.notify(f'Erro ao processar biometria: {ex}', color='negative')
+
+                ui.upload(on_upload=handle_upload, auto_upload=True).props('accept="image/*" w-full')
+                ui.button('Cancelar', on_click=dlg.close).props('flat w-full color=grey q-mt-sm')
+            dlg.open()
+            
+        ui.button('👤 Cadastrar Biometria Facial', on_click=abrir_cadastrar_biometria).props('outline color=cyan').classes('font-bold')
+
+    db = get_db_connection()
+    worker_status = 'offline'
+    queue_count = 0
+    if db:
+        try:
+            hb_res = db.table('config').select('value').eq('key', 'face_worker_heartbeat').execute()
+            if hb_res.data:
+                try:
+                    last_hb_str = hb_res.data[0]['value'].replace('Z', '+00:00')
+                    last_hb = datetime.fromisoformat(last_hb_str)
+                    import datetime as dt
+                    now = dt.datetime.now(dt.timezone.utc) if last_hb.tzinfo else datetime.now()
+                    if (now - last_hb).total_seconds() < 60:
+                        worker_status = 'online'
+                except Exception:
+                    pass
+            
+            qc_res = db.table('config').select('value').eq('key', 'face_worker_queue_count').execute()
+            if qc_res.data:
+                queue_count = int(qc_res.data[0]['value'])
+            
+            if worker_status == 'offline':
+                pend_res = db.table('processed_photos').select('id', count='exact').in_('status', ['pendente', 'PENDENTE_AI']).execute()
+                queue_count = pend_res.count or 0
+        except Exception as e:
+            print(f"[WORKER STATUS ERR] {e}")
+
+    with ui.row().classes('w-full q-ml-md q-mb-md items-center'):
+        if worker_status == 'online':
+            ui.badge('🟢 Worker GPU Online (PXSTUDIO)', color='positive').classes('text-sm font-bold q-pa-sm')
+        else:
+            ui.badge(f'🟡 Worker GPU Offline ({queue_count} fotos na fila de espera)', color='warning').classes('text-sm font-bold text-black q-pa-sm q-mr-sm')
+            ui.button('⚡ Processar no Servidor', on_click=lambda: ui.notify('Processamento CPU iniciado (fallback).', color='info')).props('dense rounded color=blue').classes('text-xs font-bold')
+
     
     user_data = app.storage.user.get('user_data', {})
     user_id = user_data.get('id')
@@ -358,6 +429,7 @@ def render_page(evento_id: str = None, **kwargs):
                             pending_matches.append({
                                 'match_id': m['id'],
                                 'similarity': m['similarity'],
+                                'bbox': m.get('bbox'),
                                 'photo': res_p.data[0],
                                 'user': res_u.data[0]
                             })
@@ -376,7 +448,23 @@ def render_page(evento_id: str = None, **kwargs):
                     with ui.card().classes('q-pa-none no-shadow rounded-xl overflow-hidden').style(
                         f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
                     ):
-                        ui.image(file_web_path).style('height: 160px; object-fit: cover;')
+                        try:
+                            import sisgab_face_worker
+                            import base64
+                            local_img_path = os.path.join(GALERIA_DIR, p['event_name'], p['filename'])
+                            bbox = item.get('bbox')
+                            if bbox and os.path.exists(local_img_path):
+                                with open(local_img_path, 'rb') as img_f:
+                                    img_bytes = img_f.read()
+                                drawn_bytes = sisgab_face_worker.draw_face_bounding_box(img_bytes, bbox)
+                                b64_img = base64.b64encode(drawn_bytes).decode('utf-8')
+                                img_src = f"data:image/jpeg;base64,{b64_img}"
+                            else:
+                                img_src = file_web_path
+                        except Exception:
+                            img_src = file_web_path
+
+                        ui.image(img_src).style('height: 160px; object-fit: cover;')
                         with ui.column().classes('q-pa-md w-full gap-1'):
                             ui.label(f"👮 {u['nome_guerra']}").classes('text-md font-bold text-white')
                             ui.label(f"⚓ Pauta: {p['event_name']}").classes('text-xs text-grey-4')
@@ -420,8 +508,8 @@ def render_page(evento_id: str = None, **kwargs):
                                     except Exception as err:
                                         ui.notify(f'Erro ao rejeitar: {err}', color='red')
                                         
-                                ui.button('Rejeitar', on_click=rejeitar).props('flat dense color=red').classes('text-xs')
-                                ui.button('Aprovar', on_click=aprovar).props('flat dense color=green').classes('text-xs font-bold')
+                                ui.button('❌ Rejeitar Match', on_click=rejeitar).props('flat dense color=red').classes('text-xs')
+                                ui.button('✅ Aprovar Match', on_click=aprovar).props('flat dense color=green').classes('text-xs font-bold')
         else:
             with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
                 ui.icon('fact_check', size='3rem')
@@ -450,6 +538,7 @@ def render_page(evento_id: str = None, **kwargs):
                 print(f"[PESSOAL DB ERR] {ex}")
                 
         if pessoal_photos:
+            ui.badge(f"📸 Você apareceu em {len(pessoal_photos)} fotos nos eventos!", color='primary').classes('q-mb-md text-bold')
             with ui.grid(columns=1).classes('w-full gap-4 gt-xs').style('grid-template-columns: repeat(4, 1fr);'):
                 for item in pessoal_photos:
                     p = item['photo']
@@ -462,12 +551,13 @@ def render_page(evento_id: str = None, **kwargs):
                         ui.image(file_web_path).style('height: 150px; object-fit: cover;')
                         with ui.column().classes('q-pa-sm w-full gap-1'):
                             ui.label(p['event_name']).classes('text-xs font-bold text-white')
-                            ui.label(f"📈 Similaridade: {sim_pct:.1f}%").classes('text-[10px] text-cyan')
-                            ui.button(
-                                'Abrir no Google Drive', 
-                                icon='open_in_new', 
-                                on_click=lambda link=p['drive_link']: ui.open(link, new_tab=True)
-                            ).props('flat w-full dense color=cyan').classes('text-[10px] font-bold')
+                            date_str = p.get('created_at', '')[:10] if p.get('created_at') else ''
+                            if date_str:
+                                ui.label(f"📅 {date_str}").classes('text-[10px] text-grey-4')
+                            ui.label(f"📈 {sim_pct:.0f}% de certeza").classes('text-[10px] text-cyan')
+                            with ui.row().classes('w-full justify-between mt-2 gap-1'):
+                                ui.button('⬇️ Baixar', on_click=lambda l=p.get('drive_link', file_web_path): ui.download(l)).props('flat dense color=white').classes('text-[10px] font-bold flex-1')
+                                ui.button('🔗 Abrir no Drive', on_click=lambda link=p.get('drive_link'): ui.open(link, new_tab=True) if link else ui.notify('Link não disponível', color='warning')).props('flat dense color=cyan').classes('text-[10px] font-bold flex-1')
         else:
             with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
                 ui.icon('face', size='3rem')

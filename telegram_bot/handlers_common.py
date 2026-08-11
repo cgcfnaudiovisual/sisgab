@@ -3201,3 +3201,56 @@ def register_common_handlers(bot):
             )
         except Exception as err:
             await bot.edit_message_text(f"❌ Falha ao interpretar áudio: {err}", chat_id=chat_id, message_id=msg_waiting.message_id)
+
+    @bot.message_handler(content_types=['photo', 'document'], func=lambda m: m.chat.id in chat_states and chat_states[m.chat.id].get('action') == 'waiting_selfie_registration')
+    async def handle_selfie_registration(message):
+        chat_id = message.chat.id
+        state = chat_states[chat_id]
+        profile = state.get('user')
+        
+        await bot.reply_to(message, "⏳ Processando sua selfie, aguarde...")
+        
+        try:
+            file_info = None
+            if message.content_type == 'photo':
+                file_info = await bot.get_file(message.photo[-1].file_id)
+            elif message.content_type == 'document':
+                if not message.document.mime_type.startswith('image/'):
+                    await bot.reply_to(message, "❌ Por favor, envie um arquivo de imagem.")
+                    return
+                file_info = await bot.get_file(message.document.file_id)
+                
+            file_bytes = await bot.download_file(file_info.file_path)
+            
+            import sys
+            import os
+            sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            from sisgab_face_worker import evaluate_selfie_quality
+            
+            success, msg, embedding = evaluate_selfie_quality(file_bytes)
+            
+            if not success:
+                await bot.reply_to(message, msg)
+                return
+                
+            from database import get_bot_db_connection
+            db = get_bot_db_connection()
+            if not db:
+                await bot.reply_to(message, "❌ Erro ao conectar ao banco de dados.")
+                return
+                
+            user_id = profile.get('id')
+            nome_guerra = profile.get('nome_guerra') or profile.get('nome') or 'Militar'
+            
+            import json
+            payload = {
+                'user_id': user_id,
+                'telegram_id': str(chat_id),
+                'nome_guerra': nome_guerra,
+                'embedding': json.dumps(embedding.tolist())
+            }
+            db.table('face_embeddings').upsert(payload).execute()
+            await bot.reply_to(message, "✅ *Biometria Facial Cadastrada com Sucesso!*\nAgora você receberá notificações automáticas quando aparecer em fotos de eventos.", parse_mode='Markdown')
+            clear_state(chat_id)
+        except Exception as e:
+            await bot.reply_to(message, f"❌ Erro ao salvar biometria: {e}")
