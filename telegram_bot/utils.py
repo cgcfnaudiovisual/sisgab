@@ -463,3 +463,60 @@ def sort_efetivo_by_rank(ef_list: list) -> list:
         return (group_priority, ant_idx, ng)
 
     return sorted(ef_list, key=sort_key)
+
+
+async def upload_photos_to_drive(bot, chat_id, photos_info, demanda):
+    """Downloads photos from Telegram and uploads to Drive event folder."""
+    import drive_service
+    import os
+    from database import get_bot_db_connection
+    import uuid
+    from datetime import datetime
+
+    success_count = 0
+    
+    folder_id = demanda.get('drive_folder_id')
+    if not folder_id:
+        titulo = demanda.get('titulo_evento', 'Evento sem titulo')
+        dt_evento = demanda.get('data_evento', datetime.now().strftime('%Y-%m-%d'))
+        res = drive_service.criar_pasta_evento(titulo, dt_evento)
+        if res:
+            folder_id = res.get('evento_folder_id')
+            db = get_bot_db_connection()
+            if db:
+                db.table('demandas_comunicacao').update({
+                    'drive_folder_id': folder_id,
+                    'drive_url': res.get('evento_link')
+                }).eq('id', demanda['id']).execute()
+    
+    if not folder_id:
+        return 0
+        
+    db = get_bot_db_connection()
+        
+    for photo in photos_info:
+        try:
+            file_info = await bot.get_file(photo['file_id'])
+            downloaded_file = await bot.download_file(file_info.file_path)
+            
+            filename = photo.get('file_name', f"photo_{uuid.uuid4().hex[:8]}.jpg")
+            
+            upload_res = drive_service.upload_file(downloaded_file, filename, folder_id)
+            if upload_res:
+                success_count += 1
+                if db:
+                    try:
+                        db.table('processed_photos').insert({
+                            'demanda_id': demanda['id'],
+                            'file_id': photo['file_id'],
+                            'file_name': filename,
+                            'uploaded_by': str(chat_id),
+                            'created_at': datetime.now().isoformat()
+                        }).execute()
+                    except Exception as db_err:
+                        print(f"Erro ao registrar foto processada: {db_err}")
+        except Exception as e:
+            print(f"Erro no upload da foto {photo['file_id']}: {e}")
+            
+    return success_count
+

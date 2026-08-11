@@ -1369,5 +1369,73 @@ def render_page():
                                                 on_click=lambda _, cur_u=u: open_delete_dialog(cur_u)
                                             ).props('flat round dense color=red').classes('text-xs').style('background: rgba(255, 23, 68, 0.05);').tooltip('Excluir Operador')
 
+            # --- SEÇÃO 3: CONFIGURAÇÃO GOOGLE DRIVE ---
+            with theme.card_base().classes('w-full q-pa-md q-mt-md'):
+                with ui.column().classes('w-full gap-4'):
+                    with ui.row().classes('items-center gap-2'):
+                        ui.icon('folder_shared', size='2rem').style(f'color: {THEME["accent"]}')
+                        ui.label('📂 Integração Google Drive').classes('text-lg font-bold cyber-title')
+                    ui.separator().style('background-color: rgba(0, 229, 255, 0.15);')
+
+                    import drive_service
+                    
+                    db = get_service_db_connection() or get_db_connection()
+                    cur_sa = ""
+                    cur_folder = ""
+                    if db:
+                        try:
+                            # Load values from config table
+                            sa_res = db.table('config').select('value').eq('key', 'drive_service_account_json').execute()
+                            if sa_res and sa_res.data:
+                                cur_sa = sa_res.data[0].get('value', '')
+                            folder_res = db.table('config').select('value').eq('key', 'drive_pasta_mae_id').execute()
+                            if folder_res and folder_res.data:
+                                cur_folder = folder_res.data[0].get('value', '')
+                        except Exception as e:
+                            print(f"[DRIVE CONFIG LOAD ERR] {e}")
+
+                    in_sa_json = ui.textarea('JSON da Service Account', value=cur_sa).props('dark outlined w-full rows=4').classes('w-full text-xs font-mono')
+                    in_folder_id = ui.input('ID da Pasta Mãe do Google Drive', value=cur_folder).props('dark outlined dense w-full')
+
+                    drive_status = ui.label('').classes('text-xs text-amber font-bold q-mt-xs')
+
+                    def test_drive_connection():
+                        drive_status.text = 'Testando conexão...'
+                        ui.timer(0.1, lambda: (
+                            drive_status.set_text(
+                                'Conexão OK!' if drive_service.testar_conexao() else 'Erro na conexão.'
+                            )
+                        ), once=True)
+
+                    def save_drive_config():
+                        db_s = get_service_db_connection() or get_db_connection()
+                        if db_s:
+                            try:
+                                # Upsert drive_service_account_json
+                                res_sa = db_s.table('config').select('id').eq('key', 'drive_service_account_json').execute()
+                                if res_sa and res_sa.data:
+                                    db_s.table('config').update({'value': in_sa_json.value.strip()}).eq('key', 'drive_service_account_json').execute()
+                                else:
+                                    db_s.table('config').insert({'key': 'drive_service_account_json', 'value': in_sa_json.value.strip()}).execute()
+                                
+                                # Upsert drive_pasta_mae_id
+                                res_fd = db_s.table('config').select('id').eq('key', 'drive_pasta_mae_id').execute()
+                                if res_fd and res_fd.data:
+                                    db_s.table('config').update({'value': in_folder_id.value.strip()}).eq('key', 'drive_pasta_mae_id').execute()
+                                else:
+                                    db_s.table('config').insert({'key': 'drive_pasta_mae_id', 'value': in_folder_id.value.strip()}).execute()
+
+                                drive_service.reset_drive_service()
+                                ui.notify('✅ Configurações do Drive salvas!', color='success')
+                            except Exception as e_save:
+                                ui.notify(f'Erro ao salvar: {e_save}', color='negative')
+                        else:
+                            ui.notify('Sem conexão com banco de dados', color='negative')
+
+                    with ui.row().classes('w-full gap-2 justify-end q-mt-md'):
+                        ui.button('🔗 Testar Conexão com Drive', on_click=test_drive_connection).props('outline color=cyan text-color=white bold')
+                        ui.button('💾 Salvar Configurações do Drive', on_click=save_drive_config).props('unelevated color=green text-color=white bold')
+
+
     # Primeiro carregamento
     reload_admin_data()

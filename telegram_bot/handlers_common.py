@@ -397,6 +397,8 @@ async def listar_cadastros_pendentes(bot, message):
     )
 
 
+_upload_state = {}  # {chat_id: {'photos': [file_info], 'last_time': float, 'waiting_event': bool}}
+
 def register_common_handlers(bot):
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('toggle_service:'))
@@ -735,6 +737,114 @@ def register_common_handlers(bot):
                 await bot.answer_callback_query(call.id, f"Erro: {err}")
             except Exception:
                 pass
+
+    import time
+    import asyncio
+    
+    async def wait_for_photos(chat_id):
+        while True:
+            await asyncio.sleep(1)
+            if chat_id not in _upload_state:
+                break
+            if time.time() - _upload_state[chat_id]['last_time'] >= 4.0:
+                if not _upload_state[chat_id].get('waiting_event'):
+                    _upload_state[chat_id]['waiting_event'] = True
+                    
+                    db = get_db_connection()
+                    from datetime import datetime, timedelta
+                    hoje = datetime.now().date()
+                    amanha = hoje + timedelta(days=1)
+                    
+                    try:
+                        res = db.table('demandas_comunicacao').select('id, titulo_evento').in_('status', ['aprovado', 'aprovada']).gte('data_evento', hoje.isoformat()).lte('data_evento', amanha.isoformat()).execute()
+                        events = res.data if res and res.data else []
+                        
+                        if not events:
+                            await bot.send_message(chat_id, "⚠️ Nenhuma pauta aprovada para hoje ou amanhã encontrada para envio de fotos.")
+                            del _upload_state[chat_id]
+                            return
+                        
+                        markup = types.InlineKeyboardMarkup(row_width=1)
+                        for ev in events:
+                            markup.add(types.InlineKeyboardButton(f"📸 {ev['titulo_evento']}", callback_data=f"upload_evt_{ev['id']}"))
+                        markup.add(types.InlineKeyboardButton("❌ Cancelar", callback_data="upload_evt_cancel"))
+                        
+                        await bot.send_message(chat_id, "📸 Você enviou fotos. Para qual evento deseja enviá-las (Drive)?", reply_markup=markup)
+                    except Exception as e:
+                        print(f"Error fetching events for photo upload: {e}")
+                        del _upload_state[chat_id]
+                break
+
+    @bot.callback_query_handler(func=lambda call: call.data == 'upload_evt_cancel')
+    async def handle_cancel_upload(call):
+        chat_id = call.message.chat.id
+        if chat_id in _upload_state:
+            del _upload_state[chat_id]
+        await bot.answer_callback_query(call.id, "Upload cancelado.")
+        try:
+            await bot.edit_message_text("❌ Upload de fotos cancelado.", chat_id=chat_id, message_id=call.message.message_id)
+        except Exception:
+            pass
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('upload_evt_'))
+    async def handle_upload_event_callback(call):
+        chat_id = call.message.chat.id
+        demanda_id = call.data.split('_')[2]
+        
+        if chat_id not in _upload_state or not _upload_state[chat_id].get('photos'):
+            await bot.answer_callback_query(call.id, "Sessão expirada ou nenhuma foto na fila.")
+            return
+
+        photos_info = _upload_state[chat_id]['photos']
+        await bot.answer_callback_query(call.id, "Iniciando upload para o Drive...")
+        await bot.send_message(chat_id, f"⏳ Iniciando upload de {len(photos_info)} foto(s)... Por favor, aguarde.")
+        
+        db = get_db_connection()
+        res = db.table('demandas_comunicacao').select('*').eq('id', demanda_id).execute()
+        if not res or not res.data:
+            await bot.send_message(chat_id, "❌ Erro: Evento não encontrado.")
+            return
+            
+        demanda = res.data[0]
+        
+        from .utils import upload_photos_to_drive
+        success_count = await upload_photos_to_drive(bot, chat_id, photos_info, demanda)
+        
+        if success_count > 0:
+            await bot.send_message(chat_id, f"✅ {success_count} fotos enviadas para: {demanda.get('titulo_evento')}")
+        else:
+            await bot.send_message(chat_id, "❌ Falha ao enviar fotos para o Drive.")
+            
+        if chat_id in _upload_state:
+            del _upload_state[chat_id]
+
+    @bot.message_handler(content_types=['document'], func=lambda msg: msg.document and msg.document.mime_type and msg.document.mime_type.startswith('image/'))
+    async def handle_document_photo(message):
+        chat_id = message.chat.id
+        if chat_id not in _upload_state:
+            _upload_state[chat_id] = {'photos': [], 'last_time': time.time(), 'waiting_event': False}
+            asyncio.create_task(wait_for_photos(chat_id))
+        else:
+            _upload_state[chat_id]['last_time'] = time.time()
+            
+        file_info = {'file_id': message.document.file_id, 'file_name': message.document.file_name}
+        _upload_state[chat_id]['photos'].append(file_info)
+
+    @bot.message_handler(content_types=['photo'])
+    async def handle_regular_photo(message):
+        chat_id = message.chat.id
+        
+        is_new = chat_id not in _upload_state
+        if is_new:
+            _upload_state[chat_id] = {'photos': [], 'last_time': time.time(), 'waiting_event': False}
+            asyncio.create_task(wait_for_photos(chat_id))
+            await bot.send_message(chat_id, "📌 Dica: Envie como documento para manter a qualidade HD!")
+        else:
+            _upload_state[chat_id]['last_time'] = time.time()
+            
+        best_photo = message.photo[-1]
+        file_info = {'file_id': best_photo.file_id, 'file_name': f"photo_{best_photo.file_id}.jpg"}
+        _upload_state[chat_id]['photos'].append(file_info)
 
     @bot.message_handler(func=lambda msg: True)
     async def handle_all_messages(message):

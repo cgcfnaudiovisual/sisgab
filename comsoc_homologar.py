@@ -121,6 +121,16 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                         ui.label('📁 Link da Pasta no Google Drive / Acervo Nuvem').classes('text-xs font-bold text-blue-4')
                         if cur_drive_url:
                             ui.button('📁 Abrir Drive', on_click=lambda u=cur_drive_url: ui.open(u, new_tab=True)).props('unelevated color=blue icon=open_in_new dense').classes('text-[10px] px-2')
+                        else:
+                            def criar_pasta_manual():
+                                import drive_service
+                                result = drive_service.criar_pasta_evento(demanda['titulo_evento'], demanda.get('data_evento', ''))
+                                if result:
+                                    in_drive_url.value = result['evento_link']
+                                    ui.notify(f"📂 Pasta criada no Drive!", color='success')
+                                else:
+                                    ui.notify("Erro ao criar pasta no Drive.", color='negative')
+                            ui.button('📂 Criar Pasta no Drive', on_click=criar_pasta_manual).props('unelevated color=blue-7 dense').classes('text-[10px] px-2')
                     in_drive_url = ui.input(
                         placeholder='https://drive.google.com/drive/folders/...',
                         value=cur_drive_url
@@ -708,6 +718,15 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
                         db.table('demandas_comunicacao').update(update_data).eq('id', dem_id).execute()
                         demanda['status'] = novo_status
                         
+                        if novo_status in ('aprovado', 'aprovada'):
+                            import drive_service
+                            result = drive_service.criar_pasta_evento(demanda['titulo_evento'], demanda.get('data_evento', ''))
+                            if result:
+                                db.table('demandas_comunicacao').update({
+                                    'drive_url': result['evento_link']
+                                }).eq('id', dem_id).execute()
+                                ui.notify(f"📂 Pasta criada no Drive!", color='success')
+
                         ui.notify(f"Demanda tramitada: {acao_nome}", color='success')
 
                         try:

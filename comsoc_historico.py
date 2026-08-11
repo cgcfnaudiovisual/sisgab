@@ -187,11 +187,9 @@ def render_page():
 
                                     with ui.column().classes('items-end justify-start gap-2 shrink-0'):
                                         if drive_link:
-                                            ui.link(
-                                                '🔗 Acessar Galeria de Fotos', 
-                                                target=drive_link,
-                                                new_tab=True
-                                            ).classes('text-xs text-cyan hover:underline font-bold bg-cyan/10 q-px-md q-py-sm rounded-lg border border-cyan/20')
+                                            with ui.row().classes('gap-2 items-center'):
+                                                ui.button('📸 Galeria', on_click=lambda id=p['id']: ui.navigate.to(f'/comsoc_galeria?evento_id={id}')).props('unelevated color=primary text-color=black dense').classes('text-[10px] q-px-sm bold')
+                                                ui.link('🔗 GDrive', target=drive_link, new_tab=True).classes('text-[10px] text-cyan hover:underline font-bold bg-cyan/10 q-px-sm q-py-xs rounded border border-cyan/20')
                                         else:
                                             def associar_drive(evento=ev_title):
                                                 with ui.dialog() as diag, ui.card().classes('w-96 q-pa-md').style(f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'):
