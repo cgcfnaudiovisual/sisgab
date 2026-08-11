@@ -45,7 +45,7 @@ def _load_config_from_db():
     """Carrega credenciais e pasta mãe do banco config."""
     global _service_account_info, _pasta_mae_id
     try:
-        from db_utils import get_service_db_connection, get_db_connection
+        from database import get_service_db_connection, get_db_connection
         db = get_service_db_connection() or get_db_connection()
         if db:
             res = db.table('config').select('valor').eq('chave', 'drive_service_account_json').execute()

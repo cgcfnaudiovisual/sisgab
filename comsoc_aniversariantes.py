@@ -5,7 +5,7 @@ import io
 from datetime import datetime
 from nicegui import ui, app
 import theme
-from db_utils import get_db_connection, get_service_db_connection
+from database import get_db_connection, get_service_db_connection
 import ai_helper
 from logo_base64 import LOGO_BASE64
 import pandas as pd

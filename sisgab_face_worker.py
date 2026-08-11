@@ -301,7 +301,7 @@ def main_loop():
     print("Pressione Ctrl+C para encerrar.\n")
 
     try:
-        from db_utils import get_service_db_connection, get_db_connection
+        from database import get_service_db_connection, get_db_connection
         db = get_service_db_connection() or get_db_connection()
 
         if not db:
@@ -318,7 +318,7 @@ def main_loop():
     except KeyboardInterrupt:
         print("\n[FACE_WORKER] Encerrado pelo usuário.")
         try:
-            from db_utils import get_service_db_connection, get_db_connection
+            from database import get_service_db_connection, get_db_connection
             db = get_service_db_connection() or get_db_connection()
             if db:
                 update_heartbeat(db, is_online=False, queued_count=0)

@@ -69,7 +69,7 @@ def register_commands(bot):
 
     @bot.message_handler(commands=['minhas_fotos'])
     async def minhas_fotos_cmd(message):
-        from db_utils import get_db_connection, get_service_db_connection
+        from database import get_db_connection, get_service_db_connection
         chat_id = message.chat.id
         from .utils import check_authorized_user
         profile = await check_authorized_user(message.from_user.id)
