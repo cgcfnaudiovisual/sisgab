@@ -26,13 +26,15 @@ def get_main_menu_keyboard(is_operator=False):
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     if is_operator:
         markup.row(types.KeyboardButton("🟢 Dar Presença"), types.KeyboardButton("📋 Pronto CheGab"))
+        markup.row(types.KeyboardButton("📸 Enviar Fotos / Drive"), types.KeyboardButton("🙋 Minhas Fotos (IA)"))
         markup.row(types.KeyboardButton("📋 Gerenciar Demandas"), types.KeyboardButton("👥 Cadastros Pendentes"))
         markup.row(types.KeyboardButton("📅 Agenda Semanal"), types.KeyboardButton("➕ Criar Demanda"))
         markup.row(types.KeyboardButton("🤖 Digerir Pauta (IA)"), types.KeyboardButton("🪑 Placas JADE"))
         markup.row(types.KeyboardButton("🔌 Cautelas Ativas"), types.KeyboardButton("⚙️ Configurações"))
         markup.row(types.KeyboardButton("❌ Cancelar"))
     else:
-        markup.row(types.KeyboardButton("🟢 Dar Presença"), types.KeyboardButton("📅 Agenda Semanal"))
+        markup.row(types.KeyboardButton("🟢 Dar Presença"), types.KeyboardButton("📸 Enviar Fotos / Drive"))
+        markup.row(types.KeyboardButton("🙋 Minhas Fotos (IA)"), types.KeyboardButton("📅 Agenda Semanal"))
         markup.row(types.KeyboardButton("➕ Criar Demanda"), types.KeyboardButton("⚡ Missão Rápida"))
         markup.row(types.KeyboardButton("⚙️ Configurações"), types.KeyboardButton("ℹ️ Ajuda"))
         markup.row(types.KeyboardButton("❌ Cancelar"))

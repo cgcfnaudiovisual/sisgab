@@ -1030,6 +1030,19 @@ def register_common_handlers(bot):
                 }
                 await bot.reply_to(message, "⚙️ **CONFIGURAÇÕES**\nEscolha uma das opções abaixo:", reply_markup=get_settings_keyboard(True, is_operator))
 
+            elif text in ("📸 Enviar Fotos / Drive", "📸 Enviar Fotos", "/upload"):
+                await bot.reply_to(
+                    message,
+                    "📸 *ENVIO DE FOTOS PARA O GOOGLE DRIVE*\n\n"
+                    "Envie **uma ou várias fotos (ou arquivos de imagem)** diretamente aqui no chat do Telegram!\n\n"
+                    "O assistente identificará as fotos e exibirá o menu para você escolher o evento (ou criar a pasta no Drive na hora se não existir).",
+                    parse_mode='Markdown'
+                )
+
+            elif text in ("🙋 Minhas Fotos (IA)", "📸 Minhas Fotos", "/minhas_fotos"):
+                from .handlers_commands import minhas_fotos_cmd
+                await minhas_fotos_cmd(message)
+
             elif text == "➕ Criar Demanda":
                 chat_states[chat_id] = {
                     'action': 'criar_demanda',
