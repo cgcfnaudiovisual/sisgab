@@ -550,21 +550,55 @@ _Comunicação Social — Comando-Geral do Corpo de Fuzileiros Navais_"""
                     except Exception as e:
                         print(f"[RELATORIO PRESENCA DB ERR] {e}")
 
-                # 1. Filtra apenas a equipe COMSOC / Gabinete (exclui a categoria genérica 'militar' / 'operador' / 'compel')
-                # 2. Remove duplicados por (posto_grad, nome_guerra)
-                efetivo = []
-                seen_militar = set()
+                # 1. Filtra apenas a equipe COMSOC / Gabinete (exclui 'militar', 'compel', 'operador')
+                # 2. Normaliza e remove duplicados (ex: 'SO HENRIQUE' sem posto x 'HENRIQUE' com posto 'SO')
+                POSTOS_LIST = ['CMG', 'CF', 'CC', 'CT', '1ºTEN', '2ºTEN', 'TEN', '1TEN', '2TEN', 'SO', '1SG', '2SG', '3SG', 'SG', 'CB', 'SD']
+
+                def parse_full_militar(row):
+                    raw_pg = str(row.get('posto_grad') or row.get('posto') or '').replace('None', '').strip().upper()
+                    raw_ng = str(row.get('nome_guerra') or row.get('nome') or '').replace('None', '').strip().upper()
+                    
+                    pg_found = raw_pg
+                    ng_clean = raw_ng
+                    
+                    if not pg_found:
+                        for p_rank in POSTOS_LIST:
+                            if raw_ng.startswith(p_rank + ' '):
+                                pg_found = p_rank
+                                ng_clean = raw_ng[len(p_rank):].strip()
+                                break
+                    else:
+                        if raw_ng.startswith(pg_found + ' '):
+                            ng_clean = raw_ng[len(pg_found):].strip()
+
+                    return pg_found or 'MILITAR', ng_clean
+
+                efetivo_map = {}
                 for m in efetivo_raw:
                     role_raw = str(m.get('role') or 'militar').strip().lower()
                     if role_raw in ('militar', 'compel', 'operador'):
                         continue  # Não listar os da categoria militar/geral
                     
-                    pg = str(m.get('posto_grad') or m.get('posto') or '').replace('None', '').strip().upper()
-                    ng = str(m.get('nome_guerra') or m.get('nome') or '').replace('None', '').strip().upper()
+                    pg, ng = parse_full_militar(m)
                     key = (pg, ng)
-                    if key not in seen_militar and ng:
-                        seen_militar.add(key)
-                        efetivo.append(m)
+                    if not ng:
+                        continue
+                        
+                    if key not in efetivo_map:
+                        m_copy = dict(m)
+                        m_copy['posto_grad'] = pg
+                        m_copy['nome_guerra'] = ng
+                        m_copy['all_ids'] = {str(m.get('id', ''))}
+                        efetivo_map[key] = m_copy
+                    else:
+                        target = efetivo_map[key]
+                        target['all_ids'].add(str(m.get('id', '')))
+                        if m.get('email') and not target.get('email'):
+                            target['email'] = m['email']
+                        if m.get('telegram_id') and not target.get('telegram_id'):
+                            target['telegram_id'] = m['telegram_id']
+
+                efetivo = list(efetivo_map.values())
 
                 # Processamento das estatísticas por militar
                 relatorio_militar = []
@@ -573,9 +607,9 @@ _Comunicação Social — Comando-Geral do Corpo de Fuzileiros Navais_"""
 
                 for militar in efetivo:
                     nome_g = str(militar.get('nome_guerra') or '').replace('None', '').strip().upper()
-                    militar_id_str = str(militar.get('id', ''))
-                    posto_grad = str(militar.get('posto_grad') or militar.get('posto') or '').replace('None', '').strip().upper()
+                    posto_grad = str(militar.get('posto_grad') or '').replace('None', '').strip().upper()
                     cargo = str(militar.get('cargo_funcao') or militar.get('role') or 'Operador COMSOC').replace('None', '').strip()
+                    m_ids = militar.get('all_ids', set())
 
                     pautas_militar = []
                     pendentes_militar = []
@@ -592,9 +626,9 @@ _Comunicação Social — Comando-Geral do Corpo de Fuzileiros Navais_"""
                         aut_obs = f"{dem.get('autoridades', '')} {dem.get('observacoes', '')} {dem.get('solicitante_nome', '')} {dem.get('titulo_evento', '')}".upper()
 
                         eh_vinculado = False
-                        if militar_id_str and militar_id_str in (enc_id, des_id, fot_id):
+                        if m_ids and (enc_id in m_ids or des_id in m_ids or fot_id in m_ids):
                             eh_vinculado = True
-                        elif militar_id_str and (f'"{militar_id_str}"' in raw_notif or f'[{militar_id_str}' in raw_notif or f', {militar_id_str}' in raw_notif):
+                        elif m_ids and any(f'"{i}"' in raw_notif or f'[{i}' in raw_notif or f', {i}' in raw_notif for i in m_ids):
                             eh_vinculado = True
                         elif nome_g and len(nome_g) >= 3 and (nome_g in raw_notif.upper() or nome_g in aut_obs):
                             eh_vinculado = True
@@ -701,7 +735,7 @@ _Comunicação Social — Comando-Geral do Corpo de Fuzileiros Navais_"""
                                   on_click=exportar_excel
                         ).props('unelevated color=green text-color=white bold dense').classes('text-xs q-px-sm')
 
-                # ── GRID EM 4 COLUNAS COM CARDS DE USUÁRIOS ──
+                # ── GRID EM 3 COLUNAS COM CARDS DE USUÁRIOS ──
                 if relatorio_militar:
                     with ui.row().classes('w-full gap-3 items-stretch wrap'):
                         for r in relatorio_militar:
@@ -709,7 +743,7 @@ _Comunicação Social — Comando-Geral do Corpo de Fuzileiros Navais_"""
                             clean_title = f"{clean_pg} {r['nome_guerra']}".strip()
 
                             with ui.card().classes('q-pa-md no-shadow rounded-xl border flex flex-col justify-between').style(
-                                f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]}; width: calc(25% - 10px); min-width: 230px; flex: 1 1 230px;'
+                                f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]}; width: calc(33.333% - 10px); min-width: 260px; flex: 1 1 260px;'
                             ):
                                 # Topo do Card: Nome, Cargo e Badge de Carga
                                 with ui.column().classes('w-full gap-1'):
