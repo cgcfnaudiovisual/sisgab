@@ -120,13 +120,6 @@ def get_drive_service():
         return None
 
 
-def get_pasta_mae_id():
-    """Retorna o ID da pasta mãe configurada."""
-    global _pasta_mae_id
-    if not _pasta_mae_id:
-        _load_config_from_db()
-    return _pasta_mae_id
-
 
 def reset_drive_service():
     """Reseta a instância do Drive para forçar reconexão."""
