@@ -14,7 +14,11 @@ ROLE_OPTIONS = {
     'praca_gab': 'Praça do Gabinete',
     'comsoc': 'Equipe COMSOC (Fotografia/Vídeo)',
     'comsoc_design': 'Equipe COMSOC (Artes Gráficas/Canva)',
-    'militar': 'Militar / Efetivo em Geral',
+    'militar': 'Militar / Efetivo em Geral'
+}
+
+ROLE_LABELS = {
+    **ROLE_OPTIONS,
     'operador': 'Militar / Efetivo em Geral',
     'compel': 'Militar / Efetivo em Geral'
 }
@@ -307,7 +311,7 @@ def render_page():
                     
                     ui.upload(label='Enviar Foto para o Supabase', on_upload=handle_c_upload, auto_upload=True, max_files=1).props('dark dense').classes('w-full h-20')
                     
-                    c_role = ui.select(ROLE_OPTIONS, label='Papel do Usuário', value='compel').props('dark outlined dense w-full')
+                    c_role = ui.select(ROLE_OPTIONS, label='Papel do Usuário', value='militar').props('dark outlined dense w-full')
                     
                     c_error = ui.label('').classes('text-xs text-red w-full text-center')
                     
@@ -1337,7 +1341,7 @@ def render_page():
                                             with ui.column().classes('gap-0.5'):
                                                 with ui.row().classes('items-center gap-2'):
                                                     ui.label(u['nome']).classes('font-black text-sm uppercase').style(f'color: {THEME["text_main"]}')
-                                                    role_text = ROLE_OPTIONS.get(u_role_raw, 'Praça do Gabinete').split(' (')[0]
+                                                    role_text = ROLE_LABELS.get(u_role_raw, 'Praça do Gabinete').split(' (')[0]
                                                     ui.label(role_text.upper()).classes('text-[9px] font-bold px-1.5 py-0.5 rounded border').style(
                                                         f"color: {role_color}; border-color: {role_color}40; background: {role_color}10;"
                                                     )
