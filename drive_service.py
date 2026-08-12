@@ -208,11 +208,20 @@ def criar_pasta_evento(titulo_evento, data_evento_str, pasta_mae_id=None):
         return None
 
     try:
-        # Parse da data
-        if isinstance(data_evento_str, str):
-            dt = datetime.strptime(data_evento_str[:10], '%Y-%m-%d')
-        else:
+        # Parse da data flexível (suporta YYYY-MM-DD, DD/MM/YYYY, etc.)
+        dt = None
+        if isinstance(data_evento_str, datetime):
             dt = data_evento_str
+        elif isinstance(data_evento_str, str) and data_evento_str.strip():
+            s_dt = data_evento_str.strip()[:10]
+            for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%Y/%m/%d', '%d-%m-%Y'):
+                try:
+                    dt = datetime.strptime(s_dt, fmt)
+                    break
+                except Exception:
+                    pass
+        if not dt:
+            dt = datetime.now()
 
         # Nome da pasta do mês: "2026-08 - AGOSTO"
         mes_nome = MESES_PT.get(dt.month, str(dt.month))

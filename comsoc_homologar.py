@@ -136,9 +136,9 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                                 result = drive_service.criar_pasta_evento(demanda['titulo_evento'], demanda.get('data_evento', ''), pasta_mae_id=pm_id)
                                 if result:
                                     in_drive_url.value = result['evento_link']
-                                    ui.notify(f"📂 Pasta criada no Drive!", color='success')
+                                    ui.notify(f"📂 Pasta criada no Drive: {result['evento_link']}", color='success')
                                 else:
-                                    ui.notify("Erro ao criar pasta no Drive.", color='negative')
+                                    ui.notify("⚠️ Não foi possível criar a pasta no Drive. Verifique se o JSON da Service Account e a Pasta Mãe foram configurados no Painel Admin.", color='negative')
                             ui.button('📂 Criar Pasta no Drive', on_click=criar_pasta_manual).props('unelevated color=blue-7 dense').classes('text-[10px] px-2')
                     in_drive_url = ui.input(
                         placeholder='https://drive.google.com/drive/folders/...',
