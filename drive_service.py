@@ -228,13 +228,37 @@ def criar_pasta_evento(titulo_evento, data_evento_str, pasta_mae_id=None):
         titulo_clean = str(titulo_evento).strip().upper()[:80]
         pasta_evento_name = f"{dt.strftime('%m-%d-%y')} - {titulo_clean}"
 
-        # Criar/encontrar pasta do mês
-        mes_id = find_or_create_folder(pasta_mes_name, pasta_mae)
+        # 1. Verificar se a Pasta Mãe já é a própria pasta do mês (ex: "2026-08 - AGOSTO")
+        pm_info = get_file_info(pasta_mae)
+        pm_name = str(pm_info.get('name', '')).strip().upper() if pm_info else ''
+        
+        if pm_name == pasta_mes_name.upper() or pm_name.startswith(dt.strftime('%Y-%m')):
+            mes_id = pasta_mae
+        else:
+            mes_id = find_or_create_folder(pasta_mes_name, pasta_mae)
+            
         if not mes_id:
             return None
 
-        # Criar pasta do evento
-        evento_id = find_or_create_folder(pasta_evento_name, mes_id)
+        # 2. Buscar se já existe uma pasta de evento correspondente (por título ou nome exato)
+        evento_id = None
+        service = get_drive_service()
+        if service:
+            try:
+                q_evt = f"'{mes_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+                res_e = service.files().list(q=q_evt, fields='files(id, name)', supportsAllDrives=True).execute()
+                for f_item in (res_e.get('files') or []):
+                    f_name = f_item['name'].upper()
+                    if pasta_evento_name.upper() in f_name or (titulo_clean and len(titulo_clean) > 5 and titulo_clean in f_name):
+                        evento_id = f_item['id']
+                        print(f"[DRIVE_SERVICE] Pasta de evento existente reutilizada: {f_name} -> ID: {evento_id}")
+                        break
+            except Exception as ex_search:
+                print(f"[DRIVE_SERVICE] Erro ao buscar pasta existente de evento: {ex_search}")
+
+        if not evento_id:
+            evento_id = create_folder(pasta_evento_name, mes_id)
+            
         if not evento_id:
             return None
 
