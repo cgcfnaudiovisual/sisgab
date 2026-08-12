@@ -5,7 +5,8 @@ from datetime import datetime
 import pandas as pd
 from nicegui import ui, app
 import theme
-from database import get_db_connection, get_service_db_connection
+from database import get_db_connection, get_service_db_connection, get_demanda_drive_url
+import drive_service
 
 THEME = theme.colors
 
@@ -159,7 +160,7 @@ def render_page():
                         for p in pautas_filtradas:
                             ev_title = p['titulo_evento']
                             fotos = fotos_por_evento.get(ev_title, [])
-                            drive_link = fotos[0].get('drive_link') if fotos else None
+                            drive_link = get_demanda_drive_url(p) or (fotos[0].get('drive_link') if fotos else None)
                             
                             with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
                                 f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
@@ -168,6 +169,10 @@ def render_page():
                                     with ui.column().classes('gap-1 flex-grow'):
                                         with ui.row().classes('items-center gap-2 wrap'):
                                             ui.label(ev_title).classes('text-md font-bold text-white')
+                                            if drive_link:
+                                                ui.badge('🟢 Drive Vinculado', color='teal-9').classes('text-[8px] font-bold')
+                                            else:
+                                                ui.badge('⚪ Sem Drive', color='grey-9').classes('text-[8px]')
                                             if p.get('sigiloso') == 1:
                                                 ui.badge('Sigiloso/Reservado', color='red-10').classes('text-[8px] font-bold')
                                         
@@ -186,45 +191,85 @@ def render_page():
                                                 ).classes('text-[10px] text-grey-3 hover:underline font-semibold')
 
                                     with ui.column().classes('items-end justify-start gap-2 shrink-0'):
-                                        if drive_link:
-                                            with ui.row().classes('gap-2 items-center'):
+                                        with ui.row().classes('gap-1.5 items-center wrap justify-end'):
+                                            if drive_link:
                                                 ui.button('📸 Galeria', on_click=lambda id=p['id']: ui.navigate.to(f'/comsoc_galeria?evento_id={id}')).props('unelevated color=primary text-color=black dense').classes('text-[10px] q-px-sm bold')
-                                                ui.link('🔗 GDrive', target=drive_link, new_tab=True).classes('text-[10px] text-cyan hover:underline font-bold bg-cyan/10 q-px-sm q-py-xs rounded border border-cyan/20')
-                                        else:
-                                            def associar_drive(evento=ev_title):
-                                                with ui.dialog() as diag, ui.card().classes('w-96 q-pa-md').style(f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'):
-                                                    ui.label('Associar Link do Drive').classes('text-white text-md font-bold')
-                                                    link_input = ui.input('Link do Google Drive', placeholder='https://drive.google.com/...').props('dark outlined dense w-full')
-                                                    
-                                                    def salvar_link():
-                                                        url = link_input.value.strip()
-                                                        if not url:
-                                                            return
+                                                ui.button('📁 Drive', on_click=lambda u=drive_link: ui.open(u, new_tab=True)).props('unelevated color=blue dense icon=open_in_new').classes('text-[10px] q-px-xs')
+                                                
+                                                def abrir_distribuir_telegram(cur_p=p):
+                                                    with ui.dialog() as dlg_dist, ui.card().classes('w-[450px] max-w-[90vw] q-pa-md'):
+                                                        ui.label(f"📲 Distribuir Acervo: {cur_p['titulo_evento']}").classes('text-sm font-bold text-cyan q-mb-sm')
+                                                        tg_id_in = ui.input('Telegram Chat ID ou ID do Militar', placeholder='Ex: 123456789').props('dark outlined dense w-full')
+                                                        
+                                                        async def enviar_link_tg():
+                                                            if not tg_id_in.value:
+                                                                ui.notify('Digite o Telegram ID!', color='warning')
+                                                                return
+                                                            from telegram_bot.utils import enviar_links_acervo, get_telegram_bot_instance
+                                                            bot = await get_telegram_bot_instance()
+                                                            if bot:
+                                                                ok = await enviar_links_acervo(bot, tg_id_in.value.strip(), cur_p)
+                                                                if ok:
+                                                                    ui.notify('✅ Links enviados no Telegram!', color='success')
+                                                                    dlg_dist.close()
+                                                                else:
+                                                                    ui.notify('Erro ao enviar mensagem no Telegram.', color='negative')
+                                                            else:
+                                                                ui.notify('Bot do Telegram não inicializado.', color='warning')
+
+                                                        with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
+                                                            ui.button('Cancelar', on_click=dlg_dist.close).props('flat color=grey')
+                                                            ui.button('📲 Enviar Links', on_click=enviar_link_tg).props('unelevated color=cyan')
+                                                    dlg_dist.open()
+                                                ui.button('📲 Distribuir', on_click=abrir_distribuir_telegram).props('outline color=cyan dense').classes('text-[10px] q-px-xs').tooltip('Enviar Links via Telegram')
+                                            else:
+                                                def criar_pasta_historico(cur_p=p):
+                                                    res = drive_service.criar_pasta_evento(cur_p['titulo_evento'], cur_p['data_evento'])
+                                                    if res:
+                                                        new_link = res['evento_link']
                                                         conn = get_db_connection()
                                                         if conn:
                                                             try:
-                                                                conn.table('processed_photos').insert({
-                                                                    'event_name': evento,
-                                                                    'filename': 'drive_folder_link',
-                                                                    'drive_link': url,
-                                                                    'criado_em': datetime.now().isoformat()
-                                                                }).execute()
-                                                                ui.notify('Link da galeria associado com sucesso!', color='success')
-                                                                diag.close()
-                                                                render_event_cards.refresh()
-                                                            except Exception as err:
-                                                                ui.notify(f'Erro ao salvar: {err}', color='red')
-                                                    
-                                                    with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
-                                                        ui.button('Cancelar', on_click=diag.close).props('flat color=grey')
-                                                        ui.button('Salvar', on_click=salvar_link).props('unelevated color=primary text-color=black')
-                                                diag.open()
+                                                                conn.table('demandas_comunicacao').update({'drive_url': new_link}).eq('id', cur_p['id']).execute()
+                                                            except Exception:
+                                                                pass
+                                                        ui.notify(f"📂 Pasta criada no Drive!", color='success')
+                                                        render_event_cards.refresh()
+                                                    else:
+                                                        ui.notify("⚠️ Não foi possível criar pasta no Drive. Verifique se o JSON da Service Account e a Pasta Mãe foram configurados no Admin.", color='warning')
 
-                                            ui.button(
-                                                'Vincular Galeria', 
-                                                icon='link',
-                                                on_click=associar_drive
-                                            ).props('unelevated color=grey-8 text-color=white dense').classes('text-[10px] q-px-sm')
+                                                ui.button('📂 Criar Pasta no Drive', on_click=criar_pasta_historico).props('unelevated color=blue-7 dense').classes('text-[10px] q-px-xs bold').tooltip('Criar Pasta no Drive automaticamente')
+
+                                                def associar_drive(evento=ev_title):
+                                                    with ui.dialog() as diag, ui.card().classes('w-96 q-pa-md').style(f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'):
+                                                        ui.label('Associar Link do Drive Manualmente').classes('text-white text-md font-bold')
+                                                        link_input = ui.input('Link do Google Drive', placeholder='https://drive.google.com/...').props('dark outlined dense w-full')
+                                                        
+                                                        def salvar_link():
+                                                            url = link_input.value.strip()
+                                                            if not url:
+                                                                return
+                                                            conn = get_db_connection()
+                                                            if conn:
+                                                                try:
+                                                                    conn.table('processed_photos').insert({
+                                                                        'event_name': evento,
+                                                                        'filename': 'drive_folder_link',
+                                                                        'drive_link': url,
+                                                                        'criado_em': datetime.now().isoformat()
+                                                                    }).execute()
+                                                                    ui.notify('Link da galeria associado com sucesso!', color='success')
+                                                                    diag.close()
+                                                                    render_event_cards.refresh()
+                                                                except Exception as err:
+                                                                    ui.notify(f'Erro ao salvar: {err}', color='red')
+                                                        
+                                                        with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
+                                                            ui.button('Cancelar', on_click=diag.close).props('flat color=grey')
+                                                            ui.button('Salvar', on_click=salvar_link).props('unelevated color=primary text-color=black')
+                                                    diag.open()
+
+                                                ui.button('🔗 Vincular', on_click=associar_drive).props('flat color=grey-4 dense').classes('text-[10px] q-px-xs').tooltip('Vincular link existente manualmente')
                                         
                                         try:
                                             cobs = json.loads(p.get('tipo_cobertura', '[]'))
