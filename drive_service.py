@@ -41,9 +41,11 @@ MESES_PT = {
 }
 
 
+_pastas_mae_list = []
+
 def _load_config_from_db():
-    """Carrega credenciais e pasta mãe do banco config."""
-    global _service_account_info, _pasta_mae_id
+    """Carrega credenciais e lista de pastas mãe do banco config."""
+    global _service_account_info, _pasta_mae_id, _pastas_mae_list
     try:
         from database import get_service_db_connection, get_db_connection
         db = get_service_db_connection() or get_db_connection()
@@ -55,8 +57,36 @@ def _load_config_from_db():
             res2 = db.table('config').select('valor').eq('chave', 'drive_pasta_mae_id').execute()
             if res2.data and res2.data[0].get('valor'):
                 _pasta_mae_id = res2.data[0]['valor'].strip()
+
+            res3 = db.table('config').select('valor').eq('chave', 'drive_pastas_mae_json').execute()
+            if res3.data and res3.data[0].get('valor'):
+                try:
+                    _pastas_mae_list = json.loads(res3.data[0]['valor'])
+                except Exception:
+                    _pastas_mae_list = []
+            
+            if not _pastas_mae_list and _pasta_mae_id:
+                _pastas_mae_list = [{'id': '1', 'nome': 'Pasta Mãe Principal', 'folder_id': _pasta_mae_id, 'padrao': True}]
     except Exception as e:
         print(f"[DRIVE_SERVICE] Erro ao carregar config do DB: {e}")
+
+
+def get_pastas_mae_list():
+    """Retorna a lista de pastas mãe configuradas."""
+    global _pastas_mae_list
+    if not _pastas_mae_list:
+        _load_config_from_db()
+    return _pastas_mae_list or []
+
+
+def get_pasta_mae_id(folder_id_custom=None):
+    """Retorna o ID da pasta mãe (customizada ou a padrão)."""
+    global _pasta_mae_id
+    if folder_id_custom:
+        return folder_id_custom.strip()
+    if not _pasta_mae_id:
+        _load_config_from_db()
+    return _pasta_mae_id
 
 
 def get_drive_service():
@@ -165,14 +195,14 @@ def find_or_create_folder(name, parent_id=None):
     return create_folder(name, parent_id)
 
 
-def criar_pasta_evento(titulo_evento, data_evento_str):
+def criar_pasta_evento(titulo_evento, data_evento_str, pasta_mae_id=None):
     """
     Cria a estrutura completa de pastas para um evento:
-    PASTA_MAE / YYYY-MM - MÊS / YYYY-MM-DD - TÍTULO / SELEÇÃO
+    PASTA_MAE / YYYY-MM - MÊS / MM-DD-YY - TÍTULO / SELEÇÃO
     
     Retorna dict: {'evento_folder_id': str, 'selecao_folder_id': str, 'evento_link': str} ou None
     """
-    pasta_mae = get_pasta_mae_id()
+    pasta_mae = get_pasta_mae_id(pasta_mae_id)
     if not pasta_mae:
         print("[DRIVE_SERVICE] Pasta Mãe não configurada.")
         return None

@@ -122,9 +122,17 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                         if cur_drive_url:
                             ui.button('📁 Abrir Drive', on_click=lambda u=cur_drive_url: ui.open(u, new_tab=True)).props('unelevated color=blue icon=open_in_new dense').classes('text-[10px] px-2')
                         else:
+                            pastas_mae = drive_service.get_pastas_mae_list()
+                            sel_pasta_mae = None
+                            if len(pastas_mae) > 1:
+                                opts_pm = {p['folder_id']: f"📁 {p['nome']}" for p in pastas_mae}
+                                default_pm = next((p['folder_id'] for p in pastas_mae if p.get('padrao')), pastas_mae[0]['folder_id'])
+                                sel_pasta_mae = ui.select(opts_pm, value=default_pm, label='Pasta Mãe do Drive').props('dark outlined dense').classes('text-xs')
+
                             def criar_pasta_manual():
                                 import drive_service
-                                result = drive_service.criar_pasta_evento(demanda['titulo_evento'], demanda.get('data_evento', ''))
+                                pm_id = sel_pasta_mae.value if sel_pasta_mae else None
+                                result = drive_service.criar_pasta_evento(demanda['titulo_evento'], demanda.get('data_evento', ''), pasta_mae_id=pm_id)
                                 if result:
                                     in_drive_url.value = result['evento_link']
                                     ui.notify(f"📂 Pasta criada no Drive!", color='success')

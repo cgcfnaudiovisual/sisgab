@@ -1382,30 +1382,133 @@ def render_page():
                     db = get_service_db_connection() or get_db_connection()
                     cur_sa = ""
                     cur_folder = ""
+                    cur_pastas_mae = []
                     cur_wm_enabled = False
                     cur_wm_text = "COMSOC / CGCFN"
-                    if db:
-                        try:
-                            # Load values from config table
-                            sa_res = db.table('config').select('value').eq('key', 'drive_service_account_json').execute()
-                            if sa_res and sa_res.data:
-                                cur_sa = sa_res.data[0].get('value', '')
-                            folder_res = db.table('config').select('value').eq('key', 'drive_pasta_mae_id').execute()
-                            if folder_res and folder_res.data:
-                                cur_folder = folder_res.data[0].get('value', '')
-                            wm_en_res = db.table('config').select('value').eq('key', 'drive_watermark_enabled').execute()
-                            if wm_en_res and wm_en_res.data:
-                                cur_wm_enabled = wm_en_res.data[0].get('value') == 'True'
-                            wm_txt_res = db.table('config').select('value').eq('key', 'drive_watermark_text').execute()
-                            if wm_txt_res and wm_txt_res.data:
-                                cur_wm_text = wm_txt_res.data[0].get('value', 'COMSOC / CGCFN')
-                        except Exception as e:
-                            print(f"[DRIVE CONFIG LOAD ERR] {e}")
 
-                    in_sa_json = ui.textarea('JSON da Service Account', value=cur_sa).props('dark outlined w-full rows=4').classes('w-full text-xs font-mono')
-                    in_folder_id = ui.input('ID da Pasta Mãe do Google Drive', value=cur_folder).props('dark outlined dense w-full')
+                    def _safe_get_config(key, default=""):
+                        if not db: return default
+                        try:
+                            res = db.table('config').select('valor').eq('chave', key).execute()
+                            if res and res.data and res.data[0].get('valor'):
+                                return res.data[0]['valor']
+                        except Exception:
+                            pass
+                        return default
+
+                    cur_sa = _safe_get_config('drive_service_account_json', '')
+                    cur_folder = _safe_get_config('drive_pasta_mae_id', '')
+                    cur_wm_enabled = _safe_get_config('drive_watermark_enabled', 'False') == 'True'
+                    cur_wm_text = _safe_get_config('drive_watermark_text', 'COMSOC / CGCFN')
                     
-                    with ui.row().classes('w-full items-center gap-4'):
+                    pastas_raw = _safe_get_config('drive_pastas_mae_json', '[]')
+                    try:
+                        cur_pastas_mae = json.loads(pastas_raw)
+                    except Exception:
+                        cur_pastas_mae = []
+
+                    if not cur_pastas_mae and cur_folder:
+                        cur_pastas_mae = [{'id': '1', 'nome': 'Pasta Mãe Principal', 'folder_id': cur_folder, 'padrao': True}]
+
+                    in_sa_json = ui.textarea('JSON da Service Account', value=cur_sa).props('dark outlined w-full rows=3').classes('w-full text-xs font-mono')
+                    
+                    # 📁 GERENCIADOR DE MULTIPLAS PASTAS MÃE
+                    ui.label('📁 Pastas Mãe do Google Drive:').classes('text-xs font-bold text-cyan q-mt-sm')
+                    
+                    pastas_container = ui.column().classes('w-full gap-2')
+
+                    def render_pastas_mae_list():
+                        pastas_container.clear()
+                        with pastas_container:
+                            if not cur_pastas_mae:
+                                ui.label('Nenhuma Pasta Mãe cadastrada. Clique abaixo para adicionar.').classes('text-xs text-grey-4 italic')
+                            else:
+                                for idx, p in enumerate(cur_pastas_mae):
+                                    with ui.card().classes('w-full q-pa-xs px-3 no-shadow rounded-lg border').style(
+                                        f'background: {"rgba(0, 229, 255, 0.08)" if p.get("padrao") else "rgba(255, 255, 255, 0.03)"}; '
+                                        f'border: 1px solid {"#00e5ff" if p.get("padrao") else "rgba(255, 255, 255, 0.1)"};'
+                                    ):
+                                        with ui.row().classes('w-full items-center justify-between wrap gap-2'):
+                                            with ui.column().classes('gap-0 flex-grow'):
+                                                with ui.row().classes('items-center gap-2'):
+                                                    ui.label(p.get('nome', 'Pasta Mãe')).classes('text-xs font-bold text-white')
+                                                    if p.get('padrao'):
+                                                        ui.badge('PADRÃO', color='cyan').classes('text-[10px]')
+                                                ui.label(f"ID: {p.get('folder_id', '')}").classes('text-[10px] text-grey-4 font-mono')
+
+                                            with ui.row().classes('items-center gap-1'):
+                                                if not p.get('padrao'):
+                                                    def set_default(p_idx=idx):
+                                                        for item in cur_pastas_mae:
+                                                            item['padrao'] = False
+                                                        cur_pastas_mae[p_idx]['padrao'] = True
+                                                        render_pastas_mae_list()
+                                                        ui.notify('Pasta padrão atualizada!', color='info')
+                                                    ui.button('⭐ Tornar Padrão', on_click=set_default).props('flat dense color=cyan size=xs')
+
+                                                def edit_pasta(p_idx=idx):
+                                                    item = cur_pastas_mae[p_idx]
+                                                    with ui.dialog() as dlg_e, ui.card().classes('w-[450px] max-w-[90vw] q-pa-md'):
+                                                        ui.label('Editar Pasta Mãe').classes('text-sm font-bold text-white q-mb-sm')
+                                                        e_nome = ui.input('Nome da Pasta', value=item.get('nome', '')).props('dark outlined dense w-full')
+                                                        e_id = ui.input('ID no Drive', value=item.get('folder_id', '')).props('dark outlined dense w-full')
+                                                        def salvar_e():
+                                                            if not e_nome.value or not e_id.value:
+                                                                ui.notify('Preencha nome e ID!', color='warning')
+                                                                return
+                                                            item['nome'] = e_nome.value.strip()
+                                                            item['folder_id'] = e_id.value.strip()
+                                                            dlg_e.close()
+                                                            render_pastas_mae_list()
+                                                        with ui.row().classes('w-full justify-end gap-2 q-mt-sm'):
+                                                            ui.button('Cancelar', on_click=dlg_e.close).props('flat color=grey')
+                                                            ui.button('Salvar', on_click=salvar_e).props('unelevated color=cyan')
+                                                    dlg_e.open()
+                                                ui.button('✏️', on_click=edit_pasta).props('flat round dense color=grey size=xs').tooltip('Editar')
+
+                                                def delete_pasta(p_idx=idx):
+                                                    cur_pastas_mae.pop(p_idx)
+                                                    if cur_pastas_mae and not any(x.get('padrao') for x in cur_pastas_mae):
+                                                        cur_pastas_mae[0]['padrao'] = True
+                                                    render_pastas_mae_list()
+                                                    ui.notify('Pasta removida.', color='info')
+                                                ui.button('🗑️', on_click=delete_pasta).props('flat round dense color=red size=xs').tooltip('Excluir')
+
+                    render_pastas_mae_list()
+
+                    def add_nova_pasta_mae():
+                        with ui.dialog() as dlg_add, ui.card().classes('w-[450px] max-w-[90vw] q-pa-md'):
+                            ui.label('➕ Adicionar Nova Pasta Mãe').classes('text-sm font-bold text-white q-mb-sm')
+                            a_nome = ui.input('Nome da Pasta (ex: Acervo Histórico)', placeholder='Ex: Pasta Geral COMSOC').props('dark outlined dense w-full')
+                            a_id = ui.input('ID da Pasta no Google Drive', placeholder='Cole o ID do link do Drive').props('dark outlined dense w-full')
+                            a_padrao = ui.checkbox('Definir como Pasta Padrão').props('dark')
+                            
+                            def salvar_add():
+                                if not a_nome.value or not a_id.value:
+                                    ui.notify('Preencha o Nome e o ID da pasta!', color='warning')
+                                    return
+                                new_item = {
+                                    'id': str(len(cur_pastas_mae) + 1),
+                                    'nome': a_nome.value.strip(),
+                                    'folder_id': a_id.value.strip(),
+                                    'padrao': a_padrao.value or (len(cur_pastas_mae) == 0)
+                                }
+                                if new_item['padrao']:
+                                    for x in cur_pastas_mae:
+                                        x['padrao'] = False
+                                cur_pastas_mae.append(new_item)
+                                dlg_add.close()
+                                render_pastas_mae_list()
+                                ui.notify('Nova Pasta Mãe adicionada!', color='success')
+
+                            with ui.row().classes('w-full justify-end gap-2 q-mt-sm'):
+                                ui.button('Cancelar', on_click=dlg_add.close).props('flat color=grey')
+                                ui.button('Adicionar', on_click=salvar_add).props('unelevated color=cyan')
+                        dlg_add.open()
+
+                    ui.button('➕ Adicionar Pasta Mãe', on_click=add_nova_pasta_mae).props('outline color=cyan size=sm dense').classes('q-mb-sm')
+                    
+                    with ui.row().classes('w-full items-center gap-4 q-mt-xs'):
                         in_wm_enabled = ui.checkbox('Marca d\'Água Automática na SELEÇÃO', value=cur_wm_enabled).props('dark')
                         in_wm_text = ui.input('Texto da Marca d\'Água', value=cur_wm_text).props('dark outlined dense').classes('col-grow')
 
@@ -1423,36 +1526,24 @@ def render_page():
                         db_s = get_service_db_connection() or get_db_connection()
                         if db_s:
                             try:
-                                # Upsert drive_service_account_json
-                                res_sa = db_s.table('config').select('id').eq('key', 'drive_service_account_json').execute()
-                                if res_sa and res_sa.data:
-                                    db_s.table('config').update({'value': in_sa_json.value.strip()}).eq('key', 'drive_service_account_json').execute()
-                                else:
-                                    db_s.table('config').insert({'key': 'drive_service_account_json', 'value': in_sa_json.value.strip()}).execute()
-                                
-                                # Upsert drive_pasta_mae_id
-                                res_fd = db_s.table('config').select('id').eq('key', 'drive_pasta_mae_id').execute()
-                                if res_fd and res_fd.data:
-                                    db_s.table('config').update({'value': in_folder_id.value.strip()}).eq('key', 'drive_pasta_mae_id').execute()
-                                else:
-                                    db_s.table('config').insert({'key': 'drive_pasta_mae_id', 'value': in_folder_id.value.strip()}).execute()
-                                    
-                                # Upsert drive_watermark_enabled
-                                res_wm_en = db_s.table('config').select('id').eq('key', 'drive_watermark_enabled').execute()
-                                if res_wm_en and res_wm_en.data:
-                                    db_s.table('config').update({'value': str(in_wm_enabled.value)}).eq('key', 'drive_watermark_enabled').execute()
-                                else:
-                                    db_s.table('config').insert({'key': 'drive_watermark_enabled', 'value': str(in_wm_enabled.value)}).execute()
-                                    
-                                # Upsert drive_watermark_text
-                                res_wm_tx = db_s.table('config').select('id').eq('key', 'drive_watermark_text').execute()
-                                if res_wm_tx and res_wm_tx.data:
-                                    db_s.table('config').update({'value': in_wm_text.value.strip()}).eq('key', 'drive_watermark_text').execute()
-                                else:
-                                    db_s.table('config').insert({'key': 'drive_watermark_text', 'value': in_wm_text.value.strip()}).execute()
+                                # Identifica a pasta padrão
+                                padrao_folder_id = ""
+                                for item in cur_pastas_mae:
+                                    if item.get('padrao'):
+                                        padrao_folder_id = item.get('folder_id', '')
+                                        break
+                                if not padrao_folder_id and cur_pastas_mae:
+                                    padrao_folder_id = cur_pastas_mae[0].get('folder_id', '')
+
+                                # Upsert usando chave e valor com on_conflict='chave'
+                                db_s.table('config').upsert({'chave': 'drive_service_account_json', 'valor': in_sa_json.value.strip()}, on_conflict='chave').execute()
+                                db_s.table('config').upsert({'chave': 'drive_pasta_mae_id', 'valor': padrao_folder_id}, on_conflict='chave').execute()
+                                db_s.table('config').upsert({'chave': 'drive_pastas_mae_json', 'valor': json.dumps(cur_pastas_mae)}, on_conflict='chave').execute()
+                                db_s.table('config').upsert({'chave': 'drive_watermark_enabled', 'valor': str(in_wm_enabled.value)}, on_conflict='chave').execute()
+                                db_s.table('config').upsert({'chave': 'drive_watermark_text', 'valor': in_wm_text.value.strip()}, on_conflict='chave').execute()
 
                                 drive_service.reset_drive_service()
-                                ui.notify('✅ Configurações do Drive salvas!', color='success')
+                                ui.notify('✅ Configurações do Drive salvas com sucesso!', color='success')
                             except Exception as e_save:
                                 ui.notify(f'Erro ao salvar: {e_save}', color='negative')
                         else:
