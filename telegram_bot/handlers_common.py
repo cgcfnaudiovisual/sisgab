@@ -743,8 +743,9 @@ def register_common_handlers(bot):
     
     async def render_upload_event_menu(chat_id, page=0, search_query=None, edit_message_id=None):
         db = get_db_connection()
+        from database import get_demanda_drive_url
         try:
-            query = db.table('demandas_comunicacao').select('id, titulo_evento, data_evento, status, drive_url, drive_folder_id').in_('status', ['aprovado', 'aprovada', 'concluida'])
+            query = db.table('demandas_comunicacao').select('*').in_('status', ['aprovado', 'aprovada', 'concluida'])
             
             if search_query:
                 query = query.ilike('titulo_evento', f'%{search_query}%')
@@ -769,7 +770,8 @@ def register_common_handlers(bot):
             for ev in events:
                 dt_label = str(ev.get('data_evento', ''))[:10]
                 tit_label = str(ev.get('titulo_evento', ''))[:40]
-                has_drive = "📁" if (ev.get('drive_url') or ev.get('drive_folder_id')) else "➕📂"
+                d_url = get_demanda_drive_url(ev)
+                has_drive = "📁" if d_url else "➕📂"
                 markup.add(types.InlineKeyboardButton(f"{has_drive} {dt_label} — {tit_label}", callback_data=f"upload_evt_{ev['id']}"))
             
             # Linha de Navegação e Busca
@@ -863,9 +865,11 @@ def register_common_handlers(bot):
             
         demanda = res.data[0]
         
+        from database import get_demanda_drive_url
+        d_url = get_demanda_drive_url(demanda)
+        
         # Se a pauta ainda não tem pasta no Drive, cria a pasta agora no Google Drive!
-        has_folder = demanda.get('drive_url') or demanda.get('drive_folder_id')
-        if not has_folder:
+        if not d_url:
             await bot.send_message(chat_id, f"📂 *Criando pasta no Google Drive...*\nAguarde, gerando pasta para: *{demanda.get('titulo_evento')}*", parse_mode="Markdown")
             import drive_service
             drive_service.reset_drive_service()
@@ -873,14 +877,18 @@ def register_common_handlers(bot):
             dt_e = demanda.get('data_evento', '')
             res_drive = await asyncio.to_thread(drive_service.criar_pasta_evento, tit_e, dt_e)
             if res_drive and res_drive.get('evento_link'):
+                d_url = res_drive.get('evento_link')
                 demanda['drive_folder_id'] = res_drive.get('evento_folder_id')
-                demanda['drive_url'] = res_drive.get('evento_link')
+                demanda['drive_url'] = d_url
                 try:
-                    db.table('demandas_comunicacao').update({
-                        'drive_folder_id': res_drive.get('evento_folder_id'),
-                        'drive_url': res_drive.get('evento_link')
-                    }).eq('id', demanda['id']).execute()
-                    await bot.send_message(chat_id, f"✅ Pasta criada no Drive com sucesso!\n🔗 {res_drive.get('evento_link')}")
+                    db.table('processed_photos').insert({
+                        'event_name': demanda.get('titulo_evento', ''),
+                        'filename': 'drive_folder_link',
+                        'drive_link': d_url,
+                        'uploaded_by': str(chat_id),
+                        'created_at': datetime.now().isoformat()
+                    }).execute()
+                    await bot.send_message(chat_id, f"✅ Pasta criada no Drive com sucesso!\n🔗 {d_url}")
                 except Exception as e_up:
                     print(f"[TELEGRAM DRIVE UPDATE ERR] {e_up}")
             else:
@@ -892,8 +900,9 @@ def register_common_handlers(bot):
         from .utils import upload_photos_to_drive
         success_count = await upload_photos_to_drive(bot, chat_id, photos_info, demanda)
         
+        d_link_final = get_demanda_drive_url(demanda) or demanda.get('drive_url', '')
         if success_count > 0:
-            await bot.send_message(chat_id, f"✅ {success_count} fotos enviadas para o Drive!\n📍 Evento: *{demanda.get('titulo_evento')}*\n🔗 Link: {demanda.get('drive_url','')}", parse_mode="Markdown")
+            await bot.send_message(chat_id, f"✅ {success_count} fotos enviadas para o Drive!\n📍 Evento: *{demanda.get('titulo_evento')}*\n🔗 Link: {d_link_final}", parse_mode="Markdown")
         else:
             await bot.send_message(chat_id, "❌ Falha ao enviar fotos para o Drive. Tente novamente.")
             
