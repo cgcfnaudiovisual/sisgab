@@ -1,5 +1,6 @@
 # modules/comsoc_historico.py
 import io
+import asyncio
 import json
 from datetime import datetime
 import pandas as pd
@@ -407,20 +408,27 @@ _Comunicação Social — Comando-Geral do Corpo de Fuzileiros Navais_"""
 
                                                 ui.button('📲 Distribuir', on_click=abrir_distribuir_acervo).props('outline color=cyan dense').classes('text-[10px] q-px-xs').tooltip('Distribuir via Telegram ou WhatsApp')
                                             else:
-                                                def criar_pasta_historico(cur_p=p):
-                                                    res = drive_service.criar_pasta_evento(cur_p['titulo_evento'], cur_p['data_evento'])
-                                                    if res:
-                                                        new_link = res['evento_link']
-                                                        conn = get_db_connection()
-                                                        if conn:
-                                                            try:
-                                                                conn.table('demandas_comunicacao').update({'drive_url': new_link}).eq('id', cur_p['id']).execute()
-                                                            except Exception:
-                                                                pass
-                                                        ui.notify(f"📂 Pasta criada no Drive!", color='success')
-                                                        render_event_cards.refresh()
-                                                    else:
-                                                        ui.notify("⚠️ Não foi possível criar pasta no Drive. Verifique se o JSON da Service Account e a Pasta Mãe foram configurados no Admin.", color='warning')
+                                                async def criar_pasta_historico(cur_p=p):
+                                                    n_w = ui.notify("📂 Criando pasta no Google Drive...", color='info', spinner=True, timeout=0)
+                                                    try:
+                                                        drive_service.reset_drive_service()
+                                                        res = await asyncio.to_thread(drive_service.criar_pasta_evento, cur_p['titulo_evento'], cur_p['data_evento'])
+                                                        n_w.dismiss()
+                                                        if res and res.get('evento_link'):
+                                                            new_link = res['evento_link']
+                                                            conn = get_db_connection()
+                                                            if conn:
+                                                                try:
+                                                                    conn.table('demandas_comunicacao').update({'drive_url': new_link}).eq('id', cur_p['id']).execute()
+                                                                except Exception:
+                                                                    pass
+                                                            ui.notify(f"📂 Pasta criada no Drive: {new_link}", color='success', timeout=5000)
+                                                            render_event_cards.refresh()
+                                                        else:
+                                                            ui.notify("⚠️ Não foi possível criar a pasta no Drive. Verifique se o JSON da Service Account e a Pasta Mãe foram salvos no Admin (/admin_panel).", color='warning', timeout=8000)
+                                                    except Exception as ex_ch:
+                                                        n_w.dismiss()
+                                                        ui.notify(f"Erro ao criar pasta no Drive: {ex_ch}", color='negative', timeout=8000)
 
                                                 ui.button('📂 Criar Pasta no Drive', on_click=criar_pasta_historico).props('unelevated color=blue-7 dense').classes('text-[10px] q-px-xs bold').tooltip('Criar Pasta no Drive automaticamente')
 

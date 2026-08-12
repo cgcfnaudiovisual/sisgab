@@ -1,5 +1,6 @@
 # modules/comsoc_homologar.py
 from datetime import datetime
+import asyncio
 import json
 import urllib.parse
 from nicegui import ui, app
@@ -130,15 +131,25 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                                 default_pm = next((p['folder_id'] for p in pastas_mae if p.get('padrao')), pastas_mae[0]['folder_id'])
                                 sel_pasta_mae = ui.select(opts_pm, value=default_pm, label='Pasta Mãe do Drive').props('dark outlined dense').classes('text-xs')
 
-                            def criar_pasta_manual():
-                                import drive_service
-                                pm_id = sel_pasta_mae.value if sel_pasta_mae else None
-                                result = drive_service.criar_pasta_evento(demanda['titulo_evento'], demanda.get('data_evento', ''), pasta_mae_id=pm_id)
-                                if result:
-                                    in_drive_url.value = result['evento_link']
-                                    ui.notify(f"📂 Pasta criada no Drive: {result['evento_link']}", color='success')
-                                else:
-                                    ui.notify("⚠️ Não foi possível criar a pasta no Drive. Verifique se o JSON da Service Account e a Pasta Mãe foram configurados no Painel Admin.", color='negative')
+                            async def criar_pasta_manual():
+                                tit_val = in_titulo.value.strip() if in_titulo.value else demanda.get('titulo_evento', '')
+                                dt_val = in_data_inicio.value.strip() if in_data_inicio.value else demanda.get('data_evento', '')
+                                
+                                n_wait = ui.notify("📂 Criando pasta no Google Drive...", color='info', spinner=True, timeout=0)
+                                try:
+                                    import drive_service
+                                    drive_service.reset_drive_service()
+                                    pm_id = sel_pasta_mae.value if sel_pasta_mae else None
+                                    result = await asyncio.to_thread(drive_service.criar_pasta_evento, tit_val, dt_val, pm_id)
+                                    n_wait.dismiss()
+                                    if result and result.get('evento_link'):
+                                        in_drive_url.value = result['evento_link']
+                                        ui.notify(f"📂 Pasta criada no Drive!", color='success', timeout=5000)
+                                    else:
+                                        ui.notify("⚠️ Não foi possível criar a pasta no Drive. Verifique se o JSON da Service Account e a Pasta Mãe foram salvos no Painel Admin (/admin_panel).", color='warning', timeout=8000)
+                                except Exception as ex_cp:
+                                    n_wait.dismiss()
+                                    ui.notify(f"Erro ao criar pasta no Drive: {ex_cp}", color='negative', timeout=8000)
                             ui.button('📂 Criar Pasta no Drive', on_click=criar_pasta_manual).props('unelevated color=blue-7 dense').classes('text-[10px] px-2')
                     in_drive_url = ui.input(
                         placeholder='https://drive.google.com/drive/folders/...',
