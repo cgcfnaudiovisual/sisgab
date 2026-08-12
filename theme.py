@@ -1,5 +1,6 @@
 # modules/theme.py
 from nicegui import ui
+from badge_base64 import BADGE_FN_BASE64
 
 # Paleta de Cores "Gold Military" (alinhada com o brasão COMSOC)
 colors = {
@@ -174,6 +175,9 @@ body {
   if (window.__antigravity_initialized) return;
   window.__antigravity_initialized = true;
 
+  const fnBadgeImg = new Image();
+  fnBadgeImg.src = "${BADGE_FN_BASE64}";
+
   function initAntigravity() {
     let canvas = document.getElementById('antigravity-canvas');
     if (!canvas) {
@@ -218,6 +222,7 @@ body {
         this.speedX = (Math.random() - 0.5) * 0.5;
         this.alpha = Math.random() * 0.7 + 0.35;
         this.color = Math.random() > 0.3 ? '212, 175, 55' : '255, 193, 7';
+        this.isBadge = Math.random() < 0.35; // 35% de emblemas dourados dos Fuzileiros Navais
       }
       update() {
         this.y -= this.speedY;
@@ -239,12 +244,22 @@ body {
         }
       }
       draw() {
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${this.color}, ${this.alpha})`;
-        ctx.shadowBlur = 12;
-        ctx.shadowColor = `rgba(${this.color}, 0.95)`;
-        ctx.fill();
+        if (this.isBadge && fnBadgeImg.complete && fnBadgeImg.naturalWidth !== 0) {
+          ctx.save();
+          ctx.globalAlpha = this.alpha;
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = 'rgba(212, 175, 55, 0.9)';
+          const bSize = this.size * 6.5 + 12;
+          ctx.drawImage(fnBadgeImg, this.x - bSize/2, this.y - bSize/2, bSize, bSize);
+          ctx.restore();
+        } else {
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${this.color}, ${this.alpha})`;
+          ctx.shadowBlur = 12;
+          ctx.shadowColor = `rgba(${this.color}, 0.95)`;
+          ctx.fill();
+        }
       }
     }
 
