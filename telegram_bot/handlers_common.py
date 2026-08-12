@@ -756,20 +756,22 @@ def register_common_handlers(bot):
                     amanha = hoje + timedelta(days=1)
                     
                     try:
-                        res = db.table('demandas_comunicacao').select('id, titulo_evento').in_('status', ['aprovado', 'aprovada']).gte('data_evento', hoje.isoformat()).lte('data_evento', amanha.isoformat()).execute()
+                        res = db.table('demandas_comunicacao').select('id, titulo_evento, data_evento, status').in_('status', ['aprovado', 'aprovada', 'concluida']).order('data_evento', desc=True).limit(10).execute()
                         events = res.data if res and res.data else []
                         
                         if not events:
-                            await bot.send_message(chat_id, "⚠️ Nenhuma pauta aprovada para hoje ou amanhã encontrada para envio de fotos.")
+                            await bot.send_message(chat_id, "⚠️ Nenhuma pauta encontrada no sistema para vincular o envio de fotos.")
                             del _upload_state[chat_id]
                             return
                         
                         markup = types.InlineKeyboardMarkup(row_width=1)
                         for ev in events:
-                            markup.add(types.InlineKeyboardButton(f"📸 {ev['titulo_evento']}", callback_data=f"upload_evt_{ev['id']}"))
-                        markup.add(types.InlineKeyboardButton("❌ Cancelar", callback_data="upload_evt_cancel"))
+                            dt_label = str(ev.get('data_evento', ''))[:10]
+                            tit_label = str(ev.get('titulo_evento', ''))[:45]
+                            markup.add(types.InlineKeyboardButton(f"📁 {dt_label} — {tit_label}", callback_data=f"upload_evt_{ev['id']}"))
+                        markup.add(types.InlineKeyboardButton("❌ Cancelar Upload", callback_data="upload_evt_cancel"))
                         
-                        await bot.send_message(chat_id, "📸 Você enviou fotos. Para qual evento deseja enviá-las (Drive)?", reply_markup=markup)
+                        await bot.send_message(chat_id, f"📸 *ENVIO DE FOTOS PARA O DRIVE*\nRecebi {len(_upload_state[chat_id]['photos'])} foto(s).\n\nEscolha o evento (últimos 10 recentes):", parse_mode="Markdown", reply_markup=markup)
                     except Exception as e:
                         print(f"Error fetching events for photo upload: {e}")
                         del _upload_state[chat_id]
