@@ -112,10 +112,10 @@ def get_drive_service():
     try:
         creds = Credentials.from_service_account_info(_service_account_info, scopes=SCOPES)
         _drive_service_instance = build('drive', 'v3', credentials=creds, cache_discovery=False)
-        print("[DRIVE_SERVICE] ✅ Google Drive API conectado com sucesso.")
+        print("[DRIVE_SERVICE] [OK] Google Drive API conectado com sucesso.")
         return _drive_service_instance
     except Exception as e:
-        print(f"[DRIVE_SERVICE] ❌ Erro ao conectar ao Drive: {e}")
+        print(f"[DRIVE_SERVICE] [ERR] Erro ao conectar ao Drive: {e}")
         traceback.print_exc()
         return None
 
@@ -244,7 +244,7 @@ def criar_pasta_evento(titulo_evento, data_evento_str, pasta_mae_id=None):
         # Gerar link compartilhável
         link = get_shareable_link(evento_id)
 
-        print(f"[DRIVE_SERVICE] ✅ Estrutura criada para '{titulo_clean}': evento={evento_id}, selecao={selecao_id}")
+        print(f"[DRIVE_SERVICE] [OK] Estrutura criada para '{titulo_clean}': evento={evento_id}, selecao={selecao_id}")
         return {
             'evento_folder_id': evento_id,
             'selecao_folder_id': selecao_id,
@@ -300,12 +300,15 @@ def upload_file(file_bytes, filename, folder_id, mime_type='image/jpeg'):
         result = service.files().create(
             body=metadata,
             media_body=media,
-            fields='id, name, webViewLink'
+            fields='id, name, webViewLink',
+            supportsAllDrives=True
         ).execute()
-        print(f"[DRIVE_SERVICE] Upload OK: {filename} -> {result.get('id')}")
+        print(f"[DRIVE_SERVICE] [OK] Upload OK: {filename} -> {result.get('id')}")
         return result
     except Exception as e:
-        print(f"[DRIVE_SERVICE] Erro no upload de '{filename}': {e}")
+        print(f"[DRIVE_SERVICE] [ERR] Erro no upload de '{filename}': {e}")
+        if 'storageQuotaExceeded' in str(e) or 'quota' in str(e).lower():
+            return {'error': 'storageQuotaExceeded', 'detail': str(e)}
         return None
 
 

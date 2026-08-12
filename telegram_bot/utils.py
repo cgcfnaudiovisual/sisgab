@@ -518,7 +518,19 @@ async def upload_photos_to_drive(bot, chat_id, photos_info, demanda):
                 asyncio.to_thread(drive_service.upload_file, downloaded_file, filename, folder_id),
                 timeout=15.0
             )
-            if upload_res:
+            if isinstance(upload_res, dict) and upload_res.get('error') == 'storageQuotaExceeded':
+                await bot.send_message(
+                    chat_id,
+                    "⚠️ *ERRO DE COTA NO GOOGLE DRIVE (Quota Exceeded)*\n\n"
+                    "As Service Accounts do Google possuem 0 GB de cota própria para uploads em contas pessoais `@gmail.com`.\n\n"
+                    "💡 *Como Resolver (Passo a Passo em 1 minuto):*\n"
+                    "1. No Google Drive, acesse **Drives Compartilhados** e crie um novo Drive Compartilhado.\n"
+                    "2. Adicione a Service Account como Administrador:\n`sisgab-drive-service@sisgab-drive.iam.gserviceaccount.com`\n"
+                    "3. Cole o ID do Drive Compartilhado no Painel Admin do SisGAB (`/admin_panel`).",
+                    parse_mode="Markdown"
+                )
+                return 0
+            elif isinstance(upload_res, dict) and upload_res.get('id'):
                 success_count += 1
                 if db and demanda.get('id'):
                     try:
