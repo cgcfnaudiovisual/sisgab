@@ -1,4 +1,5 @@
 import os
+import asyncio
 import inspect
 from datetime import datetime
 from nicegui import ui, app
@@ -315,6 +316,12 @@ def render_page(evento_id: str = None, **kwargs):
         drive_svc = drive_service.get_drive_service()
         drive_folder_id = pauta.get('drive_folder_id')
         
+        # Tenta extrair o ID diretamente do drive_url da pauta
+        if not drive_folder_id and pauta.get('drive_url'):
+            url_p = pauta.get('drive_url', '')
+            if 'folders/' in url_p:
+                drive_folder_id = url_p.split('folders/')[-1].split('?')[0].split('/')[0]
+
         if not drive_folder_id:
             db_conn = get_db_connection()
             if db_conn and pauta.get('titulo_evento'):
@@ -322,10 +329,81 @@ def render_page(evento_id: str = None, **kwargs):
                 if res.data and res.data[0].get('drive_link'):
                     url = res.data[0]['drive_link']
                     if 'folders/' in url:
-                        drive_folder_id = url.split('folders/')[-1].split('?')[0]
+                        drive_folder_id = url.split('folders/')[-1].split('?')[0].split('/')[0]
 
         if not (drive_svc and drive_folder_id):
-            ui.label('⚠️ Integração com Google Drive não configurada ou pasta não vinculada. Exibindo galeria local.').classes('text-warning text-xs q-mb-md q-pa-md bg-black/50 rounded')
+            with ui.row().classes('w-full justify-between items-center q-mb-md q-pa-md bg-black/40 rounded-xl border border-amber-500/30 gap-3 wrap'):
+                with ui.column().classes('gap-0'):
+                    ui.label('⚠️ Pasta no Google Drive não vinculada a esta pauta.').classes('text-amber-4 text-xs font-bold')
+                    ui.label('Gere a estrutura no Drive com 1 clique ou informe um link manual existente.').classes('text-grey-4 text-[11px]')
+                
+                async def criar_pasta_na_galeria():
+                    n_w = ui.notify("📂 Criando pasta no Google Drive...", color='info', spinner=True, timeout=0)
+                    try:
+                        drive_service.reset_drive_service()
+                        res_c = await asyncio.wait_for(
+                            asyncio.to_thread(drive_service.criar_pasta_evento, pauta.get('titulo_evento', ''), pauta.get('data_evento', '')),
+                            timeout=12.0
+                        )
+                        if res_c and res_c.get('evento_link'):
+                            new_fid = res_c.get('evento_folder_id')
+                            new_link = res_c.get('evento_link')
+                            pauta['drive_folder_id'] = new_fid
+                            pauta['drive_url'] = new_link
+                            
+                            db_up = get_db_connection()
+                            if db_up and pauta.get('id'):
+                                try:
+                                    db_up.table('demandas_comunicacao').update({
+                                        'drive_folder_id': new_fid,
+                                        'drive_url': new_link
+                                    }).eq('id', pauta['id']).execute()
+                                except Exception:
+                                    pass
+                            ui.notify('📂 Pasta criada no Drive com sucesso!', color='success', timeout=5000)
+                            render_drive_tabs.refresh()
+                        else:
+                            ui.notify('⚠️ Não foi possível criar pasta no Drive. Verifique as credenciais no Admin.', color='warning', timeout=7000)
+                    except Exception as ex_c:
+                        ui.notify(f'Erro ao criar pasta: {ex_c}', color='negative', timeout=7000)
+                    finally:
+                        try:
+                            n_w.dismiss()
+                        except Exception:
+                            pass
+
+                def vincular_link_manual():
+                    with ui.dialog() as dlg_v, ui.card().classes('w-96 q-pa-md').style(f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'):
+                        ui.label('Vincular Pasta do Drive').classes('text-white text-sm font-bold q-mb-xs')
+                        in_url = ui.input('Link do Google Drive', placeholder='https://drive.google.com/drive/folders/...').props('dark outlined dense w-full')
+                        
+                        def salvar_vinc():
+                            u_val = in_url.value.strip()
+                            if not u_val:
+                                return
+                            fid = u_val.split('folders/')[-1].split('?')[0].split('/')[0] if 'folders/' in u_val else u_val
+                            pauta['drive_folder_id'] = fid
+                            pauta['drive_url'] = u_val
+                            db_u = get_db_connection()
+                            if db_u and pauta.get('id'):
+                                try:
+                                    db_u.table('demandas_comunicacao').update({'drive_folder_id': fid, 'drive_url': u_val}).eq('id', pauta['id']).execute()
+                                except Exception:
+                                    pass
+                            ui.notify('🔗 Link vinculado!', color='success')
+                            dlg_v.close()
+                            render_drive_tabs.refresh()
+                            
+                        with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
+                            ui.button('Cancelar', on_click=dlg_v.close).props('flat color=grey')
+                            ui.button('Salvar', on_click=salvar_vinc).props('unelevated color=cyan bold')
+                    dlg_v.open()
+
+                with ui.row().classes('items-center gap-2'):
+                    if is_operator and pauta.get('id'):
+                        ui.button('📂 Criar Pasta no Drive', on_click=criar_pasta_na_galeria).props('unelevated color=blue-7 dense').classes('text-xs bold px-2')
+                    ui.button('🔗 Vincular Link', on_click=vincular_link_manual).props('outline color=cyan dense').classes('text-xs px-2')
+
             render_gallery_grid_local(pauta_id)
             return
 
