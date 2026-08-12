@@ -741,6 +741,67 @@ def register_common_handlers(bot):
     import time
     import asyncio
     
+    async def render_upload_event_menu(chat_id, page=0, search_query=None, edit_message_id=None):
+        db = get_db_connection()
+        try:
+            query = db.table('demandas_comunicacao').select('id, titulo_evento, data_evento, status, drive_url, drive_folder_id').in_('status', ['aprovado', 'aprovada', 'concluida'])
+            
+            if search_query:
+                query = query.ilike('titulo_evento', f'%{search_query}%')
+            
+            offset_val = page * 8
+            res = query.order('data_evento', desc=True).range(offset_val, offset_val + 7).execute()
+            events = res.data if res and res.data else []
+            
+            if not events and page > 0:
+                await bot.send_message(chat_id, "⚠️ Nenhuma outra pauta mais antiga encontrada.")
+                return
+            elif not events and search_query:
+                await bot.send_message(chat_id, f"⚠️ Nenhuma pauta encontrada com o termo '{search_query}'. Tente outra palavra-chave.")
+                return
+            elif not events:
+                await bot.send_message(chat_id, "⚠️ Nenhuma pauta aprovada ou concluída encontrada no sistema.")
+                if chat_id in _upload_state:
+                    del _upload_state[chat_id]
+                return
+
+            markup = types.InlineKeyboardMarkup(row_width=1)
+            for ev in events:
+                dt_label = str(ev.get('data_evento', ''))[:10]
+                tit_label = str(ev.get('titulo_evento', ''))[:40]
+                has_drive = "📁" if (ev.get('drive_url') or ev.get('drive_folder_id')) else "➕📂"
+                markup.add(types.InlineKeyboardButton(f"{has_drive} {dt_label} — {tit_label}", callback_data=f"upload_evt_{ev['id']}"))
+            
+            # Linha de Navegação e Busca
+            nav_row = []
+            if page > 0:
+                nav_row.append(types.InlineKeyboardButton(f"⬅️ Pág {page}", callback_data=f"upload_pg_{page-1}"))
+            nav_row.append(types.InlineKeyboardButton("🔍 Pesquisar", callback_data="upload_search_evt"))
+            if len(events) >= 8:
+                nav_row.append(types.InlineKeyboardButton(f"Pág {page+2} ➡️", callback_data=f"upload_pg_{page+1}"))
+            
+            markup.row(*nav_row)
+            markup.add(types.InlineKeyboardButton("❌ Cancelar Upload", callback_data="upload_evt_cancel"))
+            
+            n_photos = len(_upload_state.get(chat_id, {}).get('photos', []))
+            header_text = f"📸 *ENVIO DE FOTOS PARA O DRIVE*\nRecebi {n_photos} foto(s).\n\n"
+            if search_query:
+                header_text += f"🔍 *Resultado da busca:* '{search_query}' (Pág {page+1}):"
+            else:
+                header_text += f"Escolha o evento para salvar no Drive (Pág {page+1}):\n_(Ícone ➕📂 cria a pasta no Drive automaticamente se não existir)_"
+            
+            if edit_message_id:
+                try:
+                    await bot.edit_message_text(header_text, chat_id=chat_id, message_id=edit_message_id, parse_mode="Markdown", reply_markup=markup)
+                    return
+                except Exception:
+                    pass
+            await bot.send_message(chat_id, header_text, parse_mode="Markdown", reply_markup=markup)
+        except Exception as e:
+            print(f"[RENDER UPLOAD MENU ERR] {e}")
+            if chat_id in _upload_state:
+                del _upload_state[chat_id]
+
     async def wait_for_photos(chat_id):
         while True:
             await asyncio.sleep(1)
@@ -749,32 +810,7 @@ def register_common_handlers(bot):
             if time.time() - _upload_state[chat_id]['last_time'] >= 4.0:
                 if not _upload_state[chat_id].get('waiting_event'):
                     _upload_state[chat_id]['waiting_event'] = True
-                    
-                    db = get_db_connection()
-                    from datetime import datetime, timedelta
-                    hoje = datetime.now().date()
-                    amanha = hoje + timedelta(days=1)
-                    
-                    try:
-                        res = db.table('demandas_comunicacao').select('id, titulo_evento, data_evento, status').in_('status', ['aprovado', 'aprovada', 'concluida']).order('data_evento', desc=True).limit(10).execute()
-                        events = res.data if res and res.data else []
-                        
-                        if not events:
-                            await bot.send_message(chat_id, "⚠️ Nenhuma pauta encontrada no sistema para vincular o envio de fotos.")
-                            del _upload_state[chat_id]
-                            return
-                        
-                        markup = types.InlineKeyboardMarkup(row_width=1)
-                        for ev in events:
-                            dt_label = str(ev.get('data_evento', ''))[:10]
-                            tit_label = str(ev.get('titulo_evento', ''))[:45]
-                            markup.add(types.InlineKeyboardButton(f"📁 {dt_label} — {tit_label}", callback_data=f"upload_evt_{ev['id']}"))
-                        markup.add(types.InlineKeyboardButton("❌ Cancelar Upload", callback_data="upload_evt_cancel"))
-                        
-                        await bot.send_message(chat_id, f"📸 *ENVIO DE FOTOS PARA O DRIVE*\nRecebi {len(_upload_state[chat_id]['photos'])} foto(s).\n\nEscolha o evento (últimos 10 recentes):", parse_mode="Markdown", reply_markup=markup)
-                    except Exception as e:
-                        print(f"Error fetching events for photo upload: {e}")
-                        del _upload_state[chat_id]
+                    await render_upload_event_menu(chat_id, page=0)
                 break
 
     @bot.callback_query_handler(func=lambda call: call.data == 'upload_evt_cancel')
@@ -788,6 +824,25 @@ def register_common_handlers(bot):
         except Exception:
             pass
 
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('upload_pg_'))
+    async def handle_upload_pagination(call):
+        chat_id = call.message.chat.id
+        try:
+            pg = int(call.data.split('_')[2])
+        except Exception:
+            pg = 0
+        s_query = _upload_state.get(chat_id, {}).get('search_query')
+        await bot.answer_callback_query(call.id)
+        await render_upload_event_menu(chat_id, page=pg, search_query=s_query, edit_message_id=call.message.message_id)
+
+    @bot.callback_query_handler(func=lambda call: call.data == 'upload_search_evt')
+    async def handle_upload_search_prompt(call):
+        chat_id = call.message.chat.id
+        if chat_id in _upload_state:
+            _upload_state[chat_id]['waiting_search_query'] = True
+        await bot.answer_callback_query(call.id, "Digite a palavra-chave no chat")
+        await bot.send_message(chat_id, "🔍 *BUSCA DE EVENTOS*\nDigite no chat o nome, palavra-chave ou local da pauta que deseja pesquisar:", parse_mode="Markdown")
+
     @bot.callback_query_handler(func=lambda call: call.data.startswith('upload_evt_'))
     async def handle_upload_event_callback(call):
         chat_id = call.message.chat.id
@@ -798,8 +853,7 @@ def register_common_handlers(bot):
             return
 
         photos_info = _upload_state[chat_id]['photos']
-        await bot.answer_callback_query(call.id, "Iniciando upload para o Drive...")
-        await bot.send_message(chat_id, f"⏳ Iniciando upload de {len(photos_info)} foto(s)... Por favor, aguarde.")
+        await bot.answer_callback_query(call.id, "Processando evento...")
         
         db = get_db_connection()
         res = db.table('demandas_comunicacao').select('*').eq('id', demanda_id).execute()
@@ -809,13 +863,39 @@ def register_common_handlers(bot):
             
         demanda = res.data[0]
         
+        # Se a pauta ainda não tem pasta no Drive, cria a pasta agora no Google Drive!
+        has_folder = demanda.get('drive_url') or demanda.get('drive_folder_id')
+        if not has_folder:
+            await bot.send_message(chat_id, f"📂 *Criando pasta no Google Drive...*\nAguarde, gerando pasta para: *{demanda.get('titulo_evento')}*", parse_mode="Markdown")
+            import drive_service
+            drive_service.reset_drive_service()
+            tit_e = demanda.get('titulo_evento', 'Evento')
+            dt_e = demanda.get('data_evento', '')
+            res_drive = await asyncio.to_thread(drive_service.criar_pasta_evento, tit_e, dt_e)
+            if res_drive and res_drive.get('evento_link'):
+                demanda['drive_folder_id'] = res_drive.get('evento_folder_id')
+                demanda['drive_url'] = res_drive.get('evento_link')
+                try:
+                    db.table('demandas_comunicacao').update({
+                        'drive_folder_id': res_drive.get('evento_folder_id'),
+                        'drive_url': res_drive.get('evento_link')
+                    }).eq('id', demanda['id']).execute()
+                    await bot.send_message(chat_id, f"✅ Pasta criada no Drive com sucesso!\n🔗 {res_drive.get('evento_link')}")
+                except Exception as e_up:
+                    print(f"[TELEGRAM DRIVE UPDATE ERR] {e_up}")
+            else:
+                await bot.send_message(chat_id, "⚠️ Não foi possível criar a pasta no Drive. Verifique as configurações da Service Account no Admin.")
+                return
+
+        await bot.send_message(chat_id, f"⏳ Iniciando upload de {len(photos_info)} foto(s)... Por favor, aguarde.")
+        
         from .utils import upload_photos_to_drive
         success_count = await upload_photos_to_drive(bot, chat_id, photos_info, demanda)
         
         if success_count > 0:
-            await bot.send_message(chat_id, f"✅ {success_count} fotos enviadas para: {demanda.get('titulo_evento')}")
+            await bot.send_message(chat_id, f"✅ {success_count} fotos enviadas para o Drive!\n📍 Evento: *{demanda.get('titulo_evento')}*\n🔗 Link: {demanda.get('drive_url','')}", parse_mode="Markdown")
         else:
-            await bot.send_message(chat_id, "❌ Falha ao enviar fotos para o Drive.")
+            await bot.send_message(chat_id, "❌ Falha ao enviar fotos para o Drive. Tente novamente.")
             
         if chat_id in _upload_state:
             del _upload_state[chat_id]
@@ -860,7 +940,12 @@ def register_common_handlers(bot):
         
         text = message.text.strip()
 
-        
+        # Intercepta busca de eventos para envio de fotos no Telegram
+        if chat_id in _upload_state and _upload_state[chat_id].get('waiting_search_query'):
+            _upload_state[chat_id]['waiting_search_query'] = False
+            _upload_state[chat_id]['search_query'] = text
+            await render_upload_event_menu(chat_id, page=0, search_query=text)
+            return
         # =====================================================================
         # SEÇÃO 1: Roteamento de Teclado Principal (usuário SEM estado ativo)
         # =====================================================================
