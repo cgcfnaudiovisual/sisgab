@@ -332,7 +332,7 @@ def render_page():
             @ui.refreshable
             def render_relatorio_efetivo():
                 db = get_service_db_connection() or get_db_connection()
-                efetivo = []
+                efetivo_raw = []
                 demandas = []
                 presencas_hoje = {}
                 
@@ -341,7 +341,7 @@ def render_page():
                 if db:
                     try:
                         res_ef = db.table('efetivo').select('*').order('nome_guerra').execute()
-                        efetivo = res_ef.data or []
+                        efetivo_raw = res_ef.data or []
                     except Exception as e:
                         print(f"[RELATORIO EFETIVO DB ERR] {e}")
 
@@ -357,6 +357,22 @@ def render_page():
                             presencas_hoje = {p['nome_guerra'].upper(): p.get('status', 'PENDENTE') for p in res_pr.data}
                     except Exception as e:
                         print(f"[RELATORIO PRESENCA DB ERR] {e}")
+
+                # 1. Filtra apenas a equipe COMSOC / Gabinete (exclui a categoria genérica 'militar' / 'operador' / 'compel')
+                # 2. Remove duplicados por (posto_grad, nome_guerra)
+                efetivo = []
+                seen_militar = set()
+                for m in efetivo_raw:
+                    role_raw = str(m.get('role') or 'militar').strip().lower()
+                    if role_raw in ('militar', 'compel', 'operador'):
+                        continue  # Não listar os da categoria militar/geral
+                    
+                    pg = str(m.get('posto_grad') or m.get('posto') or '').replace('None', '').strip().upper()
+                    ng = str(m.get('nome_guerra') or m.get('nome') or '').replace('None', '').strip().upper()
+                    key = (pg, ng)
+                    if key not in seen_militar and ng:
+                        seen_militar.add(key)
+                        efetivo.append(m)
 
                 # Processamento das estatísticas por militar
                 relatorio_militar = []
@@ -374,27 +390,25 @@ def render_page():
                     concluidas_militar = []
 
                     for dem in demandas:
-                        enc_id = str(dem.get('encarregado_id', ''))
+                        st = str(dem.get('status', '')).strip().lower()
                         
-                        target_ids = set()
-                        raw_ids = dem.get('notificar_militar_ids')
-                        if raw_ids:
-                            try:
-                                parsed = json.loads(raw_ids) if isinstance(raw_ids, str) else raw_ids
-                                if isinstance(parsed, list):
-                                    target_ids = {str(x) for x in parsed if str(x).isdigit()}
-                            except Exception:
-                                pass
+                        enc_id = str(dem.get('encarregado_id', ''))
+                        des_id = str(dem.get('designer_id', ''))
+                        fot_id = str(dem.get('fotografo_id', ''))
+                        
+                        raw_notif = str(dem.get('notificar_militar_ids') or '')
+                        aut_obs = f"{dem.get('autoridades', '')} {dem.get('observacoes', '')} {dem.get('solicitante_nome', '')} {dem.get('titulo_evento', '')}".upper()
 
-                        # Verifica se o militar está individualmente vinculado à demanda
-                        eh_responsavel = (
-                            (militar_id_str and enc_id == militar_id_str) or
-                            (militar_id_str and militar_id_str in target_ids)
-                        )
+                        eh_vinculado = False
+                        if militar_id_str and militar_id_str in (enc_id, des_id, fot_id):
+                            eh_vinculado = True
+                        elif militar_id_str and (f'"{militar_id_str}"' in raw_notif or f'[{militar_id_str}' in raw_notif or f', {militar_id_str}' in raw_notif):
+                            eh_vinculado = True
+                        elif nome_g and len(nome_g) >= 3 and (nome_g in raw_notif.upper() or nome_g in aut_obs):
+                            eh_vinculado = True
 
-                        if eh_responsavel:
+                        if eh_vinculado:
                             pautas_militar.append(dem)
-                            st = str(dem.get('status', '')).strip().lower()
                             if st in ('pendente', 'pendentes', 'aprovada', 'aprovado', 'ajustes'):
                                 pendentes_militar.append(dem)
                             elif st in ('concluida', 'concluido', 'concluidas'):
@@ -402,7 +416,6 @@ def render_page():
 
                     st_presenca = presencas_hoje.get(nome_g, 'P')
                     
-                    # Nível de carga
                     qtd_ativas = len(pendentes_militar)
                     if qtd_ativas == 0:
                         nivel_carga = 'LIVRE'
@@ -427,92 +440,138 @@ def render_page():
                         'ativas': len(pendentes_militar),
                         'concluidas': len(concluidas_militar),
                         'pautas_ativas_list': pendentes_militar,
+                        'pautas_todas_list': pautas_militar,
                         'nivel_carga': nivel_carga,
                         'cor_carga': cor_carga
                     })
 
-                # Ordena por número de pautas ativas (mais ocupados primeiro)
-                relatorio_militar.sort(key=lambda x: x['ativas'], reverse=True)
+                # Ordenação padrão: Maior Carga / Mais Missões
+                relatorio_militar.sort(key=lambda x: (x['ativas'], x['tot_pautas']), reverse=True)
 
-                # ── CABEÇALHO COM KPIS E BOTÃO DE EXPORTAÇÃO EXCEL ──
+                # ── CABEÇALHO COM KPIS, ORDENAÇÃO E BOTÃO EXCEL ──
                 with ui.row().classes('w-full justify-between items-center q-mb-md wrap gap-3'):
-                    with ui.row().classes('items-center gap-3 flex-wrap'):
-                        ui.badge(f"👥 Efetivo Ativo: {len(efetivo)}").props('color=cyan-9 bold').classes('q-pa-xs text-xs')
-                        ui.badge(f"⏳ Demandas Ativas: {tot_pendentes_geral}").props('color=amber-9 bold').classes('q-pa-xs text-xs')
-                        ui.badge(f"✅ Concluídas no Total: {tot_concluidas_geral}").props('color=green-9 bold').classes('q-pa-xs text-xs')
+                    with ui.row().classes('items-center gap-2 flex-wrap'):
+                        ui.badge(f"👥 Efetivo COMSOC: {len(relatorio_militar)}").props('color=cyan-9 bold').classes('q-pa-xs text-xs')
+                        ui.badge(f"⏳ Ativas: {tot_pendentes_geral}").props('color=amber-9 bold').classes('q-pa-xs text-xs')
+                        ui.badge(f"✅ Concluídas: {tot_concluidas_geral}").props('color=green-9 bold').classes('q-pa-xs text-xs')
 
-                    def exportar_excel():
-                        try:
-                            export_data = []
-                            for r in relatorio_militar:
-                                export_data.append({
-                                    'Posto/Grad': r['posto_grad'],
-                                    'Nome de Guerra': r['nome_guerra'],
-                                    'Cargo/Função': r['cargo'],
-                                    'Presença Hoje': r['presenca_hoje'],
-                                    'Pautas Ativas/Pendentes': r['ativas'],
-                                    'Pautas Concluídas': r['concluidas'],
-                                    'Nível de Carga': r['nivel_carga']
-                                })
-                            df = pd.DataFrame(export_data)
-                            buffer = io.BytesIO()
-                            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                                df.to_excel(writer, sheet_name='Produtividade_COMSOC', index=False)
-                            buffer.seek(0)
-                            ui.download(buffer.getvalue(), f"Relatorio_Produtividade_COMSOC_{hoje_str}.xlsx")
-                            ui.notify('📥 Relatório Excel gerado e baixado com sucesso!', color='positive')
-                        except Exception as exp_err:
-                            ui.notify(f'Erro ao exportar Excel: {exp_err}', color='negative')
+                    with ui.row().classes('items-center gap-3 wrap'):
+                        sort_select = ui.select(
+                            {
+                                'carga_desc': '📊 Maior Carga (Ativas)',
+                                'tot_desc': '📋 Mais Missões Totais',
+                                'concluidas_desc': '✅ Mais Concluídas',
+                                'nome_asc': '🔤 Nome (A-Z)'
+                            },
+                            value='carga_desc',
+                            label='Ordenar Efetivo Por'
+                        ).props('dark outlined dense').classes('w-56 text-xs')
 
-                    ui.button('📥 Exportar Relatório (Excel)', icon='download',
-                              on_click=exportar_excel
-                    ).props('unelevated color=green text-color=white bold dense').classes('text-xs q-px-sm')
+                        def reordenar_efetivo(e):
+                            criterio = e.value
+                            if criterio == 'carga_desc':
+                                relatorio_militar.sort(key=lambda x: (x['ativas'], x['tot_pautas']), reverse=True)
+                            elif criterio == 'tot_desc':
+                                relatorio_militar.sort(key=lambda x: x['tot_pautas'], reverse=True)
+                            elif criterio == 'concluidas_desc':
+                                relatorio_militar.sort(key=lambda x: x['concluidas'], reverse=True)
+                            elif criterio == 'nome_asc':
+                                relatorio_militar.sort(key=lambda x: x['nome_guerra'])
+                            render_relatorio_efetivo.refresh()
 
-                # ── CARDS DE MILITARES E SUA CARGA DE TRABALHO ──
+                        sort_select.on_value_change(reordenar_efetivo)
+
+                        def exportar_excel():
+                            try:
+                                export_data = []
+                                for r in relatorio_militar:
+                                    export_data.append({
+                                        'Posto/Grad': r['posto_grad'],
+                                        'Nome de Guerra': r['nome_guerra'],
+                                        'Cargo/Função': r['cargo'],
+                                        'Presença Hoje': r['presenca_hoje'],
+                                        'Pautas Ativas/Pendentes': r['ativas'],
+                                        'Pautas Concluídas': r['concluidas'],
+                                        'Total Missões': r['tot_pautas'],
+                                        'Nível de Carga': r['nivel_carga']
+                                    })
+                                df = pd.DataFrame(export_data)
+                                buffer = io.BytesIO()
+                                with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                                    df.to_excel(writer, sheet_name='Produtividade_COMSOC', index=False)
+                                buffer.seek(0)
+                                ui.download(buffer.getvalue(), f"Relatorio_Produtividade_COMSOC_{hoje_str}.xlsx")
+                                ui.notify('📥 Relatório Excel gerado com sucesso!', color='positive')
+                            except Exception as exp_err:
+                                ui.notify(f'Erro ao exportar Excel: {exp_err}', color='negative')
+
+                        ui.button('📥 Exportar Excel', icon='download',
+                                  on_click=exportar_excel
+                        ).props('unelevated color=green text-color=white bold dense').classes('text-xs q-px-sm')
+
+                # ── GRID EM 4 COLUNAS COM CARDS DE USUÁRIOS ──
                 if relatorio_militar:
-                    with ui.column().classes('w-full gap-3'):
+                    with ui.row().classes('w-full gap-3 items-stretch wrap'):
                         for r in relatorio_militar:
-                            with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
-                                f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
+                            clean_pg = str(r['posto_grad'] or '').replace('None', '').strip()
+                            clean_title = f"{clean_pg} {r['nome_guerra']}".strip()
+
+                            with ui.card().classes('q-pa-md no-shadow rounded-xl border flex flex-col justify-between').style(
+                                f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]}; width: calc(25% - 10px); min-width: 230px; flex: 1 1 230px;'
                             ):
-                                with ui.row().classes('w-full justify-between items-center wrap gap-3'):
-                                    # Dados do Militar
-                                    with ui.row().classes('items-center gap-3'):
-                                        ui.icon('person', size='2rem', color='cyan-5')
-                                        with ui.column().classes('gap-0'):
-                                            with ui.row().classes('items-center gap-2'):
-                                                clean_pg = str(r['posto_grad'] or '').replace('None', '').strip()
-                                                clean_title = f"{clean_pg} {r['nome_guerra']}".strip()
-                                                ui.label(clean_title).classes('text-sm font-bold text-white')
-                                                ui.badge(r['nivel_carga']).props(f"color={r['cor_carga']} bold").classes('text-[9px]')
-                                            ui.label(r['cargo']).classes('text-xs text-grey-4')
+                                # Topo do Card: Nome, Cargo e Badge de Carga
+                                with ui.column().classes('w-full gap-1'):
+                                    with ui.row().classes('w-full justify-between items-start no-wrap gap-1'):
+                                        with ui.row().classes('items-center gap-1.5 shrink-0'):
+                                            ui.icon('person', size='1.3rem', color='cyan-4')
+                                            ui.label(clean_title).classes('text-xs font-bold text-white truncate max-w-[140px]')
+                                        ui.badge(r['nivel_carga']).props(f"color={r['cor_carga']} bold").classes('text-[8px]')
 
-                                    # Indicadores de Carga
-                                    with ui.row().classes('items-center gap-3 text-xs'):
-                                        with ui.column().classes('items-center gap-0'):
-                                            ui.label(str(r['ativas'])).classes(f"text-lg font-black text-{r['cor_carga']}")
-                                            ui.label('Ativas / Pendentes').classes('text-[9px] text-grey-4')
+                                    ui.label(r['cargo']).classes('text-[10px] text-grey-4 truncate')
 
-                                        ui.separator().props('vertical').classes('q-mx-xs')
+                                # Meio do Card: Métricas e Indicadores (Ativas, Concluídas, Total)
+                                with ui.row().classes('w-full justify-around items-center bg-black/20 q-py-xs rounded q-my-xs text-center border border-white/5'):
+                                    with ui.column().classes('items-center gap-0'):
+                                        ui.label(str(r['ativas'])).classes(f"text-md font-black text-{r['cor_carga']}")
+                                        ui.label('Ativas').classes('text-[8px] text-grey-4')
 
-                                        with ui.column().classes('items-center gap-0'):
-                                            ui.label(str(r['concluidas'])).classes('text-lg font-black text-green-4')
-                                            ui.label('Concluídas').classes('text-[9px] text-grey-4')
+                                    ui.separator().props('vertical').classes('q-mx-2')
 
-                                # Pautas ativas vinculadas (se houver)
-                                if r['pautas_ativas_list']:
-                                    with ui.column().classes('w-full q-mt-sm q-pt-xs border-t border-cyan-500/10 gap-1'):
-                                        ui.label('📌 Pautas ativas sob responsabilidade:').classes('text-[10px] text-cyan font-bold')
-                                        for p_ativa in r['pautas_ativas_list']:
-                                            dt_ev = p_ativa.get('data_evento', '')
-                                            tit_ev = p_ativa.get('titulo_evento', 'Sem Título')
-                                            st_ev = p_ativa.get('status', 'pendente')
-                                            with ui.row().classes('w-full items-center justify-between text-[11px] bg-black/20 q-px-sm q-py-xs rounded'):
-                                                ui.label(f"• {tit_ev} ({dt_ev})").classes('text-white font-semibold truncate max-w-[70%]')
-                                                ui.badge(st_ev.upper()).props('color=amber-9 dense text-color=black').classes('text-[8px]')
+                                    with ui.column().classes('items-center gap-0'):
+                                        ui.label(str(r['concluidas'])).classes('text-md font-black text-green-4')
+                                        ui.label('Concluídas').classes('text-[8px] text-grey-4')
+
+                                    ui.separator().props('vertical').classes('q-mx-2')
+
+                                    with ui.column().classes('items-center gap-0'):
+                                        ui.label(str(r['tot_pautas'])).classes('text-md font-black text-cyan-4')
+                                        ui.label('Total').classes('text-[8px] text-grey-4')
+
+                                # Rodapé: Botão de Ver Missões do Militar
+                                def abrir_missoes_militar(data=r):
+                                    with ui.dialog() as dlg_m, ui.card().classes('w-[520px] max-w-[95vw] q-pa-md'):
+                                        ui.label(f"📋 Missões de {data['posto_grad']} {data['nome_guerra']}").classes('text-sm font-bold text-cyan q-mb-sm')
+                                        if data['pautas_todas_list']:
+                                            with ui.column().classes('w-full gap-2 max-h-[350px] overflow-y-auto'):
+                                                for p_m in data['pautas_todas_list']:
+                                                    st_m = str(p_m.get('status', 'pendente')).upper()
+                                                    st_color = 'green' if 'CONCLU' in st_m else 'amber'
+                                                    with ui.card().classes('w-full q-pa-xs px-2 no-shadow rounded bg-white/5 border border-white/10'):
+                                                        with ui.row().classes('w-full justify-between items-center text-xs'):
+                                                            ui.label(p_m.get('titulo_evento', '')).classes('font-bold text-white truncate max-w-[70%]')
+                                                            ui.badge(st_m).props(f'color={st_color} dense').classes('text-[8px]')
+                                                        ui.label(f"📅 {p_m.get('data_evento','')} | 📍 {p_m.get('local_evento','')}").classes('text-[10px] text-grey-4')
+                                        else:
+                                            ui.label('Nenhuma missão vinculada a este militar.').classes('text-xs text-grey-5 italic q-my-md')
+                                        
+                                        with ui.row().classes('w-full justify-end q-mt-sm'):
+                                            ui.button('Fechar', on_click=dlg_m.close).props('flat color=grey')
+                                    dlg_m.open()
+
+                                ui.button('📋 Ver Missões', on_click=lambda d=r: abrir_missoes_militar(d)).props('flat dense color=cyan icon=list_alt').classes('w-full text-[10px]')
                 else:
                     with ui.column().classes('w-full items-center justify-center q-py-xl gap-2 text-grey-4'):
                         ui.icon('group_off', size='3rem')
-                        ui.label('Nenhum militar encontrado no cadastro de efetivo.').classes('text-xs')
+                        ui.label('Nenhum militar da COMSOC/Gabinete encontrado.').classes('text-xs')
 
             render_relatorio_efetivo()
