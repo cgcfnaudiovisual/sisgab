@@ -1589,7 +1589,10 @@ def register_common_handlers(bot):
                     await bot.reply_to(message, "⚠️ Banco offline.")
                     return
                 try:
-                    res = db.table('photo_matches').select('*').eq('user_id', profile['id']).execute()
+                    try:
+                        res = db.table('photo_matches').select('*').eq('militar_id', profile['id']).execute()
+                    except Exception:
+                        res = db.table('photo_matches').select('*').eq('user_id', profile['id']).execute()
                     if res.data:
                         msg = "📸 **MINHAS FOTOS IDENTIFICADAS:**\n\n"
                         for match in res.data[:10]:
