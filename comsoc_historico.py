@@ -93,10 +93,85 @@ def render_page():
                         'Filtrar', 
                         icon='search', 
                         on_click=aplicar_filtros
-                    ).props('unelevated color=primary text-color=black bold').classes('q-px-lg cyber-glow')
+                    ).props('unelevated color=primary text-color=black bold').classes('q-px-md cyber-glow')
+
+                    def exportar_pdf_historico():
+                        try:
+                            from reportlab.lib.pagesizes import A4
+                            from reportlab.lib import colors
+                            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+                            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+                            buffer = io.BytesIO()
+                            doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+                            styles = getSampleStyleSheet()
+
+                            title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=13, textColor=colors.HexColor('#091326'), alignment=1, spaceAfter=4)
+                            sub_style = ParagraphStyle('SubStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=8, textColor=colors.HexColor('#475569'), alignment=1, spaceAfter=12)
+                            hdr_style = ParagraphStyle('HdrStyle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=8, textColor=colors.white)
+                            cell_style = ParagraphStyle('CellStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=7.5, leading=9)
+                            cell_bold = ParagraphStyle('CellBold', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=7.5, leading=9)
+
+                            elements = [
+                                Paragraph("<b>MARINHA DO BRASIL</b><br/>COMANDO-GERAL DO CORPO DE FUZILEIROS NAVAIS<br/>ASSESSORIA DE COMUNICAÇÃO SOCIAL", title_style),
+                                Paragraph(f"RELATÓRIO HISTÓRICO DE COBERTURAS & ACERVO — {datetime.now().strftime('%d/%m/%Y %H:%M')}", sub_style),
+                                Spacer(1, 5)
+                            ]
+
+                            tbl_data = [[
+                                Paragraph("Data", hdr_style),
+                                Paragraph("Evento / Pauta", hdr_style),
+                                Paragraph("Local / Setor", hdr_style),
+                                Paragraph("Solicitante / Autoridades", hdr_style),
+                                Paragraph("Status Drive", hdr_style)
+                            ]]
+
+                            p_list = current_pautas_filtradas if 'current_pautas_filtradas' in locals() and current_pautas_filtradas else pautas
+                            for p_item in p_list[:60]:
+                                dt_str = str(p_item.get('data_evento', ''))
+                                tit_str = str(p_item.get('titulo_evento', ''))
+                                loc_str = str(p_item.get('local_evento', 'Quartel'))
+                                sol_str = f"Sol: {p_item.get('solicitante_nome','')}<br/>Aut: {p_item.get('autoridades','')}"
+                                d_url = get_demanda_drive_url(p_item)
+                                st_drive = "COBERTURA OK" if d_url else "SEM DRIVE"
+
+                                tbl_data.append([
+                                    Paragraph(dt_str, cell_bold),
+                                    Paragraph(f"<b>{tit_str}</b>", cell_style),
+                                    Paragraph(loc_str, cell_style),
+                                    Paragraph(sol_str, cell_style),
+                                    Paragraph(st_drive, cell_bold)
+                                ])
+
+                            t = Table(tbl_data, colWidths=[55, 170, 95, 140, 75])
+                            t.setStyle(TableStyle([
+                                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#091326')),
+                                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                                ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                                ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
+                                ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f8fafc')])
+                            ]))
+                            elements.append(t)
+                            doc.build(elements)
+                            buffer.seek(0)
+
+                            ui.download(buffer.getvalue(), f"Relatorio_Acervo_COMSOC_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf")
+                            ui.notify("📄 Relatório PDF do Histórico gerado com sucesso!", color="success")
+                        except Exception as pdf_err:
+                            ui.notify(f"Erro ao gerar PDF: {pdf_err}", color="negative")
+
+                    ui.button(
+                        'PDF', 
+                        icon='picture_as_pdf', 
+                        on_click=exportar_pdf_historico
+                    ).props('unelevated color=red-9 text-color=white bold').classes('q-px-md').tooltip('Exportar Relatório PDF do Histórico')
+
+            current_pautas_filtradas = []
 
             @ui.refreshable
             def render_event_cards():
+                nonlocal current_pautas_filtradas
                 db = get_db_connection()
                 pautas = []
                 fotos_por_evento = {}
@@ -117,6 +192,30 @@ def render_page():
                                 fotos_por_evento[ev_name].append(p)
                     except Exception as e:
                         print(f"[HISTORICO DB ERR] {e}")
+
+                # ── PAINEL DE KPIS SUPERIOR ──
+                tot_eventos = len(pautas)
+                tot_drive = sum(1 for p in pautas if get_demanda_drive_url(p))
+                tot_fotos = sum(len(v) for v in fotos_por_evento.values())
+                mes_atual_str = datetime.now().strftime('%Y-%m')
+                tot_mes = sum(1 for p in pautas if str(p.get('data_evento', '')).startswith(mes_atual_str))
+
+                with ui.row().classes('w-full gap-3 q-mb-md justify-between items-center wrap'):
+                    with ui.card().classes('grow q-pa-sm no-shadow rounded-xl border border-cyan-500/20 bg-cyan-950/20 text-center').style('min-width: 140px;'):
+                        ui.label(str(tot_eventos)).classes('text-lg font-black text-cyan')
+                        ui.label('📁 Total de Eventos').classes('text-[9px] text-grey-4 uppercase font-bold')
+
+                    with ui.card().classes('grow q-pa-sm no-shadow rounded-xl border border-teal-500/20 bg-teal-950/20 text-center').style('min-width: 140px;'):
+                        ui.label(str(tot_drive)).classes('text-lg font-black text-teal-4')
+                        ui.label('☁️ Com Pasta no Drive').classes('text-[9px] text-grey-4 uppercase font-bold')
+
+                    with ui.card().classes('grow q-pa-sm no-shadow rounded-xl border border-amber-500/20 bg-amber-950/20 text-center').style('min-width: 140px;'):
+                        ui.label(str(tot_fotos)).classes('text-lg font-black text-amber-4')
+                        ui.label('📸 Fotos no Sistema').classes('text-[9px] text-grey-4 uppercase font-bold')
+
+                    with ui.card().classes('grow q-pa-sm no-shadow rounded-xl border border-blue-500/20 bg-blue-950/20 text-center').style('min-width: 140px;'):
+                        ui.label(str(tot_mes)).classes('text-lg font-black text-blue-4')
+                        ui.label('📅 Coberturas no Mês').classes('text-[9px] text-grey-4 uppercase font-bold')
 
                 termo = filter_state['termo'].strip().lower()
                 local = filter_state['local'].strip().lower()
@@ -154,6 +253,8 @@ def render_page():
                     if categoria != 'todos' and p.get('categoria_demanda', '') != categoria:
                         continue
                     pautas_filtradas.append(p)
+
+                current_pautas_filtradas = pautas_filtradas
 
                 if pautas_filtradas:
                     with ui.column().classes('w-full gap-4'):
@@ -196,32 +297,115 @@ def render_page():
                                                 ui.button('📸 Galeria', on_click=lambda id=p['id']: ui.navigate.to(f'/comsoc_galeria?evento_id={id}')).props('unelevated color=primary text-color=black dense').classes('text-[10px] q-px-sm bold')
                                                 ui.button('📁 Drive', on_click=lambda u=drive_link: ui.open(u, new_tab=True)).props('unelevated color=blue dense icon=open_in_new').classes('text-[10px] q-px-xs')
                                                 
-                                                def abrir_distribuir_telegram(cur_p=p):
-                                                    with ui.dialog() as dlg_dist, ui.card().classes('w-[450px] max-w-[90vw] q-pa-md'):
-                                                        ui.label(f"📲 Distribuir Acervo: {cur_p['titulo_evento']}").classes('text-sm font-bold text-cyan q-mb-sm')
-                                                        tg_id_in = ui.input('Telegram Chat ID ou ID do Militar', placeholder='Ex: 123456789').props('dark outlined dense w-full')
+                                                def abrir_distribuir_acervo(cur_p=p, d_link=drive_link):
+                                                    with ui.dialog() as dlg_dist, ui.card().classes('w-[520px] max-w-[95vw] q-pa-md'):
+                                                        ui.label(f"📲 Distribuir Acervo: {cur_p['titulo_evento']}").classes('text-sm font-bold text-cyan q-mb-xs')
+                                                        ui.label('Escolha o canal e os destinatários para encaminhar os links oficiais').classes('text-[11px] text-grey-4 q-mb-md')
                                                         
-                                                        async def enviar_link_tg():
-                                                            if not tg_id_in.value:
-                                                                ui.notify('Digite o Telegram ID!', color='warning')
-                                                                return
-                                                            from telegram_bot.utils import enviar_links_acervo, get_telegram_bot_instance
-                                                            bot = await get_telegram_bot_instance()
-                                                            if bot:
-                                                                ok = await enviar_links_acervo(bot, tg_id_in.value.strip(), cur_p)
-                                                                if ok:
-                                                                    ui.notify('✅ Links enviados no Telegram!', color='success')
+                                                        with ui.tabs().classes('w-full text-cyan') as tabs_dist:
+                                                            tab_tg = ui.tab('✈️ Telegram', icon='send')
+                                                            tab_zap = ui.tab('🟢 WhatsApp', icon='chat')
+                                                            
+                                                        with ui.tab_panels(tabs_dist, value=tab_tg).classes('w-full bg-transparent p-0 q-mt-sm'):
+                                                            # ABA 1: TELEGRAM
+                                                            with ui.tab_panel(tab_tg).classes('p-0'):
+                                                                opt_modo = ui.radio(
+                                                                    {
+                                                                        'todos': '👥 Todos os Militares (Broadcast no Telegram)',
+                                                                        'membros': '🎯 Seleção de Militares Específicos',
+                                                                        'custom': '💬 Chat ID / Grupo Específico'
+                                                                    },
+                                                                    value='todos'
+                                                                ).props('dark dense').classes('text-xs gap-2 q-mb-sm')
+                                                                
+                                                                # Lista de militares com telegram
+                                                                militia_tg = []
+                                                                svc_db = get_service_db_connection() or get_db_connection()
+                                                                if svc_db:
+                                                                    try:
+                                                                        res_m = svc_db.table('efetivo').select('*').not_.is_('telegram_id', 'null').execute()
+                                                                        militia_tg = res_m.data or []
+                                                                    except Exception:
+                                                                        pass
+                                                                
+                                                                opts_mil = {str(m['telegram_id']): f"{m.get('posto_grad','')} {m.get('nome_guerra','')}".strip() for m in militia_tg if m.get('telegram_id')}
+                                                                sel_mil_multi = ui.select(opts_mil, label='Escolha os Militares', multiple=True).props('dark outlined dense use-chips w-full').classes('q-mb-sm text-xs')
+                                                                sel_mil_multi.set_visibility(False)
+                                                                
+                                                                txt_custom_id = ui.input('Chat ID / Grupo ID do Telegram', placeholder='Ex: -100123456789 ou 123456789').props('dark outlined dense w-full').classes('q-mb-sm')
+                                                                txt_custom_id.set_visibility(False)
+                                                                
+                                                                def toggle_modo_tg(e):
+                                                                    sel_mil_multi.set_visibility(e.value == 'membros')
+                                                                    txt_custom_id.set_visibility(e.value == 'custom')
+                                                                
+                                                                opt_modo.on_value_change(toggle_modo_tg)
+                                                                
+                                                                async def executar_envio_tg():
+                                                                    from telegram_bot.utils import enviar_links_acervo, get_telegram_bot_instance
+                                                                    bot = await get_telegram_bot_instance()
+                                                                    if not bot:
+                                                                        ui.notify('Bot do Telegram não inicializado no servidor.', color='warning')
+                                                                        return
+                                                                    
+                                                                    alvos = []
+                                                                    if opt_modo.value == 'todos':
+                                                                        alvos = [str(m['telegram_id']) for m in militia_tg if m.get('telegram_id')]
+                                                                    elif opt_modo.value == 'membros':
+                                                                        alvos = sel_mil_multi.value or []
+                                                                    elif opt_modo.value == 'custom':
+                                                                        if txt_custom_id.value.strip():
+                                                                            alvos = [txt_custom_id.value.strip()]
+                                                                    
+                                                                    if not alvos:
+                                                                        ui.notify('Nenhum destinatário selecionado.', color='warning')
+                                                                        return
+                                                                    
+                                                                    sucessos = 0
+                                                                    for cid in alvos:
+                                                                        ok = await enviar_links_acervo(bot, cid, cur_p)
+                                                                        if ok:
+                                                                            sucessos += 1
+                                                                    
+                                                                    ui.notify(f"✈️ Mensagem enviada para {sucessos} destinatário(s) no Telegram!", color='success')
                                                                     dlg_dist.close()
-                                                                else:
-                                                                    ui.notify('Erro ao enviar mensagem no Telegram.', color='negative')
-                                                            else:
-                                                                ui.notify('Bot do Telegram não inicializado.', color='warning')
 
-                                                        with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
-                                                            ui.button('Cancelar', on_click=dlg_dist.close).props('flat color=grey')
-                                                            ui.button('📲 Enviar Links', on_click=enviar_link_tg).props('unelevated color=cyan')
+                                                                with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
+                                                                    ui.button('Cancelar', on_click=dlg_dist.close).props('flat color=grey')
+                                                                    ui.button('✈️ Disparar Telegram', on_click=executar_envio_tg).props('unelevated color=cyan bold')
+
+                                                            # ABA 2: WHATSAPP
+                                                            with ui.tab_panel(tab_zap).classes('p-0'):
+                                                                txt_zap_msg = f"""📸 *ACERVO FOTOGRÁFICO COMSOC / CGCFN*
+
+🎖️ *Evento:* {cur_p['titulo_evento']}
+📅 *Data:* {cur_p['data_evento']}
+📍 *Local:* {cur_p.get('local_evento', 'Quartel')}
+👤 *Solicitante:* {cur_p['solicitante_nome']} ({cur_p.get('setor','')})
+
+📁 *Link do Google Drive / Fotos:*
+{d_link}
+
+_Comunicação Social — Comando-Geral do Corpo de Fuzileiros Navais_"""
+
+                                                                area_zap = ui.textarea('Mensagem Pronta para WhatsApp', value=txt_zap_msg).props('dark outlined dense w-full rows=7').classes('font-mono text-xs')
+                                                                
+                                                                def copiar_zap():
+                                                                    encoded = urllib.parse.quote(area_zap.value)
+                                                                    ui.run_javascript(f'navigator.clipboard.writeText({json.dumps(area_zap.value)})')
+                                                                    ui.notify('📋 Texto copiado para a área de transferência!', color='success')
+
+                                                                def abrir_web_zap():
+                                                                    encoded = urllib.parse.quote(area_zap.value)
+                                                                    ui.open(f"https://api.whatsapp.com/send?text={encoded}", new_tab=True)
+
+                                                                with ui.row().classes('w-full justify-between items-center q-mt-md'):
+                                                                    ui.button('📋 Copiar Texto', on_click=copiar_zap).props('outline color=amber dense').classes('text-xs')
+                                                                    ui.button('🟢 Abrir WhatsApp Web', on_click=abrir_web_zap).props('unelevated color=green dense bold').classes('text-xs')
+
                                                     dlg_dist.open()
-                                                ui.button('📲 Distribuir', on_click=abrir_distribuir_telegram).props('outline color=cyan dense').classes('text-[10px] q-px-xs').tooltip('Enviar Links via Telegram')
+
+                                                ui.button('📲 Distribuir', on_click=abrir_distribuir_acervo).props('outline color=cyan dense').classes('text-[10px] q-px-xs').tooltip('Distribuir via Telegram ou WhatsApp')
                                             else:
                                                 def criar_pasta_historico(cur_p=p):
                                                     res = drive_service.criar_pasta_evento(cur_p['titulo_evento'], cur_p['data_evento'])
