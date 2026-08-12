@@ -412,8 +412,10 @@ _Comunicação Social — Comando-Geral do Corpo de Fuzileiros Navais_"""
                                                     n_w = ui.notify("📂 Criando pasta no Google Drive...", color='info', spinner=True, timeout=0)
                                                     try:
                                                         drive_service.reset_drive_service()
-                                                        res = await asyncio.to_thread(drive_service.criar_pasta_evento, cur_p['titulo_evento'], cur_p['data_evento'])
-                                                        n_w.dismiss()
+                                                        res = await asyncio.wait_for(
+                                                            asyncio.to_thread(drive_service.criar_pasta_evento, cur_p['titulo_evento'], cur_p['data_evento']),
+                                                            timeout=12.0
+                                                        )
                                                         if res and res.get('evento_link'):
                                                             new_link = res['evento_link']
                                                             conn = get_db_connection()
@@ -426,9 +428,15 @@ _Comunicação Social — Comando-Geral do Corpo de Fuzileiros Navais_"""
                                                             render_event_cards.refresh()
                                                         else:
                                                             ui.notify("⚠️ Não foi possível criar a pasta no Drive. Verifique se o JSON da Service Account e a Pasta Mãe foram salvos no Admin (/admin_panel).", color='warning', timeout=8000)
+                                                    except asyncio.TimeoutError:
+                                                        ui.notify("⏱️ Tempo limite excedido ao conectar ao Google Drive. Verifique a internet ou o JSON da Service Account no Admin.", color='warning', timeout=8000)
                                                     except Exception as ex_ch:
-                                                        n_w.dismiss()
                                                         ui.notify(f"Erro ao criar pasta no Drive: {ex_ch}", color='negative', timeout=8000)
+                                                    finally:
+                                                        try:
+                                                            n_w.dismiss()
+                                                        except Exception:
+                                                            pass
 
                                                 ui.button('📂 Criar Pasta no Drive', on_click=criar_pasta_historico).props('unelevated color=blue-7 dense').classes('text-[10px] q-px-xs bold').tooltip('Criar Pasta no Drive automaticamente')
 

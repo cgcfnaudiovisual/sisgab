@@ -140,16 +140,24 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                                     import drive_service
                                     drive_service.reset_drive_service()
                                     pm_id = sel_pasta_mae.value if sel_pasta_mae else None
-                                    result = await asyncio.to_thread(drive_service.criar_pasta_evento, tit_val, dt_val, pm_id)
-                                    n_wait.dismiss()
+                                    result = await asyncio.wait_for(
+                                        asyncio.to_thread(drive_service.criar_pasta_evento, tit_val, dt_val, pm_id),
+                                        timeout=12.0
+                                    )
                                     if result and result.get('evento_link'):
                                         in_drive_url.value = result['evento_link']
                                         ui.notify(f"📂 Pasta criada no Drive!", color='success', timeout=5000)
                                     else:
                                         ui.notify("⚠️ Não foi possível criar a pasta no Drive. Verifique se o JSON da Service Account e a Pasta Mãe foram salvos no Painel Admin (/admin_panel).", color='warning', timeout=8000)
+                                except asyncio.TimeoutError:
+                                    ui.notify("⏱️ Tempo limite excedido ao conectar ao Google Drive. Verifique a internet ou o JSON da Service Account no Admin.", color='warning', timeout=8000)
                                 except Exception as ex_cp:
-                                    n_wait.dismiss()
                                     ui.notify(f"Erro ao criar pasta no Drive: {ex_cp}", color='negative', timeout=8000)
+                                finally:
+                                    try:
+                                        n_wait.dismiss()
+                                    except Exception:
+                                        pass
                             ui.button('📂 Criar Pasta no Drive', on_click=criar_pasta_manual).props('unelevated color=blue-7 dense').classes('text-[10px] px-2')
                     in_drive_url = ui.input(
                         placeholder='https://drive.google.com/drive/folders/...',

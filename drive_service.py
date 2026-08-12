@@ -7,8 +7,12 @@ Utiliza Service Account para autenticação server-to-server.
 import json
 import io
 import os
+import socket
 import traceback
 from datetime import datetime, timedelta
+
+# Define timeout global para conexões de rede do Google Drive (12 segundos)
+socket.setdefaulttimeout(12)
 
 # Google Drive API imports
 try:
