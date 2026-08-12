@@ -3177,15 +3177,11 @@ def register_common_handlers(bot):
             pass
 
 
-    @bot.message_handler(content_types=['photo'])
+    @bot.message_handler(content_types=['photo'], func=lambda m: m.chat.id in chat_states and chat_states[m.chat.id].get('action') == 'cadastro_facial')
     async def handle_photo_messages(message):
         import os
         chat_id = message.chat.id
-        if chat_id not in chat_states:
-            await bot.reply_to(message, "💡 Se deseja cadastrar seu rosto, primeiro vá em Configurações ➔ Cadastro Facial.")
-            return
-            
-        state = chat_states[chat_id]
+        state = chat_states.get(chat_id, {})
         if state.get('action') == 'cadastro_facial' and state.get('step') == 'send_selfie':
             try:
                 file_info = message.photo[-1]
