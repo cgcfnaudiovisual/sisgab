@@ -469,27 +469,40 @@ async def upload_photos_to_drive(bot, chat_id, photos_info, demanda):
     """Downloads photos from Telegram and uploads to Drive event folder."""
     import drive_service
     import os
+    import asyncio
     from database import get_bot_db_connection
     import uuid
     from datetime import datetime
 
     success_count = 0
     
+    drive_service.reset_drive_service()
+    
     folder_id = demanda.get('drive_folder_id')
+    if not folder_id and demanda.get('drive_url'):
+        url = demanda.get('drive_url', '')
+        if 'folders/' in url:
+            folder_id = url.split('folders/')[-1].split('?')[0].split('/')[0]
+
     if not folder_id:
         titulo = demanda.get('titulo_evento', 'Evento sem titulo')
         dt_evento = demanda.get('data_evento', datetime.now().strftime('%Y-%m-%d'))
-        res = drive_service.criar_pasta_evento(titulo, dt_evento)
-        if res:
+        res = await asyncio.to_thread(drive_service.criar_pasta_evento, titulo, dt_evento)
+        if res and res.get('evento_folder_id'):
             folder_id = res.get('evento_folder_id')
             db = get_bot_db_connection()
-            if db:
-                db.table('demandas_comunicacao').update({
-                    'drive_folder_id': folder_id,
-                    'drive_url': res.get('evento_link')
-                }).eq('id', demanda['id']).execute()
+            if db and demanda.get('id'):
+                try:
+                    db.table('demandas_comunicacao').update({
+                        'drive_folder_id': folder_id,
+                        'drive_url': res.get('evento_link')
+                    }).eq('id', demanda['id']).execute()
+                    demanda['drive_url'] = res.get('evento_link')
+                except Exception:
+                    pass
     
     if not folder_id:
+        await bot.send_message(chat_id, "⚠️ Não foi possível determinar ou criar a pasta no Google Drive. Verifique as credenciais no Admin.")
         return 0
         
     db = get_bot_db_connection()
@@ -501,22 +514,27 @@ async def upload_photos_to_drive(bot, chat_id, photos_info, demanda):
             
             filename = photo.get('file_name', f"photo_{uuid.uuid4().hex[:8]}.jpg")
             
-            upload_res = drive_service.upload_file(downloaded_file, filename, folder_id)
+            upload_res = await asyncio.wait_for(
+                asyncio.to_thread(drive_service.upload_file, downloaded_file, filename, folder_id),
+                timeout=15.0
+            )
             if upload_res:
                 success_count += 1
-                if db:
+                if db and demanda.get('id'):
                     try:
                         db.table('processed_photos').insert({
                             'demanda_id': demanda['id'],
+                            'event_name': demanda.get('titulo_evento', ''),
                             'file_id': photo['file_id'],
                             'file_name': filename,
+                            'drive_link': upload_res.get('webViewLink', ''),
                             'uploaded_by': str(chat_id),
                             'created_at': datetime.now().isoformat()
                         }).execute()
                     except Exception as db_err:
                         print(f"Erro ao registrar foto processada: {db_err}")
         except Exception as e:
-            print(f"Erro no upload da foto {photo['file_id']}: {e}")
+            print(f"Erro no upload da foto {photo.get('file_id')}: {e}")
             
     return success_count
 
