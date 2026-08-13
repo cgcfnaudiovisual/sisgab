@@ -227,13 +227,10 @@ def render_drive_grid(fotos, page_state, is_operator, selecao_fid, theme, is_sel
                         ui.badge(f'{n_sel} selecionada(s)', color='amber').classes('text-xs text-black font-bold')
 
                         def baixar_selecionadas():
-                            count = 0
-                            for f in fotos:
-                                if f.get('id') in selected_set:
-                                    link = f.get('webContentLink') or f.get('webViewLink') or f"https://drive.google.com/uc?id={f.get('id')}&export=download"
-                                    ui.open(link, new_tab=True)
-                                    count += 1
-                            ui.notify(f'🚀 Abrindo download de {count} foto(s)...', color='info')
+                            id_list = ",".join(list(selected_set))
+                            zip_url = f"/api/drive_download_zip?ids={id_list}"
+                            ui.open(zip_url, new_tab=True)
+                            ui.notify(f'🚀 Gerando e baixando arquivo ZIP com {n_sel} foto(s)...', color='positive')
 
                         ui.button(f'⬇️ Baixar Seleção ({n_sel})', icon='download', on_click=baixar_selecionadas).props(
                             'unelevated color=cyan text-color=black bold dense'
@@ -246,13 +243,13 @@ def render_drive_grid(fotos, page_state, is_operator, selecao_fid, theme, is_sel
                             ).classes('text-xs px-3')
 
                     def baixar_tudo():
-                        count = 0
-                        for f in fotos:
-                            link = f.get('webContentLink') or f.get('webViewLink') or f"https://drive.google.com/uc?id={f.get('id')}&export=download"
-                            if link:
-                                ui.open(link, new_tab=True)
-                                count += 1
-                        ui.notify(f'🚀 Baixando {count} foto(s) do evento...', color='positive')
+                        if is_selecao and selecao_fid:
+                            zip_url = f"/api/drive_download_zip?folder_id={selecao_fid}"
+                        else:
+                            id_list = ",".join([f['id'] for f in fotos if f.get('id')])
+                            zip_url = f"/api/drive_download_zip?ids={id_list}"
+                        ui.open(zip_url, new_tab=True)
+                        ui.notify(f'🚀 Gerando e baixando arquivo ZIP com todas as {total_fotos} foto(s)...', color='positive')
 
                     ui.button(f'📦 Baixar Todas ({total_fotos})', icon='cloud_download', on_click=baixar_tudo).props(
                         'outline color=cyan dense'
@@ -306,11 +303,11 @@ def render_drive_grid(fotos, page_state, is_operator, selecao_fid, theme, is_sel
                         badge_col = 'amber' if is_selecao else 'blue-grey'
                         ui.badge(badge_txt, color=badge_col).classes('text-[9px]')
                         
-                        d_link = f.get('webContentLink') or f.get('webViewLink') or (f"https://drive.google.com/uc?id={fid}&export=download" if fid else None)
-                        if d_link:
-                            ui.button('Baixar', icon='download', on_click=lambda _, l=d_link: ui.open(l, new_tab=True)).props(
-                                'unelevated color=cyan text-color=black dense bold'
-                            ).classes('text-[10px] px-2 py-0.5').tooltip('Baixar esta foto')
+                        fname_esc = f.get('name', 'foto.jpg')
+                        d_url = f"/api/drive_download/{fid}?filename={fname_esc}"
+                        ui.button('Baixar', icon='download', on_click=lambda _, u=d_url: ui.open(u, new_tab=True)).props(
+                            'unelevated color=cyan text-color=black dense bold'
+                        ).classes('text-[10px] px-2 py-0.5').tooltip('Baixar foto HD')
 
     _draw_grid_content()
 

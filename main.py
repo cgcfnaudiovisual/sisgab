@@ -208,6 +208,53 @@ def api_get_templates_graficos():
         return {"error": str(e)}, 500
 
 
+from fastapi.responses import Response, RedirectResponse
+import zipfile
+import io
+
+@app.get('/api/drive_download/{file_id}')
+def api_drive_download_file(file_id: str, filename: str = None):
+    import drive_service
+    file_bytes = drive_service.download_file(file_id)
+    if file_bytes:
+        fname = filename or f"foto_{file_id[:8]}.jpg"
+        if not fname.lower().endswith(('.jpg', '.jpeg', '.png')):
+            fname += ".jpg"
+        return Response(
+            content=file_bytes,
+            media_type='image/jpeg',
+            headers={'Content-Disposition': f'attachment; filename="{fname}"'}
+        )
+    return RedirectResponse(url=f"https://drive.google.com/uc?id={file_id}&export=download")
+
+
+@app.get('/api/drive_download_zip')
+def api_drive_download_zip(ids: str = '', folder_id: str = ''):
+    import drive_service
+    file_ids = [i.strip() for i in ids.split(',') if i.strip()]
+    
+    if not file_ids and folder_id:
+        files = drive_service.list_files(folder_id, mime_filter='image/', page_size=50)
+        file_ids = [f['id'] for f in files if f.get('id')]
+        
+    if not file_ids:
+        return Response(content="Nenhum arquivo selecionado.", status_code=400)
+        
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for idx, fid in enumerate(file_ids):
+            fbytes = drive_service.download_file(fid)
+            if fbytes:
+                zip_file.writestr(f"foto_{idx+1:02d}_{fid[:6]}.jpg", fbytes)
+                
+    zip_buffer.seek(0)
+    return Response(
+        content=zip_buffer.getvalue(),
+        media_type='application/zip',
+        headers={'Content-Disposition': 'attachment; filename="acervo_fotos.zip"'}
+    )
+
+
 import theme
 from logo_base64 import LOGO_BASE64
 
