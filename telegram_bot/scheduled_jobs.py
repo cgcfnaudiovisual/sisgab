@@ -18,8 +18,9 @@ async def send_daily_morning_report(bot, chat_id=None):
         if not conn:
             return
             
-        hoje_str = datetime.now().strftime('%Y-%m-%d')
-        hoje_br = datetime.now().strftime('%d/%m/%Y')
+        now_br = datetime.utcnow() - timedelta(hours=3)
+        hoje_str = now_br.strftime('%Y-%m-%d')
+        hoje_br = now_br.strftime('%d/%m/%Y')
         
         # 1. Carrega pautas do dia
         res_pautas = conn.table('demandas_comunicacao').select('*').eq('data_evento', hoje_str).eq('status', 'aprovada').execute()

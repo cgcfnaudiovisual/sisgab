@@ -1299,7 +1299,7 @@ def register_common_handlers(bot):
                         hr = d.get('hora_evento', 'N/I')
                         loc = d.get('local_evento', 'N/I')
                         st = str(d.get('status', 'pendente')).upper()
-                        obs = d.get('observacoes', '') or 'Nenhuma'
+                        obs = d.get('observacoes') or (d.get('autoridades') if 'Obs:' in str(d.get('autoridades')) else '') or 'Nenhuma'
                         solicitante = d.get('solicitante_nome', 'N/I')
                         setor = d.get('setor', 'N/I')
                         contato = d.get('contato', 'N/I')
@@ -1749,6 +1749,8 @@ def register_common_handlers(bot):
             "🔌 Cautelas Ativas", "🤖 Digerir Pauta (IA)",
             "📋 Pronto CheGab", "📊 Relatório Executivo",
             "🟢 Dar Presença", "📋 Dar Presença",
+            "📸 Enviar Fotos / Drive", "📸 Enviar Fotos",
+            "🙋 Minhas Fotos (IA)", "📸 Minhas Fotos",
             "➕ Criar Demanda", "🪑 Placas JADE",
             "⚡ Missão Rápida", "ℹ️ Ajuda",
             "📸 Cadastro Facial", "🔍 Buscar Minhas Fotos",
@@ -1886,7 +1888,7 @@ def register_common_handlers(bot):
             elif text in ("📸 Cadastro Facial", "cadastro facial"):
                 chat_states[chat_id] = {
                     'action': 'cadastro_facial',
-                    'step': 'await_photo',
+                    'step': 'send_selfie',
                     'user': profile
                 }
                 await bot.reply_to(message, "📸 **CADASTRO FACIAL**\n\nPor favor, envie uma foto nítida do seu rosto no chat para cadastrar a biometria facial.")
@@ -2687,7 +2689,12 @@ def register_common_handlers(bot):
                 sel_set = state['data'].setdefault('selected_services_set', set())
                 
                 # Tratar botões de seleção no teclado de resposta rápida
-                if "Fotográfica" in text:
+                if "VOLTAR" in text.upper() or text in ["⬅️ Voltar", "voltar"]:
+                    state['step'] = 'autoridades'
+                    from .keyboards import get_authorities_keyboard
+                    await bot.reply_to(message, "[Passo 8/9] 👑 Quais **Autoridades** estarão presentes?", reply_markup=get_authorities_keyboard(), parse_mode='Markdown')
+                    return
+                elif "Fotográfica" in text:
                     if "foto" in sel_set: sel_set.remove("foto")
                     else: sel_set.add("foto")
                 elif "Vídeo" in text:
@@ -3230,7 +3237,7 @@ def register_common_handlers(bot):
                 hr = d.get('hora_evento', 'N/I')
                 loc = d.get('local_evento', 'N/I')
                 st = str(d.get('status', 'pendente')).upper()
-                obs = d.get('observacoes', '') or 'Nenhuma'
+                obs = d.get('observacoes') or (d.get('autoridades') if 'Obs:' in str(d.get('autoridades')) else '') or 'Nenhuma'
                 solicitante = d.get('solicitante_nome', 'N/I')
                 setor = d.get('setor', 'N/I')
                 contato = d.get('contato', 'N/I')
@@ -3459,7 +3466,7 @@ def register_common_handlers(bot):
                     'local_evento': local_ev,
                     'status': 'aprovada',
                     'tipo_cobertura': '["foto", "video"]',
-                    'descricao': f"Transcrevendo de áudio: {transcricao}"
+                    'autoridades': f"Obs: Transcrição de áudio: {transcricao}"
                 }
                 res_ins = db.table('demandas_comunicacao').insert(novo_reg).execute()
                 if res_ins.data:
