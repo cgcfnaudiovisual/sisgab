@@ -377,11 +377,12 @@ def open_editar_pauta_dialog(demanda, callback_refresh=None):
                             try:
                                 res = db.table('demandas_comunicacao').update(update_payload).eq('id', dem_id).execute()
                             except Exception as e_sup:
-                                if 'drive_url' in str(e_sup):
-                                    update_payload.pop('drive_url', None)
-                                    res = db.table('demandas_comunicacao').update(update_payload).eq('id', dem_id).execute()
-                                else:
-                                    raise e_sup
+                                update_payload.pop('drive_url', None)
+                                res = db.table('demandas_comunicacao').update(update_payload).eq('id', dem_id).execute()
+
+                            if d_url_val:
+                                from database import salvar_demanda_drive_link
+                                salvar_demanda_drive_link(dem_id, in_titulo.value.strip(), d_url_val)
 
                             # Sincroniza também no banco SQLite local
                             try:

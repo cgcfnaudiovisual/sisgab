@@ -84,25 +84,18 @@ def get_local_photos(pauta_id):
 
 
 def get_drive_folder_id(pauta: dict) -> str:
-    """Extrai drive_folder_id de uma demanda com fallbacks."""
+    """Extrai drive_folder_id de uma demanda com fallbacks universais."""
+    if not pauta or not isinstance(pauta, dict):
+        return None
     fid = pauta.get('drive_folder_id')
     if fid:
         return fid
-    url = pauta.get('drive_url', '') or ''
-    if 'folders/' in url:
+    from database import get_demanda_drive_url
+    url = get_demanda_drive_url(pauta)
+    if url and 'folders/' in url:
         return url.split('folders/')[-1].split('?')[0].split('/')[0]
-    db = get_db_connection()
-    if db and pauta.get('titulo_evento'):
-        try:
-            res = db.table('processed_photos').select('drive_link').eq(
-                'event_name', pauta['titulo_evento']
-            ).eq('filename', 'drive_folder_link').execute()
-            if res.data and res.data[0].get('drive_link'):
-                u = res.data[0]['drive_link']
-                if 'folders/' in u:
-                    return u.split('folders/')[-1].split('?')[0].split('/')[0]
-        except Exception:
-            pass
+    if url and len(url) > 20 and '/' not in url:
+        return url
     return None
 
 

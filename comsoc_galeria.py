@@ -166,9 +166,10 @@ def render_page(evento_id: str = None, **kwargs):
                         for eid, ev in list(pautas_data.items())[:20]:
                             data_ev = ev.get('data_evento', '')[:10]
                             titulo = ev.get('titulo_evento', 'Sem titulo')
+                            from database import get_demanda_drive_url
                             dfid = get_drive_folder_id(ev)
+                            drive_url = get_demanda_drive_url(ev)
                             n_local = len(get_local_photos(eid))
-                            drive_url = ev.get('drive_url', '')
                             is_sel = str(eid) == str(page_state['pauta_id'])
                             row_bg = 'background: rgba(0,229,255,0.08);' if is_sel else ''
 
@@ -184,17 +185,20 @@ def render_page(evento_id: str = None, **kwargs):
                                 with ui.element('td').classes('q-pa-xs text-center'):
                                     if n_local > 0:
                                         ui.badge(str(n_local), color='cyan').classes('text-[9px]')
+                                    elif dfid or drive_url:
+                                        ui.badge('Nuvem', color='blue-grey').classes('text-[8px]')
                                     else:
                                         ui.label('-').classes('text-[10px] text-grey-6')
                                 with ui.element('td').classes('q-pa-xs text-center'):
-                                    if dfid:
+                                    if dfid or drive_url:
                                         ui.icon('cloud_done', size='14px', color='green')
                                     else:
                                         ui.icon('cloud_off', size='14px', color='grey')
                                 with ui.element('td').classes('q-pa-xs'):
                                     with ui.row().classes('gap-1 items-center'):
-                                        if drive_url:
-                                            ui.button(icon='open_in_new', on_click=lambda _, u=drive_url: ui.open(u, new_tab=True)).props(
+                                        if drive_url or dfid:
+                                            target_link = drive_url or f"https://drive.google.com/drive/folders/{dfid}"
+                                            ui.button(icon='open_in_new', on_click=lambda _, u=target_link: ui.open(u, new_tab=True)).props(
                                                 'flat dense round size=xs color=cyan'
                                             ).tooltip('Abrir pasta no Drive')
                                         ui.button(icon='photo_library', on_click=lambda _, _id=eid: _on_event_change(_id)).props(
