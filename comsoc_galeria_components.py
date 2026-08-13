@@ -190,113 +190,129 @@ def render_drive_grid(fotos, page_state, is_operator, selecao_fid, theme, is_sel
     all_ids = {f.get('id') for f in fotos if f.get('id')}
     selected_set = page_state.setdefault('selected_files', set())
 
-    # ─── BARRA DE FERRAMENTAS E SELEÇÃO EM LOTE ───
-    with ui.column().classes('w-full gap-2 q-mb-md'):
-        with ui.row().classes('w-full items-center justify-between wrap gap-2 bg-slate-900/60 p-3 rounded-xl border border-cyan-500/20'):
-            with ui.row().classes('items-center gap-2'):
-                def toggle_cur():
-                    page_state['curation_mode'] = not page_state.get('curation_mode', False)
+    @ui.refreshable
+    def _draw_grid_content():
+        # ─── BARRA DE FERRAMENTAS E SELEÇÃO EM LOTE ───
+        with ui.column().classes('w-full gap-2 q-mb-md'):
+            with ui.row().classes('w-full items-center justify-between wrap gap-2 bg-slate-900/80 p-3 rounded-xl border border-cyan-500/30'):
+                with ui.row().classes('items-center gap-2'):
+                    def toggle_cur():
+                        page_state['curation_mode'] = not page_state.get('curation_mode', False)
+                        _draw_grid_content.refresh()
 
-                cur_active = page_state.get('curation_mode', False)
-                btn_cur_col = 'amber' if cur_active else 'cyan-9'
-                ui.button(
-                    'Modo Curadoria: LIGADO' if cur_active else '⚡ Ativar Modo Curadoria',
-                    icon='brush' if cur_active else 'edit',
-                    on_click=toggle_cur
-                ).props(f'dense unelevated color={btn_cur_col} text-color=white bold').classes('text-xs px-3')
+                    cur_active = page_state.get('curation_mode', False)
+                    btn_cur_col = 'amber' if cur_active else 'cyan-9'
+                    ui.button(
+                        'Modo Curadoria: LIGADO' if cur_active else '⚡ Ativar Modo Curadoria',
+                        icon='brush' if cur_active else 'edit',
+                        on_click=toggle_cur
+                    ).props(f'dense unelevated color={btn_cur_col} text-color=white bold').classes('text-xs px-3')
 
-                def select_all():
-                    selected_set.update(all_ids)
-                    render_drive_grid.refresh() if hasattr(render_drive_grid, 'refresh') else None
+                    def select_all():
+                        selected_set.update(all_ids)
+                        _draw_grid_content.refresh()
 
-                def deselect_all():
-                    selected_set.clear()
-                    render_drive_grid.refresh() if hasattr(render_drive_grid, 'refresh') else None
+                    def deselect_all():
+                        selected_set.clear()
+                        _draw_grid_content.refresh()
 
-                ui.button('☑️ Selecionar Todas', on_click=select_all).props('flat dense color=cyan').classes('text-xs')
-                ui.button('⬜ Desmarcar', on_click=deselect_all).props('flat dense color=grey-4').classes('text-xs')
+                    ui.button('☑️ Selecionar Todas', on_click=select_all).props('flat dense color=cyan').classes('text-xs')
+                    ui.button('⬜ Desmarcar', on_click=deselect_all).props('flat dense color=grey-4').classes('text-xs')
 
-            # Ações com selecionadas
-            n_sel = len(selected_set)
-            with ui.row().classes('items-center gap-2'):
-                if n_sel > 0:
-                    ui.badge(f'{n_sel} selecionada(s)', color='amber').classes('text-xs text-black font-bold')
+                # Ações de Download e Curadoria
+                n_sel = len(selected_set)
+                total_fotos = len(fotos)
+                with ui.row().classes('items-center gap-2'):
+                    if n_sel > 0:
+                        ui.badge(f'{n_sel} selecionada(s)', color='amber').classes('text-xs text-black font-bold')
 
-                    def baixar_selecionadas():
-                        count = 0
-                        for f in fotos:
-                            if f.get('id') in selected_set:
-                                link = f.get('webContentLink') or f.get('webViewLink')
-                                if link:
+                        def baixar_selecionadas():
+                            count = 0
+                            for f in fotos:
+                                if f.get('id') in selected_set:
+                                    link = f.get('webContentLink') or f.get('webViewLink') or f"https://drive.google.com/uc?id={f.get('id')}&export=download"
                                     ui.open(link, new_tab=True)
                                     count += 1
-                        ui.notify(f'🚀 Abrindo download de {count} foto(s)...', color='info')
+                            ui.notify(f'🚀 Abrindo download de {count} foto(s)...', color='info')
 
-                    ui.button(f'⬇️ Baixar ({n_sel})', on_click=baixar_selecionadas).props(
-                        'unelevated color=cyan-7 text-color=white dense'
-                    ).classes('text-xs')
+                        ui.button(f'⬇️ Baixar Seleção ({n_sel})', icon='download', on_click=baixar_selecionadas).props(
+                            'unelevated color=cyan text-color=black bold dense'
+                        ).classes('text-xs px-3')
 
-                    if is_operator and not is_selecao and selecao_fid:
-                        ui.button(f'⭐ Mover para SELEÇÃO ({n_sel})', icon='star',
-                                  on_click=lambda: _mover_selecao(page_state, selecao_fid)).props(
-                            'unelevated color=amber text-color=black bold dense'
-                        ).classes('text-xs')
+                        if is_operator and not is_selecao and selecao_fid:
+                            ui.button(f'⭐ Mover para SELEÇÃO ({n_sel})', icon='star',
+                                      on_click=lambda: _mover_selecao(page_state, selecao_fid)).props(
+                                'unelevated color=amber text-color=black bold dense'
+                            ).classes('text-xs px-3')
 
-    # ─── GRID REVOLUCIONÁRIO DE MINIATURAS (5 a 6 por linha, sem cortes) ───
-    with ui.element('div').classes('w-full gap-4').style(
-        'display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));'
-    ):
-        for f in fotos:
-            fid = f.get('id')
-            raw_thumb = f.get('thumbnailLink', '')
-            # Aumentar resolucao do thumbnail do Drive de 220px para 800px HD
-            if '=s220' in raw_thumb:
-                thumb = raw_thumb.replace('=s220', '=s800')
-            elif '=' in raw_thumb:
-                thumb = raw_thumb.split('=')[0] + '=s800'
-            else:
-                thumb = raw_thumb
+                    def baixar_tudo():
+                        count = 0
+                        for f in fotos:
+                            link = f.get('webContentLink') or f.get('webViewLink') or f"https://drive.google.com/uc?id={f.get('id')}&export=download"
+                            if link:
+                                ui.open(link, new_tab=True)
+                                count += 1
+                        ui.notify(f'🚀 Baixando {count} foto(s) do evento...', color='positive')
 
-            is_selected = fid in selected_set
-            border_style = 'border: 2px solid #ffc107; box-shadow: 0 0 12px rgba(255,193,7,0.4);' if is_selected else (
-                'border: 1px solid rgba(255,193,7,0.6);' if is_selecao else f'border: 1px solid {theme["border"]};'
-            )
+                    ui.button(f'📦 Baixar Todas ({total_fotos})', icon='cloud_download', on_click=baixar_tudo).props(
+                        'outline color=cyan dense'
+                    ).classes('text-xs px-3')
 
-            with ui.card().classes(
-                'q-pa-none no-shadow rounded-xl overflow-hidden cursor-pointer transition-all duration-200 hover:scale-[1.02]'
-            ).style(f'background: {theme["bg_editor"]}; {border_style}'):
+        # ─── GRID DE MINIATURAS (proporcao sem cortes, 260px min) ───
+        with ui.element('div').classes('w-full gap-4').style(
+            'display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));'
+        ):
+            for f in fotos:
+                fid = f.get('id')
+                raw_thumb = f.get('thumbnailLink', '')
+                if '=s220' in raw_thumb:
+                    thumb = raw_thumb.replace('=s220', '=s800')
+                elif '=' in raw_thumb:
+                    thumb = raw_thumb.split('=')[0] + '=s800'
+                else:
+                    thumb = raw_thumb
 
-                with ui.element('div').classes('relative w-full overflow-hidden').style(
-                    'height: 240px; background: #030a17; display: flex; align-items: center; justify-content: center;'
-                ):
-                    # Checkbox de selecao rapida
-                    def make_toggle(file_id=fid):
-                        def _toggle(e):
-                            if file_id in selected_set:
-                                selected_set.remove(file_id)
-                            else:
-                                selected_set.add(file_id)
-                        return _toggle
+                is_selected = fid in selected_set
+                border_style = 'border: 2px solid #ffc107; box-shadow: 0 0 12px rgba(255,193,7,0.4);' if is_selected else (
+                    'border: 1px solid rgba(255,193,7,0.6);' if is_selecao else f'border: 1px solid {theme["border"]};'
+                )
 
-                    ui.checkbox('', value=is_selected, on_change=make_toggle(fid)).classes(
-                        'absolute top-2 left-2 z-20 bg-black/60 rounded p-1'
-                    ).props('dark color=amber dense')
+                with ui.card().classes(
+                    'q-pa-none no-shadow rounded-xl overflow-hidden cursor-pointer transition-all duration-200 hover:scale-[1.02]'
+                ).style(f'background: {theme["bg_editor"]}; {border_style}'):
 
-                    # Imagem na proporção integral (object-contain sem cortar topo/lados)
-                    img = ui.image(thumb).style('max-height: 240px; width: 100%; object-fit: contain;')
-                    img.on('click', lambda _, fi=f: preview_drive_photo(fi, theme))
+                    with ui.element('div').classes('relative w-full overflow-hidden').style(
+                        'height: 240px; background: #030a17; display: flex; align-items: center; justify-content: center;'
+                    ):
+                        def make_toggle(file_id=fid):
+                            def _toggle(e):
+                                if file_id in selected_set:
+                                    selected_set.remove(file_id)
+                                else:
+                                    selected_set.add(file_id)
+                                _draw_grid_content.refresh()
+                            return _toggle
 
-                with ui.row().classes('w-full p-2 items-center justify-between bg-black/70 border-t border-white/5'):
-                    ui.label(f.get('name', '')).classes('text-[11px] text-grey-2 font-bold truncate flex-grow mr-1')
-                    badge_txt = '⭐ Seleção' if is_selecao else '☁️ Drive'
-                    badge_col = 'amber' if is_selecao else 'blue-grey'
-                    ui.badge(badge_txt, color=badge_col).classes('text-[9px]')
-                    
-                    if f.get('webContentLink') or f.get('webViewLink'):
-                        d_link = f.get('webContentLink') or f.get('webViewLink')
-                        ui.button(icon='download', on_click=lambda _, l=d_link: ui.open(l, new_tab=True)).props(
-                            'flat dense round size=xs color=cyan'
-                        ).tooltip('Baixar Foto HD')
+                        ui.checkbox('', value=is_selected, on_change=make_toggle(fid)).classes(
+                            'absolute top-2 left-2 z-20 bg-black/70 rounded p-1'
+                        ).props('dark color=amber dense')
+
+                        img = ui.image(thumb).style('max-height: 240px; width: 100%; object-fit: contain;')
+                        img.on('click', lambda _, fi=f: preview_drive_photo(fi, theme))
+
+                    with ui.row().classes('w-full p-2 items-center justify-between bg-slate-950 border-t border-white/5 gap-1'):
+                        ui.label(f.get('name', '')).classes('text-[11px] text-grey-2 font-bold truncate flex-grow')
+                        badge_txt = '⭐ Seleção' if is_selecao else '☁️ Drive'
+                        badge_col = 'amber' if is_selecao else 'blue-grey'
+                        ui.badge(badge_txt, color=badge_col).classes('text-[9px]')
+                        
+                        d_link = f.get('webContentLink') or f.get('webViewLink') or (f"https://drive.google.com/uc?id={fid}&export=download" if fid else None)
+                        if d_link:
+                            ui.button('Baixar', icon='download', on_click=lambda _, l=d_link: ui.open(l, new_tab=True)).props(
+                                'unelevated color=cyan text-color=black dense bold'
+                            ).classes('text-[10px] px-2 py-0.5').tooltip('Baixar esta foto')
+
+    _draw_grid_content()
 
 
 def preview_drive_photo(file_info, theme):
