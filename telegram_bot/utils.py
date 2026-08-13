@@ -563,7 +563,7 @@ async def upload_photos_to_drive(bot, chat_id, photos_info, demanda):
     return success_count
 
 async def enviar_links_acervo(bot, chat_id, demanda):
-    """Envia mensagem formatada no Telegram com links da pasta completa e SELEÇÃO."""
+    """Envia mensagem formatada no Telegram com links da pasta completa e SELEÇÃO com fallback seguro."""
     from database import get_demanda_drive_url
     
     titulo = (demanda.get('titulo_evento') or 'Evento').upper()
@@ -581,7 +581,7 @@ async def enviar_links_acervo(bot, chat_id, demanda):
     if drive_url:
         msg += f"📁 *Pasta Completa do Evento no Google Drive:*\n{drive_url}\n\n"
     else:
-        msg += "⚠️ *Link do Drive não disponível.*\n\n"
+        msg += "⚠️ *Link do Drive não disponível para este evento.*\n\n"
         
     msg += "📱 *Gerado pelo SisGAB — COMSOC / CGCFN*"
     
@@ -589,8 +589,19 @@ async def enviar_links_acervo(bot, chat_id, demanda):
         await bot.send_message(chat_id, msg, parse_mode='Markdown')
         return True
     except Exception as e:
-        print(f"[BOT] Erro ao enviar links do acervo: {e}")
-        return False
+        print(f"[BOT] Erro no Markdown de links do acervo ({e}). Tentando texto simples...")
+        try:
+            msg_plain = f"📸 ACERVO FOTOGRÁFICO: {titulo}\n📅 Data: {data_ev} | 📍 Local: {local}\n\n"
+            if drive_url:
+                msg_plain += f"📁 Pasta Completa no Google Drive:\n{drive_url}\n\n"
+            else:
+                msg_plain += "⚠️ Link do Drive não disponível.\n\n"
+            msg_plain += "📱 Gerado pelo SisGAB — COMSOC / CGCFN"
+            await bot.send_message(chat_id, msg_plain)
+            return True
+        except Exception as e2:
+            print(f"[BOT] Erro critico ao enviar links do acervo: {e2}")
+            return False
 
 
 async def enviar_album_hd_drive(bot, chat_id, selecao_folder_id, max_photos=12):

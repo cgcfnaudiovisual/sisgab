@@ -1003,13 +1003,31 @@ def register_common_handlers(bot):
         
         if data.startswith('acervo_links:'):
             ev_id = data.split(':')[1]
-            db = get_db_connection()
-            if db:
-                res = db.table('demandas_comunicacao').select('*').eq('id', int(ev_id)).execute()
-                if res.data:
-                    from .utils import enviar_links_acervo
-                    await enviar_links_acervo(bot, chat_id, res.data[0])
-            await bot.answer_callback_query(call.id)
+            await bot.answer_callback_query(call.id, 'Buscando links...')
+            ev_data = None
+            
+            # 1. Tenta pegar do mapa em memoria
+            if chat_id in chat_states and 'acervo_map' in chat_states[chat_id]:
+                ev_data = chat_states[chat_id]['acervo_map'].get(ev_id)
+                
+            # 2. Se nao encontrou em memoria, busca no banco
+            if not ev_data:
+                db = get_db_connection()
+                if db:
+                    try:
+                        ev_id_val = int(ev_id) if ev_id.isdigit() else ev_id
+                        res = db.table('demandas_comunicacao').select('*').eq('id', ev_id_val).execute()
+                        if res.data:
+                            ev_data = res.data[0]
+                    except Exception as e_db:
+                        print(f"[ACERVO LINKS DB ERR] {e_db}")
+                        
+            if ev_data:
+                from .utils import enviar_links_acervo
+                await enviar_links_acervo(bot, chat_id, ev_data)
+            else:
+                await bot.send_message(chat_id, "⚠️ Evento não encontrado.")
+                
             clear_state(chat_id)
             return
 
