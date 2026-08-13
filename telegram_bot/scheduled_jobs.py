@@ -186,6 +186,7 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
             if not ef_data: return None, set(), {}
 
             respondidos = {}
+            respondidos_tids = set()
             try:
                 res_esc = conn.table('escala_diaria').select('nome, cargo').eq('data', hoje_str).execute()
                 if res_esc and res_esc.data:
@@ -198,23 +199,30 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
                 pass
 
             try:
-                res_pr = conn.table('presenca_diaria').select('nome_guerra, status').eq('data', hoje_str).execute()
+                res_pr = conn.table('presenca_diaria').select('nome_guerra, telegram_id, user_id, status').eq('data', hoje_str).execute()
                 if res_pr and res_pr.data:
                     for p in res_pr.data:
                         st = str(p.get('status') or '').strip().upper()
                         if st and st not in ('PENDENTE', 'NONE', 'NULL'):
                             ng = str(p.get('nome_guerra') or '').strip().upper()
+                            p_tid = str(p.get('telegram_id') or '').strip()
+                            p_uid = str(p.get('user_id') or '').strip()
                             if ng: respondidos[ng] = st
+                            if p_tid: respondidos_tids.add(p_tid)
+                            if p_uid: respondidos_tids.add(p_uid)
             except Exception:
                 pass
             
             try:
-                res_ext = conn.table('presenca_diaria').select('nome_guerra, data_fim').in_('status', ['FE', 'L', 'DM']).lte('data', hoje_str).execute()
+                res_ext = conn.table('presenca_diaria').select('nome_guerra, telegram_id, data_fim').in_('status', ['FE', 'L', 'DM']).lte('data', hoje_str).execute()
                 if res_ext and res_ext.data:
                     for item in res_ext.data:
                         df = item.get('data_fim')
                         if df and df >= hoje_str:
-                            respondidos[item.get('nome_guerra', '').upper()] = 'AFASTADO'
+                            ng_ext = item.get('nome_guerra', '').upper()
+                            e_tid = str(item.get('telegram_id') or '').strip()
+                            if ng_ext: respondidos[ng_ext] = 'AFASTADO'
+                            if e_tid: respondidos_tids.add(e_tid)
             except Exception:
                 pass
                 
@@ -239,12 +247,12 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
             except Exception:
                 pass
 
-            return ef_data, respondidos, user_tg_map
+            return ef_data, respondidos, respondidos_tids, user_tg_map
         except Exception as e_f:
             print(f"[REMINDER FETCH ERR] {e_f}")
-            return None, {}, {}
+            return None, {}, set(), {}
 
-    ef_data, respondidos, user_tg_map = await asyncio.to_thread(_fetch_reminder_data)
+    ef_data, respondidos, respondidos_tids, user_tg_map = await asyncio.to_thread(_fetch_reminder_data)
     if not ef_data:
         return 0
 
@@ -284,9 +292,9 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
         
         if nome_g and tg_id and str(tg_id).strip():
             tid = str(tg_id).strip()
-            if nome_g in respondidos:
-                status = respondidos[nome_g]
-                print(f'[15MIN-CHECK] Militar {nome_g} telegram_id={tid} -> status={status}, skipping reminder')
+            is_respondido = (tid in respondidos_tids) or (nome_g in respondidos) or any(w in respondidos for w in nome_g.split() if len(w) > 2)
+            if is_respondido:
+                print(f'[15MIN-CHECK] Militar {nome_g} telegram_id={tid} -> presenca ok, skipping reminder')
             else:
                 try:
                     personalized_msg = f"{hdr}\n\n👤 *Militar:* {pg} {nome_g}\n{body}"
