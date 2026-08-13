@@ -44,7 +44,90 @@ def get_demanda_drive_url(demanda: dict) -> str:
                 return url_part
         except Exception:
             pass
+
+    # Fallback 3: consultar na tabela processed_photos
+    ev_title = demanda.get('titulo_evento')
+    d_id = demanda.get('id')
+    if ev_title or d_id:
+        try:
+            db = get_db_connection()
+            if db:
+                q = db.table('processed_photos').select('drive_link').eq('filename', 'drive_folder_link')
+                if ev_title:
+                    q = q.eq('event_name', ev_title)
+                elif d_id:
+                    q = q.eq('demanda_id', d_id)
+                res = q.execute()
+                if res.data and res.data[0].get('drive_link'):
+                    return res.data[0]['drive_link']
+        except Exception:
+            pass
+
     return ""
+
+
+def salvar_demanda_drive_link(demanda_id: int, titulo_evento: str, drive_url: str, drive_folder_id: str = None) -> bool:
+    """Salva/vincula o link do Drive de um evento de forma resiliente em 3 camadas de dados."""
+    if not drive_url or not str(drive_url).strip():
+        return False
+        
+    url = str(drive_url).strip()
+    fid = drive_folder_id or (url.split('folders/')[-1].split('?')[0].split('/')[0] if 'folders/' in url else url)
+    db = get_db_connection()
+    if not db:
+        return False
+
+    success = False
+
+    # 1. Tentar salvar nas colunas da tabela demandas_comunicacao
+    if demanda_id:
+        try:
+            db.table('demandas_comunicacao').update({
+                'drive_url': url,
+                'drive_folder_id': fid
+            }).eq('id', demanda_id).execute()
+            success = True
+        except Exception:
+            # Fallback 2: Embutir tag [DRIVE: url] no campo autoridades/observacoes
+            try:
+                res = db.table('demandas_comunicacao').select('autoridades, observacoes').eq('id', demanda_id).execute()
+                if res.data:
+                    current_obs = str(res.data[0].get('autoridades') or res.data[0].get('observacoes') or '')
+                    import re
+                    clean_obs = re.sub(r'\[DRIVE:.*?\]', '', current_obs).strip()
+                    new_obs = f"{clean_obs} [DRIVE: {url}]".strip()
+                    db.table('demandas_comunicacao').update({'autoridades': new_obs}).eq('id', demanda_id).execute()
+                    success = True
+            except Exception:
+                pass
+
+    # 3. Salvar/atualizar na tabela processed_photos como registro oficial de pasta
+    if titulo_evento or demanda_id:
+        try:
+            payload = {
+                'filename': 'drive_folder_link',
+                'drive_link': url,
+                'event_name': titulo_evento or 'Evento'
+            }
+            if demanda_id:
+                payload['demanda_id'] = demanda_id
+                
+            q = db.table('processed_photos').select('id').eq('filename', 'drive_folder_link')
+            if titulo_evento:
+                q = q.eq('event_name', titulo_evento)
+            elif demanda_id:
+                q = q.eq('demanda_id', demanda_id)
+            exist = q.execute()
+
+            if exist.data:
+                db.table('processed_photos').update(payload).eq('id', exist.data[0]['id']).execute()
+            else:
+                db.table('processed_photos').insert(payload).execute()
+            success = True
+        except Exception as ex:
+            print(f"[DB] Erro salvando link no processed_photos: {ex}")
+
+    return success
 
 
 def get_bot_db_connection():

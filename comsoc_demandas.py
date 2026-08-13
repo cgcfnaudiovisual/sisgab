@@ -1107,6 +1107,9 @@ def render_page(autofill: str = None):
                                     nonlocal edit_id
                                     if edit_id:
                                         _safe_execute_db(lambda d_payload: db.table('demandas_comunicacao').update(d_payload).eq('id', edit_id), registro)
+                                        if d_url_val:
+                                            from database import salvar_demanda_drive_link
+                                            salvar_demanda_drive_link(edit_id, tit_ev, d_url_val)
                                         hist = {
                                             'demanda_id': edit_id,
                                             'data_hora': datetime.now().isoformat(),

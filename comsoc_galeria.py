@@ -361,10 +361,8 @@ def render_page(evento_id: str = None, **kwargs):
                 if not v: return
                 fid = v.split('folders/')[-1].split('?')[0].split('/')[0] if 'folders/' in v else v
                 pauta['drive_folder_id'] = fid; pauta['drive_url'] = v
-                c = get_db_connection()
-                if c and pauta.get('id'):
-                    try: c.table('demandas_comunicacao').update({'drive_folder_id': fid, 'drive_url': v}).eq('id', pauta['id']).execute()
-                    except Exception: pass
+                from database import salvar_demanda_drive_link
+                salvar_demanda_drive_link(pauta.get('id'), pauta.get('titulo_evento'), v, fid)
                 ui.notify('Link vinculado!', color='success'); dlg.close(); render_main_content.refresh()
             with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
                 ui.button('Cancelar', on_click=dlg.close).props('flat color=grey')
@@ -379,10 +377,8 @@ def render_page(evento_id: str = None, **kwargs):
             res = await asyncio.wait_for(asyncio.to_thread(drive_service.criar_pasta_evento, pauta.get('titulo_evento', ''), pauta.get('data_evento', '')), timeout=15.0)
             if res and res.get('evento_link'):
                 pauta['drive_folder_id'] = res['evento_folder_id']; pauta['drive_url'] = res['evento_link']
-                c = get_db_connection()
-                if c and pauta.get('id'):
-                    try: c.table('demandas_comunicacao').update({'drive_folder_id': res['evento_folder_id'], 'drive_url': res['evento_link']}).eq('id', pauta['id']).execute()
-                    except Exception: pass
+                from database import salvar_demanda_drive_link
+                salvar_demanda_drive_link(pauta.get('id'), pauta.get('titulo_evento'), res['evento_link'], res['evento_folder_id'])
                 ui.notify('Pasta criada!', color='success'); render_main_content.refresh()
             else:
                 ui.notify('Falha ao criar pasta. Verifique credenciais.', color='warning')
