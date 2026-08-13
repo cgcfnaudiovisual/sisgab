@@ -14,20 +14,76 @@ GALERIA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets',
 
 # ─── Busca Inteligente (Hibrida: Fuzzy + IA) ─────────────────────────
 
+import re
+
+MONTH_MAP = {
+    'JANEIRO': '01', 'JAN': '01',
+    'FEVEREIRO': '02', 'FEV': '02',
+    'MARCO': '03', 'MARÇO': '03', 'MAR': '03',
+    'ABRIL': '04', 'ABR': '04',
+    'MAIO': '05', 'MAI': '05',
+    'JUNHO': '06', 'JUN': '06',
+    'JULHO': '07', 'JUL': '07',
+    'AGOSTO': '08', 'AGO': '08',
+    'SETEMBRO': '09', 'SET': '09',
+    'OUTUBRO': '10', 'OUT': '10',
+    'NOVEMBRO': '11', 'NOV': '11',
+    'DEZEMBRO': '12', 'DEZ': '12'
+}
+
+def parse_date_query(query: str):
+    """Detecta datas no texto de busca (ex: '12 de agosto', '12/08', '12-08-2026')."""
+    q_up = query.upper().strip()
+    m = re.search(r'(\d{1,2})\s+DE\s+([A-ZÇ]+)(?:\s+DE\s+(\d{4}))?', q_up)
+    if m:
+        day = int(m.group(1))
+        m_str = m.group(2)
+        year = m.group(3)
+        if m_str in MONTH_MAP:
+            return f"{day:02d}", MONTH_MAP[m_str], year
+
+    m2 = re.search(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', q_up)
+    if m2:
+        return f"{int(m2.group(3)):02d}", f"{int(m2.group(2)):02d}", m2.group(1)
+
+    m3 = re.search(r'(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?', q_up)
+    if m3:
+        day = int(m3.group(1))
+        month = int(m3.group(2))
+        year = m3.group(3)
+        if 1 <= day <= 31 and 1 <= month <= 12:
+            return f"{day:02d}", f"{month:02d}", year
+
+    return None, None, None
+
+
 def fuzzy_search(query: str, options: dict) -> list:
-    """Busca fuzzy local por titulo de evento. Retorna lista de (id, score, label)."""
+    """Busca fuzzy local por titulo de evento com suporte a datas exatas."""
     query_up = query.strip().upper()
+    
+    # 1. Filtro estrito de data se informado dia e mês (ex: 12 de agosto)
+    day_str, month_str, year_str = parse_date_query(query)
+    if day_str and month_str:
+        target_pattern = f"{year_str}-{month_str}-{day_str}" if year_str else f"-{month_str}-{day_str}"
+        date_results = []
+        for eid, label in options.items():
+            if target_pattern in label:
+                date_results.append((eid, 0.99, label))
+        if date_results:
+            return date_results[:10]
+
     results = []
     for eid, label in options.items():
         label_up = label.upper()
         if query_up in label_up:
             results.append((eid, 0.95, label))
             continue
-        words = query_up.split()
-        word_hits = sum(1 for w in words if w in label_up)
-        if word_hits > 0:
-            results.append((eid, word_hits / max(len(words), 1) * 0.8, label))
-            continue
+        words = [w for w in query_up.split() if len(w) > 2 and w not in ('DE', 'DO', 'DA', 'EM')]
+        if words:
+            word_hits = sum(1 for w in words if w in label_up)
+            if word_hits > 0:
+                results.append((eid, word_hits / len(words) * 0.8, label))
+                continue
         ratio = SequenceMatcher(None, query_up, label_up).ratio()
         if ratio > 0.35:
             results.append((eid, ratio, label))

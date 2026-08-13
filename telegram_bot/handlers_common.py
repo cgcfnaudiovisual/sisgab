@@ -1790,24 +1790,34 @@ def register_common_handlers(bot):
                         clear_state(chat_id)
                         return
                     
-                    # Busca fuzzy
-                    query_up = query.upper()
+                    # Busca fuzzy com suporte a datas exatas (ex: 12 de agosto, 12/08)
+                    from comsoc_galeria_components import parse_date_query
+                    day_str, month_str, year_str = parse_date_query(query)
                     scored = []
-                    for ev in res.data:
-                        titulo = (ev.get('titulo_evento') or '').upper()
-                        data = (ev.get('data_evento') or '')
-                        full = f"{data} {titulo}"
-                        if query_up in full.upper():
-                            scored.append((ev, 0.95))
-                        else:
-                            words = query_up.split()
-                            hits = sum(1 for w in words if w in full.upper())
-                            if hits > 0:
-                                scored.append((ev, hits / max(len(words), 1) * 0.8))
-                            else:
-                                ratio = SequenceMatcher(None, query_up, titulo).ratio()
-                                if ratio > 0.3:
-                                    scored.append((ev, ratio))
+                    
+                    if day_str and month_str:
+                        target_pattern = f"{year_str}-{month_str}-{day_str}" if year_str else f"-{month_str}-{day_str}"
+                        for ev in res.data:
+                            data_ev = str(ev.get('data_evento') or '')
+                            if target_pattern in data_ev or (data_ev.endswith(f"-{month_str}-{day_str}")):
+                                scored.append((ev, 0.99))
+                    else:
+                        query_up = query.upper()
+                        words = [w for w in query_up.split() if len(w) > 2 and w not in ('DE', 'DO', 'DA', 'EM')]
+                        for ev in res.data:
+                            titulo = (ev.get('titulo_evento') or '').upper()
+                            data = (ev.get('data_evento') or '')
+                            full = f"{data} {titulo}".upper()
+                            if query_up in full:
+                                scored.append((ev, 0.95))
+                            elif words:
+                                hits = sum(1 for w in words if w in full)
+                                if hits > 0:
+                                    scored.append((ev, hits / len(words) * 0.8))
+                                else:
+                                    ratio = SequenceMatcher(None, query_up, titulo).ratio()
+                                    if ratio > 0.35:
+                                        scored.append((ev, ratio))
                     
                     scored.sort(key=lambda x: x[1], reverse=True)
                     top = scored[:8]
