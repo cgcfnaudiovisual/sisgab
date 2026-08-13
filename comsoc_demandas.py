@@ -801,7 +801,7 @@ def render_page(autofill: str = None):
                                     'suporte_evento': '📦 Suporte Logístico / Receptivo',
                                     'outra_tarefa': '⚡ Outra Tarefa Especial'
                                 },
-                                value=['design_arte'],
+                                value=[],
                                 label='Categoria(s) da Demanda',
                                 multiple=True,
                                 clearable=True
@@ -843,12 +843,12 @@ def render_page(autofill: str = None):
                             ).props('dark outlined dense option-dark').classes('w-full sm:w-1/3')
 
                         # Sigilo Checkbox
-                        chk_sigilo = ui.checkbox('Pauta Sigilosa / Reservada (Gabinete)').classes('text-xs text-amber-5')
+                        chk_sigilo = ui.checkbox('Pauta Sigilosa / Reservada (Gabinete)').classes('text-xs text-amber-5 q-my-xs')
 
                         # 📷 SELETOR DE SERVIÇOS & SUBCATEGORIAS MULTIPLAS
                         def get_service_options_for_categories(cats):
                             if isinstance(cats, str): cats = [cats]
-                            if not cats: cats = ['design_arte']
+                            if not cats: return {}
                             servs_map = {
                                 'audiovisual': {
                                     'foto': '📸 Cobertura Fotográfica',
@@ -887,15 +887,16 @@ def render_page(autofill: str = None):
                             res = {}
                             for c in cats:
                                 if c in servs_map: res.update(servs_map[c])
-                            return res if res else servs_map['design_arte']
+                            return res
 
                         tipo_cobertura = ui.select(
-                            options=get_service_options_for_categories(['design_arte']),
-                            value=['cardapio_design'],
-                            label='📷 Serviços & Pecas Específicas',
+                            options=get_service_options_for_categories([]),
+                            value=[],
+                            label='📷 Serviços & Peças Específicas',
                             multiple=True,
                             clearable=True
                         ).props('dark outlined dense option-dark use-chips').classes('w-full font-bold text-cyan q-my-xs')
+                        tipo_cobertura.set_visibility(False)
 
                         # ── SEÇÕES DINÂMICAS GRADUAIS POR CATEGORIA ──
                         
@@ -932,6 +933,7 @@ def render_page(autofill: str = None):
                             campos_audiovisual_container.set_visibility('audiovisual' in cats)
                             container_sec_design.set_visibility('design_arte' in cats or 'impressos_albuns' in cats)
                             container_sec_redacao.set_visibility('redacao_textos' in cats)
+                            tipo_cobertura.set_visibility(bool(cats))
                             
                             novas_opts = get_service_options_for_categories(cats)
                             cur_vals = tipo_cobertura.value or []
