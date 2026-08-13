@@ -392,43 +392,151 @@ def render_page(evento_id: str = None, **kwargs):
             try: n.dismiss()
             except Exception: pass
 
-    def _abrir_distribuir():
-        pauta = pautas_data.get(str(page_state['pauta_id']), {})
-        if not pauta.get('id'):
-            ui.notify('Selecione um evento.', color='warning'); return
-        dests = {}
+    def _abrir_distribuir(pauta):
+        from database import get_demanda_drive_url, get_db_connection
+        titulo = (pauta.get('titulo_evento') or 'Sem Título').upper()
+        data_ev = pauta.get('data_evento', '')
+        local_ev = pauta.get('local_evento', 'CGCFN')
+        drive_url = get_demanda_drive_url(pauta)
+        fid = get_drive_folder_id(pauta)
+        if not drive_url and fid:
+            drive_url = f"https://drive.google.com/drive/folders/{fid}"
+
+        # Carregar militares cadastrados no efetivo
+        militares_opts = {}
+        todos_tids = []
         c = get_db_connection()
         if c:
             try:
                 r = c.table('efetivo').select('nome_guerra, posto_grad, telegram_id').not_('telegram_id', 'is', 'null').execute()
                 if r.data:
                     for ef in r.data:
-                        tg = ef.get('telegram_id')
-                        if tg: dests[str(tg)] = f"{ef.get('posto_grad', '')} {ef.get('nome_guerra', '')} (ID: {tg})"
-            except Exception: pass
-        dests['manual'] = 'Inserir ID Manualmente...'
-        with ui.dialog() as dlg, ui.card().classes('q-pa-md max-w-sm w-full').style(f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'):
-            ui.label('Distribuir Acervo').classes('text-lg font-bold text-cyan q-mb-md')
-            sel = ui.select(dests, label='Destinatario', value=list(dests.keys())[0]).props('dark outlined dense w-full option-dark q-mb-sm')
-            man = ui.input('ID Telegram').props('dark outlined dense w-full q-mb-md').bind_visibility_from(sel, 'value', value=lambda v: v == 'manual')
-            async def do_d(acao):
-                cid = man.value if sel.value == 'manual' else sel.value
-                if not cid: ui.notify('Selecione destinatario.', color='warning'); return
-                import telegram_bot; from telegram_bot.utils import enviar_links_acervo, enviar_album_hd_drive
-                bot = telegram_bot.bot
-                if not bot: ui.notify('Bot nao inicializado.', color='negative'); return
-                dlg.close(); ui.notify('Iniciando...', color='info')
-                try:
-                    if acao in ['links', 'ambos']: await enviar_links_acervo(bot, cid, pauta); ui.notify('Links enviados!', color='success')
-                    if acao in ['album', 'ambos']:
-                        fid = get_drive_folder_id(pauta)
-                        if fid:
-                            sf = drive_service.find_folder('SELEÇÃO', fid)
-                            if sf: cnt = await enviar_album_hd_drive(bot, cid, sf); ui.notify(f'Album {cnt} fotos!', color='success')
-                except Exception as e: ui.notify(f'Erro: {e}', color='negative')
-            with ui.column().classes('w-full gap-2 mt-2'):
-                ui.button('Enviar Links', icon='link', on_click=lambda: do_d('links')).props('unelevated w-full color=primary text-color=black bold')
-                ui.button('Enviar Album HD', icon='photo_album', on_click=lambda: do_d('album')).props('unelevated w-full color=secondary text-color=black bold')
-                ui.button('Enviar Ambos', icon='send', on_click=lambda: do_d('ambos')).props('unelevated w-full color=accent text-color=white bold')
-                ui.button('Cancelar', on_click=dlg.close).props('flat w-full color=grey')
+                        tg = str(ef.get('telegram_id') or '').strip()
+                        if tg and tg.isdigit():
+                            lbl = f"{ef.get('posto_grad', '')} {ef.get('nome_guerra', '')}".strip()
+                            militares_opts[tg] = f"👤 {lbl} (ID: {tg})"
+                            todos_tids.append(tg)
+            except Exception:
+                pass
+
+        # Texto padrão formatado para WhatsApp / Telegram
+        texto_padrao = (
+            f"📸 *ACERVO FOTOGRÁFICO — CGCFN / COMSOC*\n\n"
+            f"📌 *Evento:* {titulo}\n"
+            f"📅 *Data:* {data_ev}\n"
+            f"📍 *Local:* {local_ev}\n\n"
+            f"📁 *Pasta Completa no Google Drive:*\n{drive_url or 'Link não disponível'}\n\n"
+            f"📱 *SisGAB — Comando-Geral do Corpo de Fuzileiros Navais*"
+        )
+
+        with ui.dialog() as dlg, ui.card().classes('q-pa-md max-w-xl w-full rounded-2xl').style(
+            f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]}; shadow: 0 0 30px rgba(0,229,255,0.2);'
+        ):
+            # Cabeçalho com Resumo do Evento
+            with ui.row().classes('w-full justify-between items-center q-mb-sm border-b border-cyan-500/20 pb-2'):
+                with ui.column().classes('gap-0'):
+                    ui.label('🚀 Distribuir Acervo & Links').classes('text-base font-bold text-cyan')
+                    ui.label(f"{titulo} ({data_ev})").classes('text-xs text-grey-4 truncate max-w-[380px]')
+                ui.button(icon='close', on_click=dlg.close).props('flat round dense text-color=white')
+
+            # Abas de Envio
+            with ui.tabs().classes('w-full text-cyan') as tabs:
+                tab_envio = ui.tab('envio', label='📲 Telegram', icon='send')
+                tab_zap = ui.tab('whatsapp', label='📋 Copiar Texto (Zap/Texto)', icon='content_copy')
+
+            with ui.tab_panels(tabs, value=tab_envio).classes('w-full bg-transparent p-0 q-mt-sm'):
+                
+                # ─── PAINEL TELEGRAM ───
+                with ui.tab_panel(tab_envio).classes('w-full p-0 gap-3'):
+                    mode_select = ui.select(
+                        {
+                            'nominal': '👤 Militar Específico do Efetivo',
+                            'todos': f'👥 Todos os Militares Cadastrados ({len(todos_tids)})',
+                            'manual': '💬 Digitar ID / Chat ID Manual'
+                        },
+                        value='nominal',
+                        label='Destinatário'
+                    ).props('dark outlined dense w-full option-dark').classes('q-mb-xs')
+
+                    mil_select = ui.select(
+                        militares_opts if militares_opts else {'none': 'Nenhum militar com Telegram registrado'},
+                        value=list(militares_opts.keys())[0] if militares_opts else 'none',
+                        label='Selecione o Militar'
+                    ).props('dark outlined dense w-full option-dark').bind_visibility_from(
+                        mode_select, 'value', value=lambda v: v == 'nominal'
+                    )
+
+                    manual_input = ui.input('ID Telegram (ex: 123456789)').props(
+                        'dark outlined dense w-full'
+                    ).bind_visibility_from(mode_select, 'value', value=lambda v: v == 'manual')
+
+                    # Opções do conteúdo
+                    with ui.row().classes('w-full items-center justify-between p-2 bg-slate-900/60 rounded-lg border border-white/5 q-my-xs'):
+                        chk_links = ui.checkbox('🔗 Links do Drive', value=True).props('dark color=cyan dense')
+                        chk_album = ui.checkbox('⭐ Álbum HD (Seleção)', value=True).props('dark color=amber dense')
+
+                    async def disparar_telegram():
+                        mode = mode_select.value
+                        target_ids = []
+                        if mode == 'nominal':
+                            if mil_select.value and mil_select.value != 'none':
+                                target_ids.append(mil_select.value)
+                        elif mode == 'todos':
+                            target_ids = todos_tids
+                        elif mode == 'manual':
+                            v = (manual_input.value or '').strip()
+                            if v: target_ids.append(v)
+
+                        if not target_ids:
+                            ui.notify('Selecione ou digite ao menos um destinatário.', color='warning')
+                            return
+
+                        import telegram_bot
+                        from telegram_bot.utils import enviar_links_acervo, enviar_album_hd_drive
+                        bot = telegram_bot.bot
+                        if not bot:
+                            ui.notify('Bot do Telegram não inicializado.', color='negative')
+                            return
+
+                        dlg.close()
+                        notif = ui.notification(f"🚀 Enviando acervo para {len(target_ids)} destinatário(s)...", timeout=0, spinner=True)
+                        sucessos = 0
+                        try:
+                            for cid in target_ids:
+                                if chk_links.value:
+                                    await enviar_links_acervo(bot, cid, pauta)
+                                if chk_album.value and fid:
+                                    sf = drive_service.find_folder('SELEÇÃO', fid) or fid
+                                    await enviar_album_hd_drive(bot, cid, sf)
+                                sucessos += 1
+                            notif.dismiss()
+                            ui.notify(f'✅ Acervo enviado com sucesso para {sucessos} destinatário(s)!', color='positive')
+                        except Exception as ex_send:
+                            notif.dismiss()
+                            ui.notify(f'Erro ao enviar: {ex_send}', color='negative')
+
+                    ui.button('🚀 Disparar Distribuição', icon='send', on_click=disparar_telegram).props(
+                        'unelevated color=cyan text-color=black bold w-full'
+                    ).classes('q-mt-sm')
+
+                # ─── PAINEL WHATSAPP / MENSAGEM PADRÃO ───
+                with ui.tab_panel(tab_zap).classes('w-full p-0 gap-3'):
+                    ui.label('Mensagem Padrão Pronta para Copiar:').classes('text-xs text-grey-4')
+                    txt_area = ui.textarea(value=texto_padrao).props('dark outlined dense w-full rows=6').classes('w-full font-mono text-xs')
+
+                    def copiar_texto():
+                        val = txt_area.value
+                        escaped = val.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+                        ui.run_javascript(f'navigator.clipboard.writeText(`{escaped}`);')
+                        ui.notify('📋 Texto copiado para a área de transferência!', color='positive', icon='content_copy')
+
+                    with ui.row().classes('w-full justify-between items-center q-mt-xs'):
+                        ui.button('📋 Copiar Texto Padrão', icon='content_copy', on_click=copiar_texto).props(
+                            'unelevated color=amber text-color=black bold'
+                        ).classes('text-xs')
+                        if drive_url:
+                            ui.button('📁 Abrir Drive', icon='open_in_new', on_click=lambda: ui.open(drive_url, new_tab=True)).props(
+                                'flat dense color=cyan'
+                            ).classes('text-xs')
+
         dlg.open()
