@@ -651,7 +651,7 @@ def build_layout_base():
     return ui.column().classes('w-full h-full p-0')
 
 
-def build_layout(page_func):
+def build_layout(page_func, **extra_kwargs):
     import inspect
     is_async = inspect.iscoroutinefunction(page_func)
     
@@ -661,7 +661,7 @@ def build_layout(page_func):
                 return
             container = build_layout_base()
             with container:
-                await page_func()
+                await page_func(**extra_kwargs)
         return wrapper
     else:
         def wrapper():
@@ -669,7 +669,7 @@ def build_layout(page_func):
                 return
             container = build_layout_base()
             with container:
-                page_func()
+                page_func(**extra_kwargs)
         return wrapper
 
 
@@ -859,9 +859,9 @@ def comsoc_assentos_page():
 
 
 @ui.page('/comsoc_galeria')
-def comsoc_galeria_page():
+def comsoc_galeria_page(evento_id: str = None):
     app.storage.user['current_path'] = '/comsoc_galeria'
-    build_layout(comsoc_galeria.render_page)()
+    build_layout(comsoc_galeria.render_page, evento_id=evento_id)()
 
 
 @ui.page('/comsoc_historico')

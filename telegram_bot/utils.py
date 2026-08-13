@@ -514,6 +514,18 @@ async def upload_photos_to_drive(bot, chat_id, photos_info, demanda):
             
             filename = photo.get('file_name', f"photo_{uuid.uuid4().hex[:8]}.jpg")
             
+            # Salvar copia local para galeria web
+            try:
+                import os as _os
+                _local_dir = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), 'assets', 'galeria_hot', str(demanda.get('id', 'unknown')))
+                _os.makedirs(_local_dir, exist_ok=True)
+                _local_path = _os.path.join(_local_dir, filename)
+                with open(_local_path, 'wb') as _f:
+                    _f.write(downloaded_file)
+                print(f'[UPLOAD] [OK] Copia local salva: {_local_path}')
+            except Exception as _le:
+                print(f'[UPLOAD] [WARN] Falha ao salvar copia local: {_le}')
+            
             upload_res = await asyncio.wait_for(
                 asyncio.to_thread(drive_service.upload_file, downloaded_file, filename, folder_id),
                 timeout=15.0

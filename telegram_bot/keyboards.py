@@ -285,6 +285,7 @@ def get_main_menu_keyboard(is_operator=False):
     if is_operator:
         markup.row(types.KeyboardButton("🟢 Dar Presença"), types.KeyboardButton("📋 Pronto CheGab"))
         markup.row(types.KeyboardButton("📸 Enviar Fotos / Drive"), types.KeyboardButton("🙋 Minhas Fotos (IA)"))
+        markup.row(types.KeyboardButton("📂 Buscar Acervo"), types.KeyboardButton("⚡ Missão Rápida"))
         markup.row(types.KeyboardButton("📋 Gerenciar Demandas"), types.KeyboardButton("📊 Relatório Executivo"))
         markup.row(types.KeyboardButton("👥 Cadastros Pendentes"), types.KeyboardButton("📅 Agenda Semanal"))
         markup.row(types.KeyboardButton("➕ Criar Demanda"), types.KeyboardButton("🤖 Digerir Pauta (IA)"))
@@ -292,7 +293,7 @@ def get_main_menu_keyboard(is_operator=False):
         markup.row(types.KeyboardButton("⚙️ Configurações"), types.KeyboardButton("❌ Cancelar"))
     else:
         markup.row(types.KeyboardButton("🟢 Dar Presença"), types.KeyboardButton("📸 Enviar Fotos / Drive"))
-        markup.row(types.KeyboardButton("🙋 Minhas Fotos (IA)"), types.KeyboardButton("📊 Relatório Executivo"))
+        markup.row(types.KeyboardButton("🙋 Minhas Fotos (IA)"), types.KeyboardButton("📂 Buscar Acervo"))
         markup.row(types.KeyboardButton("📅 Agenda Semanal"), types.KeyboardButton("➕ Criar Demanda"))
         markup.row(types.KeyboardButton("⚡ Missão Rápida"), types.KeyboardButton("⚙️ Configurações"))
         markup.row(types.KeyboardButton("ℹ️ Ajuda"), types.KeyboardButton("❌ Cancelar"))
@@ -426,3 +427,25 @@ def get_jade_events_inline_keyboard(events_list):
     markup.row(types.InlineKeyboardButton("❌ Cancelar", callback_data="jade_cancel"))
     return markup
 
+
+def get_acervo_result_keyboard(results):
+    """Gera teclado com resultados de busca de acervo."""
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    for ev_id, titulo in results:
+        titulo_short = titulo[:40] + '...' if len(titulo) > 40 else titulo
+        markup.add(
+            types.InlineKeyboardButton(f"📸 {titulo_short}", callback_data=f"acervo_select:{ev_id}")
+        )
+    return markup
+
+
+def get_acervo_actions_keyboard(ev_id):
+    """Gera botoes de acao apos selecionar um evento do acervo."""
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(
+        types.InlineKeyboardButton("📁 Ver Link da Pasta no Drive", callback_data=f"acervo_link:{ev_id}"),
+        types.InlineKeyboardButton("⭐ Receber Album HD (SELECAO)", callback_data=f"acervo_album:{ev_id}"),
+        types.InlineKeyboardButton("🔗 Receber Links Completos", callback_data=f"acervo_links:{ev_id}"),
+        types.InlineKeyboardButton("❌ Cancelar", callback_data="acervo_cancel")
+    )
+    return markup

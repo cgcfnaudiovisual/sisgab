@@ -937,6 +937,108 @@ def register_common_handlers(bot):
         file_info = {'file_id': best_photo.file_id, 'file_name': f"photo_{best_photo.file_id}.jpg"}
         _upload_state[chat_id]['photos'].append(file_info)
 
+    @bot.callback_query_handler(func=lambda call: call.data and call.data.startswith('acervo_'))
+    async def handle_acervo_callback(call):
+        chat_id = call.message.chat.id
+        data = call.data
+        
+        if data == 'acervo_cancel':
+            await bot.answer_callback_query(call.id, 'Cancelado')
+            await bot.edit_message_text('Busca cancelada.', chat_id, call.message.message_id)
+            clear_state(chat_id)
+            return
+        
+        if data.startswith('acervo_select:'):
+            ev_id = data.split(':')[1]
+            # Buscar dados do evento
+            db = get_db_connection()
+            if not db:
+                await bot.answer_callback_query(call.id, 'Banco offline')
+                return
+            try:
+                res = db.table('demandas_comunicacao').select('*').eq('id', int(ev_id)).execute()
+                if not res.data:
+                    await bot.answer_callback_query(call.id, 'Evento nao encontrado')
+                    return
+                ev = res.data[0]
+                titulo = ev.get('titulo_evento', 'Evento')
+                data_ev = ev.get('data_evento', '')
+                drive_url = ev.get('drive_url', '')
+                
+                from .keyboards import get_acervo_actions_keyboard
+                msg = f"📸 *{titulo}*\n📅 {data_ev}\n"
+                if drive_url:
+                    msg += f"📁 Drive: {drive_url}\n"
+                msg += "\nEscolha uma acao:"
+                
+                await bot.edit_message_text(msg, chat_id, call.message.message_id, parse_mode='Markdown', reply_markup=get_acervo_actions_keyboard(ev_id))
+                await bot.answer_callback_query(call.id)
+            except Exception as e:
+                await bot.answer_callback_query(call.id, f'Erro: {str(e)[:50]}')
+            return
+        
+        if data.startswith('acervo_link:'):
+            ev_id = data.split(':')[1]
+            db = get_db_connection()
+            if db:
+                res = db.table('demandas_comunicacao').select('titulo_evento, drive_url, drive_folder_id').eq('id', int(ev_id)).execute()
+                if res.data:
+                    ev = res.data[0]
+                    url = ev.get('drive_url', '')
+                    fid = ev.get('drive_folder_id', '')
+                    if url:
+                        await bot.send_message(chat_id, f"📁 *Pasta do Evento:*\n{url}", parse_mode='Markdown')
+                    elif fid:
+                        await bot.send_message(chat_id, f"📁 *Pasta do Evento:*\nhttps://drive.google.com/drive/folders/{fid}", parse_mode='Markdown')
+                    else:
+                        await bot.send_message(chat_id, "Pasta do Drive nao vinculada a este evento.")
+            await bot.answer_callback_query(call.id)
+            clear_state(chat_id)
+            return
+        
+        if data.startswith('acervo_album:'):
+            ev_id = data.split(':')[1]
+            await bot.answer_callback_query(call.id, 'Baixando fotos...')
+            await bot.send_message(chat_id, "Baixando e enviando album HD... aguarde.")
+            db = get_db_connection()
+            if db:
+                res = db.table('demandas_comunicacao').select('drive_url, drive_folder_id').eq('id', int(ev_id)).execute()
+                if res.data:
+                    ev = res.data[0]
+                    import drive_service
+                    fid = ev.get('drive_folder_id', '')
+                    if not fid and ev.get('drive_url', ''):
+                        url = ev['drive_url']
+                        if 'folders/' in url:
+                            fid = url.split('folders/')[-1].split('?')[0].split('/')[0]
+                    if fid:
+                        sel_fid = drive_service.find_folder('SELEÇÃO', fid)
+                        if sel_fid:
+                            from .utils import enviar_album_hd_drive
+                            count = await enviar_album_hd_drive(bot, chat_id, sel_fid)
+                            if count:
+                                await bot.send_message(chat_id, f"Album HD de {count} fotos enviado!")
+                            else:
+                                await bot.send_message(chat_id, "Nenhuma foto encontrada na pasta SELECAO.")
+                        else:
+                            await bot.send_message(chat_id, "Pasta SELECAO nao encontrada no evento.")
+                    else:
+                        await bot.send_message(chat_id, "Drive nao vinculado a este evento.")
+            clear_state(chat_id)
+            return
+        
+        if data.startswith('acervo_links:'):
+            ev_id = data.split(':')[1]
+            db = get_db_connection()
+            if db:
+                res = db.table('demandas_comunicacao').select('*').eq('id', int(ev_id)).execute()
+                if res.data:
+                    from .utils import enviar_links_acervo
+                    await enviar_links_acervo(bot, chat_id, res.data[0])
+            await bot.answer_callback_query(call.id)
+            clear_state(chat_id)
+            return
+
     @bot.message_handler(func=lambda msg: True)
     async def handle_all_messages(message):
         chat_id = message.chat.id
@@ -1051,6 +1153,21 @@ def register_common_handlers(bot):
             elif text in ("🙋 Minhas Fotos (IA)", "📸 Minhas Fotos", "/minhas_fotos"):
                 from .handlers_commands import minhas_fotos_cmd
                 await minhas_fotos_cmd(message)
+
+            elif text in ("📂 Buscar Acervo", "/acervo"):
+                chat_states[chat_id] = {
+                    'action': 'buscar_acervo',
+                    'step': 'await_query',
+                    'user': profile
+                }
+                await bot.reply_to(
+                    message,
+                    "📂 *BUSCAR ACERVO FOTOGRAFICO*\n\n"
+                    "Digite o nome, data ou descricao do evento que deseja buscar.\n\n"
+                    "_Exemplo: almoco com senador, solenidade agosto, banda marcial..._",
+                    parse_mode='Markdown',
+                    reply_markup=get_cancel_keyboard()
+                )
 
             elif text == "➕ Criar Demanda":
                 chat_states[chat_id] = {
@@ -1661,6 +1778,7 @@ def register_common_handlers(bot):
             "➕ Criar Demanda", "🪑 Placas JADE",
             "⚡ Missão Rápida", "ℹ️ Ajuda",
             "📸 Cadastro Facial", "🔍 Buscar Minhas Fotos",
+            "📂 Buscar Acervo",
             "🪑 Solicitar Assento JADE", "⚙️ Configurações",
             "👥 Cadastros Pendentes", "🔑 Aprovar Cadastros",
         )
@@ -1680,6 +1798,84 @@ def register_common_handlers(bot):
         if text in ["❌ Cancelar", "cancelar"]:
             clear_state(chat_id)
             await bot.reply_to(message, "❌ Operação cancelada.", reply_markup=get_main_menu_keyboard(is_operator) if profile else get_unauthorized_keyboard())
+            return
+
+        if action == 'buscar_acervo':
+            if step == 'await_query':
+                from difflib import SequenceMatcher
+                query = text.strip()
+                db = get_db_connection()
+                if not db:
+                    await bot.reply_to(message, "Banco de dados indisponivel.")
+                    clear_state(chat_id)
+                    return
+                try:
+                    res = db.table('demandas_comunicacao').select('id, titulo_evento, data_evento, drive_url, drive_folder_id').in_('status', ['aprovada', 'concluida']).order('data_evento', desc=True).execute()
+                    if not res.data:
+                        await bot.reply_to(message, "Nenhum evento encontrado.", reply_markup=get_main_menu_keyboard(is_operator))
+                        clear_state(chat_id)
+                        return
+                    
+                    # Busca fuzzy
+                    query_up = query.upper()
+                    scored = []
+                    for ev in res.data:
+                        titulo = (ev.get('titulo_evento') or '').upper()
+                        data = (ev.get('data_evento') or '')
+                        full = f"{data} {titulo}"
+                        if query_up in full.upper():
+                            scored.append((ev, 0.95))
+                        else:
+                            words = query_up.split()
+                            hits = sum(1 for w in words if w in full.upper())
+                            if hits > 0:
+                                scored.append((ev, hits / max(len(words), 1) * 0.8))
+                            else:
+                                ratio = SequenceMatcher(None, query_up, titulo).ratio()
+                                if ratio > 0.3:
+                                    scored.append((ev, ratio))
+                    
+                    scored.sort(key=lambda x: x[1], reverse=True)
+                    top = scored[:8]
+                    
+                    if not top:
+                        # Fallback: busca IA
+                        try:
+                            import google.generativeai as genai
+                            from ai_helper import _get_google_api_key, _get_gemini_model_name
+                            api_key = _get_google_api_key()
+                            if api_key:
+                                genai.configure(api_key=api_key)
+                                events_list = "\n".join([f"ID:{e['id']} | {e.get('data_evento','')} - {e.get('titulo_evento','')}" for e in res.data[:50]])
+                                prompt = f"O usuario busca: \"{query}\"\nEventos:\n{events_list}\nRetorne APENAS os IDs separados por virgula. Se nenhum, retorne NENHUM."
+                                model = genai.GenerativeModel(_get_gemini_model_name(), system_instruction="Retorne apenas IDs numericos separados por virgula.")
+                                ai_resp = model.generate_content(prompt).text.strip()
+                                if ai_resp and 'NENHUM' not in ai_resp.upper():
+                                    ai_ids = [x.strip().replace('ID:', '') for x in ai_resp.split(',')]
+                                    ev_map = {str(e['id']): e for e in res.data}
+                                    for aid in ai_ids:
+                                        if aid in ev_map:
+                                            top.append((ev_map[aid], 0.85))
+                        except Exception as ai_err:
+                            print(f"[ACERVO] [WARN] Busca IA Telegram: {ai_err}")
+                    
+                    if not top:
+                        await bot.reply_to(message, f"Nenhum evento encontrado para \"{query}\". Tente outros termos.", reply_markup=get_main_menu_keyboard(is_operator))
+                        clear_state(chat_id)
+                        return
+                    
+                    # Salvar resultados no estado
+                    acervo_map = {str(ev['id']): ev for ev, _ in top}
+                    chat_states[chat_id]['acervo_map'] = acervo_map
+                    
+                    # Construir mensagem e teclado inline
+                    from .keyboards import get_acervo_result_keyboard
+                    results = [(str(ev['id']), f"{ev.get('data_evento', '')} - {ev.get('titulo_evento', '')}") for ev, sc in top]
+                    msg = f"📂 *RESULTADOS DA BUSCA:* \"{query}\"\n\nEncontrados {len(results)} evento(s). Selecione:\n"
+                    await bot.reply_to(message, msg, reply_markup=get_acervo_result_keyboard(results), parse_mode='Markdown')
+                except Exception as e:
+                    await bot.reply_to(message, f"Erro na busca: {e}", reply_markup=get_main_menu_keyboard(is_operator))
+                    clear_state(chat_id)
             return
 
         if action == 'settings':
