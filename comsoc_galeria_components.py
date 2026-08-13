@@ -182,77 +182,151 @@ def empty_state(icon_name, text):
 # ─── Grids de Fotos ──────────────────────────────────────────────────
 
 def render_drive_grid(fotos, page_state, is_operator, selecao_fid, theme, is_selecao=False):
-    """Renderiza grid de fotos do Drive."""
-    if is_operator and not is_selecao:
-        with ui.row().classes('w-full items-center gap-2 q-mb-sm'):
-            def toggle_cur():
-                page_state['curation_mode'] = not page_state['curation_mode']
-                page_state['selected_files'].clear()
-            btn_c = 'amber' if page_state.get('curation_mode') else 'grey-8'
-            ui.button('Modo Curadoria', icon='edit', on_click=toggle_cur).props(
-                f'dense unelevated color={btn_c} text-color=black'
-            ).classes('text-xs')
-            if page_state.get('curation_mode'):
-                n_sel = len(page_state['selected_files'])
-                ui.button(f'Mover para SELECAO ({n_sel})', icon='star',
-                          on_click=lambda: _mover_selecao(page_state, selecao_fid)).props(
-                    'dense unelevated color=amber text-color=black'
-                ).classes('text-xs')
+    """Renderiza grid de fotos do Drive com miniaturas 100% maiores, proporcao completa e acoes em lote."""
+    if not fotos:
+        empty_state('photo_library', 'Nenhuma foto encontrada nesta pasta.')
+        return
 
-    with ui.element('div').classes('w-full gap-3').style(
-        'display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));'
+    all_ids = {f.get('id') for f in fotos if f.get('id')}
+    selected_set = page_state.setdefault('selected_files', set())
+
+    # ─── BARRA DE FERRAMENTAS E SELEÇÃO EM LOTE ───
+    with ui.column().classes('w-full gap-2 q-mb-md'):
+        with ui.row().classes('w-full items-center justify-between wrap gap-2 bg-slate-900/60 p-3 rounded-xl border border-cyan-500/20'):
+            with ui.row().classes('items-center gap-2'):
+                def toggle_cur():
+                    page_state['curation_mode'] = not page_state.get('curation_mode', False)
+
+                cur_active = page_state.get('curation_mode', False)
+                btn_cur_col = 'amber' if cur_active else 'cyan-9'
+                ui.button(
+                    'Modo Curadoria: LIGADO' if cur_active else '⚡ Ativar Modo Curadoria',
+                    icon='brush' if cur_active else 'edit',
+                    on_click=toggle_cur
+                ).props(f'dense unelevated color={btn_cur_col} text-color=white bold').classes('text-xs px-3')
+
+                def select_all():
+                    selected_set.update(all_ids)
+                    render_drive_grid.refresh() if hasattr(render_drive_grid, 'refresh') else None
+
+                def deselect_all():
+                    selected_set.clear()
+                    render_drive_grid.refresh() if hasattr(render_drive_grid, 'refresh') else None
+
+                ui.button('☑️ Selecionar Todas', on_click=select_all).props('flat dense color=cyan').classes('text-xs')
+                ui.button('⬜ Desmarcar', on_click=deselect_all).props('flat dense color=grey-4').classes('text-xs')
+
+            # Ações com selecionadas
+            n_sel = len(selected_set)
+            with ui.row().classes('items-center gap-2'):
+                if n_sel > 0:
+                    ui.badge(f'{n_sel} selecionada(s)', color='amber').classes('text-xs text-black font-bold')
+
+                    def baixar_selecionadas():
+                        count = 0
+                        for f in fotos:
+                            if f.get('id') in selected_set:
+                                link = f.get('webContentLink') or f.get('webViewLink')
+                                if link:
+                                    ui.open(link, new_tab=True)
+                                    count += 1
+                        ui.notify(f'🚀 Abrindo download de {count} foto(s)...', color='info')
+
+                    ui.button(f'⬇️ Baixar ({n_sel})', on_click=baixar_selecionadas).props(
+                        'unelevated color=cyan-7 text-color=white dense'
+                    ).classes('text-xs')
+
+                    if is_operator and not is_selecao and selecao_fid:
+                        ui.button(f'⭐ Mover para SELEÇÃO ({n_sel})', icon='star',
+                                  on_click=lambda: _mover_selecao(page_state, selecao_fid)).props(
+                            'unelevated color=amber text-color=black bold dense'
+                        ).classes('text-xs')
+
+    # ─── GRID REVOLUCIONÁRIO DE MINIATURAS (5 a 6 por linha, sem cortes) ───
+    with ui.element('div').classes('w-full gap-4').style(
+        'display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));'
     ):
         for f in fotos:
             fid = f.get('id')
-            thumb = f.get('thumbnailLink', '')
-            is_selected = fid in page_state.get('selected_files', set())
-            border = 'border: 2px solid #ffc107;' if is_selected else (
-                'border: 1px solid rgba(255,193,7,0.8);' if is_selecao else f'border: 1px solid {theme["border"]};'
-            )
-            with ui.card().classes('q-pa-none no-shadow rounded-lg overflow-hidden cursor-pointer hover-scale').style(
-                f'background: {theme["bg_editor"]}; {border}'
-            ):
-                if page_state.get('curation_mode') and not is_selecao:
-                    def toggle(e, file_id=fid):
-                        if file_id in page_state['selected_files']:
-                            page_state['selected_files'].remove(file_id)
-                        else:
-                            page_state['selected_files'].add(file_id)
-                    ui.checkbox('', value=is_selected, on_change=toggle).classes(
-                        'absolute top-1 left-1 z-10'
-                    ).props('dark color=amber')
+            raw_thumb = f.get('thumbnailLink', '')
+            # Aumentar resolucao do thumbnail do Drive de 220px para 800px HD
+            if '=s220' in raw_thumb:
+                thumb = raw_thumb.replace('=s220', '=s800')
+            elif '=' in raw_thumb:
+                thumb = raw_thumb.split('=')[0] + '=s800'
+            else:
+                thumb = raw_thumb
 
-                img = ui.image(thumb).classes('w-full').style('height: 150px; object-fit: cover;')
-                if not page_state.get('curation_mode'):
+            is_selected = fid in selected_set
+            border_style = 'border: 2px solid #ffc107; box-shadow: 0 0 12px rgba(255,193,7,0.4);' if is_selected else (
+                'border: 1px solid rgba(255,193,7,0.6);' if is_selecao else f'border: 1px solid {theme["border"]};'
+            )
+
+            with ui.card().classes(
+                'q-pa-none no-shadow rounded-xl overflow-hidden cursor-pointer transition-all duration-200 hover:scale-[1.02]'
+            ).style(f'background: {theme["bg_editor"]}; {border_style}'):
+
+                with ui.element('div').classes('relative w-full overflow-hidden').style(
+                    'height: 240px; background: #030a17; display: flex; align-items: center; justify-content: center;'
+                ):
+                    # Checkbox de selecao rapida
+                    def make_toggle(file_id=fid):
+                        def _toggle(e):
+                            if file_id in selected_set:
+                                selected_set.remove(file_id)
+                            else:
+                                selected_set.add(file_id)
+                        return _toggle
+
+                    ui.checkbox('', value=is_selected, on_change=make_toggle(fid)).classes(
+                        'absolute top-2 left-2 z-20 bg-black/60 rounded p-1'
+                    ).props('dark color=amber dense')
+
+                    # Imagem na proporção integral (object-contain sem cortar topo/lados)
+                    img = ui.image(thumb).style('max-height: 240px; width: 100%; object-fit: contain;')
                     img.on('click', lambda _, fi=f: preview_drive_photo(fi, theme))
 
-                with ui.row().classes('w-full q-pa-xs items-center bg-black/50'):
-                    ui.label(f.get('name', '')[:20]).classes('text-[9px] text-grey-3 truncate flex-grow')
-                    badge_txt = 'Selecao' if is_selecao else 'Drive'
+                with ui.row().classes('w-full p-2 items-center justify-between bg-black/70 border-t border-white/5'):
+                    ui.label(f.get('name', '')).classes('text-[11px] text-grey-2 font-bold truncate flex-grow mr-1')
+                    badge_txt = '⭐ Seleção' if is_selecao else '☁️ Drive'
                     badge_col = 'amber' if is_selecao else 'blue-grey'
-                    ui.badge(badge_txt, color=badge_col).classes('text-[8px]')
+                    ui.badge(badge_txt, color=badge_col).classes('text-[9px]')
+                    
+                    if f.get('webContentLink') or f.get('webViewLink'):
+                        d_link = f.get('webContentLink') or f.get('webViewLink')
+                        ui.button(icon='download', on_click=lambda _, l=d_link: ui.open(l, new_tab=True)).props(
+                            'flat dense round size=xs color=cyan'
+                        ).tooltip('Baixar Foto HD')
 
 
 def preview_drive_photo(file_info, theme):
-    """Modal de preview de foto do Drive."""
-    with ui.dialog() as modal, ui.card().classes('q-pa-md max-w-4xl max-h-[90vh] overflow-hidden').style(
-        f'background: {theme["bg_panel"]}; border: 1px solid {theme["border"]};'
+    """Modal de preview HD de foto do Drive com download."""
+    with ui.dialog() as modal, ui.card().classes('q-pa-md max-w-5xl max-h-[95vh] overflow-hidden rounded-2xl').style(
+        f'background: {theme["bg_panel"]}; border: 1px solid {theme["border"]}; shadow: 0 0 30px rgba(0,229,255,0.2);'
     ):
-        with ui.row().classes('w-full justify-between items-center q-mb-sm'):
-            ui.label(file_info.get('name', 'Preview')).classes('text-sm font-bold text-cyan truncate max-w-[70%]')
+        with ui.row().classes('w-full justify-between items-center q-mb-xs'):
+            ui.label(file_info.get('name', 'Visualização HD')).classes('text-sm font-bold text-cyan truncate max-w-[70%]')
             ui.button(icon='close', on_click=modal.close).props('flat round dense text-color=white')
-        thumb = file_info.get('thumbnailLink', '')
-        large_img = thumb.replace('=s220', '=s1000') if thumb else file_info.get('webViewLink', '')
+
+        raw_thumb = file_info.get('thumbnailLink', '')
+        large_img = raw_thumb.replace('=s220', '=s1600') if raw_thumb else file_info.get('webViewLink', '')
         if large_img:
-            ui.image(large_img).style('max-height: 65vh; object-fit: contain;')
-        created = file_info.get('createdTime', '')[:10]
-        ui.label(f"Upload: {created}").classes('text-[10px] text-grey-5 q-mt-sm')
-        with ui.row().classes('w-full justify-end q-mt-md'):
-            if file_info.get('webViewLink'):
-                ui.button('Abrir no Drive', icon='open_in_new',
-                          on_click=lambda: ui.open(file_info['webViewLink'], new_tab=True)).props(
-                    'unelevated color=primary text-color=black bold'
-                )
+            ui.image(large_img).style('max-height: 72vh; width: 100%; object-fit: contain; border-radius: 8px;')
+
+        with ui.row().classes('w-full justify-between items-center q-mt-md'):
+            created = file_info.get('createdTime', '')[:10]
+            ui.label(f"📅 Data no Acervo: {created}").classes('text-xs text-grey-4')
+            with ui.row().classes('gap-2'):
+                if file_info.get('webContentLink'):
+                    ui.button('⬇️ Baixar Foto Original', icon='download',
+                              on_click=lambda: ui.open(file_info['webContentLink'], new_tab=True)).props(
+                        'unelevated color=cyan text-color=black bold'
+                    )
+                if file_info.get('webViewLink'):
+                    ui.button('📁 Abrir no Drive', icon='open_in_new',
+                              on_click=lambda: ui.open(file_info['webViewLink'], new_tab=True)).props(
+                        'outline color=grey-4'
+                    )
     modal.open()
 
 
