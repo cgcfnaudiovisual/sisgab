@@ -440,12 +440,11 @@ def get_acervo_result_keyboard(results):
 
 
 def get_acervo_actions_keyboard(ev_id):
-    """Gera botoes de acao apos selecionar um evento do acervo."""
+    """Gera botoes de acao apos selecionar um evento do acervo (sem redundancia)."""
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
-        types.InlineKeyboardButton("📁 Ver Link da Pasta no Drive", callback_data=f"acervo_link:{ev_id}"),
-        types.InlineKeyboardButton("⭐ Receber Album HD (SELECAO)", callback_data=f"acervo_album:{ev_id}"),
-        types.InlineKeyboardButton("🔗 Receber Links Completos", callback_data=f"acervo_links:{ev_id}"),
+        types.InlineKeyboardButton("⭐ Receber Álbum HD (Fotos)", callback_data=f"acervo_album:{ev_id}"),
+        types.InlineKeyboardButton("🔗 Ver Link & Detalhes do Acervo", callback_data=f"acervo_links:{ev_id}"),
         types.InlineKeyboardButton("❌ Cancelar", callback_data="acervo_cancel")
     )
     return markup

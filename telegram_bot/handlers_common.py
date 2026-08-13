@@ -977,30 +977,9 @@ def register_common_handlers(bot):
                 await bot.answer_callback_query(call.id, f'Erro: {str(e)[:50]}')
             return
         
-        if data.startswith('acervo_link:'):
-            ev_id = data.split(':')[1]
-            db = get_db_connection()
-            if db:
-                from database import get_demanda_drive_url
-                res = db.table('demandas_comunicacao').select('*').eq('id', int(ev_id)).execute()
-                if res.data:
-                    ev = res.data[0]
-                    url = get_demanda_drive_url(ev)
-                    fid = ev.get('drive_folder_id', '')
-                    if url:
-                        await bot.send_message(chat_id, f"📁 *Pasta do Evento:*\n{url}", parse_mode='Markdown')
-                    elif fid:
-                        await bot.send_message(chat_id, f"📁 *Pasta do Evento:*\nhttps://drive.google.com/drive/folders/{fid}", parse_mode='Markdown')
-                    else:
-                        await bot.send_message(chat_id, "Pasta do Drive nao vinculada a este evento.")
-            await bot.answer_callback_query(call.id)
-            clear_state(chat_id)
-            return
-        
         if data.startswith('acervo_album:'):
             ev_id = data.split(':')[1]
             await bot.answer_callback_query(call.id, 'Baixando fotos...')
-            await bot.send_message(chat_id, "Baixando e enviando album HD... aguarde.")
             db = get_db_connection()
             if db:
                 from database import get_demanda_drive_url
@@ -1014,18 +993,11 @@ def register_common_handlers(bot):
                         if 'folders/' in url:
                             fid = url.split('folders/')[-1].split('?')[0].split('/')[0]
                     if fid:
-                        sel_fid = drive_service.find_folder('SELEÇÃO', fid)
-                        if sel_fid:
-                            from .utils import enviar_album_hd_drive
-                            count = await enviar_album_hd_drive(bot, chat_id, sel_fid)
-                            if count:
-                                await bot.send_message(chat_id, f"Album HD de {count} fotos enviado!")
-                            else:
-                                await bot.send_message(chat_id, "Nenhuma foto encontrada na pasta SELECAO.")
-                        else:
-                            await bot.send_message(chat_id, "Pasta SELECAO nao encontrada no evento.")
+                        sel_fid = drive_service.find_folder('SELEÇÃO', fid) or fid
+                        from .utils import enviar_album_hd_drive
+                        await enviar_album_hd_drive(bot, chat_id, sel_fid)
                     else:
-                        await bot.send_message(chat_id, "Drive nao vinculado a este evento.")
+                        await bot.send_message(chat_id, "⚠️ Pasta do Drive não vinculada a este evento.")
             clear_state(chat_id)
             return
         
