@@ -981,10 +981,11 @@ def register_common_handlers(bot):
             ev_id = data.split(':')[1]
             db = get_db_connection()
             if db:
-                res = db.table('demandas_comunicacao').select('titulo_evento, drive_url, drive_folder_id').eq('id', int(ev_id)).execute()
+                from database import get_demanda_drive_url
+                res = db.table('demandas_comunicacao').select('*').eq('id', int(ev_id)).execute()
                 if res.data:
                     ev = res.data[0]
-                    url = ev.get('drive_url', '')
+                    url = get_demanda_drive_url(ev)
                     fid = ev.get('drive_folder_id', '')
                     if url:
                         await bot.send_message(chat_id, f"📁 *Pasta do Evento:*\n{url}", parse_mode='Markdown')
@@ -1002,13 +1003,14 @@ def register_common_handlers(bot):
             await bot.send_message(chat_id, "Baixando e enviando album HD... aguarde.")
             db = get_db_connection()
             if db:
-                res = db.table('demandas_comunicacao').select('drive_url, drive_folder_id').eq('id', int(ev_id)).execute()
+                from database import get_demanda_drive_url
+                res = db.table('demandas_comunicacao').select('*').eq('id', int(ev_id)).execute()
                 if res.data:
                     ev = res.data[0]
                     import drive_service
                     fid = ev.get('drive_folder_id', '')
-                    if not fid and ev.get('drive_url', ''):
-                        url = ev['drive_url']
+                    url = get_demanda_drive_url(ev)
+                    if not fid and url:
                         if 'folders/' in url:
                             fid = url.split('folders/')[-1].split('?')[0].split('/')[0]
                     if fid:
@@ -1810,7 +1812,7 @@ def register_common_handlers(bot):
                     clear_state(chat_id)
                     return
                 try:
-                    res = db.table('demandas_comunicacao').select('id, titulo_evento, data_evento, drive_url, drive_folder_id').in_('status', ['aprovada', 'concluida']).order('data_evento', desc=True).execute()
+                    res = db.table('demandas_comunicacao').select('*').in_('status', ['aprovada', 'concluida']).order('data_evento', desc=True).execute()
                     if not res.data:
                         await bot.reply_to(message, "Nenhum evento encontrado.", reply_markup=get_main_menu_keyboard(is_operator))
                         clear_state(chat_id)
