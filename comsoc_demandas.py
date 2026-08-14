@@ -1093,17 +1093,24 @@ def render_page(autofill: str = None):
                                     }
                                     
                                     def _safe_execute_db(operation_func, data_dict):
+                                        data_copy = dict(data_dict)
                                         try:
-                                            return operation_func(dict(data_dict)).execute()
+                                            return operation_func(data_copy).execute()
                                         except Exception as e_save:
                                             err_s = str(e_save)
-                                            if 'drive_url' in err_s or 'PGRST204' in err_s:
-                                                data_copy = dict(data_dict)
-                                                d_val = data_copy.pop('drive_url', None)
-                                                if d_val:
-                                                    aut_c = data_copy.get('autoridades', '')
-                                                    data_copy['autoridades'] = f"{aut_c} [DRIVE: {d_val}]".strip()
-                                                return operation_func(data_copy).execute()
+                                            if 'PGRST204' in err_s or 'column' in err_s.lower():
+                                                import re
+                                                m = re.search(r"column ['\"]?([a-zA-Z0-9_]+)['\"]?", err_s) or re.search(r"find the ['\"]?([a-zA-Z0-9_]+)['\"]? column", err_s)
+                                                if m:
+                                                    missing_col = m.group(1)
+                                                    print(f"[DB SAFE SAVE] Coluna '{missing_col}' não existe no Supabase. Removendo do payload e re-tentando...")
+                                                    data_copy.pop(missing_col, None)
+                                                    if missing_col == 'drive_url':
+                                                        d_val = data_dict.get('drive_url')
+                                                        if d_val:
+                                                            aut_c = data_copy.get('autoridades', '')
+                                                            data_copy['autoridades'] = f"{aut_c} [DRIVE: {d_val}]".strip()
+                                                    return _safe_execute_db(operation_func, data_copy)
                                             raise e_save
 
                                     nonlocal edit_id
