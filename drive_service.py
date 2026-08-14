@@ -194,8 +194,8 @@ def find_or_create_folder(name, parent_id=None):
 
 def criar_pasta_evento(titulo_evento, data_evento_str, pasta_mae_id=None):
     """
-    Cria a estrutura completa de pastas para um evento:
-    PASTA_MAE / YYYY-MM - MÊS / MM-DD-YY - TÍTULO / SELEÇÃO
+    Cria a estrutura de pasta para um evento diretamente na PASTA_MAE:
+    PASTA_MAE / MM-DD-AAAA - TÍTULO / SELEÇÃO
     
     Retorna dict: {'evento_folder_id': str, 'selecao_folder_id': str, 'evento_link': str} ou None
     """
@@ -220,32 +220,16 @@ def criar_pasta_evento(titulo_evento, data_evento_str, pasta_mae_id=None):
         if not dt:
             dt = datetime.now()
 
-        # Nome da pasta do mês: "2026-08 - AGOSTO"
-        mes_nome = MESES_PT.get(dt.month, str(dt.month))
-        pasta_mes_name = f"{dt.strftime('%Y-%m')} - {mes_nome}"
-        
-        # Nome da pasta do evento: "08-15-26 - SOLENIDADE PASSAGEM DE COMANDO" (MM-DD-YY - TÍTULO)
+        # Nome da pasta do evento: "08-14-2026 - SOLENIDADE PASSAGEM DE COMANDO" (MM-DD-AAAA - TÍTULO)
         titulo_clean = str(titulo_evento).strip().upper()[:80]
-        pasta_evento_name = f"{dt.strftime('%m-%d-%y')} - {titulo_clean}"
+        pasta_evento_name = f"{dt.strftime('%m-%d-%Y')} - {titulo_clean}"
 
-        # 1. Verificar se a Pasta Mãe já é a própria pasta do mês (ex: "2026-08 - AGOSTO")
-        pm_info = get_file_info(pasta_mae)
-        pm_name = str(pm_info.get('name', '')).strip().upper() if pm_info else ''
-        
-        if pm_name == pasta_mes_name.upper() or pm_name.startswith(dt.strftime('%Y-%m')):
-            mes_id = pasta_mae
-        else:
-            mes_id = find_or_create_folder(pasta_mes_name, pasta_mae)
-            
-        if not mes_id:
-            return None
-
-        # 2. Buscar se já existe uma pasta de evento correspondente (por título ou nome exato)
+        # Buscar se já existe uma pasta de evento correspondente na Pasta Mãe
         evento_id = None
         service = get_drive_service()
         if service:
             try:
-                q_evt = f"'{mes_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+                q_evt = f"'{pasta_mae}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
                 res_e = service.files().list(q=q_evt, fields='files(id, name)', supportsAllDrives=True).execute()
                 for f_item in (res_e.get('files') or []):
                     f_name = f_item['name'].upper()
@@ -257,7 +241,7 @@ def criar_pasta_evento(titulo_evento, data_evento_str, pasta_mae_id=None):
                 print(f"[DRIVE_SERVICE] Erro ao buscar pasta existente de evento: {ex_search}")
 
         if not evento_id:
-            evento_id = create_folder(pasta_evento_name, mes_id)
+            evento_id = create_folder(pasta_evento_name, pasta_mae)
             
         if not evento_id:
             return None
