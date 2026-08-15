@@ -1234,9 +1234,9 @@ def rsvp_public_page(token: str, request: Request):
 
 
 @ui.page('/evento/{id_evento}')
-def evento_publico_page(id_evento: str):
+def evento_publico_page(request: Request, id_evento: str):
     """Portal do Convidado — rota pública e dinâmica para entrega de fotos em tempo real via IA."""
-    portal_convidado.render_page(id_evento)
+    portal_convidado.render_page(id_evento, request=request)
 
 
 @ui.page('/sisgab_tv')

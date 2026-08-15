@@ -314,18 +314,22 @@ async def api_portal_match(
                 event_id, 'match', session_id=session_id, metadata={'count': len(matched_items)}
             ))
 
-        return JSONResponse({
+        matched_fids_str = ','.join([m['drive_file_id'] for m in matched_items])
+        response = JSONResponse({
             'ok': True,
             'count': len(matched_items),
             'matched_photos': matched_items,
             'embedding': embedding.tolist()
         })
+        response.set_cookie(f'portal_m_{event_id}', matched_fids_str, max_age=86400, path='/')
+        response.set_cookie(f'portal_s_{event_id}', '1', max_age=86400, path='/')
+        return response
     except Exception as e:
         print(f"[API_PORTAL_MATCH_ERR] {e}")
         return JSONResponse({'ok': False, 'message': str(e)}, status_code=500)
 
 
-def render_page(event_id: str):
+def render_page(event_id: str, request: Request = None):
     """Renderiza a página completa do Portal do Convidado para o evento especificado."""
     theme.apply_global_styles()
 
@@ -355,14 +359,36 @@ def render_page(event_id: str):
     
     asyncio.create_task(asyncio.to_thread(log_portal_analytics, event_id, 'acesso', session_id=session_id))
 
+    # Recupera matched FIDs dos cookies HTTP de forma síncrona e instantânea
+    matched_photos_initial = []
+    has_searched_initial = False
+    if request:
+        cookie_matches = request.cookies.get(f'portal_m_{event_id}', '')
+        cookie_searched = request.cookies.get(f'portal_s_{event_id}', '')
+        if cookie_searched:
+            has_searched_initial = True
+        if cookie_matches:
+            target_fids = set(f.strip() for f in cookie_matches.split(',') if f.strip())
+            if target_fids:
+                _, records = _get_event_matrix(event_id)
+                seen = set()
+                for r in records:
+                    fid = r.get('drive_file_id')
+                    if fid and fid in target_fids and fid not in seen:
+                        seen.add(fid)
+                        matched_photos_initial.append({
+                            'drive_file_id': fid,
+                            'drive_link': r.get('drive_link') or f"https://drive.google.com/file/d/{fid}/view",
+                            'filename': r.get('photo_filename', 'foto.jpg')
+                        })
+
     # Estado local da sessão do convidado
-    saved_selfies = app.storage.user.get(f'portal_embs_{event_id}', [])
     guest_state = {
-        'selfie_embeddings': saved_selfies or [],
-        'matched_photos': [],
+        'selfie_embeddings': [],
+        'matched_photos': matched_photos_initial,
         'geral_photos': [],
         'selected_fids': set(),
-        'has_searched': bool(saved_selfies),
+        'has_searched': has_searched_initial,
         'guest_name': app.storage.user.get('portal_guest_name', ''),
         'guest_email': app.storage.user.get('portal_guest_email', ''),
         'rate_limit_count': 0,
@@ -435,7 +461,7 @@ def render_page(event_id: str):
             flex: 1;
         }}
     </style>
-    <div id="turbo-loading-overlay" style="display: none; position: fixed; inset: 0; background: rgba(11, 15, 25, 0.92); backdrop-filter: blur(10px); z-index: 999999; flex-direction: column; align-items: center; justify-content: center; gap: 16px;">
+    <div id="turbo-loading-overlay" style="display: none; position: fixed; inset: 0; background: rgba(11, 15, 25, 0.94); backdrop-filter: blur(10px); z-index: 999999; flex-direction: column; align-items: center; justify-content: center; gap: 16px;">
         <div style="width: 54px; height: 54px; border: 4px solid rgba(0, 229, 255, 0.2); border-top-color: #00e5ff; border-radius: 50%; animation: turbo-spin 0.8s linear infinite;"></div>
         <div style="font-size: 1.15rem; font-weight: 900; color: #ffffff; letter-spacing: 0.5px; text-shadow: 0 0 12px rgba(0,229,255,0.6);">ANALISANDO SUA FOTO COM IA...</div>
         <div id="turbo-status-text" style="font-size: 0.85rem; color: #94a3b8;">Buscando suas fotos no evento em tempo real</div>
@@ -509,16 +535,6 @@ def render_page(event_id: str):
             const data = await response.json();
             
             if (data.ok) {{
-                sessionStorage.setItem('portal_matched_' + window._PORTAL_EVENT_ID, JSON.stringify(data.matched_photos || []));
-                sessionStorage.setItem('portal_searched_' + window._PORTAL_EVENT_ID, '1');
-                if (data.embedding) {{
-                    let embs = [];
-                    try {{
-                        embs = JSON.parse(sessionStorage.getItem('portal_embs_' + window._PORTAL_EVENT_ID) || '[]');
-                    }} catch(e) {{}}
-                    embs.push(data.embedding);
-                    sessionStorage.setItem('portal_embs_' + window._PORTAL_EVENT_ID, JSON.stringify(embs));
-                }}
                 if (statusText) statusText.innerText = 'Fotos encontradas! Carregando...';
                 window.location.reload();
             }} else {{
@@ -561,8 +577,8 @@ def render_page(event_id: str):
     }} else {{
         setupUploadInputs();
     }}
-    setTimeout(setupUploadInputs, 400);
-    setTimeout(setupUploadInputs, 1200);
+    setTimeout(setupUploadInputs, 300);
+    setTimeout(setupUploadInputs, 1000);
     </script>
     ''')
 
@@ -902,28 +918,25 @@ def render_page(event_id: str):
                     ui.icon('face_retouching_natural', size='1.5rem', color='cyan-4')
                     ui.label('ENCONTRE SUAS FOTOS DO EVENTO').classes('text-sm sm:text-base font-black text-cyan-3 tracking-wide')
 
-                num_selfies = len(guest_state['selfie_embeddings'])
+                num_matches = len(guest_state['matched_photos'])
                 ui.label('Tire uma selfie ou escolha uma foto sua para a inteligência artificial localizar todas as suas fotos no evento:').classes('text-xs text-grey-4 max-w-xl mx-auto')
 
-                btn_cam_txt = '📸 TIRAR SELFIE (CÂMERA)' if num_selfies == 0 else '📸 OUTRA SELFIE'
-                btn_gal_txt = '📁 ESCOLHER FOTO' if num_selfies == 0 else '📁 OUTRA FOTO'
+                btn_cam_txt = '📸 TIRAR SELFIE (CÂMERA)' if num_matches == 0 else '📸 OUTRA SELFIE'
+                btn_gal_txt = '📁 ESCOLHER FOTO' if num_matches == 0 else '📁 OUTRA FOTO'
 
                 ui.html(f'''
                 <div style="display: flex; gap: 10px; width: 100%; margin-top: 6px;">
-                    <label for="portal-native-camera" class="turbo-upload-label turbo-btn-camera" onclick="setupUploadInputs()">{btn_cam_txt}</label>
-                    <label for="portal-native-gallery" class="turbo-upload-label turbo-btn-gallery" onclick="setupUploadInputs()">{btn_gal_txt}</label>
+                    <label for="portal-native-camera" class="turbo-upload-label turbo-btn-camera">{btn_cam_txt}</label>
+                    <label for="portal-native-gallery" class="turbo-upload-label turbo-btn-gallery">{btn_gal_txt}</label>
                 </div>
                 ''')
 
-                if num_selfies > 0 or guest_state['has_searched']:
+                if guest_state['has_searched']:
                     def reset_selfies():
                         guest_state['selfie_embeddings'] = []
                         guest_state['matched_photos'] = []
                         guest_state['has_searched'] = False
-                        app.storage.user[f'portal_embs_{event_id}'] = []
-                        ui.run_javascript(f"sessionStorage.removeItem('portal_matched_{event_id}'); sessionStorage.removeItem('portal_searched_{event_id}'); sessionStorage.removeItem('portal_embs_{event_id}');")
-                        ui.notify('Biometria limpa.', color='info')
-                        refresh_ui()
+                        ui.run_javascript(f"document.cookie = 'portal_m_{event_id}=; path=/; max-age=0'; document.cookie = 'portal_s_{event_id}=; path=/; max-age=0'; window.location.reload();")
                     with ui.row().classes('items-center justify-between w-full pt-1'):
                         ui.label('🔒 Foto processada em memória e descartada.').classes('text-[10px] text-grey-5')
                         ui.button('Recomeçar busca', icon='refresh', on_click=reset_selfies).props('flat dense color=grey-4 size=xs').classes('text-[10px]')
@@ -969,26 +982,5 @@ def render_page(event_id: str):
             with content_container:
                 render_portal_content()
 
-        # ── 9. RECUPERAÇÃO AUTOMÁTICA DE RESULTADOS ───────────────────────────
-        async def check_client_session():
-            js_res = await ui.run_javascript(f'''
-                (function() {{
-                    try {{
-                        var raw = sessionStorage.getItem("portal_matched_{event_id}");
-                        var searched = sessionStorage.getItem("portal_searched_{event_id}");
-                        if (raw && searched) {{
-                            return {{ searched: true, matches: JSON.parse(raw) }};
-                        }}
-                    }} catch(e) {{}}
-                    return null;
-                }})()
-            ''')
-            if js_res and js_res.get('searched'):
-                guest_state['has_searched'] = True
-                guest_state['matched_photos'] = js_res.get('matches') or []
-                refresh_ui()
-
-        ui.timer(0.05, check_client_session, once=True)
-
-        # ── 10. INICIALIZA A PRIMEIRA RENDERIZAÇÃO NA RAIZ DA PÁGINA ──────────
+        # ── 9. INICIALIZA A PRIMEIRA RENDERIZAÇÃO NA RAIZ DA PÁGINA ───────────
         refresh_ui()
