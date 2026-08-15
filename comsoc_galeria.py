@@ -371,170 +371,186 @@ def render_page(evento_id: str = None, **kwargs):
         dlg.open()
 
     def _abrir_biometria():
-        with ui.dialog() as dlg, ui.card().classes('q-pa-md max-w-sm w-full').style(f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'):
-            ui.label('Cadastrar Biometria Facial').classes('text-lg font-bold text-cyan q-mb-md')
-            ui.label('Envie uma selfie clara do seu rosto.').classes('text-xs text-grey-4 q-mb-sm')
-            async def handle_selfie(e):
-                fb = e.content.read()
-                try:
-                    import sisgab_face_worker
-                    ok, msg, emb = sisgab_face_worker.evaluate_selfie_quality(fb)
-                    if not ok:
-                        ui.notify(msg, color='negative'); return
-                    c = get_db_connection()
-                    if c:
-                        c.table('face_embeddings').insert({'user_id': user_data.get('id'), 'nome_guerra': user_data.get('nome_guerra', ''), 'telegram_id': user_data.get('telegram_id', ''), 'embedding': emb}).execute()
-                        ui.notify('Biometria cadastrada!', color='positive'); dlg.close()
-                except Exception as ex:
-                    ui.notify(f'Erro: {ex}', color='negative')
-            ui.upload(on_upload=handle_selfie, auto_upload=True).props('accept="image/*" w-full')
-            ui.button('Cancelar', on_click=dlg.close).props('flat w-full color=grey q-mt-sm')
-        dlg.open()
-
-    def _abrir_vincular():
         pauta = pautas_data.get(str(page_state['pauta_id']), {})
-        if not pauta or not pauta.get('id'):
-            ui.notify('Selecione um evento na lista antes de vincular ou criar pasta.', color='warning')
-            return
-        
-        titulo_ev = pauta.get('titulo_evento', 'Evento')
-        data_ev = pauta.get('data_evento', '')
-        cur_url = get_demanda_drive_url(pauta)
+        slug = str(pauta.get('id', '50'))
+        titulo_ev = (pauta.get('titulo_evento') or 'Evento Selecionado').upper()
 
-        with ui.dialog() as dlg, ui.card().classes('w-[480px] max-w-[95vw] q-pa-lg rounded-2xl bg-slate-900 border border-cyan-500/30 text-white'):
-            with ui.row().classes('w-full justify-between items-center border-b border-cyan-500/20 pb-2 mb-3'):
-                with ui.column().classes('gap-0'):
-                    ui.label('📁 VINCULAR OU CRIAR PASTA NO DRIVE').classes('text-sm font-black text-cyan cyber-title')
-                    ui.label(f"{titulo_ev} ({data_ev})").classes('text-xs text-grey-4 truncate max-w-[380px]')
-                ui.button(icon='close', on_click=dlg.close).props('flat round dense text-color=grey-4')
+        with ui.dialog() as dlg_bio, ui.card().classes('w-[780px] max-w-[96vw] max-h-[92vh] q-pa-lg rounded-3xl bg-slate-950 border-2 border-purple-500/40 text-white flex flex-col justify-start overflow-y-auto').style('box-shadow: 0 0 45px rgba(168,85,247,0.25);'):
+            # Header
+            with ui.row().classes('w-full justify-between items-center border-b border-purple-500/20 pb-3 mb-3'):
+                with ui.row().classes('items-center gap-3'):
+                    ui.icon('face_retouching_natural', size='2rem', color='purple-4')
+                    with ui.column().classes('gap-0'):
+                        ui.label('CENTRAL DE BIOMETRIA FACIAL & IA').classes('text-base font-black text-purple-3 cyber-title')
+                        ui.label(f'Evento Ativo: {titulo_ev} (ID: #{slug})').classes('text-xs text-grey-4 truncate max-w-[450px]')
+                ui.button(icon='close', on_click=dlg_bio.close).props('flat round dense text-color=grey-4')
 
-            ui.label('Opção 1: Vincular Link Manual').classes('text-xs font-bold text-amber-3')
-            in_url = ui.input(
-                'Link da Pasta no Google Drive',
-                placeholder='https://drive.google.com/drive/folders/...',
-                value=cur_url
-            ).props('dark outlined dense w-full')
+            with ui.tabs().classes('w-full text-purple-3 border-b border-white/10') as bio_tabs:
+                t_cad = ui.tab('cad', label='👤 1. Cadastrar / Atualizar Biometria', icon='badge')
+                t_search = ui.tab('search', label='🔍 2. Localizar Fotos no Evento', icon='manage_search')
+                t_list = ui.tab('list', label='📋 3. Militares Cadastrados', icon='groups')
 
-            def salvar_manual():
-                v = in_url.value.strip()
-                if not v:
-                    ui.notify('Digite ou cole o link do Google Drive!', color='warning')
-                    return
-                fid = v.split('folders/')[-1].split('?')[0].split('/')[0] if 'folders/' in v else v
-                pauta['drive_folder_id'] = fid
-                pauta['drive_url'] = v
-                from database import salvar_demanda_drive_link
-                salvar_demanda_drive_link(pauta.get('id'), pauta.get('titulo_evento'), v, fid)
-                ui.notify('✅ Link do Google Drive vinculado com sucesso!', color='positive')
-                dlg.close()
-                render_main_content.refresh()
+            with ui.tab_panels(bio_tabs, value=t_cad).classes('w-full bg-transparent p-0 q-mt-md'):
+                
+                # ── ABA 1: CADASTRAR BIOMETRIA ──
+                with ui.tab_panel(t_cad).classes('w-full p-2 gap-4 flex flex-col'):
+                    with ui.card().classes('w-full bg-slate-900/90 border border-purple-500/30 p-4 rounded-2xl gap-3'):
+                        ui.label('Identificação do Militar / Autoridade:').classes('text-xs font-bold text-amber-3')
+                        with ui.grid().classes('w-full grid-cols-1 sm:grid-cols-3 gap-2'):
+                            in_nome = ui.input('Nome de Guerra / Completo', value=user_data.get('nome_guerra') or user_data.get('nome') or '').props('dark outlined dense')
+                            in_posto = ui.input('Posto / Graduação', value=user_data.get('posto_grad') or '').props('dark outlined dense')
+                            in_tg = ui.input('Telegram ID (opcional)', value=str(user_data.get('telegram_id') or '')).props('dark outlined dense')
 
-            ui.button('💾 Salvar Link Manual', icon='link', on_click=salvar_manual).props('unelevated color=cyan text-color=black bold w-full').classes('q-mb-md')
+                        ui.separator().classes('my-1 border-white/10')
+                        ui.label('Foto / Selfie para Treinamento Biométrico (Rosto Nitido e Centralizado):').classes('text-xs font-bold text-cyan-3')
+                        
+                        bio_preview_box = ui.column().classes('w-full items-center justify-center p-3 bg-black/50 border border-dashed border-purple-500/40 rounded-xl min-h-[120px] gap-2')
+                        with bio_preview_box:
+                            ui.icon('add_a_photo', size='2rem', color='purple-4')
+                            ui.label('Selecione ou tire uma foto frontal clara').classes('text-xs text-grey-4')
 
-            ui.separator().classes('my-2 border-slate-800')
+                        uploaded_bio_bytes = {'data': None}
 
-            ui.label('Opção 2: Criar Pasta Oficial Automaticamente').classes('text-xs font-bold text-amber-3')
-            ui.label('Cria a pasta oficial dentro da Pasta Mãe do Drive com as subpastas GERAL e SELEÇÃO.').classes('text-[10px] text-grey-4 q-mb-xs')
+                        async def handle_bio_upload(e):
+                            fb = e.content.read()
+                            uploaded_bio_bytes['data'] = fb
+                            bio_preview_box.clear()
+                            with bio_preview_box:
+                                import base64
+                                b64_img = base64.b64encode(fb).decode('utf-8')
+                                ui.image(f"data:image/jpeg;base64,{b64_img}").classes('w-32 h-32 rounded-2xl object-cover border-2 border-purple-400')
+                                ui.label(f'Foto carregada ({len(fb) // 1024} KB)').classes('text-xs text-green-4 font-bold')
 
-            async def gerar_pasta_automatica():
-                n_auto = ui.notify('📂 Criando pasta no Google Drive...', color='info', spinner=True, timeout=0)
-                try:
-                    drive_service.reset_drive_service()
-                    res = await asyncio.wait_for(
-                        asyncio.to_thread(drive_service.criar_pasta_evento, pauta.get('titulo_evento', ''), pauta.get('data_evento', '')),
-                        timeout=20.0
-                    )
-                    if res and res.get('evento_link'):
-                        pauta['drive_folder_id'] = res['evento_folder_id']
-                        pauta['drive_url'] = res['evento_link']
-                        from database import salvar_demanda_drive_link
-                        salvar_demanda_drive_link(pauta.get('id'), pauta.get('titulo_evento'), res['evento_link'], res['evento_folder_id'])
-                        ui.notify('🎉 Pasta oficial criada e vinculada com sucesso no Google Drive!', color='positive', timeout=5000)
-                        dlg.close()
-                        render_main_content.refresh()
-                    else:
-                        ui.notify('⚠️ Não foi possível criar a pasta. Verifique as credenciais do Google Drive no Painel Admin.', color='warning')
-                except Exception as ex_p:
-                    ui.notify(f'Erro ao criar pasta: {ex_p}', color='negative')
-                finally:
-                    try: n_auto.dismiss()
-                    except Exception: pass
+                        ui.upload(on_upload=handle_bio_upload, auto_upload=True).props('accept="image/*" w-full').classes('q-mb-sm')
 
-            ui.button('⚡ Criar Pasta no Google Drive Agora', icon='create_new_folder', on_click=gerar_pasta_automatica).props('unelevated color=amber-9 text-color=white bold w-full')
-        dlg.open()
+                        async def salvar_biometria_militar():
+                            if not uploaded_bio_bytes['data']:
+                                ui.notify('Envie uma foto ou tire uma selfie primeiro!', color='warning')
+                                return
+                            nome = (in_nome.value or '').strip()
+                            if not nome:
+                                ui.notify('Preencha o Nome de Guerra ou Nome Completo!', color='warning')
+                                return
 
-    async def _criar_pasta():
-        pauta = pautas_data.get(str(page_state['pauta_id']), {})
-        n = ui.notify('Criando pasta no Drive...', color='info', spinner=True, timeout=0)
-        try:
-            drive_service.reset_drive_service()
-            res = await asyncio.wait_for(asyncio.to_thread(drive_service.criar_pasta_evento, pauta.get('titulo_evento', ''), pauta.get('data_evento', '')), timeout=15.0)
-            if res and res.get('evento_link'):
-                pauta['drive_folder_id'] = res['evento_folder_id']; pauta['drive_url'] = res['evento_link']
-                from database import salvar_demanda_drive_link
-                salvar_demanda_drive_link(pauta.get('id'), pauta.get('titulo_evento'), res['evento_link'], res['evento_folder_id'])
-                ui.notify('Pasta criada!', color='success'); render_main_content.refresh()
-            else:
-                ui.notify('Falha ao criar pasta. Verifique credenciais.', color='warning')
-        except Exception as ex:
-            ui.notify(f'Erro: {ex}', color='negative')
-        finally:
-            try: n.dismiss()
-            except Exception: pass
+                            n_bio = ui.notify('🧠 Extraindo vetor facial com InsightFace...', color='info', spinner=True, timeout=0)
+                            try:
+                                import sisgab_face_worker
+                                ok, msg, emb = sisgab_face_worker.evaluate_selfie_quality(uploaded_bio_bytes['data'])
+                                if not ok or emb is None:
+                                    n_bio.dismiss()
+                                    ui.notify(f'Qualidade Insuficiente: {msg}', color='negative', timeout=5000)
+                                    return
 
-    async def _sincronizar_todas_pastas_drive():
-        n = ui.notify('🔄 Sincronizando pastas do Google Drive com as demandas...', color='info', spinner=True, timeout=0)
-        try:
-            import unicodedata, re
-            from database import salvar_demanda_drive_link, get_db_connection
+                                from database import save_guest_face_profile
+                                pid = save_guest_face_profile(
+                                    event_id='global_militar',
+                                    embedding=emb,
+                                    email=f"{in_tg.value or 'militar'}@sisgab.mil.br",
+                                    nome=f"{in_posto.value} {nome}".strip()
+                                )
+                                n_bio.dismiss()
+                                ui.notify(f'✅ Biometria de {nome} cadastrada e ativada com sucesso! (ID: {pid})', color='positive', timeout=6000)
+                            except Exception as ex_bio:
+                                n_bio.dismiss()
+                                ui.notify(f'Erro ao processar biometria: {ex_bio}', color='negative')
 
-            def normalize_txt(text):
-                if not text: return ""
-                text = unicodedata.normalize('NFKD', str(text)).encode('ASCII', 'ignore').decode('ASCII')
-                return re.sub(r'[^a-zA-Z0-9]', '', text).upper()
+                        ui.button('💾 Salvar & Ativar Biometria Facial', icon='save', on_click=salvar_biometria_militar).props('unelevated color=purple-8 text-color=white bold w-full').classes('h-12 rounded-xl cyber-glow')
 
-            drive_service.reset_drive_service()
-            svc = drive_service.get_drive_service()
-            pasta_mae = drive_service.get_pasta_mae_id()
-            if not svc or not pasta_mae:
-                ui.notify('Google Drive não configurado no Painel Admin.', color='warning')
-                return
+                # ── ABA 2: BUSCAR FOTOS NESTE EVENTO (INSTANT MATCH) ──
+                with ui.tab_panel(t_search).classes('w-full p-2 gap-4 flex flex-col'):
+                    with ui.card().classes('w-full bg-slate-900/90 border border-cyan-500/30 p-4 rounded-2xl gap-3'):
+                        ui.label(f'Localizador Facial no Evento #{slug}: {titulo_ev}').classes('text-xs font-bold text-cyan-3')
+                        ui.label('Compara a selfie do militar contra todas as fotos indexadas deste evento.').classes('text-xs text-grey-4')
 
-            # Lista todas as subpastas da pasta mãe
-            query = f"'{pasta_mae}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
-            res = await asyncio.to_thread(lambda: svc.files().list(q=query, fields='files(id, name, webViewLink)', pageSize=150).execute())
-            drive_folders = res.get('files', []) if res else []
+                        thresh_slider = ui.slider(min=0.35, max=0.70, step=0.01, value=0.45).props('dark label-always color=cyan')
+                        ui.label(f'Threshold de Similaridade: {thresh_slider.value:.2f} (0.45 = Padrão)').classes('text-[11px] text-grey-5')
 
-            vinculados = 0
-            for eid, p in pautas_data.items():
-                cur_fid = get_drive_folder_id(p)
-                tit = p.get('titulo_evento', '')
-                norm_tit = normalize_txt(tit)
-                if not norm_tit:
-                    continue
+                        results_container = ui.column().classes('w-full gap-2 q-mt-2')
 
-                best_match = None
-                for df in drive_folders:
-                    df_name = df['name']
-                    norm_df = normalize_txt(df_name)
-                    if norm_tit in norm_df or norm_df in norm_tit or (len(norm_tit) > 8 and norm_tit[:15] in norm_df):
-                        best_match = df
-                        break
+                        async def buscar_fotos_evento():
+                            if not uploaded_bio_bytes['data']:
+                                ui.notify('Faça upload de uma selfie na Aba 1 para comparar!', color='warning')
+                                return
 
-                if best_match:
-                    p['drive_folder_id'] = best_match['id']
-                    p['drive_url'] = best_match.get('webViewLink') or f"https://drive.google.com/drive/folders/{best_match['id']}"
-                    salvar_demanda_drive_link(p.get('id'), tit, p['drive_url'], best_match['id'])
-                    vinculados += 1
+                            results_container.clear()
+                            n_match = ui.notify('🔍 Analisando acervo do evento...', color='info', spinner=True, timeout=0)
+                            try:
+                                import sisgab_face_worker
+                                ok, msg, query_emb = sisgab_face_worker.evaluate_selfie_quality(uploaded_bio_bytes['data'])
+                                if not ok or query_emb is None:
+                                    n_match.dismiss()
+                                    ui.notify(f'Erro na selfie: {msg}', color='negative')
+                                    return
 
-            ui.notify(f'✅ {vinculados} evento(s) sincronizados com pastas existentes no Google Drive!', color='positive', timeout=6000)
-            render_main_content.refresh()
-        except Exception as ex:
-            print(f"[GALERIA SYNC ERR] {ex}")
-            ui.notify(f'Erro na sincronização: {ex}', color='negative')
-        finally:
-            try: n.dismiss()
-            except Exception: pass
+                                from database import get_event_photo_embeddings
+                                all_embs = get_event_photo_embeddings(slug)
+                                if not all_embs:
+                                    n_match.dismiss()
+                                    with results_container:
+                                        with ui.card().classes('w-full p-4 bg-black/60 border border-amber-500/30 rounded-xl text-center gap-2'):
+                                            ui.icon('info', size='2rem', color='amber-4')
+                                            ui.label('Nenhuma foto indexada com IA neste evento ainda.').classes('text-sm font-bold text-amber-3')
+                                            ui.label('Execute o Watcher de fotos no seu PC (com GPU) para extrair os rostos do evento!').classes('text-xs text-grey-4')
+                                    return
+
+                                q_vec = np.array(query_emb, dtype=np.float32)
+                                q_norm = np.linalg.norm(q_vec)
+                                if q_norm > 0:
+                                    q_vec = q_vec / q_norm
+
+                                matches = []
+                                for rec in all_embs:
+                                    r_emb = rec.get('embedding')
+                                    if not r_emb: continue
+                                    r_vec = np.array(r_emb, dtype=np.float32)
+                                    r_norm = np.linalg.norm(r_vec)
+                                    if r_norm > 0: r_vec = r_vec / r_norm
+                                    sim = float(np.dot(q_vec, r_vec))
+                                    if sim >= float(thresh_slider.value):
+                                        matches.append((sim, rec))
+
+                                matches.sort(key=lambda x: x[0], reverse=True)
+                                n_match.dismiss()
+
+                                with results_container:
+                                    if not matches:
+                                        ui.label(f'Nenhuma foto encontrada com similaridade ≥ {thresh_slider.value:.2f}. Tente diminuir o threshold no slider.').classes('text-xs text-amber-4 italic p-2')
+                                    else:
+                                        ui.label(f'🎉 {len(matches)} foto(s) localizada(s) com sucesso!').classes('text-sm font-black text-green-4')
+                                        with ui.grid().classes('w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-80 overflow-y-auto p-1'):
+                                            for sim, rec in matches:
+                                                fid = rec.get('drive_file_id')
+                                                fname = rec.get('photo_filename') or f'foto_{fid[:8]}.jpg'
+                                                dlink = rec.get('drive_link') or f"https://drive.google.com/file/d/{fid}/view"
+                                                with ui.card().classes('p-2 bg-black/80 border border-cyan-500/40 rounded-xl flex flex-col items-center gap-1'):
+                                                    ui.label(f'{sim:.1%} Match').classes('text-xs font-black text-amber-3 bg-amber-900/60 px-2 py-0.5 rounded-full')
+                                                    ui.label(fname).classes('text-[10px] text-white font-mono truncate w-full text-center')
+                                                    ui.button('Abrir no Drive', icon='open_in_new', on_click=lambda l=dlink: ui.open(l, new_tab=True)).props('flat dense color=cyan text-color=cyan').classes('text-[10px]')
+
+                            except Exception as ex_m:
+                                n_match.dismiss()
+                                ui.notify(f'Erro na busca: {ex_m}', color='negative')
+
+                        ui.button('🚀 BUSCAR MINHAS FOTOS NESTE EVENTO', icon='search', on_click=buscar_fotos_evento).props('unelevated color=cyan-8 text-color=black bold w-full').classes('h-12 rounded-xl cyber-glow')
+
+                # ── ABA 3: PERFIS CADASTRADOS ──
+                with ui.tab_panel(t_list).classes('w-full p-2 gap-3 flex flex-col'):
+                    with ui.card().classes('w-full bg-slate-900/90 border border-slate-800 p-4 rounded-2xl gap-2'):
+                        from database import get_guest_profiles_for_event
+                        profiles = get_guest_profiles_for_event('global_militar') + get_guest_profiles_for_event(slug)
+                        if not profiles:
+                            ui.label('Nenhum perfil biométrico registrado ainda.').classes('text-xs text-grey-5 italic')
+                        else:
+                            ui.label(f'Total de Perfis Ativos: {len(profiles)}').classes('text-xs font-bold text-purple-3')
+                            with ui.column().classes('w-full gap-1.5 max-h-80 overflow-y-auto font-mono text-xs'):
+                                for prof in profiles:
+                                    with ui.row().classes('w-full items-center justify-between p-2 bg-black/40 rounded-xl border border-white/5'):
+                                        with ui.row().classes('items-center gap-2'):
+                                            ui.label('👤').classes('text-sm')
+                                            ui.label(prof.get('nome') or prof.get('email') or f"Perfil #{prof.get('id')}").classes('text-white font-bold')
+                                        ui.badge(prof.get('event_id', 'global'), color='purple-9').classes('text-[10px]')
+
+        dlg_bio.open()
 
     def _abrir_distribuir(pauta=None):
         if pauta is None:
@@ -579,109 +595,132 @@ def render_page(evento_id: str = None, **kwargs):
             f"📱 *SisGAB — Comando-Geral do Corpo de Fuzileiros Navais*"
         )
 
-        with ui.dialog() as dlg, ui.card().classes('q-pa-md max-w-xl w-full rounded-2xl').style(
-            f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]}; shadow: 0 0 30px rgba(0,229,255,0.2);'
-        ):
+        with ui.dialog() as dlg, ui.card().classes('q-pa-md max-w-2xl w-full rounded-3xl bg-slate-950 border border-cyan-500/40 text-white flex flex-col gap-3').style('box-shadow: 0 0 35px rgba(0,229,255,0.2);'):
             # Cabeçalho com Resumo do Evento
-            with ui.row().classes('w-full justify-between items-center q-mb-sm border-b border-cyan-500/20 pb-2'):
-                with ui.column().classes('gap-0'):
-                    ui.label('🚀 Distribuir Acervo & Links').classes('text-base font-bold text-cyan')
-                    ui.label(f"{titulo} ({data_ev})").classes('text-xs text-grey-4 truncate max-w-[380px]')
-                ui.button(icon='close', on_click=dlg.close).props('flat round dense text-color=white')
+            with ui.row().classes('w-full justify-between items-center border-b border-cyan-500/20 pb-2'):
+                with ui.row().classes('items-center gap-2'):
+                    ui.icon('send', size='1.5rem', color='cyan-4')
+                    with ui.column().classes('gap-0'):
+                        ui.label('DISTRIBUIR ACERVO & LINKS').classes('text-sm font-black text-cyan cyber-title')
+                        ui.label(f"{titulo} ({data_ev})").classes('text-xs text-grey-4 truncate max-w-[420px]')
+                ui.button(icon='close', on_click=dlg.close).props('flat round dense text-color=grey-4')
 
             # Abas de Envio
-            with ui.tabs().classes('w-full text-cyan') as tabs:
+            with ui.tabs().classes('w-full text-cyan border-b border-white/10') as tabs:
                 tab_envio = ui.tab('envio', label='📲 Telegram', icon='send')
-                tab_zap = ui.tab('whatsapp', label='📋 Copiar Texto (Zap/Texto)', icon='content_copy')
+                tab_zap = ui.tab('whatsapp', label='📋 WhatsApp & Texto', icon='content_copy')
 
             with ui.tab_panels(tabs, value=tab_envio).classes('w-full bg-transparent p-0 q-mt-sm'):
                 
                 # ─── PAINEL TELEGRAM ───
-                with ui.tab_panel(tab_envio).classes('w-full p-0 gap-3'):
+                with ui.tab_panel(tab_envio).classes('w-full p-0 gap-3 flex flex-col'):
                     mode_select = ui.select(
                         {
+                            'manual': '💬 Digitar ID do Telegram / Canal / Grupo Manualmente',
                             'nominal': '👤 Militar Específico do Efetivo',
                             'todos': f'👥 Todos os Militares Cadastrados ({len(todos_tids)})',
-                            'manual': '💬 Digitar ID / Chat ID Manual'
                         },
-                        value='nominal',
-                        label='Destinatário'
-                    ).props('dark outlined dense w-full option-dark').classes('q-mb-xs')
+                        value='manual',
+                        label='Tipo de Destinatário'
+                    ).props('dark outlined dense w-full option-dark')
 
-                    mil_select = ui.select(
-                        militares_opts if militares_opts else {'none': 'Nenhum militar com Telegram registrado'},
-                        value=list(militares_opts.keys())[0] if militares_opts else 'none',
-                        label='Selecione o Militar'
-                    ).props('dark outlined dense w-full option-dark').bind_visibility_from(
-                        mode_select, 'value', value=lambda v: v == 'nominal'
-                    )
+                    dest_container = ui.column().classes('w-full gap-2')
 
-                    manual_input = ui.input('ID Telegram (ex: 123456789)').props(
-                        'dark outlined dense w-full'
-                    ).bind_visibility_from(mode_select, 'value', value=lambda v: v == 'manual')
+                    def render_dest_fields():
+                        dest_container.clear()
+                        with dest_container:
+                            m = mode_select.value
+                            if m == 'manual':
+                                manual_in = ui.input('ID do Telegram ou @Canal (ex: 5425877837 ou @comsoc_cgcfn)', placeholder='Ex: 5425877837').props('dark outlined dense w-full')
+                                dest_container.manual_in = manual_in
+                                
+                                with ui.card().classes('w-full p-3 bg-cyan-950/40 border border-cyan-500/30 rounded-xl gap-1 text-xs text-cyan-2'):
+                                    ui.label('💡 Como a pessoa ou canal descobre o ID do Telegram?').classes('font-bold text-amber-3')
+                                    ui.label('• Envie /start ou /meuid no bot oficial @SisGAB_bot no Telegram.')
+                                    ui.label('• Ou consulte o bot oficial @userinfobot para obter o Chat ID numérico.')
+                                    ui.label('• Para canais/grupos: digite o @nomedocanal ou o ID numérico (começado com -100).')
+                            elif m == 'nominal':
+                                if militares_opts:
+                                    mil_in = ui.select(militares_opts, value=list(militares_opts.keys())[0], label='Selecione o Militar').props('dark outlined dense w-full option-dark')
+                                    dest_container.mil_in = mil_in
+                                else:
+                                    ui.label('Nenhum militar com Telegram ID cadastrado no efetivo ainda. Use a opção de digitação manual acima.').classes('text-xs text-amber-4 italic p-2 bg-amber-950/30 rounded-lg')
+                            elif m == 'todos':
+                                ui.label(f'Será enviado para todos os {len(todos_tids)} militares com Telegram vinculado no sistema.').classes('text-xs text-green-4 font-bold p-2 bg-green-950/30 rounded-lg')
+
+                    mode_select.on_value_change(render_dest_fields)
+                    render_dest_fields()
 
                     # Opções do conteúdo
-                    with ui.row().classes('w-full items-center justify-between p-2 bg-slate-900/60 rounded-lg border border-white/5 q-my-xs'):
-                        chk_links = ui.checkbox('🔗 Links do Drive', value=True).props('dark color=cyan dense')
-                        chk_album = ui.checkbox('⭐ Álbum HD (Seleção)', value=True).props('dark color=amber dense')
+                    with ui.row().classes('w-full items-center justify-between p-2.5 bg-slate-900 rounded-xl border border-white/5'):
+                        chk_links = ui.checkbox('🔗 Enviar Link da Pasta do Drive', value=True).props('dark color=cyan dense')
+                        chk_album = ui.checkbox('⭐ Enviar Fotos em HD', value=True).props('dark color=amber dense')
+
+                    # Área de Edição da Mensagem
+                    ui.label('Mensagem que será enviada:').classes('text-xs font-bold text-grey-3')
+                    msg_text_input = ui.textarea(value=texto_padrao).props('dark outlined rows=4 w-full').classes('font-mono text-xs')
 
                     async def disparar_telegram():
                         mode = mode_select.value
                         target_ids = []
-                        if mode == 'nominal':
-                            if mil_select.value and mil_select.value != 'none':
-                                target_ids.append(mil_select.value)
+                        if mode == 'manual':
+                            v = getattr(dest_container, 'manual_in', None)
+                            if v and v.value:
+                                target_ids.append(v.value.strip())
+                        elif mode == 'nominal':
+                            v = getattr(dest_container, 'mil_in', None)
+                            if v and v.value:
+                                target_ids.append(v.value)
                         elif mode == 'todos':
                             target_ids = todos_tids
-                        elif mode == 'manual':
-                            v = (manual_input.value or '').strip()
-                            if v: target_ids.append(v)
 
                         if not target_ids:
-                            ui.notify('Selecione ou digite ao menos um destinatário.', color='warning')
-                            return
-
-                        import telegram_bot
-                        from telegram_bot.utils import enviar_links_acervo, enviar_album_hd_drive
-                        bot = telegram_bot.bot
-                        if not bot:
-                            ui.notify('Bot do Telegram não inicializado.', color='negative')
+                            ui.notify('Digite ou selecione um destinatário válido!', color='warning')
                             return
 
                         dlg.close()
                         notif = ui.notify(f"🚀 Enviando acervo para {len(target_ids)} destinatário(s)...", timeout=0, spinner=True, color='info')
-                        sucessos = 0
                         try:
+                            import telegram_bot
+                            from telegram_bot.utils import enviar_links_acervo, enviar_album_hd_drive
+                            bot = telegram_bot.bot
+                            if not bot:
+                                notif.dismiss()
+                                ui.notify('Bot do Telegram não inicializado.', color='negative')
+                                return
+
                             for cid in target_ids:
-                                if chk_links.value:
-                                    await enviar_links_acervo(bot, cid, pauta)
-                                if chk_album.value and fid:
-                                    sf = drive_service.find_folder('SELEÇÃO', fid) or fid
-                                    await enviar_album_hd_drive(bot, cid, sf)
-                                sucessos += 1
-                            try: notif.dismiss()
-                            except Exception: pass
-                            ui.notify(f'✅ Acervo enviado com sucesso para {sucessos} destinatário(s)!', color='positive')
-                        except Exception as ex_send:
-                            try: notif.dismiss()
-                            except Exception: pass
-                            ui.notify(f'Erro ao enviar: {ex_send}', color='negative')
+                                try:
+                                    bot.send_message(cid, msg_text_input.value or texto_padrao, parse_mode='Markdown')
+                                    if chk_album.value and fid:
+                                        sf = drive_service.find_folder('SELEÇÃO', fid) or fid
+                                        await enviar_album_hd_drive(bot, cid, sf)
+                                except Exception as ex_item:
+                                    print(f"Erro ao enviar para {cid}: {ex_item}")
 
-                    ui.button('🚀 Disparar Distribuição', icon='send', on_click=disparar_telegram).props(
-                        'unelevated color=cyan text-color=black bold w-full'
-                    ).classes('q-mt-sm')
+                            notif.dismiss()
+                            ui.notify(f"✅ Disparo concluído com sucesso para {len(target_ids)} destinatário(s)!", color='positive')
+                        except Exception as ex_tg:
+                            notif.dismiss()
+                            ui.notify(f'Erro no disparo: {ex_tg}', color='negative')
 
-                # ─── PAINEL WHATSAPP / MENSAGEM PADRÃO ───
-                with ui.tab_panel(tab_zap).classes('w-full p-0 gap-3'):
-                    ui.label('Mensagem Padrão Pronta para Copiar:').classes('text-xs text-grey-4')
-                    txt_area = ui.textarea(value=texto_padrao).props('dark outlined dense w-full rows=6').classes('w-full font-mono text-xs')
+                    ui.button('🚀 DISPARAR DISTRIBUIÇÃO TELEGRAM', icon='send', on_click=disparar_telegram).props('unelevated color=cyan-8 text-color=black bold w-full').classes('h-11 rounded-xl cyber-glow')
+
+                # ─── PAINEL WHATSAPP & TEXTO ───
+                with ui.tab_panel(tab_zap).classes('w-full p-0 gap-3 flex flex-col'):
+                    ui.label('Texto Formatado para WhatsApp / Mensagens:').classes('text-xs font-bold text-amber-3')
+                    zap_text = ui.textarea(value=texto_padrao).props('dark outlined rows=6 w-full').classes('font-mono text-xs')
+
+                    import urllib.parse
+                    def abrir_whatsapp():
+                        txt = zap_text.value or texto_padrao
+                        encoded = urllib.parse.quote(txt)
+                        ui.open(f"https://api.whatsapp.com/send?text={encoded}", new_tab=True)
 
                     def copiar_texto():
-                        val = txt_area.value
-                        escaped = val.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+                        txt = zap_text.value or texto_padrao
+                        escaped = txt.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
                         ui.run_javascript(f'navigator.clipboard.writeText(`{escaped}`);')
-                        ui.notify('📋 Texto copiado para a área de transferência!', color='positive', icon='content_copy')
-
                     with ui.row().classes('w-full justify-between items-center q-mt-xs'):
                         ui.button('📋 Copiar Texto Padrão', icon='content_copy', on_click=copiar_texto).props(
                             'unelevated color=amber text-color=black bold'
@@ -754,17 +793,21 @@ def render_page(evento_id: str = None, **kwargs):
         except Exception:
             pass
 
-        # Gera QR Code
-        import qrcode
-        import io
-        import base64
-        qr = qrcode.QRCode(box_size=8, border=2)
-        qr.add_data(portal_url)
-        qr.make(fit=True)
-        img_qr = qr.make_image(fill_color="black", back_color="white")
-        buf = io.BytesIO()
-        img_qr.save(buf, format="PNG")
-        qr_b64 = f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode('utf-8')}"
+        # Gera QR Code com fallback seguro
+        qr_b64 = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&margin=10&data={portal_url}"
+        try:
+            import qrcode
+            import io
+            import base64
+            qr = qrcode.QRCode(box_size=8, border=2)
+            qr.add_data(portal_url)
+            qr.make(fit=True)
+            img_qr = qr.make_image(fill_color="black", back_color="white")
+            buf = io.BytesIO()
+            img_qr.save(buf, format="PNG")
+            qr_b64 = f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode('utf-8')}"
+        except Exception:
+            pass
 
         # MODAL EXPANDIDO E ESPAÇOSO (940px)
         with ui.dialog() as dlg_portal, ui.card().classes('w-[940px] max-w-[96vw] max-h-[92vh] q-pa-lg rounded-3xl bg-slate-900 border-2 border-cyan-500/30 text-white flex flex-col justify-start overflow-y-auto').style('box-shadow: 0 0 50px rgba(0,229,255,0.2);'):
