@@ -234,9 +234,9 @@ def get_time_keyboard():
 
 def get_uniform_keyboard():
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-    markup.row(types.KeyboardButton("👔 3.3 (Instalação / Comum)"), types.KeyboardButton("👔 4.4 (Operacional / Camuflado)"))
-    markup.row(types.KeyboardButton("👔 3.1 (Passeio / Branco)"), types.KeyboardButton("👔 1.1 (Gala / Cerimonial)"))
-    markup.row(types.KeyboardButton("👕 Paisano / Esporte"))
+    markup.row(types.KeyboardButton("👔 5.5 (Operacional / Serviço)"), types.KeyboardButton("👔 5.3 (Camuflado)"))
+    markup.row(types.KeyboardButton("👔 3.3 (Passeio / Trânsito)"), types.KeyboardButton("👔 Terno / Paisano"))
+    markup.row(types.KeyboardButton("👔 Outro Uniforme"))
     markup.row(types.KeyboardButton("⬅️ Voltar"), types.KeyboardButton("❌ Cancelar"))
     return markup
 

@@ -555,7 +555,7 @@ async def upload_photos_to_drive(bot, chat_id, photos_info, demanda):
                             'demanda_id': demanda['id'],
                             'event_name': demanda.get('titulo_evento', ''),
                             'file_id': photo['file_id'],
-                            'file_name': filename,
+                            'filename': filename,
                             'drive_link': upload_res.get('webViewLink', ''),
                             'uploaded_by': str(chat_id),
                             'created_at': datetime.now().isoformat()

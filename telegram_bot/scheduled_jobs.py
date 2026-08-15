@@ -200,7 +200,7 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
                 pass
 
             try:
-                res_pr = conn.table('presenca_diaria').select('nome_guerra, telegram_id, user_id, status').eq('data', hoje_str).execute()
+                res_pr = conn.table('presenca_diaria').select('nome_guerra, telegram_id, user_id, militar_id, status').eq('data', hoje_str).execute()
                 if res_pr and res_pr.data:
                     for p in res_pr.data:
                         st = str(p.get('status') or '').strip().upper()
@@ -208,9 +208,11 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
                             ng = str(p.get('nome_guerra') or '').strip().upper()
                             p_tid = str(p.get('telegram_id') or '').strip()
                             p_uid = str(p.get('user_id') or '').strip()
+                            p_mid = str(p.get('militar_id') or '').strip()
                             if ng: respondidos[ng] = st
                             if p_tid: respondidos_tids.add(p_tid)
                             if p_uid: respondidos_tids.add(p_uid)
+                            if p_mid: respondidos_tids.add(p_mid)
             except Exception:
                 pass
             

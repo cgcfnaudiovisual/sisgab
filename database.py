@@ -253,6 +253,22 @@ def deduplicar_efetivo():
     return total_unificados
 
 
+def log_telegram_access(chat_id, user_name, command_text):
+    """Grava um registro de log de acesso do bot Telegram para auditoria admin."""
+    db = get_bot_db_connection()
+    if not db:
+        return
+    try:
+        db.table('telegram_access_logs').insert({
+            'chat_id': str(chat_id),
+            'telegram_name': user_name or 'Anônimo',
+            'command': str(command_text or 'Interação')[:100],
+            'created_at': datetime.now().isoformat()
+        }).execute()
+    except Exception:
+        pass
+
+
 def get_db_connection():
     if DB_MODE == "local":
         return get_local_db_connection()

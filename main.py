@@ -310,6 +310,7 @@ import estudio_grafico
 import comsoc_rsvp
 import modulo_presenca
 import qrcode_generator
+import telegram_metrics
 from database import authenticate_user, get_user_by_id
 
 from services import data_service
@@ -365,6 +366,7 @@ sisgab_menu_categories = [
     {
         'category': '⚙️ SISTEMA & ADMINISTRAÇÃO',
         'items': [
+            {'name': 'Métricas do Bot Telegram', 'icon': 'analytics', 'path': '/telegram_metrics', 'roles': ['admin', 'supervisor'], 'subtitle': 'Auditoria e logs do assistente virtual'},
             {'name': 'Configurações', 'icon': 'settings', 'path': '/config', 'roles': ['admin', 'oficial_gab'], 'subtitle': 'Parâmetros do sistema'},
             {'name': 'Usuários e Permissões', 'icon': 'admin_panel_settings', 'path': '/admin_panel', 'roles': ['admin'], 'subtitle': 'Controle de acesso e aprovação'},
             {'name': 'Ajuda / Sobre', 'icon': 'help_outline', 'path': '/ajuda_sobre', 'roles': ['admin', 'supervisor', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar', 'compel', 'operador'], 'subtitle': 'Manuais e suporte'},
@@ -951,6 +953,12 @@ def comsoc_rsvp_page():
 def qrcode_generator_page():
     app.storage.user['current_path'] = '/qrcode_generator'
     build_layout(qrcode_generator.render_page)()
+
+
+@ui.page('/telegram_metrics')
+def telegram_metrics_page():
+    app.storage.user['current_path'] = '/telegram_metrics'
+    build_layout(telegram_metrics.render_page)()
 
 
 @ui.page('/rsvp/{token}')

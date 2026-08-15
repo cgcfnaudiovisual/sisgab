@@ -1031,6 +1031,32 @@ def register_common_handlers(bot):
             clear_state(chat_id)
             return
 
+        if data.startswith('confirm_ia_demanda:'):
+            action_code = data.split(':')[1]
+            await bot.answer_callback_query(call.id)
+            if chat_id in chat_states and 'parsed_registro' in chat_states[chat_id]:
+                registro = chat_states[chat_id]['parsed_registro']
+                if action_code == 'yes':
+                    db = get_db_connection()
+                    if db:
+                        try:
+                            db.table('demandas_comunicacao').insert(registro).execute()
+                            confirm_msg = (
+                                "✅ **Pauta confirmada e salva com sucesso via IA!**\n\n"
+                                f"📌 **Evento:** {registro['titulo_evento']}\n"
+                                f"📅 **Data:** {registro['data_evento']} às {registro['hora_evento']}\n"
+                                f"📍 **Local:** {registro['local_evento']}\n"
+                                f"👤 **Solicitante:** {registro['solicitante_nome']}\n\n"
+                                "A pauta foi incluída na lista de pendentes e aguarda homologação do supervisor."
+                            )
+                            await bot.edit_message_text(confirm_msg, chat_id, call.message.message_id, parse_mode='Markdown')
+                        except Exception as e_save:
+                            await bot.send_message(chat_id, f"❌ Erro ao salvar pauta: {e_save}")
+                else:
+                    await bot.edit_message_text("❌ *Inclusão da pauta cancelada.*", chat_id, call.message.message_id, parse_mode='Markdown')
+                clear_state(chat_id)
+            return
+
     @bot.message_handler(func=lambda msg: True)
     async def handle_all_messages(message):
         chat_id = message.chat.id
@@ -1042,6 +1068,14 @@ def register_common_handlers(bot):
             return
         
         text = message.text.strip()
+
+        # Log de Acesso para Auditoria de Métricas (Admin)
+        try:
+            from database import log_telegram_access
+            u_name = message.from_user.first_name or message.from_user.username or 'Militar'
+            log_telegram_access(chat_id, u_name, text)
+        except Exception:
+            pass
 
         # Intercepta busca de eventos para envio de fotos no Telegram
         if chat_id in _upload_state and _upload_state[chat_id].get('waiting_search_query'):
@@ -2542,44 +2576,38 @@ def register_common_handlers(bot):
                     response_json = ai_helper.digest_demand_questionnaire(text)
                     dados = json.loads(response_json)
                     
-                    db = get_db_connection()
-                    if db:
-                        registro = {
-                            'solicitante_nome': dados.get('solicitante_nome', 'N/I').upper(),
-                            'setor': dados.get('setor', 'Gabinete').upper(),
-                            'contato': dados.get('contato', 'N/I'),
-                            'titulo_evento': dados.get('titulo_evento', 'Evento Sem Título').upper(),
-                            'data_evento': dados.get('data_evento', datetime.now().strftime('%Y-%m-%d')),
-                            'hora_evento': dados.get('hora_evento', '09:00'),
-                            'local_evento': dados.get('local_evento', 'Gabinete').upper(),
-                            'tipo_cobertura': '["foto", "video"]',
-                            'autoridades': dados.get('autoridades', ''),
-                            'score_esforco': 2.0,
-                            'status': 'pendente'
-                        }
-                        
-                        db.table('demandas_comunicacao').insert(registro).execute()
-                        
-                        confirm_msg = (
-                            "✅ **Pauta processada e salva com sucesso via IA!**\n\n"
-                            f"📌 **Evento:** {registro['titulo_evento']}\n"
-                            f"📅 **Data:** {registro['data_evento']} às {registro['hora_evento']}\n"
-                            f"📍 **Local:** {registro['local_evento']}\n"
-                            f"👤 **Solicitante:** {registro['solicitante_nome']}\n\n"
-                            "A pauta foi adicionada à lista de pendentes e aguarda homologação do supervisor."
-                        )
-                        await bot.reply_to(message, confirm_msg, reply_markup=get_main_menu_keyboard(is_operator), parse_mode='Markdown')
-                        
-                        from notifications_manager import notify_telegram
-                        notify_telegram(
-                            f"🆕 **Nova Pauta Criada via IA (Telegram)**\n\n"
-                            f"📌 Evento: {registro['titulo_evento']}\n"
-                            f"📅 Data: {registro['data_evento']}\n"
-                            f"Acesse o painel web ou use o menu do bot para tramitar.",
-                            "new_user"
-                        )
-                    else:
-                        await bot.reply_to(message, "⚠️ Erro ao salvar: Banco indisponível.")
+                    registro = {
+                        'solicitante_nome': dados.get('solicitante_nome', 'N/I').upper(),
+                        'setor': dados.get('setor', 'Gabinete').upper(),
+                        'contato': dados.get('contato', 'N/I'),
+                        'titulo_evento': dados.get('titulo_evento', 'Evento Sem Título').upper(),
+                        'data_evento': dados.get('data_evento', datetime.now().strftime('%Y-%m-%d')),
+                        'hora_evento': dados.get('hora_evento', '09:00'),
+                        'local_evento': dados.get('local_evento', 'Gabinete').upper(),
+                        'tipo_cobertura': '["foto", "video"]',
+                        'autoridades': dados.get('autoridades', ''),
+                        'score_esforco': 2.0,
+                        'status': 'pendente'
+                    }
+                    
+                    state['parsed_registro'] = registro
+                    state['step'] = 'confirm_ia_save'
+
+                    markup = types.InlineKeyboardMarkup(row_width=2)
+                    markup.add(
+                        types.InlineKeyboardButton("✅ Confirmar & Incluir", callback_data="confirm_ia_demanda:yes"),
+                        types.InlineKeyboardButton("❌ Cancelar", callback_data="confirm_ia_demanda:cancel")
+                    )
+
+                    confirm_msg = (
+                        "🤖 **PRÉ-VISUALIZAÇÃO DA PAUTA EXTRAÍDA PELA IA**\n\n"
+                        f"📌 **Evento:** {registro['titulo_evento']}\n"
+                        f"📅 **Data:** {registro['data_evento']} às {registro['hora_evento']}\n"
+                        f"📍 **Local:** {registro['local_evento']}\n"
+                        f"👤 **Solicitante:** {registro['solicitante_nome']}\n\n"
+                        "⚠️ *Confirma os dados acima para salvar e incluir na agenda?*"
+                    )
+                    await bot.reply_to(message, confirm_msg, reply_markup=markup, parse_mode='Markdown')
                 except Exception as e:
                     await bot.reply_to(message, f"❌ Erro ao digerir questionário: {e}\nPor favor, tente enviar novamente ou criar manualmente.", reply_markup=get_main_menu_keyboard(is_operator))
                 finally:
