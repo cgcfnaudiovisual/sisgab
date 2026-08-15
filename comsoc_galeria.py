@@ -889,66 +889,108 @@ def render_page(evento_id: str = None, **kwargs):
 
                             # Controles da Pasta e Execução
                             with ui.card().classes('w-full bg-slate-950/90 border border-slate-800 rounded-2xl p-4 gap-3'):
-                                ui.label('📂 Pasta Local com as Fotos da Câmera:').classes('text-xs font-bold text-amber-3')
-                                pasta_input = ui.input(placeholder='Ex: D:\\FOTOS\\50 ou F:\\CGCFN\\EVENTO', value=f"D:\\FOTOS\\{slug}").props('dark outlined dense w-full')
+                                ui.label('📂 Pasta Local com as Fotos no seu Computador (com GPU):').classes('text-xs font-bold text-amber-3')
+                                pasta_input = ui.input(placeholder='Ex: F:\\CGCFN\\ENCONTRO VETE ou D:\\FOTOS\\50', value=f"D:\\FOTOS\\{slug}").props('dark outlined dense w-full')
 
                                 with ui.row().classes('w-full gap-3 items-center flex-wrap'):
-                                    if not is_running:
-                                        def iniciar_watcher_direto():
-                                            caminho_pasta = pasta_input.value.strip()
-                                            if not os.path.exists(caminho_pasta):
-                                                try:
-                                                    os.makedirs(caminho_pasta, exist_ok=True)
-                                                except Exception:
-                                                    pass
+                                    def abrir_info_execucao_local():
+                                        caminho_p = pasta_input.value.strip()
+                                        cmd_str = f'python event_photo_watcher.py --event-id "{slug}" --pasta "{caminho_p}" --workers 10'
+                                        escaped = cmd_str.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+                                        
+                                        with ui.dialog() as dlg_info, ui.card().classes('bg-slate-900 border border-cyan-500/40 p-6 rounded-3xl max-w-xl w-full text-white gap-4'):
+                                            with ui.row().classes('w-full items-center justify-between'):
+                                                with ui.row().classes('items-center gap-2'):
+                                                    ui.icon('rocket_launch', size='1.8rem', color='amber-4')
+                                                    ui.label('COMO PROCESSAR NA GPU LOCAL').classes('text-base font-black text-amber-4')
+                                                ui.button(icon='close', on_click=dlg_info.close).props('flat round dense text-color=grey-4')
+
+                                            ui.label(f'Como a plataforma web está na nuvem (VPS), o processamento acelerado por GPU (InsightFace 512D) e os 10 workers de upload rodam direto no seu PC Windows onde está a pasta:').classes('text-xs text-grey-3 leading-relaxed')
                                             
-                                            script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'event_photo_watcher.py')
-                                            cmd = [sys.executable, script_path, '--event-id', slug, '--pasta', caminho_pasta]
-                                            try:
-                                                p = subprocess.Popen(cmd, cwd=os.path.dirname(os.path.abspath(__file__)))
-                                                _ACTIVE_WATCHERS[slug] = p
-                                                ui.notify('🚀 Processamento iniciado em segundo plano! Fotos sendo enviadas e processadas pela IA.', color='positive', timeout=5000)
-                                                render_watcher_panel()
-                                            except Exception as ex_proc:
-                                                ui.notify(f'Erro ao iniciar processamento: {ex_proc}', color='negative')
+                                            with ui.element('div').classes('p-3 bg-black/80 rounded-xl border border-white/10 font-mono text-xs text-cyan-3 break-all select-all'):
+                                                ui.label(cmd_str)
 
-                                        ui.button('▶️ INICIAR PROCESSAMENTO AGORA (1 CLIQUE)', icon='play_arrow', on_click=iniciar_watcher_direto).props('unelevated color=green-8 text-color=white bold').classes('flex-1 h-13 text-sm font-black rounded-xl cyber-glow')
-                                    else:
-                                        def parar_watcher_direto():
-                                            p = _ACTIVE_WATCHERS.get(slug)
-                                            if p:
+                                            with ui.row().classes('w-full gap-2 justify-end'):
+                                                ui.button('📋 Copiar Comando', icon='content_copy', on_click=lambda: (ui.run_javascript(f'navigator.clipboard.writeText(`{escaped}`);'), ui.notify('📋 Comando copiado!', color='positive'))).props('unelevated color=amber-9 text-color=black bold').classes('text-xs')
+                                                ui.button('Fechar', on_click=dlg_info.close).props('flat color=grey').classes('text-xs')
+                                        dlg_info.open()
+
+                                    if sys.platform == 'win32' and not os.environ.get('RENDER_EXTERNAL_URL'):
+                                        if not is_running:
+                                            def iniciar_watcher_direto():
+                                                caminho_pasta = pasta_input.value.strip()
+                                                if not os.path.exists(caminho_pasta):
+                                                    try: os.makedirs(caminho_pasta, exist_ok=True)
+                                                    except Exception: pass
+                                                script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'event_photo_watcher.py')
+                                                cmd = [sys.executable, script_path, '--event-id', slug, '--pasta', caminho_pasta]
                                                 try:
-                                                    p.terminate()
-                                                    _ACTIVE_WATCHERS[slug] = None
-                                                    ui.notify('⏹️ Processamento encerrado com sucesso.', color='info')
-                                                except Exception as ex_kill:
-                                                    ui.notify(f'Erro ao parar: {ex_kill}', color='negative')
-                                            render_watcher_panel()
+                                                    p = subprocess.Popen(cmd, cwd=os.path.dirname(os.path.abspath(__file__)))
+                                                    _ACTIVE_WATCHERS[slug] = p
+                                                    ui.notify('🚀 Processamento iniciado no PC local!', color='positive')
+                                                    render_watcher_panel()
+                                                except Exception as ex_proc:
+                                                    ui.notify(f'Erro: {ex_proc}', color='negative')
 
-                                        ui.button('⏹️ PARAR PROCESSAMENTO', icon='stop', on_click=parar_watcher_direto).props('unelevated color=red-8 text-color=white bold').classes('flex-1 h-13 text-sm font-black rounded-xl')
+                                            ui.button('▶️ INICIAR PROCESSAMENTO (PC LOCAL)', icon='play_arrow', on_click=iniciar_watcher_direto).props('unelevated color=green-8 text-color=white bold').classes('flex-1 h-13 text-sm font-black rounded-xl cyber-glow')
+                                        else:
+                                            def parar_watcher_direto():
+                                                p = _ACTIVE_WATCHERS.get(slug)
+                                                if p:
+                                                    try:
+                                                        p.terminate()
+                                                        _ACTIVE_WATCHERS[slug] = None
+                                                        ui.notify('⏹️ Processamento encerrado.', color='info')
+                                                    except Exception: pass
+                                                render_watcher_panel()
 
-                                    def abrir_pasta_local():
-                                        caminho_pasta = pasta_input.value.strip()
-                                        if not os.path.exists(caminho_pasta):
-                                            os.makedirs(caminho_pasta, exist_ok=True)
-                                        try:
-                                            if sys.platform == 'win32':
-                                                os.startfile(caminho_pasta)
-                                            else:
-                                                subprocess.Popen(['xdg-open', caminho_pasta])
-                                        except Exception as ex_open:
-                                            ui.notify(f'Não foi possível abrir a pasta: {ex_open}', color='warning')
+                                            ui.button('⏹️ PARAR PROCESSAMENTO', icon='stop', on_click=parar_watcher_direto).props('unelevated color=red-8 text-color=white bold').classes('flex-1 h-13 text-sm font-black rounded-xl')
+                                    else:
+                                        ui.button('🚀 COMO EXECUTAR NO SEU PC (GPU)', icon='terminal', on_click=abrir_info_execucao_local).props('unelevated color=amber-9 text-color=black bold').classes('flex-1 h-13 text-sm font-black rounded-xl cyber-glow')
 
-                                    ui.button('📁 Abrir Pasta no PC', icon='folder_open', on_click=abrir_pasta_local).props('unelevated color=blue-9 text-color=white bold').classes('h-13 px-4 rounded-xl text-xs')
-                                    ui.button(icon='refresh', on_click=render_watcher_panel).props('unelevated color=slate-8 text-color=cyan round').classes('h-13 w-13').tooltip('Atualizar contadores e status')
+                                    def copiar_cmd_watcher():
+                                        cmd = f'python event_photo_watcher.py --event-id "{slug}" --pasta "{pasta_input.value}"'
+                                        escaped = cmd.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+                                        ui.run_javascript(f'navigator.clipboard.writeText(`{escaped}`);')
+                                        ui.notify('📋 Comando do Watcher copiado! Cole no PowerShell do seu PC.', color='positive', icon='content_copy')
 
-                                def copiar_cmd_watcher():
-                                    cmd = f'python event_photo_watcher.py --event-id "{slug}" --pasta "{pasta_input.value}"'
-                                    escaped = cmd.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
-                                    ui.run_javascript(f'navigator.clipboard.writeText(`{escaped}`);')
-                                    ui.notify('📋 Comando copiado! Você também pode rodar no terminal externo se preferir.', color='positive', icon='content_copy')
+                                    ui.button('📋 Copiar Comando Watcher', icon='content_copy', on_click=copiar_cmd_watcher).props('unelevated color=cyan-8 text-color=white bold').classes('h-13 px-4 rounded-xl text-xs')
+                                    ui.button(icon='refresh', on_click=render_watcher_panel).props('unelevated color=slate-8 text-color=cyan round').classes('h-13 w-13').tooltip('Atualizar contadores e logs')
 
-                                ui.button('📋 Copiar Comando Terminal (Modo Avançado)', icon='terminal', on_click=copiar_cmd_watcher).props('flat dense color=amber text-color=amber').classes('text-[11px] q-mt-xs')
+                            # 3. LOG EM TEMPO REAL DAS ÚLTIMAS FOTOS PROCESSADAS
+                            with ui.card().classes('w-full bg-slate-950 border border-cyan-500/20 rounded-2xl p-4 gap-2 q-mt-1'):
+                                with ui.row().classes('w-full items-center justify-between'):
+                                    with ui.row().classes('items-center gap-2'):
+                                        ui.icon('list_alt', size='1.3rem', color='cyan-4')
+                                        ui.label('LOG AO VIVO DE FOTOS PROCESSADAS COM IA').classes('text-xs font-bold text-cyan-3')
+                                    ui.badge(f'{emb_count} rostos no total', color='amber-9').classes('text-[10px]')
+
+                                recent_logs = get_event_photo_embeddings(slug)
+                                if not recent_logs:
+                                    ui.label('Aguardando envio e processamento de fotos da pasta local...').classes('text-xs text-grey-5 italic py-2')
+                                else:
+                                    # Mostra até as 8 últimas fotos únicas
+                                    seen_photos = set()
+                                    unique_recents = []
+                                    for r in reversed(recent_logs):
+                                        fid = r.get('drive_file_id')
+                                        if fid not in seen_photos:
+                                            seen_photos.add(fid)
+                                            unique_recents.append(r)
+                                        if len(unique_recents) >= 8:
+                                            break
+
+                                    with ui.column().classes('w-full gap-1 font-mono text-[11px] max-h-48 overflow-y-auto'):
+                                        for item in unique_recents:
+                                            fname = item.get('photo_filename') or f"foto_{item.get('drive_file_id')[:8]}.jpg"
+                                            dt_raw = item.get('criado_em', '')[:19].replace('T', ' ')
+                                            with ui.row().classes('w-full items-center justify-between p-1.5 bg-black/40 rounded border border-white/5'):
+                                                with ui.row().classes('items-center gap-2 truncate'):
+                                                    ui.label('🟢').classes('text-[8px]')
+                                                    ui.label(fname).classes('text-white font-bold truncate max-w-xs')
+                                                with ui.row().classes('items-center gap-3'):
+                                                    ui.label(f'👤 {item.get("det_score", 0.95):.0%} conf.').classes('text-amber-3 text-[10px]')
+                                                    ui.label(dt_raw).classes('text-grey-5 text-[10px]')
 
                     render_watcher_panel()
 

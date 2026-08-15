@@ -18,6 +18,13 @@ import traceback
 import numpy as np
 from datetime import datetime, timedelta
 
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 # Import cv2
 try:
     import cv2
