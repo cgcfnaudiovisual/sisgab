@@ -89,6 +89,68 @@ def render_page(current_user=None):
     """Renderiza o painel futurista estilo HUD Jarvis com voz em tempo real e palavra-chave."""
     ui.colors(primary=THEME['accent'], dark=THEME['bg_main'])
 
+    ui.add_head_html('''
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+        
+        .jarvis-orb-container {
+            position: relative;
+            width: 180px;
+            height: 180px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        
+        .jarvis-orb-core {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #00e5ff 0%, #091326 70%);
+            box-shadow: 0 0 40px #00e5ff, inset 0 0 20px #ffffff;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .jarvis-ring-1 {
+            position: absolute;
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            border: 2px dashed rgba(0, 229, 255, 0.6);
+            animation: rotateClockwise 12s linear infinite;
+        }
+        
+        .jarvis-ring-2 {
+            position: absolute;
+            width: 175px;
+            height: 175px;
+            border-radius: 50%;
+            border: 1px solid rgba(0, 255, 136, 0.4);
+            border-top-color: transparent;
+            animation: rotateCounterClockwise 8s linear infinite;
+        }
+
+        /* Estados Animações do Orbe */
+        .jarvis-listening .jarvis-orb-core {
+            box-shadow: 0 0 60px #00ff88, inset 0 0 30px #ffffff;
+            transform: scale(1.15);
+        }
+        .jarvis-speaking .jarvis-orb-core {
+            box-shadow: 0 0 80px #ffb700, inset 0 0 40px #ffffff;
+            animation: pulseSpeaking 0.6s ease-in-out infinite alternate;
+        }
+        
+        @keyframes rotateClockwise { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes rotateCounterClockwise { 0% { transform: rotate(0deg); } 100% { transform: rotate(-360deg); } }
+        @keyframes pulseSpeaking { 0% { transform: scale(1); } 100% { transform: scale(1.25); } }
+    </style>
+    ''')
+
     with ui.column().classes('w-full p-4 md:p-6 gap-6').style(f'background: {THEME["bg_main"]}; min-height: 100vh; font-family: "Share Tech Mono", monospace, sans-serif;'):
         
         # Cabeçalho da Página
@@ -108,68 +170,8 @@ def render_page(current_user=None):
             with ui.card().classes('w-full max-w-[800px] p-6 rounded-2xl no-shadow items-center justify-center relative overflow-hidden').style(
                 f'background: radial-gradient(circle at center, {THEME["bg_card"]} 0%, {THEME["bg_panel"]} 100%); border: 1px solid {THEME["border"]}; box-shadow: 0 0 30px rgba(0, 229, 255, 0.15);'
             ):
-                # Estilo CSS Personalizado do Orbe HUD do Jarvis
+                # HTML Container do Orbe HUD do Jarvis
                 ui.html('''
-                <style>
-                    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
-                    
-                    .jarvis-orb-container {
-                        position: relative;
-                        width: 180px;
-                        height: 180px;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        margin: 20px 0;
-                    }
-                    
-                    .jarvis-orb-core {
-                        width: 100px;
-                        height: 100px;
-                        border-radius: 50%;
-                        background: radial-gradient(circle, #00e5ff 0%, #091326 70%);
-                        box-shadow: 0 0 40px #00e5ff, inset 0 0 20px #ffffff;
-                        transition: all 0.3s ease;
-                        cursor: pointer;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                    }
-                    
-                    .jarvis-ring-1 {
-                        position: absolute;
-                        width: 150px;
-                        height: 150px;
-                        border-radius: 50%;
-                        border: 2px dashed rgba(0, 229, 255, 0.6);
-                        animation: rotateClockwise 12s linear infinite;
-                    }
-                    
-                    .jarvis-ring-2 {
-                        position: absolute;
-                        width: 175px;
-                        height: 175px;
-                        border-radius: 50%;
-                        border: 1px solid rgba(0, 255, 136, 0.4);
-                        border-top-color: transparent;
-                        animation: rotateCounterClockwise 8s linear infinite;
-                    }
-
-                    /* Estados Animações do Orbe */
-                    .jarvis-listening .jarvis-orb-core {
-                        box-shadow: 0 0 60px #00ff88, inset 0 0 30px #ffffff;
-                        transform: scale(1.15);
-                    }
-                    .jarvis-speaking .jarvis-orb-core {
-                        box-shadow: 0 0 80px #ffb700, inset 0 0 40px #ffffff;
-                        animation: pulseSpeaking 0.6s ease-in-out infinite alternate;
-                    }
-                    
-                    @keyframes rotateClockwise { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-                    @keyframes rotateCounterClockwise { 0% { transform: rotate(0deg); } 100% { transform: rotate(-360deg); } }
-                    @keyframes pulseSpeaking { 0% { transform: scale(1); } 100% { transform: scale(1.25); } }
-                </style>
-
                 <div id="jarvisHudContainer" class="jarvis-orb-container">
                     <div class="jarvis-ring-1"></div>
                     <div class="jarvis-ring-2"></div>
@@ -211,7 +213,7 @@ def render_page(current_user=None):
                         ).props('outline dense color=cyan text-color=white').classes('text-xs rounded-full')
 
         # ─── MOTOR JAVASCRIPT CLIENT-SIDE (WEBSPEECH STT + WAKE WORD + TTS) ───
-        ui.html('''
+        ui.add_body_html('''
         <script>
             let isListening = false;
             let isSpeaking = false;
