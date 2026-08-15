@@ -1575,90 +1575,41 @@ def login_page(request: Request):
                             log_acessos.log_access(f"Tentativa de login bloqueada (Brute-force)", "Autenticação", "BLOQUEADO")
                             return
                         
-                        from database import get_db_connection, authenticate_user_supabase
+                        from database import get_db_connection, authenticate_user, authenticate_user_supabase
                         db_conn = get_db_connection()
                         
                         if not db_conn:
                             error_label.text = 'Sem conexão com o Supabase. Verifique sua rede.'
                             return
                         
-                        # Resolve o login para e-mail caso o usuário tenha inserido o username/nome de guerra
-                        login_email = user.value.strip()
-                        if '@' not in login_email:
-                            try:
-                                from database import get_service_db_connection
-                                svc_db = get_service_db_connection()
-                                if svc_db:
-                                    # Busca no efetivo pelo nome_guerra (case-insensitive)
-                                    res_ef = svc_db.table('efetivo').select('email').eq('nome_guerra', login_email.upper()).execute()
-                                    if res_ef.data and res_ef.data[0].get('email'):
-                                        login_email = res_ef.data[0]['email']
-                                    else:
-                                        # Tenta buscar pelo username em users (caixa baixa)
-                                        res_u = svc_db.table('users').select('nome, email').eq('username', login_email.lower()).execute()
-                                        if res_u.data:
-                                            if res_u.data[0].get('email'):
-                                                login_email = res_u.data[0]['email']
-                                            else:
-                                                guerra = res_u.data[0]['nome']
-                                                res_ef2 = svc_db.table('efetivo').select('email').eq('nome_guerra', guerra.upper()).execute()
-                                                if res_ef2.data and res_ef2.data[0].get('email'):
-                                                    login_email = res_ef2.data[0]['email']
-                            except Exception as lookup_err:
-                                print(f"[LOGIN LOOKUP ERR] {lookup_err}")
+                        original_input = user.value.strip()
+                        password_val = pwd.value.strip()
+
+                        # 1. Tenta autenticação direta otimizada no banco (efetivo / users) em 1 único roundtrip
+                        local_user = authenticate_user(original_input, password_val)
                         
-                        def resolve_militar_display_name(email_or_user, profile_data=None):
-                            if profile_data and isinstance(profile_data, dict):
-                                ng = profile_data.get('nome_guerra') or profile_data.get('nome') or profile_data.get('nome_completo') or ''
-                                pg = profile_data.get('posto_grad') or profile_data.get('posto') or ''
-                                if ng and '@' not in str(ng):
-                                    return f"{pg} {ng}".strip().upper()
+                        profile = None
+                        session_data = None
+                        login_email = original_input
 
-                            clean_input = str(email_or_user).strip()
-                            if '@' in clean_input and 'cgcfn' in clean_input.lower():
-                                return "ADMINISTRADOR / COMSOC"
-
+                        if local_user:
+                            profile = local_user
+                            login_email = local_user.get('email') or original_input
+                        else:
+                            # 2. Se não encontrar no banco local/efetivo, tenta Supabase Auth Cloud
                             try:
-                                from database import get_service_db_connection, get_db_connection
-                                db = get_service_db_connection() or get_db_connection()
-                                if db:
-                                    if '@' in clean_input:
-                                        res_ef = db.table('efetivo').select('nome_guerra, posto_grad, nome_completo').eq('email', clean_input).limit(1).execute()
-                                        if res_ef.data:
-                                            m = res_ef.data[0]
-                                            ng = m.get('nome_guerra') or m.get('nome_completo') or ''
-                                            pg = m.get('posto_grad') or ''
-                                            if ng:
-                                                return f"{pg} {ng}".strip().upper()
-                                    else:
-                                        res_ef2 = db.table('efetivo').select('nome_guerra, posto_grad, nome_completo').ilike('nome_guerra', clean_input).limit(1).execute()
-                                        if res_ef2.data:
-                                            m = res_ef2.data[0]
-                                            ng = m.get('nome_guerra') or m.get('nome_completo') or ''
-                                            pg = m.get('posto_grad') or ''
-                                            if ng:
-                                                return f"{pg} {ng}".strip().upper()
-                            except Exception as err:
-                                print(f"[RESOLVE DISPLAY NAME FAST ERR] {err}")
+                                auth_res = authenticate_user_supabase(original_input, password_val)
+                                if auth_res:
+                                    profile = auth_res['profile']
+                                    session_data = auth_res['session']
+                                    login_email = profile.get('email') or original_input
+                            except Exception as e:
+                                print(f"[LOGIN SUPABASE AUTH ERR] {e}")
 
-                            if '@' in clean_input:
-                                user_part = clean_input.split('@')[0]
-                                parts = user_part.replace('.', ' ').replace('_', ' ').split()
-                                return " ".join([p.capitalize() for p in parts]).upper()
-
-                            return clean_input.upper()
-
-                        try:
-                            auth_res = authenticate_user_supabase(login_email, pwd.value)
-                        except Exception as e:
-                            print(f"Erro ao autenticar no Supabase: {e}")
-                            auth_res = None
-                        
-                        if auth_res:
-                            profile = auth_res['profile']
-                            session_data = auth_res['session']
-                            
-                            nome_exibicao = resolve_militar_display_name(login_email, profile)
+                        if profile:
+                            ng = profile.get('nome_guerra') or profile.get('nome') or profile.get('nome_completo') or original_input
+                            pg = profile.get('posto_grad') or ''
+                            nome_exibicao = f"{pg} {ng}".strip().upper() if ng and '@' not in str(ng) else original_input.upper()
 
                             import time
                             app.storage.user['authenticated'] = True
@@ -1667,9 +1618,9 @@ def login_page(request: Request):
                             app.storage.user['last_username'] = user.value
                             app.storage.user['user_data'] = {
                                 'id': profile.get('id'),
-                                'username': profile.get('username'),
+                                'username': profile.get('username') or profile.get('nome_guerra'),
                                 'nome_guerra': nome_exibicao,
-                                'posto_grad': profile.get('posto_grad', ''),
+                                'posto_grad': pg,
                                 'role': profile.get('role', 'compel'),
                                 'email': login_email
                             }
@@ -1689,63 +1640,21 @@ def login_page(request: Request):
                                 close_button='OK'
                             )
                             
-                            import log_acessos
-                            log_acessos.log_access("Login", "Autenticação", "SUCESSO")
+                            try:
+                                import log_acessos
+                                log_acessos.log_access("Login", "Autenticação", "SUCESSO")
+                            except Exception:
+                                pass
                             
                             ui.run_javascript(f"window.location.href = '{target_path}';")
+                            return
                         else:
-                            # Fallback para autenticação local no banco efetivo (caso tenha sido criado sem Auth por rate limits)
-                            from database import authenticate_user
-                            original_input = user.value.strip()
-                            local_user = authenticate_user(original_input, pwd.value)
-                            if not local_user and login_email != original_input:
-                                local_user = authenticate_user(login_email, pwd.value)
-                            if local_user:
-                                nome_exibicao = resolve_militar_display_name(login_email, local_user)
-
-                                profile = {
-                                    'id': local_user.get('id') or local_user.get('telegram_id') or 'local-fallback',
-                                    'username': local_user.get('email', '').split('@')[0] if local_user.get('email') else original_input,
-                                    'nome': nome_exibicao,
-                                    'posto_grad': local_user.get('posto_grad', ''),
-                                    'role': local_user.get('role', 'militar')
-                                }
-                                import time
-                                app.storage.user['authenticated'] = True
-                                app.storage.user['login_time'] = time.time()
-                                app.storage.user['session_duration'] = session_type.value
-                                app.storage.user['last_username'] = user.value
-                                app.storage.user['user_data'] = {
-                                    'id': profile.get('id'),
-                                    'username': profile.get('username'),
-                                    'nome_guerra': nome_exibicao,
-                                    'posto_grad': profile.get('posto_grad', ''),
-                                    'role': profile.get('role', 'militar'),
-                                    'email': login_email
-                                }
-                                app.storage.user['supabase_session'] = None
-                                
-                                role_user = str(profile.get('role', 'militar')).strip().lower()
-                                target_path = '/sisgab_tv' if role_user in ('tv', 'tv_comcia') else '/'
-                                app.storage.user['current_path'] = target_path
-                                if role_user not in ('tv', 'tv_comcia'):
-                                    app.storage.user['tv_lock_active'] = False
-                                
-                                ui.notify(
-                                    f'🛡️ SESSÃO AUTENTICADA — BEM-VINDO AO SISGAB, {nome_exibicao}!',
-                                    color='dark',
-                                    position='top',
-                                    icon='shield',
-                                    close_button='OK'
-                                )
-                                
-                                import log_acessos
-                                log_acessos.log_access("Login", "Autenticação Local", "SUCESSO")
-                                ui.run_javascript(f"window.location.href = '{target_path}';")
-                            else:
-                                error_label.text = 'E-mail, usuário ou senha incorretos'
+                            error_label.text = 'E-mail, usuário ou senha incorretos'
+                            try:
                                 import log_acessos
                                 log_acessos.log_access(f"Falha de Login: {user.value}", "Autenticação", "FALHA")
+                            except Exception:
+                                pass
   
                     ui.button('🚀 Entrar no Sistema').props('type=submit unelevated color=amber-9 text-color=black w-full bold').classes('q-py-sm font-bold text-sm cyber-title w-full')
                     

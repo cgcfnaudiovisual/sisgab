@@ -374,16 +374,20 @@ def authenticate_user(username: str, password: str) -> Optional[dict]:
         return None
     
     try:
-        # Busca no efetivo por nome_guerra (maiúsculo), email ou telegram_id
-        result = db.table('efetivo').select('*').or_(
+        # Busca otimizada com limit(1) no efetivo por nome_guerra, email ou telegram_id
+        result = db.table('efetivo').select(
+            'id, nome_guerra, posto_grad, email, role, senha_hash, password, telegram_id, status_aprovacao'
+        ).or_(
             f'nome_guerra.ilike.{clean_user},email.ilike.{clean_user},telegram_id.eq.{clean_user}'
-        ).execute()
+        ).limit(1).execute()
 
         if not result.data:
-            # Fallback: busca na tabela users
-            result = db.table('users').select('*').or_(
-                f'username.ilike.{clean_user},nome.ilike.{clean_user}'
-            ).execute()
+            # Fallback rápido: busca na tabela users com limit(1)
+            result = db.table('users').select(
+                'id, nome, username, email, role, senha_hash, password, telegram_id, status_aprovacao'
+            ).or_(
+                f'username.ilike.{clean_user},email.ilike.{clean_user},nome.ilike.{clean_user}'
+            ).limit(1).execute()
         
         if not result.data:
             return None

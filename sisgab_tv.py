@@ -493,7 +493,7 @@ def render_page():
                 except Exception as e:
                     print(f"[TV KPIs ERR] {e}")
 
-            # Alerta sonoro/visual se houver novas demandas pendentes
+            # Alerta sonoro/visual e de voz JARVIS se houver novas demandas pendentes
             if last_known_pendentes[0] != -1 and demandas_pendentes > last_known_pendentes[0]:
                 diff = demandas_pendentes - last_known_pendentes[0]
                 ui.notify(
@@ -503,6 +503,23 @@ def render_page():
                     timeout=15000,
                     close_button='OK'
                 )
+                # Anúncio por voz JARVIS no SisGAB TV
+                voice_msg = f"Atenção Gabinete: {diff} nova demanda pendente registrada no SisGAB."
+                ui.run_javascript(f'''
+                    if (window.speechSynthesis) {{
+                        let synth = window.speechSynthesis;
+                        synth.cancel();
+                        let u = new SpeechSynthesisUtterance("{voice_msg}");
+                        u.lang = "pt-BR";
+                        u.rate = 1.05;
+                        u.pitch = 0.95;
+                        let voices = synth.getVoices();
+                        let v = voices.find(x => x.lang.includes("pt") && (x.name.includes("Google") || x.name.includes("Lucio") || x.name.includes("Natural")));
+                        if (!v) v = voices.find(x => x.lang.includes("pt"));
+                        if (v) u.voice = v;
+                        synth.speak(u);
+                    }}
+                ''')
             last_known_pendentes[0] = demandas_pendentes
 
             # ── BLOCO 1: PAINEL DE KPIs OPERACIONAIS (FLUIDO E TRANSLÚCIDO) ──
