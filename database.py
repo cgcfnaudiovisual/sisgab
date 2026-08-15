@@ -130,27 +130,36 @@ def salvar_demanda_drive_link(demanda_id: int, titulo_evento: str, drive_url: st
     return success
 
 
+_global_service_db = None
+_global_bot_db = None
+
 def get_bot_db_connection():
-    """Retorna uma conexão dedicada para tarefas de segundo plano (como o Bot do Telegram).
-    Usa a SUPABASE_SERVICE_ROLE_KEY para contornar RLS se configurada, caso contrário cai no fallback."""
+    """Retorna uma conexão dedicada para tarefas de segundo plano (como o Bot do Telegram)."""
+    global _global_bot_db
     if DB_MODE == "local":
         return get_local_db_connection()
+    if _global_bot_db:
+        return _global_bot_db
     if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
         try:
-            return create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+            _global_bot_db = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+            return _global_bot_db
         except Exception as e:
             print(f"[ERRO BOT DB CLIENT] Falha ao criar cliente com service_role: {e}")
     return get_db_connection()
 
 
 def get_service_db_connection():
-    """Retorna uma conexão com service_role_key para operações admin privilegiadas.
-    NUNCA use para operações de usuário comum."""
+    """Retorna uma conexão com service_role_key para operações admin privilegiadas."""
+    global _global_service_db
     if DB_MODE == "local":
         return get_local_db_connection()
+    if _global_service_db:
+        return _global_service_db
     if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
         try:
-            return create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+            _global_service_db = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+            return _global_service_db
         except Exception as e:
             print(f"[ERRO SERVICE DB] Falha ao criar cliente service_role: {e}")
     return None
