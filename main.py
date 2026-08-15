@@ -311,6 +311,7 @@ import comsoc_rsvp
 import modulo_presenca
 import qrcode_generator
 import telegram_metrics
+import portal_convidado
 from database import authenticate_user, get_user_by_id
 
 from services import data_service
@@ -323,7 +324,7 @@ load_dotenv(env_path)
 app.native.window_args['resizable'] = True
 app.native.window_args['title'] = 'SisGAB'
 
-PUBLIC_ROUTES = {'/login'}
+PUBLIC_ROUTES = {'/login', '/evento', '/rsvp'}
 
 sisgab_menu_categories = [
     {
@@ -1224,8 +1225,10 @@ def rsvp_public_page(token: str, request: Request):
                 render_content()
 
 
-
-
+@ui.page('/evento/{id_evento}')
+def evento_publico_page(id_evento: str):
+    """Portal do Convidado — rota pública e dinâmica para entrega de fotos em tempo real via IA."""
+    portal_convidado.render_page(id_evento)
 
 
 @ui.page('/sisgab_tv')
