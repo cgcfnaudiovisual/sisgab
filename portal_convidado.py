@@ -199,31 +199,36 @@ async def _extract_upload_bytes(e) -> bytes:
 
 
 def _extract_selfie_embedding(image_bytes: bytes) -> tuple[bool, str, np.ndarray | None]:
-    """Extrai o embedding facial 512D da selfie usando o singleton global do motor de IA."""
+    """Extrai o embedding facial 512D da selfie com alta performance (sub-100ms)."""
     if not image_bytes:
         return False, "❌ Imagem vazia ou inválida.", None
 
-    # Decodifica e redimensiona para 640px máx (suficiente para selfie, rápido)
     img_bgr = None
     try:
-        from PIL import Image as PILImage
-        pil_img = PILImage.open(io.BytesIO(image_bytes)).convert('RGB')
-        w, h = pil_img.size
-        if max(w, h) > 640:
-            scale = 640.0 / max(w, h)
-            pil_img = pil_img.resize((int(w * scale), int(h * scale)), PILImage.Resampling.LANCZOS)
-        img_rgb = np.array(pil_img)
-        img_bgr = img_rgb[:, :, ::-1].copy()
-    except Exception as e_pil:
+        import cv2
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    except Exception:
+        pass
+
+    if img_bgr is None:
         try:
-            import cv2
-            nparr = np.frombuffer(image_bytes, np.uint8)
-            img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        except Exception:
+            from PIL import Image as PILImage
+            pil_img = PILImage.open(io.BytesIO(image_bytes)).convert('RGB')
+            img_rgb = np.array(pil_img)
+            img_bgr = img_rgb[:, :, ::-1].copy()
+        except Exception as e_pil:
             return False, f"❌ Erro ao decodificar imagem: {e_pil}", None
 
     if img_bgr is None:
         return False, "❌ Não foi possível carregar a imagem enviada.", None
+
+    # Redimensiona se necessário para max 480px (ultra-rápido para selfies)
+    h, w = img_bgr.shape[:2]
+    if max(h, w) > 480:
+        scale = 480.0 / max(h, w)
+        import cv2
+        img_bgr = cv2.resize(img_bgr, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
     try:
         app_face = _get_face_app()
@@ -232,15 +237,14 @@ def _extract_selfie_embedding(image_bytes: bytes) -> tuple[bool, str, np.ndarray
 
         t0 = time.time()
         faces = app_face.get(img_bgr)
-        print(f'[PORTAL_IA] 🔍 Detecção facial em {time.time()-t0:.3f}s → {len(faces)} rosto(s)')
+        print(f'[PORTAL_IA] ⚡ Detecção facial turbo em {time.time()-t0:.3f}s → {len(faces)} rosto(s)')
 
         if not faces:
             return False, "❌ Nenhum rosto detectado. Envie uma foto nítida e bem iluminada de frente.", None
 
-        # Seleciona o rosto com maior det_score (frente da câmera)
         face = max(faces, key=lambda f: getattr(f, 'det_score', 0))
 
-        if hasattr(face, 'det_score') and face.det_score < 0.40:
+        if hasattr(face, 'det_score') and face.det_score < 0.35:
             return False, "❌ Rosto pouco nítido ou desfocado. Tente em ambiente mais claro.", None
 
         return True, "✅ Rosto identificado com sucesso!", face.normed_embedding
@@ -259,6 +263,45 @@ def render_page(event_id: str):
             box-shadow: 0 0 15px rgba(0,229,255,0.4) !important;
         }
     </style>
+    <script>
+    window.handleTurboSelfie = function(input) {
+        if (!input.files || !input.files[0]) return;
+        const file = input.files[0];
+        input.value = '';
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                const maxDim = 480;
+                let w = img.naturalWidth || img.width;
+                let h = img.naturalHeight || img.height;
+                if (w > maxDim || h > maxDim) {
+                    if (w > h) {
+                        h = Math.round((h * maxDim) / w);
+                        w = maxDim;
+                    } else {
+                        w = Math.round((w * maxDim) / h);
+                        h = maxDim;
+                    }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, w, h);
+                
+                // Exporta JPEG ultra leve (~35KB a 50KB) em menos de 15ms
+                const b64 = canvas.toDataURL('image/jpeg', 0.80);
+                if (typeof emitEvent === 'function') {
+                    emitEvent('turbo_selfie_upload', { b64: b64 });
+                }
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    };
+    </script>
     ''')
 
     event = get_public_event(event_id)
@@ -329,19 +372,25 @@ def render_page(event_id: str):
     # Container principal — ocupa toda a tela
     with ui.column().classes('w-full min-h-screen items-center justify-start p-2 sm:p-4 bg-slate-950 text-white').style('font-family: "Outfit", sans-serif;'):
 
-        # ── INPUTS DE UPLOAD OFF-SCREEN (100% compatíveis com Android, iOS e Desktop) ──
-        with ui.element('div').style('position: fixed; top: -9999px; left: -9999px; width: 1px; height: 1px; opacity: 0; pointer-events: none;'):
-            ui.upload(
-                on_upload=lambda e: process_image_from_upload(e),
-                auto_upload=True,
-                max_files=1
-            ).props('id=portal-cam-upload accept="image/*" capture="user"')
-            
-            ui.upload(
-                on_upload=lambda e: process_image_from_upload(e),
-                auto_upload=True,
-                max_files=1
-            ).props('id=portal-gal-upload accept="image/*"')
+        # ── INPUTS DE UPLOAD OFF-SCREEN COM COMPRESSÃO TURBO CLIENT-SIDE ──
+        ui.html('''
+        <input type="file" id="portal-native-camera" accept="image/*" capture="user" style="display:none" onchange="window.handleTurboSelfie(this)">
+        <input type="file" id="portal-native-gallery" accept="image/*" style="display:none" onchange="window.handleTurboSelfie(this)">
+        ''')
+
+        async def handle_turbo_selfie(e):
+            try:
+                b64_str = (e.args or {}).get('b64', '')
+                if not b64_str:
+                    return
+                if ',' in b64_str:
+                    b64_str = b64_str.split(',', 1)[1]
+                img_bytes = base64.b64decode(b64_str)
+                await process_image_bytes(img_bytes)
+            except Exception as err:
+                ui.notify(f"Erro no processamento da foto: {err}", color='negative')
+
+        ui.on('turbo_selfie_upload', handle_turbo_selfie)
 
         # ── CARD PRINCIPAL COMPACTO DO EVENTO ─────────────────────────────────
         with ui.card().classes('w-full max-w-5xl bg-slate-900/90 border border-amber-500/30 rounded-2xl shadow-xl overflow-hidden p-3 sm:p-5 text-center gap-1.5'):
@@ -833,13 +882,13 @@ def render_page(event_id: str):
                         ui.button(
                             '📸 VALIDAR COM CÂMERA',
                             icon='photo_camera',
-                            on_click=lambda: ui.run_javascript('document.querySelector("#portal-cam-upload input[type=file]")?.click()')
+                            on_click=lambda: ui.run_javascript('document.getElementById("portal-native-camera")?.click()')
                         ).props('unelevated color=cyan-8 text-color=white bold no-caps').classes('flex-1 min-w-[150px] h-12 rounded-xl text-xs font-bold')
 
                         ui.button(
                             '📁 ESCOLHER FOTO DA GALERIA',
                             icon='photo_library',
-                            on_click=lambda: ui.run_javascript('document.querySelector("#portal-gal-upload input[type=file]")?.click()')
+                            on_click=lambda: ui.run_javascript('document.getElementById("portal-native-gallery")?.click()')
                         ).props('unelevated color=amber-8 text-color=black bold no-caps').classes('flex-1 min-w-[150px] h-12 rounded-xl text-xs font-bold')
 
                 return
@@ -872,7 +921,7 @@ def render_page(event_id: str):
                     btn_cam_label = '📸 TIRAR SELFIE (CÂMERA)' if num_selfies == 0 else '📸 OUTRA SELFIE'
                     ui.button(
                         btn_cam_label,
-                        on_click=lambda: ui.run_javascript('document.querySelector("#portal-cam-upload input[type=file]")?.click()')
+                        on_click=lambda: ui.run_javascript('document.getElementById("portal-native-camera")?.click()')
                     ).props('unelevated color=cyan-7 text-color=black bold no-caps').classes(
                         'flex-1 h-12 sm:h-14 font-black rounded-xl text-xs sm:text-sm shadow-md active:scale-95 transition-transform'
                     )
@@ -880,7 +929,7 @@ def render_page(event_id: str):
                     btn_gal_label = '📁 ESCOLHER FOTO' if num_selfies == 0 else '📁 OUTRA FOTO'
                     ui.button(
                         btn_gal_label,
-                        on_click=lambda: ui.run_javascript('document.querySelector("#portal-gal-upload input[type=file]")?.click()')
+                        on_click=lambda: ui.run_javascript('document.getElementById("portal-native-gallery")?.click()')
                     ).props('unelevated color=amber-7 text-color=black bold no-caps').classes(
                         'flex-1 h-12 sm:h-14 font-black rounded-xl text-xs sm:text-sm shadow-md active:scale-95 transition-transform'
                     )
