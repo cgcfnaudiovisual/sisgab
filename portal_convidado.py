@@ -478,7 +478,327 @@ def render_page(event_id: str):
 
             return matched_items, n_faces
 
-        # ── RENDERIZAÇÃO DO CONTEÚDO ──────────────────────────────────────────
+        # ── 1. DOWNLOAD INDIVIDUAL DE FOTO EM HD ──────────────────────────────
+        def download_single(file_id: str):
+            log_portal_analytics(event_id, 'download', session_id=session_id)
+            ui.navigate.to(f"https://drive.google.com/uc?export=download&id={file_id}", new_tab=True)
+
+        # ── 2. LIGHTBOX AVANÇADO COM PASSADOR ⬅️ ➡️ E TECLADO ───────────────
+        def open_full_lightbox(initial_index: int, photos_list: list[dict]):
+            cur_idx = {'val': initial_index}
+
+            with ui.dialog() as dlg, ui.card().classes('bg-black/95 border border-cyan-500/40 p-2 sm:p-4 items-center rounded-3xl w-[96vw] max-w-5xl max-h-[95vh] overflow-hidden justify-between flex flex-col'):
+                
+                # Topo do Lightbox
+                with ui.row().classes('w-full justify-between items-center p-2 border-b border-white/10'):
+                    counter_label = ui.label(f"Foto {cur_idx['val'] + 1} de {len(photos_list)}").classes('text-xs sm:text-sm font-bold text-cyan-3')
+                    with ui.row().classes('items-center gap-2'):
+                        btn_dl_box = ui.button(icon='download', on_click=lambda: download_single(photos_list[cur_idx['val']]['drive_file_id'])).props('flat dense size=sm color=amber')
+                        ui.button(icon='close', on_click=dlg.close).props('flat round dense text-color=white')
+
+                # Imagem Central
+                img_elem = ui.image(f"https://drive.google.com/thumbnail?id={photos_list[cur_idx['val']]['drive_file_id']}&sz=w1600").classes('max-w-full max-h-[72vh] object-contain rounded-2xl my-2')
+
+                def update_lightbox_img(new_i: int):
+                    if 0 <= new_i < len(photos_list):
+                        cur_idx['val'] = new_i
+                        fid = photos_list[new_i]['drive_file_id']
+                        img_elem.set_source(f"https://drive.google.com/thumbnail?id={fid}&sz=w1600")
+                        counter_label.set_text(f"Foto {cur_idx['val'] + 1} de {len(photos_list)}")
+
+                # Controles de Navegação (Passador Anterior / Próximo)
+                with ui.row().classes('w-full justify-between items-center p-2 border-t border-white/10'):
+                    ui.button('⬅️ Anterior', icon='arrow_back', on_click=lambda: update_lightbox_img(cur_idx['val'] - 1)).props('unelevated color=slate-8 text-color=white bold no-caps').classes('px-4 rounded-xl text-xs')
+                    
+                    ui.button('Abrir Original no Drive', icon='open_in_new', on_click=lambda: ui.navigate.to(photos_list[cur_idx['val']].get('drive_link') or f"https://drive.google.com/file/d/{photos_list[cur_idx['val']]['drive_file_id']}/view", new_tab=True)).props('flat dense color=cyan size=sm no-caps').classes('text-xs')
+
+                    ui.button('Próxima ➡️', icon='arrow_forward', on_click=lambda: update_lightbox_img(cur_idx['val'] + 1)).props('unelevated color=cyan-8 text-color=white bold no-caps').classes('px-4 rounded-xl text-xs')
+
+            dlg.open()
+
+        # ── 3. GRADE DE FOTOS RESPONSIVA (HORIZONTAL ASPECT 16:10) ────────────
+        def render_photo_grid(photos_list: list[dict], is_personal: bool = False):
+            with ui.grid().classes('w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3'):
+                for idx, p in enumerate(photos_list):
+                    fid = p.get('drive_file_id') or p.get('id')
+                    raw_thumb = str(p.get('thumbnailLink') or '')
+                    if '=s220' in raw_thumb:
+                        thumb_url = raw_thumb.replace('=s220', '=s800')
+                    elif '=' in raw_thumb:
+                        thumb_url = raw_thumb.split('=')[0] + '=s800'
+                    elif fid:
+                        thumb_url = f"https://drive.google.com/thumbnail?id={fid}&sz=w800"
+                    else:
+                        thumb_url = ''
+
+                    is_selected = fid in guest_state['selected_fids']
+                    border_style = 'border: 2px solid #00e5ff; box-shadow: 0 0 12px rgba(0,229,255,0.4);' if is_selected else 'border: 1px solid rgba(255,255,255,0.08);'
+
+                    with ui.card().classes('q-pa-none no-shadow rounded-xl overflow-hidden cursor-pointer transition-transform duration-150 active:scale-[0.98]').style(f'background: #0f172a; {border_style}'):
+                        # Container da foto com formato horizontal landscape (16:10)
+                        with ui.element('div').classes('relative w-full bg-[#030a17] flex items-center justify-center overflow-hidden').style('aspect-ratio: 16/10;'):
+                            def toggle_select(f=fid):
+                                if f in guest_state['selected_fids']:
+                                    guest_state['selected_fids'].remove(f)
+                                else:
+                                    guest_state['selected_fids'].add(f)
+                                refresh_ui()
+
+                            # Checkbox compacto no canto superior
+                            with ui.element('div').classes('absolute top-1 left-1 z-20 bg-black/70 backdrop-blur-md rounded-md p-0.5').on('click', lambda _, f=fid: toggle_select(f)):
+                                ui.checkbox(value=is_selected, on_change=lambda _, f=fid: toggle_select(f)).props('dark color=cyan dense size=xs')
+
+                            img = ui.image(thumb_url).classes('w-full h-full').style('object-fit: cover;')
+                            img.on('click', lambda _, i=idx, l=photos_list: open_full_lightbox(i, l))
+
+                        # Rodapé em duas linhas compactas
+                        with ui.column().classes('w-full p-1.5 sm:p-2 bg-slate-950/95 border-t border-white/5 gap-0.5'):
+                            fname = p.get('filename') or p.get('name') or 'foto.jpg'
+                            ui.label(fname).classes('text-[10px] text-slate-300 font-semibold truncate w-full')
+                            
+                            with ui.row().classes('w-full items-center justify-between gap-1'):
+                                badge_txt = '⭐ Sua foto' if is_personal else '☁️ Drive'
+                                badge_col = 'amber-9' if is_personal else 'blue-grey-8'
+                                ui.badge(badge_txt, color=badge_col).classes('text-[8px] font-bold px-1.5 py-0.5')
+
+                                with ui.row().classes('items-center gap-0.5'):
+                                    ui.button(icon='fullscreen', on_click=lambda _, i=idx, l=photos_list: open_full_lightbox(i, l)).props('flat dense size=xs color=grey-4').classes('p-0.5').tooltip('Ampliar')
+                                    ui.button(icon='download', on_click=lambda _, f=fid: download_single(f)).props('unelevated color=cyan text-color=black dense bold size=xs').classes('px-1.5 py-0.2 rounded text-[9px]').tooltip('Baixar foto HD')
+
+        # ── 4. BARRA DE SELEÇÃO MÚLTIPLA E DOWNLOAD EM LOTE ───────────────────
+        def render_selection_toolbar():
+            all_visible = guest_state['matched_photos'] + guest_state['geral_photos']
+            if not all_visible:
+                return
+
+            total_geral = len(guest_state['geral_photos'])
+            per_p = guest_state.get('per_page', 60)
+            cur_p = guest_state.get('page', 1)
+            start_i = (cur_p - 1) * per_p
+            end_i = min(start_i + per_p, total_geral)
+            page_geral = guest_state['geral_photos'][start_i:end_i]
+            page_all = guest_state['matched_photos'] + page_geral
+
+            selected_count = len(guest_state['selected_fids'])
+
+            with ui.card().classes('w-full bg-slate-900/90 border border-white/10 rounded-2xl p-2.5 sm:p-3 shadow-md'):
+                with ui.row().classes('w-full items-center justify-between flex-wrap gap-2'):
+                    with ui.row().classes('items-center gap-1.5'):
+                        ui.icon('check_box', size='1.2rem', color='cyan-4')
+                        ui.label(f"{selected_count} selecionada(s)").classes('text-xs font-bold text-white')
+
+                    with ui.row().classes('items-center gap-1.5 flex-wrap'):
+                        def select_page():
+                            for p in page_all:
+                                fid = p.get('drive_file_id') or p.get('id')
+                                if fid: guest_state['selected_fids'].add(fid)
+                            refresh_ui()
+
+                        def select_all():
+                            for p in all_visible:
+                                fid = p.get('drive_file_id') or p.get('id')
+                                if fid: guest_state['selected_fids'].add(fid)
+                            refresh_ui()
+
+                        def clear_selection():
+                            guest_state['selected_fids'].clear()
+                            refresh_ui()
+
+                        ui.button(f'Página ({len(page_all)})', icon='done', on_click=select_page).props('outline color=cyan-4 text-color=cyan-3 dense size=sm no-caps').classes('text-[11px] rounded-lg px-2')
+                        ui.button(f'Todas ({len(all_visible)})', icon='done_all', on_click=select_all).props('outline color=amber-4 text-color=amber-3 dense size=sm no-caps').classes('text-[11px] rounded-lg px-2')
+
+                        if selected_count > 0:
+                            ui.button('Desmarcar', icon='clear', on_click=clear_selection).props('flat color=grey-4 dense size=sm no-caps').classes('text-[11px] px-1.5')
+
+                        async def download_selected_zip():
+                            fids_to_dl = list(guest_state['selected_fids']) if guest_state['selected_fids'] else [p.get('drive_file_id') for p in all_visible]
+                            if not fids_to_dl:
+                                ui.notify('Nenhuma foto selecionada.', color='warning')
+                                return
+
+                            n_zip = ui.notify(f"📦 Compactando {len(fids_to_dl)} foto(s) em arquivo ZIP...", color='info', spinner=True, timeout=0)
+                            try:
+                                def build_zip():
+                                    buf = io.BytesIO()
+                                    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+                                        for idx, fid in enumerate(fids_to_dl):
+                                            img_b = drive_service.download_file(fid)
+                                            if img_b:
+                                                zf.writestr(f"foto_{idx+1:03d}_{fid}.jpg", img_b)
+                                    buf.seek(0)
+                                    return buf.getvalue()
+
+                                zip_bytes = await asyncio.to_thread(build_zip)
+                                log_portal_analytics(event_id, 'download', session_id=session_id, metadata={'count': len(fids_to_dl)})
+                                ui.download(zip_bytes, f"fotos_{event_id}.zip")
+                                ui.notify('✅ Download do ZIP iniciado!', color='positive')
+                            except Exception as ex_zip:
+                                ui.notify(f"Erro ao gerar ZIP: {ex_zip}", color='negative')
+                            finally:
+                                try: n_zip.dismiss()
+                                except Exception: pass
+
+                        dl_btn_label = f"📥 Baixar ({selected_count})" if selected_count > 0 else f"📥 Baixar Todas ({len(all_visible)})"
+                        ui.button(dl_btn_label, icon='archive', on_click=download_selected_zip).props('unelevated color=amber-8 text-color=black bold size=sm no-caps').classes('text-[11px] font-bold rounded-xl px-2.5')
+
+        # ── 5. GALERIA OFICIAL COM PAGINAÇÃO NO RODAPÉ ────────────────────────
+        def render_official_gallery(folder_id: str):
+            if not folder_id:
+                ui.label('Nenhuma foto oficial disponibilizada ainda.').classes('text-xs text-grey-5 italic')
+                return
+
+            try:
+                if not guest_state['geral_photos']:
+                    guest_state['geral_photos'] = _get_geral_photos(folder_id)
+
+                fotos = guest_state['geral_photos']
+                if not fotos:
+                    ui.label('As fotos do evento estão sendo processadas pela equipe de Comunicação Social.').classes('text-xs text-grey-4 italic')
+                    return
+
+                total_fotos = len(fotos)
+                per_page = guest_state.get('per_page', 60)
+                total_pages = max(1, math.ceil(total_fotos / per_page))
+                cur_page = max(1, min(guest_state.get('page', 1), total_pages))
+                guest_state['page'] = cur_page
+
+                start_idx = (cur_page - 1) * per_page
+                end_idx = min(start_idx + per_page, total_fotos)
+                visible_fotos = fotos[start_idx:end_idx]
+
+                def set_page(p):
+                    guest_state['page'] = max(1, min(p, total_pages))
+                    refresh_ui()
+
+                def set_per_page(v):
+                    guest_state['per_page'] = v
+                    guest_state['page'] = 1
+                    refresh_ui()
+
+                # ─── GRID DE FOTOS DA PÁGINA ───
+                render_photo_grid(visible_fotos, is_personal=False)
+
+                # ─── PAGINAÇÃO APENAS NO RODAPÉ: centralizada, linha única com seletor ───
+                with ui.row().classes('w-full items-center justify-center flex-wrap gap-2 sm:gap-3 mt-4 pt-3 border-t border-white/10'):
+                    ui.button(icon='first_page', on_click=lambda: set_page(1)).props('flat dense color=cyan round size=sm').tooltip('Primeira')
+                    ui.button(icon='chevron_left', on_click=lambda: set_page(cur_page - 1)).props('unelevated dense color=cyan-9 text-color=white round size=sm').tooltip('Anterior')
+
+                    ui.label(f'Pág. {cur_page}/{total_pages}').classes('text-xs font-bold text-cyan-3 px-1')
+                    ui.label(f'({start_idx+1}–{end_idx} de {total_fotos})').classes('text-[11px] text-grey-5')
+
+                    ui.button(icon='chevron_right', on_click=lambda: set_page(cur_page + 1)).props('unelevated dense color=cyan-9 text-color=white round size=sm').tooltip('Próxima')
+                    ui.button(icon='last_page', on_click=lambda: set_page(total_pages)).props('flat dense color=cyan round size=sm').tooltip('Última')
+
+                    ui.separator().props('vertical').classes('h-6 opacity-30')
+
+                    for opt_val, opt_lbl in [(30,'30'),(60,'60'),(120,'120'),(240,'240'),(500,'500')]:
+                        is_curr = per_page == opt_val
+                        ui.button(opt_lbl, on_click=lambda _, v=opt_val: set_per_page(v)).props(
+                            f'dense {"unelevated color=cyan-7 text-color=black" if is_curr else "flat color=grey text-color=grey-4"}'
+                        ).classes('text-[11px] px-2 rounded-lg min-w-[28px]')
+
+            except Exception as e:
+                ui.label(f"Não foi possível carregar a galeria: {e}").classes('text-xs text-red-4')
+
+        # ── 6. SEÇÃO DE ENTREGA (E-MAIL INSTITUCIONAL & WHATSAPP) ─────────────
+        def render_delivery_section():
+            all_photos = []
+            seen = set()
+            for p in (guest_state['matched_photos'] + guest_state['geral_photos']):
+                fid = p.get('drive_file_id') or p.get('id')
+                if fid and fid not in seen:
+                    seen.add(fid)
+                    all_photos.append(p)
+
+            with ui.card().classes('w-full max-w-5xl bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 gap-3 q-mt-4'):
+                ui.label('📥 RECEBER OU COMPARTILHAR SUAS FOTOS').classes('text-sm sm:text-base font-black text-white tracking-wide')
+                
+                # Botão de Compartilhar no WhatsApp
+                event_url = f"https://sisgab-cgcfn.ddns.net/evento/{event_id}"
+                whatsapp_text = f"📷 Acesse as fotos oficiais do evento {nome_evento}: {event_url}"
+                whatsapp_url = f"https://api.whatsapp.com/send?text={whatsapp_text.replace(' ', '%20')}"
+
+                with ui.row().classes('w-full items-center gap-3'):
+                    ui.button('Compartilhar Galeria no WhatsApp', icon='share', on_click=lambda: (log_portal_analytics(event_id, 'whatsapp', session_id=session_id), ui.navigate.to(whatsapp_url, new_tab=True))).props('unelevated color=green-7 text-color=white bold no-caps').classes('w-full h-12 text-xs sm:text-sm font-bold rounded-xl shadow-md')
+
+                # Envio por E-mail Institucional com Pré-Cadastro Permanente
+                with ui.column().classes('w-full gap-2.5 q-mt-1'):
+                    ui.label('Ou salve seu e-mail para receber fotos automaticamente neste e em futuros eventos:').classes('text-[11px] sm:text-xs text-grey-4')
+                    
+                    with ui.row().classes('w-full items-center gap-3 flex-wrap'):
+                        name_input = ui.input(placeholder='Seu Nome (opcional)', value=guest_state['guest_name']).props('dark outlined dense').classes('w-full sm:w-60')
+                        email_input = ui.input(placeholder='seu.email@exemplo.com', value=guest_state['guest_email']).props('dark outlined dense').classes('flex-1 min-w-[240px]')
+                        
+                        async def send_email_action():
+                            email_val = (email_input.value or '').strip()
+                            name_val = (name_input.value or '').strip()
+                            if not email_val or '@' not in email_val:
+                                ui.notify('❌ Digite um e-mail válido.', color='warning')
+                                return
+                            
+                            if not all_photos:
+                                ui.notify('ℹ️ Nenhuma foto para enviar no momento.', color='info')
+                                return
+
+                            guest_state['guest_name'] = name_val
+                            guest_state['guest_email'] = email_val
+                            app.storage.user['portal_guest_name'] = name_val
+                            app.storage.user['portal_guest_email'] = email_val
+
+                            # Salva perfil permanente no banco para histórico multi-evento
+                            save_guest_face_profile(
+                                event_id, session_id, guest_state['selfie_embeddings'],
+                                nome=name_val, email=email_val
+                            )
+                            
+                            links_html = ''.join(
+                                f'<p style="margin: 6px 0;">📷 <a href="https://drive.google.com/file/d/{p.get("drive_file_id")}/view" style="color: #0284c7; text-decoration: none; font-weight: bold;">Foto {i+1} — Abrir no Drive</a></p>'
+                                for i, p in enumerate(all_photos[:30])
+                            )
+
+                            default_template = f"""
+                            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0f172a; color: #f8fafc; padding: 24px; border-radius: 16px; border: 1px solid #334155;">
+                                <div style="text-align: center; margin-bottom: 20px;">
+                                    <h2 style="color: #f59e0b; margin: 0; font-size: 20px; text-transform: uppercase;">MARINHA DO BRASIL</h2>
+                                    <p style="color: #38bdf8; margin: 4px 0 0 0; font-size: 11px; font-weight: bold; letter-spacing: 2px;">GABINETE DO COMANDANTE-GERAL DO CORPO DE FUZILEIROS NAVAIS</p>
+                                </div>
+                                <hr style="border: 0; height: 1px; background: #334155; margin: 16px 0;" />
+                                <p style="font-size: 15px;">Prezado(a) <strong>{name_val or 'Convidado(a)'}</strong>,</p>
+                                <p style="font-size: 14px; color: #cbd5e1;">Suas fotos do evento <strong>{nome_evento}</strong> já estão prontas para visualização e download:</p>
+                                <div style="background: #1e293b; padding: 16px; border-radius: 12px; margin: 16px 0;">
+                                    {links_html}
+                                </div>
+                                <p style="text-align: center; margin-top: 20px;">
+                                    <a href="{event_url}" style="background: #0284c7; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Ver Galeria Completa</a>
+                                </p>
+                                <hr style="border: 0; height: 1px; background: #334155; margin: 20px 0;" />
+                                <p style="font-size: 11px; color: #64748b; text-align: center;">Comunicação Social — CGCFN • Este é um e-mail automático institucional.</p>
+                            </div>
+                            """
+
+                            template_to_use = event.get('email_template') or default_template
+                            template_to_use = template_to_use.replace('{EVENTO_NOME}', nome_evento)
+                            template_to_use = template_to_use.replace('{EVENTO_DATA}', data_formatada)
+                            template_to_use = template_to_use.replace('{EVENTO_LOCAL}', local_evento)
+                            template_to_use = template_to_use.replace('{FOTOS_LINKS}', links_html)
+                            template_to_use = template_to_use.replace('{TOTAL_FOTOS}', str(len(all_photos)))
+
+                            try:
+                                await asyncio.to_thread(
+                                    send_real_email_smtp,
+                                    email_val,
+                                    f"📷 Suas fotos do evento {nome_evento}",
+                                    template_to_use
+                                )
+                                save_guest_delivery(event_id, email_val, ','.join(p.get('drive_file_id') for p in all_photos), len(all_photos))
+                                log_portal_analytics(event_id, 'email', session_id=session_id)
+                                ui.notify('✅ E-mail institucional enviado com sucesso e perfil salvo!', color='positive')
+                            except Exception as err_mail:
+                                ui.notify(f"❌ Erro ao enviar e-mail: {err_mail}", color='negative')
+
+                        ui.button('📧 Enviar Fotos por E-mail', on_click=send_email_action).props('unelevated color=cyan text-color=black font-bold icon=send').classes('h-11 px-6 rounded-xl text-xs')
+
+        # ── 7. RENDERIZAÇÃO DO CONTEÚDO COMPLETO DO PORTAL ────────────────────
         def render_portal_content():
             pin_evento = str(event.get('pin_acesso') or '').strip()
             is_auth = True
@@ -612,330 +932,18 @@ def render_page(event_id: str):
             # 5. SEÇÃO DE ENTREGA (E-MAIL INSTITUCIONAL & WHATSAPP)
             render_delivery_section()
 
-        # ── BARRA DE SELEÇÃO MÚLTIPLA E DOWNLOAD EM LOTE ──────────────────────
-        def render_selection_toolbar():
-            all_visible = guest_state['matched_photos'] + guest_state['geral_photos']
-            if not all_visible:
-                return
+        # ── 8. REFRESH UI (CONTAINER DINÂMICO) ────────────────────────────────
+        def refresh_ui():
+            content_container.clear()
+            with content_container:
+                render_portal_content()
 
-            total_geral = len(guest_state['geral_photos'])
-            per_p = guest_state.get('per_page', 60)
-            cur_p = guest_state.get('page', 1)
-            start_i = (cur_p - 1) * per_p
-            end_i = min(start_i + per_p, total_geral)
-            page_geral = guest_state['geral_photos'][start_i:end_i]
-            page_all = guest_state['matched_photos'] + page_geral
-
-            selected_count = len(guest_state['selected_fids'])
-
-            with ui.card().classes('w-full bg-slate-900/90 border border-white/10 rounded-2xl p-2.5 sm:p-3 shadow-md'):
-                with ui.row().classes('w-full items-center justify-between flex-wrap gap-2'):
-                    with ui.row().classes('items-center gap-1.5'):
-                        ui.icon('check_box', size='1.2rem', color='cyan-4')
-                        ui.label(f"{selected_count} selecionada(s)").classes('text-xs font-bold text-white')
-
-                    with ui.row().classes('items-center gap-1.5 flex-wrap'):
-                        def select_page():
-                            for p in page_all:
-                                fid = p.get('drive_file_id') or p.get('id')
-                                if fid: guest_state['selected_fids'].add(fid)
-                            refresh_ui()
-
-                        def select_all():
-                            for p in all_visible:
-                                fid = p.get('drive_file_id') or p.get('id')
-                                if fid: guest_state['selected_fids'].add(fid)
-                            refresh_ui()
-
-                        def clear_selection():
-                            guest_state['selected_fids'].clear()
-                            refresh_ui()
-
-                        ui.button(f'Página ({len(page_all)})', icon='done', on_click=select_page).props('outline color=cyan-4 text-color=cyan-3 dense size=sm no-caps').classes('text-[11px] rounded-lg px-2')
-                        ui.button(f'Todas ({len(all_visible)})', icon='done_all', on_click=select_all).props('outline color=amber-4 text-color=amber-3 dense size=sm no-caps').classes('text-[11px] rounded-lg px-2')
-
-                        if selected_count > 0:
-                            ui.button('Desmarcar', icon='clear', on_click=clear_selection).props('flat color=grey-4 dense size=sm no-caps').classes('text-[11px] px-1.5')
-
-                        async def download_selected_zip():
-                            fids_to_dl = list(guest_state['selected_fids']) if guest_state['selected_fids'] else [p.get('drive_file_id') for p in all_visible]
-                            if not fids_to_dl:
-                                ui.notify('Nenhuma foto selecionada.', color='warning')
-                                return
-
-                            n_zip = ui.notify(f"📦 Compactando {len(fids_to_dl)} foto(s) em arquivo ZIP...", color='info', spinner=True, timeout=0)
-                            try:
-                                def build_zip():
-                                    buf = io.BytesIO()
-                                    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-                                        for idx, fid in enumerate(fids_to_dl):
-                                            img_b = drive_service.download_file(fid)
-                                            if img_b:
-                                                zf.writestr(f"foto_{idx+1:03d}_{fid}.jpg", img_b)
-                                    buf.seek(0)
-                                    return buf.getvalue()
-
-                                zip_bytes = await asyncio.to_thread(build_zip)
-                                log_portal_analytics(event_id, 'download', session_id=session_id, metadata={'count': len(fids_to_dl)})
-                                ui.download(zip_bytes, f"fotos_{event_id}.zip")
-                                ui.notify('✅ Download do ZIP iniciado!', color='positive')
-                            except Exception as ex_zip:
-                                ui.notify(f"Erro ao gerar ZIP: {ex_zip}", color='negative')
-                            finally:
-                                try: n_zip.dismiss()
-                                except Exception: pass
-
-                        dl_btn_label = f"📥 Baixar ({selected_count})" if selected_count > 0 else f"📥 Baixar Todas ({len(all_visible)})"
-                        ui.button(dl_btn_label, icon='archive', on_click=download_selected_zip).props('unelevated color=amber-8 text-color=black bold size=sm no-caps').classes('text-[11px] font-bold rounded-xl px-2.5')
-
-        # ── GRADE DE FOTOS RESPONSIVA (ENCAIXE PERFEITO ASPECT 4:3) ───────────
-        def render_photo_grid(photos_list: list[dict], is_personal: bool = False):
-            with ui.grid().classes('w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3'):
-                for idx, p in enumerate(photos_list):
-                    fid = p.get('drive_file_id') or p.get('id')
-                    raw_thumb = str(p.get('thumbnailLink') or '')
-                    if '=s220' in raw_thumb:
-                        thumb_url = raw_thumb.replace('=s220', '=s800')
-                    elif '=' in raw_thumb:
-                        thumb_url = raw_thumb.split('=')[0] + '=s800'
-                    elif fid:
-                        thumb_url = f"https://drive.google.com/thumbnail?id={fid}&sz=w800"
-                    else:
-                        thumb_url = ''
-
-                    is_selected = fid in guest_state['selected_fids']
-                    border_style = 'border: 2px solid #00e5ff; box-shadow: 0 0 12px rgba(0,229,255,0.4);' if is_selected else 'border: 1px solid rgba(255,255,255,0.08);'
-
-                    with ui.card().classes('q-pa-none no-shadow rounded-xl overflow-hidden cursor-pointer transition-transform duration-150 active:scale-[0.98]').style(f'background: #0f172a; {border_style}'):
-                        # Container da foto com formato horizontal landscape (16:10)
-                        with ui.element('div').classes('relative w-full bg-[#030a17] flex items-center justify-center overflow-hidden').style('aspect-ratio: 16/10;'):
-                            def toggle_select(f=fid):
-                                if f in guest_state['selected_fids']:
-                                    guest_state['selected_fids'].remove(f)
-                                else:
-                                    guest_state['selected_fids'].add(f)
-                                refresh_ui()
-
-                            # Checkbox compacto no canto superior
-                            with ui.element('div').classes('absolute top-1 left-1 z-20 bg-black/70 backdrop-blur-md rounded-md p-0.5').on('click', lambda _, f=fid: toggle_select(f)):
-                                ui.checkbox(value=is_selected, on_change=lambda _, f=fid: toggle_select(f)).props('dark color=cyan dense size=xs')
-
-                            img = ui.image(thumb_url).classes('w-full h-full').style('object-fit: cover;')
-                            img.on('click', lambda _, i=idx, l=photos_list: open_full_lightbox(i, l))
-
-                        # Rodapé em duas linhas compactas
-                        with ui.column().classes('w-full p-1.5 sm:p-2 bg-slate-950/95 border-t border-white/5 gap-0.5'):
-                            fname = p.get('filename') or p.get('name') or 'foto.jpg'
-                            ui.label(fname).classes('text-[10px] text-slate-300 font-semibold truncate w-full')
-                            
-                            with ui.row().classes('w-full items-center justify-between gap-1'):
-                                badge_txt = '⭐ Sua foto' if is_personal else '☁️ Drive'
-                                badge_col = 'amber-9' if is_personal else 'blue-grey-8'
-                                ui.badge(badge_txt, color=badge_col).classes('text-[8px] font-bold px-1.5 py-0.5')
-
-                                with ui.row().classes('items-center gap-0.5'):
-                                    ui.button(icon='fullscreen', on_click=lambda _, i=idx, l=photos_list: open_full_lightbox(i, l)).props('flat dense size=xs color=grey-4').classes('p-0.5').tooltip('Ampliar')
-                                    ui.button(icon='download', on_click=lambda _, f=fid: download_single(f)).props('unelevated color=cyan text-color=black dense bold size=xs').classes('px-1.5 py-0.2 rounded text-[9px]').tooltip('Baixar foto HD')
-
-            # ── GALERIA OFICIAL COM PAGINAÇÃO COMPLETA (IGUAL COMSOC_GALERIA) ─
-            def render_official_gallery(folder_id: str):
-                if not folder_id:
-                    ui.label('Nenhuma foto oficial disponibilizada ainda.').classes('text-xs text-grey-5 italic')
-                    return
-
-                try:
-                    if not guest_state['geral_photos']:
-                        guest_state['geral_photos'] = _get_geral_photos(folder_id)
-
-                    fotos = guest_state['geral_photos']
-                    if not fotos:
-                        ui.label('As fotos do evento estão sendo processadas pela equipe de Comunicação Social.').classes('text-xs text-grey-4 italic')
-                        return
-
-                    total_fotos = len(fotos)
-                    per_page = guest_state.get('per_page', 60)
-                    total_pages = max(1, math.ceil(total_fotos / per_page))
-                    cur_page = max(1, min(guest_state.get('page', 1), total_pages))
-                    guest_state['page'] = cur_page
-
-                    start_idx = (cur_page - 1) * per_page
-                    end_idx = min(start_idx + per_page, total_fotos)
-                    visible_fotos = fotos[start_idx:end_idx]
-
-                    def set_page(p):
-                        guest_state['page'] = max(1, min(p, total_pages))
-                        refresh_ui()
-
-                    def set_per_page(v):
-                        guest_state['per_page'] = v
-                        guest_state['page'] = 1
-                        refresh_ui()
-
-                    # ─── GRID DE FOTOS DA PÁGINA ───
-                    render_photo_grid(visible_fotos, is_personal=False)
-
-                    # ─── PAGINAÇÃO APENAS NO RODAPÉ: centralizada, linha única com seletor ───
-                    with ui.row().classes('w-full items-center justify-center flex-wrap gap-2 sm:gap-3 mt-4 pt-3 border-t border-white/10'):
-                        ui.button(icon='first_page', on_click=lambda: set_page(1)).props('flat dense color=cyan round size=sm').tooltip('Primeira')
-                        ui.button(icon='chevron_left', on_click=lambda: set_page(cur_page - 1)).props('unelevated dense color=cyan-9 text-color=white round size=sm').tooltip('Anterior')
-
-                        ui.label(f'Pág. {cur_page}/{total_pages}').classes('text-xs font-bold text-cyan-3 px-1')
-                        ui.label(f'({start_idx+1}–{end_idx} de {total_fotos})').classes('text-[11px] text-grey-5')
-
-                        ui.button(icon='chevron_right', on_click=lambda: set_page(cur_page + 1)).props('unelevated dense color=cyan-9 text-color=white round size=sm').tooltip('Próxima')
-                        ui.button(icon='last_page', on_click=lambda: set_page(total_pages)).props('flat dense color=cyan round size=sm').tooltip('Última')
-
-                        ui.separator().props('vertical').classes('h-6 opacity-30')
-
-                        for opt_val, opt_lbl in [(30,'30'),(60,'60'),(120,'120'),(240,'240'),(500,'500')]:
-                            is_curr = per_page == opt_val
-                            ui.button(opt_lbl, on_click=lambda _, v=opt_val: set_per_page(v)).props(
-                                f'dense {"unelevated color=cyan-7 text-color=black" if is_curr else "flat color=grey text-color=grey-4"}'
-                            ).classes('text-[11px] px-2 rounded-lg min-w-[28px]')
-
-                except Exception as e:
-                    ui.label(f"Não foi possível carregar a galeria: {e}").classes('text-xs text-red-4')
-
-            # ── LIGHTBOX AVANÇADO COM PASSADOR ⬅️ ➡️ E TECLADO ──────────────
-            def open_full_lightbox(initial_index: int, photos_list: list[dict]):
-                cur_idx = {'val': initial_index}
-
-                with ui.dialog() as dlg, ui.card().classes('bg-black/95 border border-cyan-500/40 p-2 sm:p-4 items-center rounded-3xl w-[96vw] max-w-5xl max-h-[95vh] overflow-hidden justify-between flex flex-col'):
-                    
-                    # Topo do Lightbox
-                    with ui.row().classes('w-full justify-between items-center p-2 border-b border-white/10'):
-                        counter_label = ui.label(f"Foto {cur_idx['val'] + 1} de {len(photos_list)}").classes('text-xs sm:text-sm font-bold text-cyan-3')
-                        with ui.row().classes('items-center gap-2'):
-                            btn_dl_box = ui.button(icon='download', on_click=lambda: download_single(photos_list[cur_idx['val']]['drive_file_id'])).props('flat dense size=sm color=amber')
-                            ui.button(icon='close', on_click=dlg.close).props('flat round dense text-color=white')
-
-                    # Imagem Central
-                    img_elem = ui.image(f"https://drive.google.com/thumbnail?id={photos_list[cur_idx['val']]['drive_file_id']}&sz=w1600").classes('max-w-full max-h-[72vh] object-contain rounded-2xl my-2')
-
-                    def update_lightbox_img(new_i: int):
-                        if 0 <= new_i < len(photos_list):
-                            cur_idx['val'] = new_i
-                            fid = photos_list[new_i]['drive_file_id']
-                            img_elem.set_source(f"https://drive.google.com/thumbnail?id={fid}&sz=w1600")
-                            counter_label.set_text(f"Foto {cur_idx['val'] + 1} de {len(photos_list)}")
-
-                    # Controles de Navegação (Passador Anterior / Próximo)
-                    with ui.row().classes('w-full justify-between items-center p-2 border-t border-white/10'):
-                        ui.button('⬅️ Anterior', icon='arrow_back', on_click=lambda: update_lightbox_img(cur_idx['val'] - 1)).props('unelevated color=slate-8 text-color=white bold no-caps').classes('px-4 rounded-xl text-xs')
-                        
-                        ui.button('Abrir Original no Drive', icon='open_in_new', on_click=lambda: ui.navigate.to(photos_list[cur_idx['val']].get('drive_link') or f"https://drive.google.com/file/d/{photos_list[cur_idx['val']]['drive_file_id']}/view", new_tab=True)).props('flat dense color=cyan size=sm no-caps').classes('text-xs')
-
-                        ui.button('Próxima ➡️', icon='arrow_forward', on_click=lambda: update_lightbox_img(cur_idx['val'] + 1)).props('unelevated color=cyan-8 text-color=white bold no-caps').classes('px-4 rounded-xl text-xs')
-
-                dlg.open()
-
-            # ── SEÇÃO DE ENTREGA (E-MAIL INSTITUCIONAL & WHATSAPP) ────────────
-            def render_delivery_section():
-                all_photos = []
-                seen = set()
-                for p in (guest_state['matched_photos'] + guest_state['geral_photos']):
-                    fid = p.get('drive_file_id') or p.get('id')
-                    if fid and fid not in seen:
-                        seen.add(fid)
-                        all_photos.append(p)
-
-                with ui.card().classes('w-full max-w-5xl bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 gap-3 q-mt-4'):
-                    ui.label('📥 RECEBER OU COMPARTILHAR SUAS FOTOS').classes('text-sm sm:text-base font-black text-white tracking-wide')
-                    
-                    # Botão de Compartilhar no WhatsApp
-                    event_url = f"https://sisgab-cgcfn.ddns.net/evento/{event_id}"
-                    whatsapp_text = f"📷 Acesse as fotos oficiais do evento {nome_evento}: {event_url}"
-                    whatsapp_url = f"https://api.whatsapp.com/send?text={whatsapp_text.replace(' ', '%20')}"
-
-                    with ui.row().classes('w-full items-center gap-3'):
-                        ui.button('Compartilhar Galeria no WhatsApp', icon='share', on_click=lambda: (log_portal_analytics(event_id, 'whatsapp', session_id=session_id), ui.navigate.to(whatsapp_url, new_tab=True))).props('unelevated color=green-7 text-color=white bold no-caps').classes('w-full h-12 text-xs sm:text-sm font-bold rounded-xl shadow-md')
-
-                    # Envio por E-mail Institucional com Pré-Cadastro Permanente
-                    with ui.column().classes('w-full gap-2.5 q-mt-1'):
-                        ui.label('Ou salve seu e-mail para receber fotos automaticamente neste e em futuros eventos:').classes('text-[11px] sm:text-xs text-grey-4')
-                        
-                        with ui.row().classes('w-full items-center gap-3 flex-wrap'):
-                            name_input = ui.input(placeholder='Seu Nome (opcional)', value=guest_state['guest_name']).props('dark outlined dense').classes('w-full sm:w-60')
-                            email_input = ui.input(placeholder='seu.email@exemplo.com', value=guest_state['guest_email']).props('dark outlined dense').classes('flex-1 min-w-[240px]')
-                            
-                            async def send_email_action():
-                                email_val = (email_input.value or '').strip()
-                                name_val = (name_input.value or '').strip()
-                                if not email_val or '@' not in email_val:
-                                    ui.notify('❌ Digite um e-mail válido.', color='warning')
-                                    return
-                                
-                                if not all_photos:
-                                    ui.notify('ℹ️ Nenhuma foto para enviar no momento.', color='info')
-                                    return
-
-                                guest_state['guest_name'] = name_val
-                                guest_state['guest_email'] = email_val
-                                app.storage.user['portal_guest_name'] = name_val
-                                app.storage.user['portal_guest_email'] = email_val
-
-                                # Salva perfil permanente no banco para histórico multi-evento
-                                save_guest_face_profile(
-                                    event_id, session_id, guest_state['selfie_embeddings'],
-                                    nome=name_val, email=email_val
-                                )
-                                
-                                links_html = ''.join(
-                                    f'<p style="margin: 6px 0;">📷 <a href="https://drive.google.com/file/d/{p.get("drive_file_id")}/view" style="color: #0284c7; text-decoration: none; font-weight: bold;">Foto {i+1} — Abrir no Drive</a></p>'
-                                    for i, p in enumerate(all_photos[:30])
-                                )
-
-                                default_template = f"""
-                                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0f172a; color: #f8fafc; padding: 24px; border-radius: 16px; border: 1px solid #334155;">
-                                    <div style="text-align: center; margin-bottom: 20px;">
-                                        <h2 style="color: #f59e0b; margin: 0; font-size: 20px; text-transform: uppercase;">MARINHA DO BRASIL</h2>
-                                        <p style="color: #38bdf8; margin: 4px 0 0 0; font-size: 11px; font-weight: bold; letter-spacing: 2px;">GABINETE DO COMANDANTE-GERAL DO CORPO DE FUZILEIROS NAVAIS</p>
-                                    </div>
-                                    <hr style="border: 0; height: 1px; background: #334155; margin: 16px 0;" />
-                                    <p style="font-size: 15px;">Prezado(a) <strong>{name_val or 'Convidado(a)'}</strong>,</p>
-                                    <p style="font-size: 14px; color: #cbd5e1;">Suas fotos do evento <strong>{nome_evento}</strong> já estão prontas para visualização e download:</p>
-                                    <div style="background: #1e293b; padding: 16px; border-radius: 12px; margin: 16px 0;">
-                                        {links_html}
-                                    </div>
-                                    <p style="text-align: center; margin-top: 20px;">
-                                        <a href="{event_url}" style="background: #0284c7; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Ver Galeria Completa</a>
-                                    </p>
-                                    <hr style="border: 0; height: 1px; background: #334155; margin: 20px 0;" />
-                                    <p style="font-size: 11px; color: #64748b; text-align: center;">Comunicação Social — CGCFN • Este é um e-mail automático institucional.</p>
-                                </div>
-                                """
-
-                                template_to_use = event.get('email_template') or default_template
-                                template_to_use = template_to_use.replace('{EVENTO_NOME}', nome_evento)
-                                template_to_use = template_to_use.replace('{EVENTO_DATA}', data_formatada)
-                                template_to_use = template_to_use.replace('{EVENTO_LOCAL}', local_evento)
-                                template_to_use = template_to_use.replace('{FOTOS_LINKS}', links_html)
-                                template_to_use = template_to_use.replace('{TOTAL_FOTOS}', str(len(all_photos)))
-
-                                try:
-                                    await asyncio.to_thread(
-                                        send_real_email_smtp,
-                                        email_val,
-                                        f"📷 Suas fotos do evento {nome_evento}",
-                                        template_to_use
-                                    )
-                                    save_guest_delivery(event_id, email_val, ','.join(p.get('drive_file_id') for p in all_photos), len(all_photos))
-                                    log_portal_analytics(event_id, 'email', session_id=session_id)
-                                    ui.notify('✅ E-mail institucional enviado com sucesso e perfil salvo!', color='positive')
-                                except Exception as err_mail:
-                                    ui.notify(f"❌ Erro ao enviar e-mail: {err_mail}", color='negative')
-
-                            ui.button('📧 Enviar Fotos por E-mail', on_click=send_email_action).props('unelevated color=cyan text-color=black font-bold icon=send').classes('h-11 px-6 rounded-xl text-xs')
-        def download_single(file_id: str):
-            log_portal_analytics(event_id, 'download', session_id=session_id)
-            ui.navigate.to(f"https://drive.google.com/uc?export=download&id={file_id}", new_tab=True)
-
-        # Auto-executa match se já houver selfies salvas na sessão persistente
+        # ── 9. AUTO-MATCH SE JÁ HOUVER SELFIES SALVAS NA SESSÃO ───────────────
         if guest_state['selfie_embeddings']:
             async def auto_match_on_load():
                 await execute_matching()
                 refresh_ui()
             asyncio.create_task(auto_match_on_load())
 
-        # Inicializa a primeira renderização na raiz da página
+        # ── 10. INICIALIZA A PRIMEIRA RENDERIZAÇÃO NA RAIZ DA PÁGINA ──────────
         refresh_ui()
