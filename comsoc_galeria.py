@@ -124,92 +124,119 @@ def render_page(evento_id: str = None, **kwargs):
                     ui.badge(f'{src} {pct}%', color='cyan' if src == 'IA' else 'grey-7').classes('text-[9px]')
                     ui.label(label).classes('text-xs text-white truncate flex-grow')
 
-    # ─── BARRA DE ACOES ───
-    with ui.card().classes('w-full q-pa-sm no-shadow rounded-xl q-mb-sm').style(
+    # ─── BARRA DE AÇÕES ORGANIZADA POR FLUXOS COERENTES ───
+    with ui.card().classes('w-full q-pa-md no-shadow rounded-2xl q-mb-sm').style(
         f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
     ):
-        with ui.row().classes('w-full items-center gap-2 flex-wrap'):
+        with ui.row().classes('w-full justify-between items-center gap-3 flex-wrap'):
             def _open_drive():
                 p = pautas_data.get(str(page_state['pauta_id']), {})
+                from database import get_demanda_drive_url
                 fid = get_drive_folder_id(p)
-                if fid:
-                    ui.open(f'https://drive.google.com/drive/folders/{fid}', new_tab=True)
+                drive_url = get_demanda_drive_url(p)
+                if drive_url or fid:
+                    target = drive_url or f"https://drive.google.com/drive/folders/{fid}"
+                    ui.open(target, new_tab=True)
                 else:
-                    ui.notify('Pasta nao vinculada.', color='warning')
-            ui.button('Abrir Drive', icon='folder_open', on_click=_open_drive).props('dense outline color=cyan').classes('text-xs')
-            if is_operator:
-                ui.button('🔄 Sincronizar Pastas do Drive', icon='sync', on_click=lambda: _sincronizar_todas_pastas_drive()).props('dense unelevated color=blue-7 text-color=white font-bold').classes('text-xs cyber-glow')
-                ui.button('Distribuir', icon='send', on_click=lambda: _abrir_distribuir()).props('dense outline color=green').classes('text-xs')
-                ui.button('Vincular/Criar Pasta', icon='link', on_click=lambda: _abrir_vincular()).props('dense outline color=amber').classes('text-xs')
-                ui.button('🌐 Portal do Convidado', icon='qr_code_2', on_click=lambda: _abrir_portal_convidado()).props('dense unelevated color=amber-9 text-color=white font-bold').classes('text-xs cyber-glow')
-            ui.button('Biometria Facial', icon='face', on_click=lambda: _abrir_biometria()).props('dense outline color=purple').classes('text-xs')
+                    ui.notify('Pasta do Google Drive não vinculada a este evento.', color='warning')
 
-    # ─── MURAL DE EVENTOS RECENTES ───
-    with ui.card().classes('w-full q-pa-md no-shadow rounded-xl q-mb-sm').style(
+            # Grupo 1: Integração Google Drive & Sincronização
+            with ui.row().classes('items-center gap-2 flex-wrap'):
+                ui.badge('☁️ GOOGLE DRIVE', color='blue-10').classes('text-[10px] font-black text-cyan-3 tracking-wider q-px-sm')
+                ui.button('Abrir Pasta', icon='folder_open', on_click=_open_drive).props('unelevated color=blue-9 text-color=white no-caps').classes('text-xs font-bold px-3 py-1.5 rounded-xl hover:brightness-110').tooltip('Abrir a pasta deste evento no Google Drive')
+                if is_operator:
+                    ui.button('Sincronizar Acervo', icon='sync', on_click=lambda: _sincronizar_todas_pastas_drive()).props('unelevated color=cyan-8 text-color=black no-caps').classes('text-xs font-black px-3 py-1.5 rounded-xl hover:brightness-110').tooltip('Varre o Google Drive e vincula todas as pastas aos eventos')
+                    ui.button('Vincular / Criar Pasta', icon='add_link', on_click=lambda: _abrir_vincular()).props('unelevated color=amber-8 text-color=black no-caps').classes('text-xs font-bold px-3 py-1.5 rounded-xl hover:brightness-110').tooltip('Vincular link manual ou gerar nova pasta no Drive')
+
+            # Grupo 2: Entrega Hot & Reconhecimento IA
+            with ui.row().classes('items-center gap-2 flex-wrap'):
+                ui.badge('🚀 ENTREGA & IA', color='purple-10').classes('text-[10px] font-black text-amber-3 tracking-wider q-px-sm')
+                if is_operator:
+                    ui.button('Portal do Convidado (Hot Delivery)', icon='qr_code_2', on_click=lambda: _abrir_portal_convidado()).props('unelevated color=amber-9 text-color=white no-caps').classes('text-xs font-black px-3.5 py-1.5 rounded-xl cyber-glow hover:brightness-110').tooltip('Gerenciar QR Code e entrega de fotos por Reconhecimento Facial')
+                    ui.button('Distribuir no Telegram', icon='send', on_click=lambda: _abrir_distribuir()).props('unelevated color=green-7 text-color=white no-caps').classes('text-xs font-bold px-3 py-1.5 rounded-xl hover:brightness-110').tooltip('Disparar fotos para militares e canais do Telegram')
+                ui.button('Biometria Facial', icon='face', on_click=lambda: _abrir_biometria()).props('unelevated color=purple-7 text-color=white no-caps').classes('text-xs font-bold px-3 py-1.5 rounded-xl hover:brightness-110').tooltip('Cadastrar foto para reconhecimento facial')
+
+    # ─── MURAL DE EVENTOS RECENTES & ACERVO ───
+    with ui.card().classes('w-full q-pa-md no-shadow rounded-2xl q-mb-sm').style(
         f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
     ):
         with ui.row().classes('w-full justify-between items-center q-mb-sm'):
-            ui.label('Mural de Eventos & Acervo').classes('text-sm font-bold text-cyan')
-            ui.badge(f'{len(pautas_data)} eventos', color='primary').classes('text-xs')
+            with ui.row().classes('items-center gap-2'):
+                ui.icon('collections_bookmark', color='cyan-4').classes('text-lg')
+                ui.label('Mural de Eventos & Acervo Oficial').classes('text-sm font-bold text-cyan')
+            with ui.row().classes('items-center gap-2'):
+                ui.label('Legenda:').classes('text-[10px] text-grey-4')
+                ui.icon('cloud_done', size='16px', color='green').tooltip('Conectado ao Google Drive')
+                ui.icon('cloud_off', size='16px', color='grey').tooltip('Pendente de pasta no Drive')
+                ui.badge(f'{len(pautas_data)} eventos', color='primary').classes('text-xs font-bold')
 
         if pautas_data:
-            with ui.element('div').classes('w-full overflow-auto').style('max-height: 280px;'):
+            with ui.element('div').classes('w-full overflow-auto').style('max-height: 320px;'):
                 with ui.element('table').classes('w-full').style(
-                    'border-collapse: collapse; font-size: 11px;'
+                    'border-collapse: collapse; font-size: 12px;'
                 ):
                     # Header
                     with ui.element('thead'):
-                        with ui.element('tr').style('border-bottom: 1px solid rgba(197,160,89,0.2);'):
-                            for h in ['Data', 'Evento', 'Fotos', 'Drive', 'Acoes']:
-                                with ui.element('th').classes('text-left text-grey-4 font-bold q-pa-xs'):
+                        with ui.element('tr').style('border-bottom: 1px solid rgba(0,229,255,0.2); background: rgba(0,0,0,0.25);'):
+                            for h in ['Data', 'Evento / Pauta', 'Fotos', 'Status Drive', 'Ações']:
+                                with ui.element('th').classes('text-left text-cyan-3 font-bold q-pa-sm'):
                                     ui.label(h)
                     # Body
                     with ui.element('tbody'):
-                        for eid, ev in list(pautas_data.items())[:20]:
+                        for eid, ev in list(pautas_data.items())[:25]:
                             raw_dt = str(ev.get('data_evento') or '').strip()
                             data_ev = raw_dt[:10] if raw_dt and raw_dt.upper() != 'ASD' else 'ASD'
-                            titulo = ev.get('titulo_evento', 'Sem titulo')
+                            titulo = ev.get('titulo_evento', 'Sem título')
                             from database import get_demanda_drive_url
                             dfid = get_drive_folder_id(ev)
                             drive_url = get_demanda_drive_url(ev)
                             n_local = len(get_local_photos(eid))
                             is_sel = str(eid) == str(page_state['pauta_id'])
-                            row_bg = 'background: rgba(0,229,255,0.08);' if is_sel else ''
+                            row_bg = 'background: rgba(0,229,255,0.12); border-left: 3px solid #00e5ff;' if is_sel else ''
 
                             with ui.element('tr').style(
-                                f'border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; {row_bg}'
-                            ).classes('hover:bg-white/5').on('click', lambda _, _id=eid: _on_event_change(_id)):
-                                with ui.element('td').classes('q-pa-xs text-grey-3'):
+                                f'border-bottom: 1px solid rgba(255,255,255,0.05); {row_bg}'
+                            ).classes('hover:bg-white/5 transition-colors'):
+                                # Data
+                                with ui.element('td').classes('q-pa-sm text-grey-3 font-mono text-xs'):
                                     if data_ev == 'ASD':
                                         ui.badge('ASD', color='amber').classes('text-[10px] text-black font-bold').tooltip('Data a Definir (ASD)')
                                     else:
-                                        ui.label(data_ev).classes('text-[10px]')
-                                with ui.element('td').classes('q-pa-xs'):
-                                    ui.label(titulo[:45] + ('...' if len(titulo) > 45 else '')).classes(
-                                        'text-[11px] text-white font-bold' if is_sel else 'text-[11px] text-grey-2'
+                                        ui.label(data_ev)
+
+                                # Evento
+                                with ui.element('td').classes('q-pa-sm cursor-pointer').on('click', lambda _, _id=eid: _on_event_change(_id)):
+                                    ui.label(titulo).classes(
+                                        'text-xs text-cyan-2 font-bold' if is_sel else 'text-xs text-white font-medium hover:text-cyan'
                                     )
-                                with ui.element('td').classes('q-pa-xs text-center'):
+
+                                # Fotos
+                                with ui.element('td').classes('q-pa-sm text-center'):
                                     if n_local > 0:
-                                        ui.badge(str(n_local), color='cyan').classes('text-[9px]')
+                                        ui.badge(f'📸 {n_local}', color='cyan-9').classes('text-[10px] font-bold')
                                     elif dfid or drive_url:
-                                        ui.badge('Nuvem', color='blue-grey').classes('text-[8px]')
+                                        ui.badge('☁️ Nuvem', color='blue-grey-9').classes('text-[10px] font-semibold text-grey-2')
                                     else:
-                                        ui.label('-').classes('text-[10px] text-grey-6')
-                                with ui.element('td').classes('q-pa-xs text-center'):
+                                        ui.label('-').classes('text-xs text-grey-6')
+
+                                # Status Drive
+                                with ui.element('td').classes('q-pa-sm text-center'):
                                     if dfid or drive_url:
-                                        ui.icon('cloud_done', size='14px', color='green')
+                                        ui.icon('cloud_done', size='18px', color='green').tooltip('Pasta vinculada no Google Drive')
                                     else:
-                                        ui.icon('cloud_off', size='14px', color='grey')
-                                with ui.element('td').classes('q-pa-xs'):
-                                    with ui.row().classes('gap-1 items-center'):
+                                        ui.icon('cloud_off', size='18px', color='grey-6').tooltip('Sem pasta vinculada')
+
+                                # Botões de Ação Ampliados
+                                with ui.element('td').classes('q-pa-sm'):
+                                    with ui.row().classes('gap-2 items-center no-wrap'):
                                         if drive_url or dfid:
                                             target_link = drive_url or f"https://drive.google.com/drive/folders/{dfid}"
-                                            ui.button(icon='open_in_new', on_click=lambda _, u=target_link: ui.open(u, new_tab=True)).props(
-                                                'flat dense round size=xs color=cyan'
-                                            ).tooltip('Abrir pasta no Drive')
-                                        ui.button(icon='photo_library', on_click=lambda _, _id=eid: _on_event_change(_id)).props(
-                                            'flat dense round size=xs color=amber'
-                                        ).tooltip('Ver galeria')
+                                            ui.button('Drive', icon='open_in_new', on_click=lambda _, u=target_link: ui.open(u, new_tab=True)).props(
+                                                'unelevated dense color=blue-8 text-color=white no-caps'
+                                            ).classes('text-[11px] font-bold px-2 py-1 rounded-lg hover:brightness-110').tooltip('Abrir pasta no Google Drive')
+                                        ui.button('Ver Galeria', icon='photo_library', on_click=lambda _, _id=eid: _on_event_change(_id)).props(
+                                            'unelevated dense color=amber-8 text-color=black no-caps'
+                                        ).classes('text-[11px] font-bold px-2 py-1 rounded-lg hover:brightness-110').tooltip('Carregar fotos deste evento na tela')
         else:
             empty_state('event_busy', 'Nenhum evento cadastrado ainda.')
 
@@ -363,20 +390,74 @@ def render_page(evento_id: str = None, **kwargs):
 
     def _abrir_vincular():
         pauta = pautas_data.get(str(page_state['pauta_id']), {})
-        with ui.dialog() as dlg, ui.card().classes('w-96 q-pa-md').style(f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'):
-            ui.label('Vincular Pasta do Drive').classes('text-white text-sm font-bold q-mb-xs')
-            in_url = ui.input('Link do Google Drive', placeholder='https://drive.google.com/drive/folders/...').props('dark outlined dense w-full')
-            def salvar():
+        if not pauta or not pauta.get('id'):
+            ui.notify('Selecione um evento na lista antes de vincular ou criar pasta.', color='warning')
+            return
+        
+        titulo_ev = pauta.get('titulo_evento', 'Evento')
+        data_ev = pauta.get('data_evento', '')
+        cur_url = get_demanda_drive_url(pauta)
+
+        with ui.dialog() as dlg, ui.card().classes('w-[480px] max-w-[95vw] q-pa-lg rounded-2xl bg-slate-900 border border-cyan-500/30 text-white'):
+            with ui.row().classes('w-full justify-between items-center border-b border-cyan-500/20 pb-2 mb-3'):
+                with ui.column().classes('gap-0'):
+                    ui.label('📁 VINCULAR OU CRIAR PASTA NO DRIVE').classes('text-sm font-black text-cyan cyber-title')
+                    ui.label(f"{titulo_ev} ({data_ev})").classes('text-xs text-grey-4 truncate max-w-[380px]')
+                ui.button(icon='close', on_click=dlg.close).props('flat round dense text-color=grey-4')
+
+            ui.label('Opção 1: Vincular Link Manual').classes('text-xs font-bold text-amber-3')
+            in_url = ui.input(
+                'Link da Pasta no Google Drive',
+                placeholder='https://drive.google.com/drive/folders/...',
+                value=cur_url
+            ).props('dark outlined dense w-full')
+
+            def salvar_manual():
                 v = in_url.value.strip()
-                if not v: return
+                if not v:
+                    ui.notify('Digite ou cole o link do Google Drive!', color='warning')
+                    return
                 fid = v.split('folders/')[-1].split('?')[0].split('/')[0] if 'folders/' in v else v
-                pauta['drive_folder_id'] = fid; pauta['drive_url'] = v
+                pauta['drive_folder_id'] = fid
+                pauta['drive_url'] = v
                 from database import salvar_demanda_drive_link
                 salvar_demanda_drive_link(pauta.get('id'), pauta.get('titulo_evento'), v, fid)
-                ui.notify('Link vinculado!', color='success'); dlg.close(); render_main_content.refresh()
-            with ui.row().classes('w-full justify-end gap-2 q-mt-md'):
-                ui.button('Cancelar', on_click=dlg.close).props('flat color=grey')
-                ui.button('Salvar', on_click=salvar).props('unelevated color=cyan bold')
+                ui.notify('✅ Link do Google Drive vinculado com sucesso!', color='positive')
+                dlg.close()
+                render_main_content.refresh()
+
+            ui.button('💾 Salvar Link Manual', icon='link', on_click=salvar_manual).props('unelevated color=cyan text-color=black bold w-full').classes('q-mb-md')
+
+            ui.separator().classes('my-2 border-slate-800')
+
+            ui.label('Opção 2: Criar Pasta Oficial Automaticamente').classes('text-xs font-bold text-amber-3')
+            ui.label('Cria a pasta oficial dentro da Pasta Mãe do Drive com as subpastas GERAL e SELEÇÃO.').classes('text-[10px] text-grey-4 q-mb-xs')
+
+            async def gerar_pasta_automatica():
+                n_auto = ui.notify('📂 Criando pasta no Google Drive...', color='info', spinner=True, timeout=0)
+                try:
+                    drive_service.reset_drive_service()
+                    res = await asyncio.wait_for(
+                        asyncio.to_thread(drive_service.criar_pasta_evento, pauta.get('titulo_evento', ''), pauta.get('data_evento', '')),
+                        timeout=20.0
+                    )
+                    if res and res.get('evento_link'):
+                        pauta['drive_folder_id'] = res['evento_folder_id']
+                        pauta['drive_url'] = res['evento_link']
+                        from database import salvar_demanda_drive_link
+                        salvar_demanda_drive_link(pauta.get('id'), pauta.get('titulo_evento'), res['evento_link'], res['evento_folder_id'])
+                        ui.notify('🎉 Pasta oficial criada e vinculada com sucesso no Google Drive!', color='positive', timeout=5000)
+                        dlg.close()
+                        render_main_content.refresh()
+                    else:
+                        ui.notify('⚠️ Não foi possível criar a pasta. Verifique as credenciais do Google Drive no Painel Admin.', color='warning')
+                except Exception as ex_p:
+                    ui.notify(f'Erro ao criar pasta: {ex_p}', color='negative')
+                finally:
+                    try: n_auto.dismiss()
+                    except Exception: pass
+
+            ui.button('⚡ Criar Pasta no Google Drive Agora', icon='create_new_folder', on_click=gerar_pasta_automatica).props('unelevated color=amber-9 text-color=white bold w-full')
         dlg.open()
 
     async def _criar_pasta():
@@ -452,7 +533,13 @@ def render_page(evento_id: str = None, **kwargs):
             try: n.dismiss()
             except Exception: pass
 
-    def _abrir_distribuir(pauta):
+    def _abrir_distribuir(pauta=None):
+        if pauta is None:
+            pauta = pautas_data.get(str(page_state['pauta_id']), {})
+        if not pauta or not pauta.get('id'):
+            ui.notify('Selecione um evento para distribuir o acervo.', color='warning')
+            return
+
         from database import get_demanda_drive_url, get_db_connection
         titulo = (pauta.get('titulo_evento') or 'Sem Título').upper()
         data_ev = pauta.get('data_evento', '')
@@ -559,7 +646,7 @@ def render_page(evento_id: str = None, **kwargs):
                             return
 
                         dlg.close()
-                        notif = ui.notification(f"🚀 Enviando acervo para {len(target_ids)} destinatário(s)...", timeout=0, spinner=True)
+                        notif = ui.notify(f"🚀 Enviando acervo para {len(target_ids)} destinatário(s)...", timeout=0, spinner=True, color='info')
                         sucessos = 0
                         try:
                             for cid in target_ids:
@@ -569,10 +656,12 @@ def render_page(evento_id: str = None, **kwargs):
                                     sf = drive_service.find_folder('SELEÇÃO', fid) or fid
                                     await enviar_album_hd_drive(bot, cid, sf)
                                 sucessos += 1
-                            notif.dismiss()
+                            try: notif.dismiss()
+                            except Exception: pass
                             ui.notify(f'✅ Acervo enviado com sucesso para {sucessos} destinatário(s)!', color='positive')
                         except Exception as ex_send:
-                            notif.dismiss()
+                            try: notif.dismiss()
+                            except Exception: pass
                             ui.notify(f'Erro ao enviar: {ex_send}', color='negative')
 
                     ui.button('🚀 Disparar Distribuição', icon='send', on_click=disparar_telegram).props(
