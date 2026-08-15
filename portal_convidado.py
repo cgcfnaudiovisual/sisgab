@@ -8,6 +8,7 @@ import os
 import sys
 import time
 import json
+import base64
 import asyncio
 from datetime import datetime
 from pathlib import Path
@@ -27,6 +28,12 @@ import drive_service
 
 # Cache em memória da matriz de embeddings por evento (TTL: 30 segundos)
 _EVENT_EMBEDDINGS_CACHE = {}
+
+MESES_PT = {
+    1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
+    5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
+    9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
+}
 
 
 def _get_event_matrix(event_id: str) -> tuple[np.ndarray, list[dict]]:
@@ -67,25 +74,44 @@ def _get_event_matrix(event_id: str) -> tuple[np.ndarray, list[dict]]:
 def _extract_selfie_embedding(image_bytes: bytes) -> tuple[bool, str, np.ndarray | None]:
     """Extrai o embedding facial 512D da selfie com InsightFace ou evaluate_selfie_quality."""
     try:
-        from sisgab_face_worker import evaluate_selfie_quality
-        return evaluate_selfie_quality(image_bytes)
-    except Exception as e:
-        # Fallback se worker não estiver importável diretamente
+        import cv2
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None:
+            return False, "❌ Imagem corrompida ou ilegível.", None
+
+        # Redimensiona para no máximo 1280px para máxima velocidade e economia de RAM
+        h, w = img.shape[:2]
+        if max(h, w) > 1280:
+            scale = 1280.0 / max(h, w)
+            img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+
         try:
-            import cv2
+            from sisgab_face_worker import init_face_engine
+            app_face = init_face_engine()
+        except Exception:
+            app_face = None
+
+        if not app_face:
             from insightface.app import FaceAnalysis
             app_face = FaceAnalysis(name='buffalo_l', allowed_modules=['detection', 'recognition'])
             app_face.prepare(ctx_id=-1, det_size=(320, 320))
-            nparr = np.frombuffer(image_bytes, np.uint8)
-            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            if img is None:
-                return False, "❌ Imagem corrompida.", None
-            faces = app_face.get(img)
-            if not faces:
-                return False, "❌ Nenhum rosto detectado na foto.", None
-            return True, "✅ Rosto identificado!", faces[0].normed_embedding
-        except Exception as e_fb:
-            return False, f"❌ Motor facial indisponível: {e_fb}", None
+
+        faces = app_face.get(img)
+        if not faces:
+            return False, "❌ Nenhum rosto detectado na foto. Envie uma foto nítida e bem iluminada.", None
+
+        if len(faces) > 1:
+            return False, f"❌ Detectamos {len(faces)} rostos. Envie uma foto individual (apenas o seu rosto).", None
+
+        face = faces[0]
+        if hasattr(face, 'det_score') and face.det_score < 0.50:
+            return False, "❌ Rosto pouco nítido ou iluminação fraca. Tente em um ambiente mais claro.", None
+
+        return True, "✅ Rosto identificado com sucesso!", face.normed_embedding
+
+    except Exception as e:
+        return False, f"❌ Erro ao processar foto: {e}", None
 
 
 def render_page(event_id: str):
@@ -109,6 +135,53 @@ def render_page(event_id: str):
             ui.label('GALERIA ENCERRADA').classes('cyber-title text-2xl font-bold text-amber-4 q-mt-md')
             ui.label(f"A galeria do evento '{event.get('nome')}' foi encerrada pela organização.").classes('text-sm text-grey-4 max-w-md')
         return
+
+    # Injeta CSS e Script JS para compressão de imagem no cliente (Canvas Resizer)
+    ui.add_head_html('''
+    <style>
+        .q-uploader__header { display: none !important; }
+        .q-uploader__list { display: none !important; }
+        .q-uploader { background: transparent !important; border: none !important; box-shadow: none !important; width: 100% !important; min-height: unset !important; }
+    </style>
+    <script>
+    window.processPortalImage = function(input) {
+        if (!input.files || !input.files[0]) return;
+        const file = input.files[0];
+        
+        // Notifica início de leitura
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                let maxDim = 1280;
+                let width = img.width;
+                let height = img.height;
+                if (width > maxDim || height > maxDim) {
+                    if (width > height) {
+                        height = Math.round((height * maxDim) / width);
+                        width = maxDim;
+                    } else {
+                        width = Math.round((width * maxDim) / height);
+                        height = maxDim;
+                    }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // Converte para JPEG 85% (~150KB-300KB)
+                const b64 = canvas.toDataURL('image/jpeg', 0.85);
+                emitEvent('portal_selfie_ready', b64);
+                input.value = ''; // Limpa para permitir nova seleção
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    };
+    </script>
+    ''')
 
     # Registra analytics de acesso
     session_id = app.storage.user.get('portal_session_id')
@@ -135,7 +208,8 @@ def render_page(event_id: str):
     if data_str:
         try:
             dt = datetime.strptime(str(data_str)[:10], '%Y-%m-%d')
-            data_formatada = dt.strftime('%d de %B de %Y')
+            mes_nome = MESES_PT.get(dt.month, str(dt.month))
+            data_formatada = f"{dt.day:02d} de {mes_nome} de {dt.year}"
         except Exception:
             data_formatada = str(data_str)
     else:
@@ -148,6 +222,12 @@ def render_page(event_id: str):
     # Container principal da página (Mobile-First, Acessível, Alto Contraste)
     with ui.column().classes('w-full min-h-screen items-center justify-start p-2 sm:p-6 bg-slate-950 text-white').style('font-family: "Outfit", sans-serif;'):
         
+        # Inputs HTML ocultos para Câmera e Galeria
+        ui.html('''
+            <input type="file" id="portal_camera_input" accept="image/*" capture="user" style="display:none;" onchange="window.processPortalImage(this)" />
+            <input type="file" id="portal_gallery_input" accept="image/*" style="display:none;" onchange="window.processPortalImage(this)" />
+        ''')
+
         # ── HERO CARD PRINCIPAL ───────────────────────────────────────────────
         with ui.card().classes('w-full max-w-3xl bg-slate-900/95 border-2 border-amber-500/30 rounded-3xl shadow-2xl overflow-hidden p-0').style('box-shadow: 0 0 50px rgba(245, 158, 11, 0.15);'):
 
@@ -187,34 +267,33 @@ def render_page(event_id: str):
                 with content_container:
                     render_portal_content()
 
-            # ── FUNÇÃO DE BUSCA FACIAL ────────────────────────────────────────
-            async def handle_selfie_upload(e):
+            # ── PROCESSAMENTO DO ARQUIVO/BASE64 RECEBIDO ──────────────────────
+            async def process_image_bytes(file_content: bytes):
                 now_t = time.time()
-                if guest_state['rate_limit_count'] >= 5 and (now_t - guest_state['last_search_time'] < 30):
+                if guest_state['rate_limit_count'] >= 8 and (now_t - guest_state['last_search_time'] < 20):
                     ui.notify('⏳ Por favor, aguarde alguns segundos antes de tentar novamente.', color='warning')
                     return
 
                 guest_state['rate_limit_count'] += 1
                 guest_state['last_search_time'] = now_t
 
-                file_content = e.content.read()
-                if len(file_content) > 12 * 1024 * 1024:
-                    ui.notify('❌ A foto enviada é muito grande (máximo 12MB).', color='negative')
+                if not file_content or len(file_content) < 1000:
+                    ui.notify('❌ Imagem inválida ou vazia.', color='negative')
                     return
 
                 # Spinner de busca amigável
                 with ui.dialog() as loading_dialog, ui.card().classes('bg-slate-900 border border-cyan-500/40 p-6 items-center text-center gap-4 rounded-2xl'):
                     ui.spinner(size='3rem', color='cyan')
-                    ui.label('Analisando sua selfie...').classes('text-lg font-bold text-white')
+                    ui.label('Analisando sua foto com IA...').classes('text-lg font-bold text-white')
                     ui.label('Buscando suas fotos no evento em tempo real.').classes('text-xs text-grey-4')
                 loading_dialog.open()
 
-                # Processa embedding da selfie em thread
+                # Processa embedding da selfie em thread com downscaling
                 ok, msg, embedding = await asyncio.to_thread(_extract_selfie_embedding, file_content)
 
                 if not ok or embedding is None:
                     loading_dialog.close()
-                    ui.notify(msg, color='negative', timeout=5000)
+                    ui.notify(msg, color='negative', timeout=6000)
                     return
 
                 # Adiciona o vetor à lista de selfies do convidado (até 3)
@@ -260,53 +339,88 @@ def render_page(event_id: str):
 
                 if matched_items:
                     log_portal_analytics(event_id, 'match', session_id=session_id, metadata={'count': len(matched_items)})
+                    ui.notify(f"🎉 Encontramos {len(matched_items)} foto(s) sua(s) no evento!", color='positive', timeout=4000)
+                else:
+                    ui.notify("Biometria registrada! Você pode ver a galeria oficial abaixo.", color='info', timeout=4000)
 
                 loading_dialog.close()
                 refresh_ui()
+
+            # Listener do evento JS emitido pelo canvas resizer
+            async def on_selfie_b64_received(e):
+                b64_str = e.args
+                if isinstance(b64_str, str) and ',' in b64_str:
+                    b64_str = b64_str.split(',', 1)[1]
+                try:
+                    img_bytes = base64.b64decode(b64_str)
+                    await process_image_bytes(img_bytes)
+                except Exception as ex_b64:
+                    ui.notify(f"Erro ao processar imagem: {ex_b64}", color='negative')
+
+            ui.on('portal_selfie_ready', on_selfie_b64_received)
+
+            # Handler alternativo para upload direto caso o usuário use
+            async def handle_direct_upload(e):
+                file_content = e.content.read()
+                await process_image_bytes(file_content)
 
             # ── RENDERIZAÇÃO DO CONTEÚDO ──────────────────────────────────────
             def render_portal_content():
                 num_selfies = len(guest_state['selfie_embeddings'])
 
-                # 1. SEÇÃO DE REGISTRO FACIAL / SELFIE
-                with ui.card().classes('w-full bg-slate-950/80 border border-slate-800 rounded-2xl p-4 sm:p-6 items-center text-center gap-3'):
+                # 1. SEÇÃO DE REGISTRO FACIAL / SELFIE COM 2 OPÇÕES CLARAS
+                with ui.card().classes('w-full bg-slate-950/90 border border-cyan-500/30 rounded-2xl p-4 sm:p-6 items-center text-center gap-3 shadow-xl'):
                     
                     if num_selfies == 0:
-                        ui.icon('face_retouching_natural', size='3rem', color='cyan-4')
+                        ui.icon('face_retouching_natural', size='3.2rem', color='cyan-4')
                         ui.label('📸 ENCONTRE SUAS FOTOS DO EVENTO').classes('text-lg sm:text-xl font-black text-white tracking-wide')
-                        ui.label('Tire uma selfie rápida para localizar as fotos onde você aparece.').classes('text-xs sm:text-sm text-grey-4 max-w-md')
+                        ui.label('Tire uma selfie rápida ou anexe uma foto do seu rosto para localizar suas fotos automaticamente.').classes('text-xs sm:text-sm text-grey-3 max-w-md')
                     else:
-                        ui.icon('check_circle', size='2.5rem', color='green-4')
-                        ui.label(f"✅ {num_selfies} de 3 selfies registradas").classes('text-md font-bold text-green-4')
-                        ui.label('Sua biometria foi identificada. Você pode adicionar mais um ângulo para refinar ou ver os resultados abaixo.').classes('text-xs text-grey-4 max-w-md')
+                        ui.icon('check_circle', size='2.8rem', color='green-4')
+                        ui.label(f"✅ {num_selfies} de 3 fotos registradas").classes('text-base sm:text-lg font-bold text-green-4')
+                        ui.label('Sua biometria foi identificada com sucesso! Você pode adicionar mais uma foto para refinar ou conferir os resultados abaixo.').classes('text-xs text-grey-3 max-w-md')
 
                     # Dicas visuais amigáveis (Acessibilidade para todas as idades)
-                    with ui.row().classes('w-full justify-center gap-2 sm:gap-4 py-2 text-[11px] sm:text-xs text-grey-3'):
+                    with ui.row().classes('w-full justify-center gap-3 sm:gap-6 py-1 text-[11px] sm:text-xs text-grey-3'):
                         with ui.row().classes('items-center gap-1'):
-                            ui.label('☀️').classes('text-base')
+                            ui.label('☀️').classes('text-sm')
                             ui.label('Boa luz')
                         with ui.row().classes('items-center gap-1'):
-                            ui.label('👤').classes('text-base')
+                            ui.label('👤').classes('text-sm')
                             ui.label('Olhe de frente')
                         with ui.row().classes('items-center gap-1'):
-                            ui.label('🕶️').classes('text-base')
+                            ui.label('🕶️').classes('text-sm')
                             ui.label('Sem óculos escuros')
 
-                    # Botão gigante de Selfie (Área de toque WCAG >= 56px)
-                    btn_label = '📸 TIRAR UMA SELFIE' if num_selfies == 0 else '📸 TIRAR OUTRA SELFIE (OPCIONAL)'
-                    with ui.upload(on_upload=handle_selfie_upload, max_file_size=12*1024*1024, auto_upload=True).props('accept="image/*" capture="user" flat bordered').classes('w-full max-w-md'):
-                        ui.button(btn_label).props('unelevated color=cyan-8 text-color=white icon=photo_camera').classes('w-full h-14 text-base font-black tracking-wide rounded-xl shadow-lg cyber-glow')
+                    # BOTÕES DUPLOS DE AÇÃO (Câmera + Galeria de Arquivos) — Área de toque WCAG >= 56px
+                    with ui.column().classes('w-full max-w-md gap-3 q-mt-xs'):
+                        
+                        # Opção 1: Câmera Nativa
+                        btn_cam_label = '📸 TIRAR SELFIE NA HORA' if num_selfies == 0 else '📸 TIRAR OUTRA SELFIE (CÂMERA)'
+                        ui.button(
+                            btn_cam_label,
+                            icon='photo_camera',
+                            on_click=lambda: ui.run_javascript("document.getElementById('portal_camera_input').click()")
+                        ).props('unelevated color=cyan-8 text-color=white no-caps').classes('w-full h-14 text-sm sm:text-base font-black tracking-wide rounded-2xl shadow-lg cyber-glow')
 
-                    ui.label('🔒 Sua selfie é processada em memória e descartada imediatamente.').classes('text-[10px] text-grey-5')
+                        # Opção 2: Anexar dos Arquivos / Galeria
+                        btn_gal_label = '📁 ESCOLHER FOTO DA GALERIA' if num_selfies == 0 else '📁 ANEXAR OUTRO ARQUIVO'
+                        ui.button(
+                            btn_gal_label,
+                            icon='perm_media',
+                            on_click=lambda: ui.run_javascript("document.getElementById('portal_gallery_input').click()")
+                        ).props('unelevated color=amber-9 text-color=black no-caps').classes('w-full h-13 text-sm font-bold tracking-wide rounded-2xl shadow-md')
+
+                    ui.label('🔒 Sua foto é processada em memória e descartada imediatamente.').classes('text-[10px] text-grey-5 q-mt-xs')
 
                 # 2. SEÇÃO DE FOTOS PESSOAIS ("MAIS FOTOS DO EVENTO") — SILENCIOSA E ELEGANTE
                 if guest_state['has_searched'] and guest_state['matched_photos']:
                     with ui.column().classes('w-full gap-3 q-mt-4'):
                         with ui.row().classes('w-full items-center justify-between'):
                             with ui.row().classes('items-center gap-2'):
-                                ui.icon('auto_awesome', size='1.4rem', color='amber-4')
+                                ui.icon('auto_awesome', size='1.5rem', color='amber-4')
                                 ui.label('📷 SUAS FOTOS NO EVENTO').classes('text-base sm:text-lg font-black text-amber-4 tracking-wide')
-                            ui.badge(f"{len(guest_state['matched_photos'])} fotos", color='amber-9').classes('text-xs font-bold')
+                            ui.badge(f"{len(guest_state['matched_photos'])} fotos encontradas", color='amber-9').classes('text-xs font-bold px-2 py-1')
 
                         # Grade de fotos identificadas
                         render_photo_grid(guest_state['matched_photos'], is_personal=True)
@@ -315,9 +429,9 @@ def render_page(event_id: str):
                 with ui.column().classes('w-full gap-3 q-mt-4'):
                     with ui.row().classes('w-full items-center justify-between'):
                         with ui.row().classes('items-center gap-2'):
-                            ui.icon('collections', size='1.4rem', color='cyan-4')
+                            ui.icon('collections', size='1.5rem', color='cyan-4')
                             ui.label('📷 GALERIA OFICIAL DO EVENTO').classes('text-base sm:text-lg font-black text-cyan-3 tracking-wide')
-                        ui.label('Fotos institucionais').classes('text-xs text-grey-4')
+                        ui.label('Fotos oficiais').classes('text-xs text-grey-4')
 
                     # Carrega fotos oficiais da pasta GERAL
                     render_official_gallery(drive_geral_id)
@@ -344,8 +458,8 @@ def render_page(event_id: str):
 
                             # Botão de visualização/download direto
                             with ui.row().classes('w-full p-1.5 items-center justify-between bg-black/60 backdrop-blur-sm'):
-                                ui.button(icon='open_in_new', on_click=lambda u=full_url: ui.navigate.to(u, new_tab=True)).props('flat dense size=xs color=grey-4')
-                                ui.button(icon='download', on_click=lambda fid=fid: download_single(fid)).props('flat dense size=xs color=cyan-4')
+                                ui.button(icon='open_in_new', on_click=lambda u=full_url: ui.navigate.to(u, new_tab=True)).props('flat dense size=xs color=grey-4').tooltip('Abrir original no Drive')
+                                ui.button(icon='download', on_click=lambda fid=fid: download_single(fid)).props('flat dense size=xs color=cyan-4').tooltip('Baixar foto')
 
             # ── GALERIA OFICIAL (PASTA GERAL) ─────────────────────────────────
             def render_official_gallery(folder_id: str):

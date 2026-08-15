@@ -120,6 +120,12 @@ def evaluate_selfie_quality(image_bytes: bytes) -> tuple[bool, str, np.ndarray |
         if img is None:
             return False, "❌ Arquivo de imagem inválido ou corrompido.", None
 
+        # Redimensionamento de segurança para evitar estouro de memória em fotos 50MP/108MP
+        h, w = img.shape[:2]
+        if max(h, w) > 1280:
+            scale = 1280.0 / max(h, w)
+            img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+
         faces = app.get(img)
         if not faces:
             return False, "❌ Nenhum rosto detectado na foto. Envie uma foto nítida e bem iluminada.", None
