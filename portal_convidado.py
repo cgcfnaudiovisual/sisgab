@@ -353,9 +353,15 @@ def render_page(event_id: str):
                 guest_state['matched_photos'] = matched_items
                 guest_state['has_searched'] = True
 
+                pin_req = str(event.get('pin_acesso') or '').strip()
                 if matched_items:
+                    if pin_req:
+                        app.storage.user[f'portal_auth_{event_id}'] = True
                     log_portal_analytics(event_id, 'match', session_id=session_id, metadata={'count': len(matched_items)})
-                    ui.notify(f"🎉 Encontramos {len(matched_items)} foto(s) sua(s) no evento!", color='positive', timeout=4000)
+                    ui.notify(f"🎉 Presença confirmada! Encontramos {len(matched_items)} foto(s) sua(s) no evento.", color='positive', timeout=5000)
+                else:
+                    if pin_req and not app.storage.user.get(f'portal_auth_{event_id}', False):
+                        ui.notify('⚠️ Não localizamos fotos suas no acervo. Digite o PIN do evento ou tente outra foto com melhor iluminação.', color='warning', timeout=7000)
 
             # Listener do evento JS emitido pelo canvas resizer
             async def on_selfie_b64_received(e):
@@ -372,6 +378,51 @@ def render_page(event_id: str):
 
             # ── RENDERIZAÇÃO DO CONTEÚDO ──────────────────────────────────────
             def render_portal_content():
+                pin_evento = str(event.get('pin_acesso') or '').strip()
+                is_auth = True
+                if pin_evento:
+                    is_auth = app.storage.user.get(f'portal_auth_{event_id}', False)
+
+                # Se o evento possui PIN e o usuário ainda não autenticou (nem por PIN nem por Selfie)
+                if not is_auth:
+                    with ui.card().classes('w-full max-w-xl mx-auto bg-slate-950/95 border-2 border-amber-500/40 rounded-3xl p-6 sm:p-8 items-center text-center gap-5 shadow-2xl backdrop-blur-xl'):
+                        ui.icon('lock', size='3.5rem', color='amber-4')
+                        ui.label('ACESSO RESTRITO AO EVENTO').classes('text-xl sm:text-2xl font-black text-white tracking-wider')
+                        ui.label('Este evento possui acesso protegido. Digite o PIN do evento ou valide sua presença com uma selfie facial.').classes('text-xs sm:text-sm text-grey-3 leading-relaxed')
+
+                        pin_box = ui.input('PIN do Evento', placeholder='Digite o PIN').props('dark outlined dense type=password').classes('w-full max-w-xs text-center text-lg tracking-widest')
+                        
+                        def verificar_pin():
+                            val = (pin_box.value or '').strip()
+                            if val.lower() == pin_evento.lower():
+                                app.storage.user[f'portal_auth_{event_id}'] = True
+                                ui.notify('✅ Acesso liberado!', color='positive')
+                                refresh_ui()
+                            else:
+                                ui.notify('❌ PIN incorreto. Tente novamente ou use a validação por Selfie.', color='negative')
+
+                        ui.button('🔓 DESBLOQUEAR COM PIN', icon='key', on_click=verificar_pin).props('unelevated color=amber-9 text-color=black bold').classes('w-full max-w-xs h-12 rounded-xl')
+
+                        ui.separator().classes('w-full').style('background: linear-gradient(90deg, transparent, rgba(245, 158, 11, 0.4), transparent);')
+
+                        ui.label('OU VALIDE SUA PRESENÇA COM UMA SELFIE').classes('text-xs font-bold text-cyan-4 tracking-wider')
+                        ui.label('Se você esteve presente e foi fotografado, sua biometria liberará seu acesso automaticamente.').classes('text-[11px] text-grey-4 max-w-sm')
+
+                        with ui.row().classes('w-full justify-center gap-3 flex-wrap'):
+                            ui.button(
+                                '📸 VALIDAR COM CÂMERA',
+                                icon='photo_camera',
+                                on_click=lambda: ui.run_javascript("document.getElementById('portal_camera_input').click()")
+                            ).props('unelevated color=cyan-8 text-color=white no-caps').classes('h-12 px-5 font-bold rounded-xl shadow-md')
+
+                            ui.button(
+                                '📁 ESCOLHER FOTO DA GALERIA',
+                                icon='perm_media',
+                                on_click=lambda: ui.run_javascript("document.getElementById('portal_gallery_input').click()")
+                            ).props('outline color=cyan-4 text-color=cyan-2 no-caps').classes('h-12 px-5 font-bold rounded-xl')
+
+                    return
+
                 num_selfies = len(guest_state['selfie_embeddings'])
 
                 # 1. SEÇÃO DE REGISTRO FACIAL / SELFIE ULTRA-MODERNA

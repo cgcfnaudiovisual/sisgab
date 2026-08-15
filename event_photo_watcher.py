@@ -316,6 +316,31 @@ def run_proactive_matching(event_id: str, new_embeddings: list):
 _DRIVE_EXISTING_FILES = {}
 _drive_files_lock = threading.Lock()
 
+# Conjunto de fotos já indexadas no banco Supabase para modo incremental instantâneo
+_DB_INDEXED_FILES = set()
+_db_indexed_lock = threading.Lock()
+
+
+def preload_db_indexed_files(event_id: str):
+    """Carrega fotos que já possuem embeddings salvos no Supabase para pular reprocessamento desnecessário."""
+    global _DB_INDEXED_FILES
+    try:
+        from database import get_event_photo_embeddings
+        records = get_event_photo_embeddings(event_id)
+        with _db_indexed_lock:
+            for r in records:
+                fn = r.get('photo_filename')
+                if fn:
+                    _DB_INDEXED_FILES.add(fn.strip().lower())
+                dfid = r.get('drive_file_id')
+                if dfid:
+                    _DB_INDEXED_FILES.add(str(dfid).strip().lower())
+        count = len(_DB_INDEXED_FILES)
+        if count > 0:
+            print(f"  🧠 [SUPABASE] {count} fotos/rostos já identificados no banco!")
+    except Exception as e:
+        print(f"  [WARN] Verificação de banco: {e}")
+
 
 def preload_drive_folder_files(folder_id: str):
     """Busca fotos já enviadas para o Google Drive para indexação instantânea sem re-upload."""
@@ -326,7 +351,7 @@ def preload_drive_folder_files(folder_id: str):
     try:
         import drive_service
         print("  🔍 Verificando fotos já existentes na pasta do Google Drive...")
-        existing = drive_service.list_files(folder_id, page_size=2000)
+        existing = drive_service.list_files(folder_id, page_size=5000)
         
         with _drive_files_lock:
             for f in existing:
@@ -344,7 +369,7 @@ def preload_drive_folder_files(folder_id: str):
                 q_sub = f"'{folder_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
                 sub_res = service.files().list(q=q_sub, fields='files(id, name)', supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
                 for sub_f in (sub_res.get('files') or []):
-                    sub_files = drive_service.list_files(sub_f['id'], page_size=2000)
+                    sub_files = drive_service.list_files(sub_f['id'], page_size=5000)
                     with _drive_files_lock:
                         for sf in sub_files:
                             sfname = sf.get('name', '').strip().lower()
@@ -456,20 +481,21 @@ def process_single_file(file_path: Path, event_id: str, folder_id: str, skip_ia:
 # BANNER E STATUS
 # ============================================================================
 def print_banner(event_id: str, pasta: str, workers: int, skip_ia: bool):
-    """Exibe banner inicial do watcher."""
-    print("\n" + "=" * 70)
+    """Imprime cabeçalho visual do watcher."""
+    gpu_desc = _GPU_INFO if not skip_ia else 'desativado (--skip-ia)'
+    print("=" * 70)
     print("  🌐 PORTAL DO CONVIDADO — Event Photo Watcher")
     print("=" * 70)
     print(f"  📌 Evento:     {event_id}")
     print(f"  📁 Pasta:      {pasta}")
     print(f"  ⚙️  Workers:    {workers}")
-    print(f"  🧠 IA:         {'Desativada' if skip_ia else _GPU_INFO}")
+    print(f"  🧠 IA:         {gpu_desc}")
     print(f"  ⏱️  Início:     {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
     print("=" * 70 + "\n")
 
 
 def print_progress():
-    """Exibe resumo de progresso."""
+    """Imprime barra de progresso compacta em uma linha."""
     with _stats_lock:
         total = _stats['total_na_pasta']
         up_ok = _stats['upload_ok']
@@ -478,95 +504,91 @@ def print_progress():
         rostos = _stats['rostos']
         matches = _stats['matches_proativos']
 
-    done = up_ok + up_fail
-    pct = (done / total * 100) if total > 0 else 0
+    pct = int((up_ok + up_fail) / total * 100) if total > 0 else 0
     bar_len = 30
     filled = int(bar_len * pct / 100)
     bar = '█' * filled + '░' * (bar_len - filled)
 
-    print(f"\r  {bar} {pct:.0f}%  ⬆️ {up_ok}/{total}  ❌{up_fail}  🧠{ia_ok}  👤{rostos}  📧{matches}", end='', flush=True)
+    sys.stdout.write(
+        f"\r  {bar} {pct:3d}%  "
+        f"⬆️ {up_ok}/{total}  "
+        f"❌{up_fail}  "
+        f"🧠{ia_ok}  "
+        f"👤{rostos}  "
+        f"📧{matches}"
+    )
+    sys.stdout.flush()
 
 
 def print_summary():
-    """Exibe resumo final."""
-    with _stats_lock:
-        s = _stats.copy()
-        erros = s['erros'].copy()
-
+    """Imprime relatório final."""
     print("\n\n" + "=" * 70)
     print("  ✅ PROCESSAMENTO CONCLUÍDO")
     print("=" * 70)
-    print(f"  📁 Total de fotos:          {s['total_na_pasta']}")
-    print(f"  ⬆️  Upload OK:               {s['upload_ok']}")
-    print(f"  ❌ Upload falha:             {s['upload_fail']}")
-    print(f"  🧠 IA processadas:           {s['ia_ok']}")
-    print(f"  🔇 IA ignoradas (sem rosto): {s['ia_skip']}")
-    print(f"  👤 Rostos detectados:        {s['rostos']}")
-    print(f"  📧 Matches proativos:        {s['matches_proativos']}")
-
-    if erros:
-        print(f"\n  ⚠️ Erros ({len(erros)}):")
-        for err in erros[:10]:
-            print(f"    • {err}")
-        if len(erros) > 10:
-            print(f"    ... e mais {len(erros) - 10} erros")
-
+    with _stats_lock:
+        print(f"  📁 Total de fotos:      {_stats['total_na_pasta']}")
+        print(f"  ⬆️  Upload OK:          {_stats['upload_ok']}")
+        print(f"  ❌ Upload falha:        {_stats['upload_fail']}")
+        print(f"  🧠 IA processadas:      {_stats['ia_ok']}")
+        print(f"  👻 IA ignoradas (sem rosto): {_stats['ia_skip']}")
+        print(f"  👤 Rostos detectados:   {_stats['rostos']}")
+        print(f"  📧 Matches proativos:   {_stats['matches_proativos']}")
+        if _stats['erros']:
+            print(f"\n  ⚠️ Erros ({len(_stats['erros'])}):")
+            for err in _stats['erros'][:5]:
+                print(f"    • {err}")
+            if len(_stats['erros']) > 5:
+                print(f"    ... e mais {len(_stats['erros']) - 5} erros.")
     print("=" * 70 + "\n")
 
 
 # ============================================================================
-# WATCHDOG FILE SYSTEM HANDLER
+# WATCHDOG HANDLER (MONITORAMENTO EM TEMPO REAL)
 # ============================================================================
-def setup_watchdog(pasta: str, event_id: str, folder_id: str, workers: int, skip_ia: bool):
-    """Inicia o monitoramento da pasta com watchdog."""
-    try:
-        from watchdog.observers import Observer
-        from watchdog.events import FileSystemEventHandler
-    except ImportError:
-        print("❌ watchdog não instalado. Use: pip install watchdog")
-        sys.exit(1)
+class PhotoHandler(FileSystemEventHandler):
+    """Handler do Watchdog para detectar novas fotos adicionadas à pasta."""
 
-    class PhotoHandler(FileSystemEventHandler):
-        def __init__(self):
-            self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=workers)
+    def __init__(self, event_id: str, folder_id: str, workers: int, skip_ia: bool):
+        self.event_id = event_id
+        self.folder_id = folder_id
+        self.workers = workers
+        self.skip_ia = skip_ia
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=workers)
 
-        def on_created(self, event):
-            if event.is_directory:
-                return
-            file_path = Path(event.src_path)
-            if file_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
-                return
-            if file_path.stat().st_size < MIN_FILE_SIZE_BYTES:
-                return
-
-            # Aguardar arquivo terminar de ser copiado (check size stability)
-            time.sleep(1)
+    def on_created(self, event):
+        if event.is_directory:
+            return
+        file_path = Path(event.src_path)
+        if file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
+            # Aguarda arquivo terminar de ser gravado no disco
+            time.sleep(1.0)
             try:
-                size1 = file_path.stat().st_size
-                time.sleep(1)
-                size2 = file_path.stat().st_size
-                if size1 != size2:
-                    time.sleep(3)  # Arquivo ainda sendo escrito, aguardar mais
-            except Exception:
-                return
+                if file_path.stat().st_size >= MIN_FILE_SIZE_BYTES:
+                    with _stats_lock:
+                        _stats['total_na_pasta'] += 1
+                    print(f"\n  📸 Nova foto detectada: {file_path.name}")
+                    self.executor.submit(
+                        process_single_file, file_path, self.event_id,
+                        self.folder_id, self.skip_ia
+                    )
+            except Exception as e:
+                print(f"  ⚠️ Erro ao acessar novo arquivo {file_path.name}: {e}")
 
-            with _stats_lock:
-                _stats['total_na_pasta'] += 1
 
-            print(f"\n  📷 Nova foto detectada: {file_path.name}")
-            self._executor.submit(process_single_file, file_path, event_id, folder_id, skip_ia)
-
-    handler = PhotoHandler()
+def setup_watchdog(pasta: str, event_id: str, folder_id: str, workers: int, skip_ia: bool):
+    """Inicia o observer do Watchdog para monitorar a pasta."""
+    handler = PhotoHandler(event_id, folder_id, workers, skip_ia)
     observer = Observer()
     observer.schedule(handler, pasta, recursive=True)
     observer.start()
 
-    print(f"  👁️ Monitorando pasta: {pasta}")
-    print(f"  ℹ️  Pressione Ctrl+C para parar.\n")
+    print("  👁️ Monitorando novas fotos em tempo real...")
+    print(f"  📂 Pasta: {pasta}")
+    print("  ℹ️  Pressione Ctrl+C para encerrar.\n")
 
     try:
         while True:
-            time.sleep(5)
+            time.sleep(1)
             if _stats['total_na_pasta'] > 0:
                 print_progress()
     except KeyboardInterrupt:
@@ -576,17 +598,16 @@ def setup_watchdog(pasta: str, event_id: str, folder_id: str, workers: int, skip
 
 
 # ============================================================================
-# PROCESSAMENTO EM LOTE (BATCH)
+# PROCESSAMENTO EM LOTE (BATCH) COM MODO INCREMENTAL INTELIGENTE
 # ============================================================================
-def run_batch(pasta: str, event_id: str, folder_id: str, workers: int, skip_ia: bool):
-    """Processa todos os arquivos existentes na pasta em lote."""
+def run_batch(pasta: str, event_id: str, folder_id: str, workers: int, skip_ia: bool, force_reindex: bool = False):
+    """Processa arquivos da pasta em lote com modo incremental (pula fotos já no banco)."""
     pasta_path = Path(pasta)
     files = []
     for ext in SUPPORTED_EXTENSIONS:
         files.extend(pasta_path.rglob(f'*{ext}'))
         files.extend(pasta_path.rglob(f'*{ext.upper()}'))
 
-    # Remover duplicatas e filtrar por tamanho mínimo
     seen = set()
     unique_files = []
     for f in files:
@@ -602,14 +623,34 @@ def run_batch(pasta: str, event_id: str, folder_id: str, workers: int, skip_ia: 
     with _stats_lock:
         _stats['total_na_pasta'] = len(unique_files)
 
-    print(f"  📁 {len(unique_files)} fotos encontradas. Iniciando processamento...\n")
+    # Filtra fotos que já foram indexadas anteriormente no Supabase
+    pending_files = []
+    already_done = 0
+    for f in unique_files:
+        fname_k = f.name.strip().lower()
+        if not force_reindex and fname_k in _DB_INDEXED_FILES:
+            already_done += 1
+        else:
+            pending_files.append(f)
 
+    if already_done > 0:
+        print(f"  ⚡ {already_done} de {len(unique_files)} fotos já estão 100% indexadas no Supabase!")
+        with _stats_lock:
+            _stats['upload_ok'] += already_done
+            _stats['ia_ok'] += already_done
+
+    if not pending_files:
+        print("  🎉 Todas as fotos da pasta já foram indexadas anteriormente! Nenhuma pendência a processar.\n")
+        print_summary()
+        return
+
+    print(f"  📁 Processando {len(pending_files)} foto(s) nova(s)/pendente(s)...\n")
     start_time = time.time()
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
         futures = {
             executor.submit(process_single_file, f, event_id, folder_id, skip_ia): f
-            for f in unique_files
+            for f in pending_files
         }
 
         completed = 0
@@ -622,10 +663,10 @@ def run_batch(pasta: str, event_id: str, folder_id: str, workers: int, skip_ia: 
                 with _stats_lock:
                     _stats['erros'].append(f"{file_path.name}: {e}")
 
-            if completed % 5 == 0 or completed == len(unique_files):
+            if completed % 5 == 0 or completed == len(pending_files):
                 elapsed = time.time() - start_time
                 rate = completed / elapsed * 60 if elapsed > 0 else 0
-                remaining = (len(unique_files) - completed) / (rate / 60) if rate > 0 else 0
+                remaining = (len(pending_files) - completed) / (rate / 60) if rate > 0 else 0
                 print_progress()
                 print(f"  ⏱️ {rate:.0f} fotos/min  📡 ~{remaining:.0f}s restantes", end='')
 
@@ -864,14 +905,18 @@ Exemplos:
     # Pré-carregar fotos já existentes no Google Drive (Modo de Indexação Inteligente)
     preload_drive_folder_files(folder_id)
 
+    # Pré-carregar fotos já indexadas no Supabase (Modo Incremental Instantâneo)
+    preload_db_indexed_files(event_id)
+
     # Processar
+    force_reindex = getattr(args, 'force_reindex', False)
     if args.batch_only:
-        run_batch(pasta, event_id, folder_id, args.workers, args.skip_ia)
+        run_batch(pasta, event_id, folder_id, args.workers, args.skip_ia, force_reindex=force_reindex)
     else:
-        # Primeiro batch dos existentes, depois monitorar novos
-        print("  📦 Processando fotos existentes na pasta...\n")
-        run_batch(pasta, event_id, folder_id, args.workers, args.skip_ia)
-        print("  👁️ Iniciando monitoramento de novas fotos...\n")
+        # Primeiro batch dos existentes (incremental), depois monitorar novos
+        print("  📦 Verificando fotos locais existentes na pasta...\n")
+        run_batch(pasta, event_id, folder_id, args.workers, args.skip_ia, force_reindex=force_reindex)
+        print("  👁️ Iniciando monitoramento de novas fotos em tempo real...\n")
         setup_watchdog(pasta, event_id, folder_id, args.workers, args.skip_ia)
 
 

@@ -846,13 +846,16 @@ def render_page(evento_id: str = None, **kwargs):
                 with ui.tab_panel(t_cfg).classes('w-full p-2 gap-4'):
                     with ui.grid().classes('w-full grid-cols-1 sm:grid-cols-2 gap-4'):
                         with ui.card().classes('p-4 bg-slate-950/80 border border-slate-800 rounded-2xl gap-3'):
-                            ui.label('Parâmetros de Operação').classes('text-xs font-bold text-cyan')
+                            ui.label('Parâmetros de Operação & Acesso').classes('text-xs font-bold text-cyan')
                             
                             status_val = ev_pub.get('status', 'ativo')
                             sw_status = ui.switch('Status da Galeria (Ativa / Inativa)', value=(status_val == 'ativo')).props('dark color=green')
                             
                             threshold_slider = ui.slider(min=0.35, max=0.70, step=0.01, value=float(ev_pub.get('threshold_match') or 0.45)).props('dark label-always color=amber')
                             ui.label(f'Threshold de Similaridade Facial: {threshold_slider.value:.2f} (0.45 = Precisão Equilibrada)').classes('text-xs text-grey-4')
+
+                            pin_input = ui.input('PIN / Senha de Acesso (Opcional)', placeholder='Ex: 2026 (Deixe em branco para acesso livre)', value=ev_pub.get('pin_acesso') or '').props('dark outlined dense w-full')
+                            ui.label('💡 Se configurado, o portal pede o PIN ou validação por Selfie para liberar as fotos.').classes('text-[10px] text-grey-5')
 
                         with ui.card().classes('p-4 bg-slate-950/80 border border-slate-800 rounded-2xl gap-3'):
                             ui.label('Marca d\'Água & Visual').classes('text-xs font-bold text-amber-4')
@@ -865,6 +868,7 @@ def render_page(evento_id: str = None, **kwargs):
                         novos_dados = {
                             'status': 'ativo' if sw_status.value else 'inativo',
                             'threshold_match': float(threshold_slider.value),
+                            'pin_acesso': (pin_input.value or '').strip() or None,
                             'watermark_enabled': wm_check.value,
                             'watermark_text': (wm_input.value or '').strip(),
                             'banner_url': (banner_input.value or '').strip() or None,
