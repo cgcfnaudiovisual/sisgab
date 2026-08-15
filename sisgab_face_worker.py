@@ -29,27 +29,61 @@ except ImportError:
 # Import InsightFace
 _FACE_APP = None
 INSIGHTFACE_AVAILABLE = False
+_GPU_INFO = 'não inicializado'
 
 def init_face_engine():
-    """Inicializa o motor InsightFace (buffalo_l) com fallback DirectML GPU / CPU."""
-    global _FACE_APP, INSIGHTFACE_AVAILABLE
+    """Inicializa o motor InsightFace (buffalo_l) com auto-detecção em cascata: NVIDIA CUDA → AMD DirectML → CPU."""
+    global _FACE_APP, INSIGHTFACE_AVAILABLE, _GPU_INFO
     if _FACE_APP is not None:
         return _FACE_APP
 
     try:
         from insightface.app import FaceAnalysis
         print("[FACE_WORKER] 🚀 Inicializando InsightFace (buffalo_l)...")
-        
-        # Tenta inicializar com suporte DirectML/GPU (ctx_id=0) ou CPU (ctx_id=-1)
+
+        # 1º NVIDIA CUDA
+        try:
+            import onnxruntime as ort
+            if 'CUDAExecutionProvider' in ort.get_available_providers():
+                app = FaceAnalysis(name='buffalo_l', allowed_modules=['detection', 'recognition'])
+                app.prepare(ctx_id=0, det_size=(640, 640))
+                _FACE_APP = app
+                INSIGHTFACE_AVAILABLE = True
+                _GPU_INFO = 'NVIDIA CUDA (640x640)'
+                print(f"[FACE_WORKER] ✅ InsightFace iniciado com aceleração {_GPU_INFO}.")
+                return _FACE_APP
+        except Exception:
+            pass
+
+        # 2º AMD DirectML
+        try:
+            import onnxruntime as ort
+            if 'DmlExecutionProvider' in ort.get_available_providers():
+                app = FaceAnalysis(name='buffalo_l', allowed_modules=['detection', 'recognition'])
+                app.prepare(ctx_id=0, det_size=(640, 640))
+                _FACE_APP = app
+                INSIGHTFACE_AVAILABLE = True
+                _GPU_INFO = 'AMD DirectML (640x640)'
+                print(f"[FACE_WORKER] ✅ InsightFace iniciado com aceleração {_GPU_INFO}.")
+                return _FACE_APP
+        except Exception:
+            pass
+
+        # 3º Tentativa genérica GPU (ctx_id=0)
         try:
             app = FaceAnalysis(name='buffalo_l', allowed_modules=['detection', 'recognition'])
             app.prepare(ctx_id=0, det_size=(640, 640))
-            print("[FACE_WORKER] ✅ InsightFace iniciado com aceleração GPU (DirectML).")
+            _FACE_APP = app
+            INSIGHTFACE_AVAILABLE = True
+            _GPU_INFO = 'GPU genérica (640x640)'
+            print(f"[FACE_WORKER] ✅ InsightFace iniciado com aceleração {_GPU_INFO}.")
+            return _FACE_APP
         except Exception as e_gpu:
             print(f"[FACE_WORKER] GPU não disponível ({e_gpu}), usando CPU modo otimizado...")
             app = FaceAnalysis(name='buffalo_l', allowed_modules=['detection', 'recognition'])
             app.prepare(ctx_id=-1, det_size=(320, 320))
-            print("[FACE_WORKER] ✅ InsightFace iniciado no modo CPU.")
+            _GPU_INFO = 'CPU (320x320)'
+            print(f"[FACE_WORKER] ✅ InsightFace iniciado no modo {_GPU_INFO}.")
 
         _FACE_APP = app
         INSIGHTFACE_AVAILABLE = True
@@ -57,6 +91,7 @@ def init_face_engine():
     except Exception as e:
         print(f"[FACE_WORKER] ❌ Erro ao inicializar InsightFace: {e}")
         INSIGHTFACE_AVAILABLE = False
+        _GPU_INFO = 'falha'
         return None
 
 
@@ -180,12 +215,20 @@ def run_worker_cycle(db):
                         'telegram_id': item.get('telegram_id'),
                         'vec': emb_vec
                     })
-                except Exception as e:
+                except Exception:
                     pass
 
-        if not militar_embeddings:
-            print("[FACE_WORKER] Nenhum militar com biometria facial cadastrada no banco.")
-            return 0
+        # Carrega eventos públicos ativos para vincular embeddings do Portal do Convidado
+        public_events_map = {}
+        try:
+            res_pub = db.table('eventos_publicos').select('id, nome, threshold_match, drive_folder_id').eq('status', 'ativo').execute()
+            if res_pub.data:
+                for ev in res_pub.data:
+                    public_events_map[ev['id'].lower()] = ev
+                    if ev.get('nome'):
+                        public_events_map[ev['nome'].lower().strip()] = ev
+        except Exception as e_pub:
+            pass
 
         # 2. Busca fotos com status 'pendente' ou 'PENDENTE_AI' em processed_photos
         res_photos = db.table('processed_photos').select('*').in_('status', ['pendente', 'PENDENTE_AI']).limit(20).execute()
@@ -196,7 +239,7 @@ def run_worker_cycle(db):
         if not photos_to_process:
             return 0
 
-        print(f"[FACE_WORKER] 🔍 Encontradas {len(photos_to_process)} fotos pendentes para processar com GPU...")
+        print(f"[FACE_WORKER] 🔍 Encontradas {len(photos_to_process)} fotos pendentes para processar ({_GPU_INFO})...")
 
         processed_count = 0
         known_hashes = set()
@@ -236,10 +279,23 @@ def run_worker_cycle(db):
             faces = app.get(img)
             matches_found = 0
 
+            # Verifica se pertence a um evento público ativo
+            matched_pub_event = None
+            ev_key = (event_name or '').lower().strip()
+            if ev_key in public_events_map:
+                matched_pub_event = public_events_map[ev_key]
+            else:
+                for k, v in public_events_map.items():
+                    if k in ev_key or ev_key in k:
+                        matched_pub_event = v
+                        break
+
+            pub_embeddings_to_save = []
+
             for face in faces:
                 emb_det = face.normed_embedding
 
-                # Compara com cada militar cadastrado
+                # ── A. Match com Militares Cadastrados ──
                 best_sim = 0.0
                 best_militar = None
 
@@ -249,12 +305,9 @@ def run_worker_cycle(db):
                         best_sim = sim
                         best_militar = m
 
-                # Threshold de corte: ≥ 0.50 considera match potencial
+                # Threshold de corte militar: ≥ 0.50
                 if best_sim >= 0.50 and best_militar:
-                    # Status: ≥ 0.75 auto-aprovado, < 0.75 moderação pendente
                     status_match = 'aprovado' if best_sim >= 0.75 else 'pendente'
-
-                    # Grava no banco photo_matches
                     match_payload = {
                         'photo_id': photo_id,
                         'militar_id': best_militar['user_id'],
@@ -264,9 +317,8 @@ def run_worker_cycle(db):
                     db.table('photo_matches').insert(match_payload).execute()
                     matches_found += 1
 
-                    print(f"[FACE_WORKER]  Match: {best_militar['nome_guerra']} (similaridade: {best_sim*100:.1f}%) -> {status_match}")
+                    print(f"[FACE_WORKER]  Match Militar: {best_militar['nome_guerra']} ({best_sim*100:.1f}%) -> {status_match}")
 
-                    # Notifica no Telegram se auto-aprovado
                     if status_match == 'aprovado' and best_militar.get('telegram_id'):
                         try:
                             from notifications_manager import notify_telegram
@@ -274,6 +326,79 @@ def run_worker_cycle(db):
                             notify_telegram(msg_t, 'face_match', custom_chat_id=best_militar['telegram_id'])
                         except Exception:
                             pass
+
+                # ── B. Portal do Convidado: Gravação de Embeddings por Evento ──
+                if matched_pub_event:
+                    det_score = float(face.det_score) if hasattr(face, 'det_score') else 0.0
+                    bbox = face.bbox.tolist() if hasattr(face, 'bbox') else None
+                    is_good_quality = det_score >= 0.50
+                    if bbox:
+                        w = bbox[2] - bbox[0]
+                        h = bbox[3] - bbox[1]
+                        if w < 50 or h < 50:
+                            is_good_quality = False
+
+                    if is_good_quality:
+                        pub_embeddings_to_save.append({
+                            'event_id': matched_pub_event['id'],
+                            'photo_id': str(photo_id),
+                            'drive_file_id': drive_file_id or '',
+                            'drive_link': p_rec.get('drive_link'),
+                            'filename': p_rec.get('filename', 'foto.jpg'),
+                            'embedding': emb_det.tolist(),
+                            'bbox': bbox,
+                            'det_score': det_score,
+                        })
+
+            # Salva embeddings do evento público em lote se houver
+            if pub_embeddings_to_save:
+                try:
+                    from database import save_event_photo_embeddings_batch
+                    saved_count = save_event_photo_embeddings_batch(pub_embeddings_to_save)
+                    print(f"[FACE_WORKER]  🌐 Gravados {saved_count} embeddings faciais para o Portal do Convidado (Evento: {matched_pub_event['id']}).")
+
+                    # Match proativo contra convidados pré-cadastrados com email
+                    try:
+                        from database import get_guest_profiles_not_notified, mark_guest_notified, save_guest_delivery, send_real_email_smtp
+                        pending_profiles = get_guest_profiles_not_notified(matched_pub_event['id'])
+                        th_ev = matched_pub_event.get('threshold_match', 0.45) or 0.45
+
+                        for prof in pending_profiles:
+                            g_embs = json.loads(prof['embeddings']) if isinstance(prof['embeddings'], str) else prof['embeddings']
+                            g_email = prof.get('email')
+                            if not g_email or not g_embs:
+                                continue
+
+                            matched_fids = set()
+                            for g_emb in g_embs:
+                                g_vec = np.array(g_emb, dtype=np.float32)
+                                for rec_emb in pub_embeddings_to_save:
+                                    p_vec = np.array(rec_emb['embedding'], dtype=np.float32)
+                                    sim_guest = float(np.dot(g_vec, p_vec))
+                                    if sim_guest >= th_ev:
+                                        matched_fids.add(rec_emb['drive_file_id'])
+
+                            if matched_fids:
+                                p_links = [f"https://drive.google.com/file/d/{fid}/view" for fid in matched_fids]
+                                links_html = ''.join(f'<p>📷 <a href="{l}">Foto {i+1}</a></p>' for i, l in enumerate(p_links))
+                                email_body = f"""
+                                <h2>📷 Suas fotos do evento estão disponíveis!</h2>
+                                <p>Evento: <strong>{matched_pub_event.get('nome', matched_pub_event['id'])}</strong></p>
+                                <p>{len(matched_fids)} foto(s) encontrada(s):</p>
+                                {links_html}
+                                <p>Acesse o portal: <a href="https://sisgab.com/evento/{matched_pub_event['id']}">Ver Galeria Completa</a></p>
+                                <hr>
+                                <p><small>COMSOC / CGCFN</small></p>
+                                """
+                                send_real_email_smtp(g_email, f"📷 Suas fotos do evento {matched_pub_event.get('nome', '')}", email_body)
+                                save_guest_delivery(matched_pub_event['id'], g_email, ','.join(matched_fids), len(matched_fids))
+                                mark_guest_notified(prof['id'])
+                                print(f"[FACE_WORKER]  📧 E-mail automático enviado para {g_email} ({len(matched_fids)} fotos).")
+                    except Exception as e_proact:
+                        print(f"[FACE_WORKER]  ⚠️ Falha no match proativo de convidados: {e_proact}")
+
+                except Exception as e_save_pub:
+                    print(f"[FACE_WORKER]  ⚠️ Falha ao salvar embeddings do portal: {e_save_pub}")
 
             # Marca a foto como processada
             db.table('processed_photos').update({
