@@ -164,7 +164,8 @@ def render_page(evento_id: str = None, **kwargs):
                     # Body
                     with ui.element('tbody'):
                         for eid, ev in list(pautas_data.items())[:20]:
-                            data_ev = ev.get('data_evento', '')[:10]
+                            raw_dt = str(ev.get('data_evento') or '').strip()
+                            data_ev = raw_dt[:10] if raw_dt and raw_dt.upper() != 'ASD' else 'ASD'
                             titulo = ev.get('titulo_evento', 'Sem titulo')
                             from database import get_demanda_drive_url
                             dfid = get_drive_folder_id(ev)
@@ -177,7 +178,10 @@ def render_page(evento_id: str = None, **kwargs):
                                 f'border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; {row_bg}'
                             ).classes('hover:bg-white/5').on('click', lambda _, _id=eid: _on_event_change(_id)):
                                 with ui.element('td').classes('q-pa-xs text-grey-3'):
-                                    ui.label(data_ev).classes('text-[10px]')
+                                    if data_ev == 'ASD':
+                                        ui.badge('ASD', color='amber').classes('text-[10px] text-black font-bold').tooltip('Data a Definir (ASD)')
+                                    else:
+                                        ui.label(data_ev).classes('text-[10px]')
                                 with ui.element('td').classes('q-pa-xs'):
                                     ui.label(titulo[:45] + ('...' if len(titulo) > 45 else '')).classes(
                                         'text-[11px] text-white font-bold' if is_sel else 'text-[11px] text-grey-2'

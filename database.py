@@ -157,6 +157,102 @@ def get_service_db_connection():
 
 
 
+def sync_militar_telegram_id(militar_id, telegram_id, status_aprovacao='aprovado'):
+    """Sincroniza bilateralmente o telegram_id e o status de aprovação entre efetivo e users."""
+    db = get_service_db_connection() or get_db_connection()
+    if not db:
+        return False
+    str_tg = str(telegram_id).strip() if telegram_id else None
+    
+    # 1. Atualiza na tabela efetivo
+    try:
+        upd_ef = {'status_aprovacao': status_aprovacao}
+        if str_tg:
+            upd_ef['telegram_id'] = str_tg
+        db.table('efetivo').update(upd_ef).eq('id', militar_id).execute()
+    except Exception as e_ef:
+        print(f"[DB SYNC] Aviso ao atualizar efetivo {militar_id}: {e_ef}")
+        
+    # 2. Busca o registro do militar para sincronizar na tabela users
+    try:
+        r_ef = db.table('efetivo').select('nome_guerra, nip').eq('id', militar_id).execute()
+        if r_ef and r_ef.data:
+            ef_data = r_ef.data[0]
+            ng = ef_data.get('nome_guerra')
+            nip = ef_data.get('nip')
+            
+            upd_usr = {}
+            if str_tg:
+                upd_usr['telegram_id'] = str_tg
+            if status_aprovacao == 'aprovado':
+                upd_usr['status_aprovacao'] = 'aprovado'
+                
+            if upd_usr:
+                if nip:
+                    db.table('users').update(upd_usr).eq('nip', nip).execute()
+                elif ng:
+                    db.table('users').update(upd_usr).ilike('nome_guerra', ng).execute()
+    except Exception as e_usr:
+        print(f"[DB SYNC] Aviso ao atualizar users do militar {militar_id}: {e_usr}")
+    return True
+
+
+def deduplicar_efetivo():
+    """Identifica e unifica registros duplicados no efetivo (por NIP ou Nome de Guerra + Posto), preservando histórico."""
+    db = get_service_db_connection() or get_db_connection()
+    if not db:
+        return 0
+    
+    total_unificados = 0
+    try:
+        res = db.table('efetivo').select('*').execute()
+        if not res or not res.data:
+            return 0
+            
+        militares = res.data
+        grupos = {}
+        
+        # Agrupa por NIP ou (nome_guerra + posto_grad)
+        for m in militares:
+            nip = str(m.get('nip') or '').strip()
+            ng = str(m.get('nome_guerra') or '').strip().upper()
+            pg = str(m.get('posto_grad') or '').strip().upper()
+            
+            key = f"NIP:{nip}" if nip and len(nip) > 3 else f"NG:{pg}_{ng}"
+            grupos.setdefault(key, []).append(m)
+            
+        for key, items in grupos.items():
+            if len(items) > 1:
+                # Escolhe o registro principal (o que tem telegram_id ou o menor ID)
+                items_sorted = sorted(items, key=lambda x: (0 if x.get('telegram_id') else 1, x.get('id', 999999)))
+                principal = items_sorted[0]
+                duplicados = items_sorted[1:]
+                
+                p_id = principal['id']
+                p_tg = principal.get('telegram_id')
+                
+                for dup in duplicados:
+                    d_id = dup['id']
+                    d_tg = dup.get('telegram_id')
+                    
+                    # Transfere telegram_id se o principal não tinha
+                    if not p_tg and d_tg:
+                        db.table('efetivo').update({'telegram_id': d_tg}).eq('id', p_id).execute()
+                        p_tg = d_tg
+                        
+                    # Remove duplicado
+                    try:
+                        db.table('efetivo').delete().eq('id', d_id).execute()
+                        total_unificados += 1
+                        print(f"[DEDUPLICAR] Militar duplicado ID {d_id} mesclado no principal ID {p_id}")
+                    except Exception as e_del:
+                        print(f"[DEDUPLICAR] Erro ao remover duplicado {d_id}: {e_del}")
+    except Exception as e_dedup:
+        print(f"[DEDUPLICAR ERR] {e_dedup}")
+        
+    return total_unificados
+
+
 def get_db_connection():
     if DB_MODE == "local":
         return get_local_db_connection()

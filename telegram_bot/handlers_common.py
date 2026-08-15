@@ -2504,19 +2504,31 @@ def register_common_handlers(bot):
                 db = get_db_connection()
                 if db:
                     try:
-                        db.table('efetivo').update({'telegram_id': str(chat_id)}).eq('nome_guerra', nome_sel).execute()
-                        from .utils import AUTHORIZED_PROFILES_CACHE
-                        AUTHORIZED_PROFILES_CACHE[str(chat_id)] = {'nome_guerra': nome_sel, 'role': 'operador', 'telegram_id': str(chat_id)}
+                        # Define status_aprovacao como 'pendente' até deliberação do Admin
+                        db.table('efetivo').update({
+                            'telegram_id': str(chat_id),
+                            'status_aprovacao': 'pendente'
+                        }).eq('nome_guerra', nome_sel).execute()
+                        
+                        from .utils import notify_telegram_admin
+                        await notify_telegram_admin(
+                            f"🔔 *NOVO PEDIDO DE VINCULAÇÃO TELEGRAM*\n\n"
+                            f"Militar: *{nome_sel}*\n"
+                            f"Telegram ID: `{chat_id}`\n"
+                            f"Usuário: @{message.from_user.username or 'N/A'}\n\n"
+                            f"Acesse o painel web ou digite /aprovar no Telegram para deliberar."
+                        )
+                        
                         await bot.reply_to(
                             message,
-                            f"✅ **VINCULAÇÃO CONCLUÍDA COM SUCESSO!**\n\n"
-                            f"Seu Telegram `{chat_id}` foi vinculado ao militar *{nome_sel}*.\n\n"
-                            f"Você já pode responder às chamadas diárias e utilizar o menu!",
-                            reply_markup=get_main_menu_keyboard(True),
+                            f"⏳ **SOLICITAÇÃO DE VINCULAÇÃO REGISTRADA!**\n\n"
+                            f"Sua solicitação para vincular ao militar *{nome_sel}* (ID: `{chat_id}`) foi enviada para validação dos Administradores do Gabinete.\n\n"
+                            f"Você receberá uma notificação assim que o seu acesso for aprovado.",
+                            reply_markup=get_unauthorized_keyboard(),
                             parse_mode='Markdown'
                         )
                     except Exception as e_vinc:
-                        await bot.reply_to(message, f"❌ Erro ao vincular: {e_vinc}", reply_markup=get_unauthorized_keyboard())
+                        await bot.reply_to(message, f"❌ Erro ao solicitar vinculação: {e_vinc}", reply_markup=get_unauthorized_keyboard())
                 clear_state(chat_id)
                 return
 
@@ -2624,20 +2636,23 @@ def register_common_handlers(bot):
             elif step == 'data_evento':
                 history.append(('data_evento', dict(state['data'])))
                 date_txt = text.strip()
-                clean_dt = date_txt.split('(')[-1].replace(')', '').strip() if '(' in date_txt else date_txt
-                parsed_dt = False
-                for fmt in ('%d/%m/%Y', '%d/%m/%y', '%Y-%m-%d', '%d-%m-%Y', '%d-%m-%y', '%d/%m'):
-                    try:
-                        if fmt == '%d/%m':
-                            clean_dt = f"{clean_dt}/{datetime.now().year}"
-                            fmt = '%d/%m/%Y'
-                        clean_dt = datetime.strptime(clean_dt, fmt).strftime('%Y-%m-%d')
-                        parsed_dt = True
-                        break
-                    except ValueError:
-                        continue
-                if not parsed_dt:
-                    clean_dt = datetime.now().strftime('%Y-%m-%d')
+                if 'ASD' in date_txt.upper() or 'DEFINIR' in date_txt.upper():
+                    clean_dt = 'ASD'
+                else:
+                    clean_dt = date_txt.split('(')[-1].replace(')', '').strip() if '(' in date_txt else date_txt
+                    parsed_dt = False
+                    for fmt in ('%d/%m/%Y', '%d/%m/%y', '%Y-%m-%d', '%d-%m-%Y', '%d-%m-%y', '%d/%m'):
+                        try:
+                            if fmt == '%d/%m':
+                                clean_dt = f"{clean_dt}/{datetime.now().year}"
+                                fmt = '%d/%m/%Y'
+                            clean_dt = datetime.strptime(clean_dt, fmt).strftime('%Y-%m-%d')
+                            parsed_dt = True
+                            break
+                        except ValueError:
+                            continue
+                    if not parsed_dt:
+                        clean_dt = datetime.now().strftime('%Y-%m-%d')
                     
                 state['data']['data_evento'] = clean_dt
                 state['data']['data_fim'] = clean_dt

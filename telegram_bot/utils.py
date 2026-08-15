@@ -209,6 +209,9 @@ async def check_authorized_user(from_user_id: int):
         res_ef = await execute_bot_query_safe(lambda c: c.table('efetivo').select('*').eq('telegram_id', str_uid))
         if res_ef and res_ef.data:
             profile = res_ef.data[0]
+            # Se cadastro estiver pendente de aprovação admin, bloqueia acesso
+            if str(profile.get('status_aprovacao') or '').strip().lower() in ('pendente', 'pending'):
+                return None
             allowed = await get_allowed_features_for_user(profile)
             USER_PERMISSIONS_CACHE[from_user_id] = allowed
             AUTHORIZED_PROFILES_CACHE[str_uid] = profile
@@ -219,6 +222,8 @@ async def check_authorized_user(from_user_id: int):
         if res and res.data:
             sorted_profiles = sorted(res.data, key=lambda u: 1 if u.get('role') == 'aluno' else 0)
             profile = sorted_profiles[0]
+            if str(profile.get('status_aprovacao') or '').strip().lower() in ('pendente', 'pending'):
+                return None
             allowed = await get_allowed_features_for_user(profile)
             USER_PERMISSIONS_CACHE[from_user_id] = allowed
             AUTHORIZED_PROFILES_CACHE[str_uid] = profile
@@ -665,4 +670,42 @@ async def enviar_album_hd_drive(bot, chat_id, selecao_folder_id, max_photos=12):
             pass
 
     return sent_count
+
+
+async def notify_telegram_admin(message_text):
+    """Envia uma notificação em Markdown para todos os Administradores com telegram_id cadastrado."""
+    from database import get_db_connection
+    db = get_db_connection()
+    if not db:
+        return
+    admin_tids = set()
+    try:
+        r_ef = db.table('efetivo').select('telegram_id').in_('role', ['admin', 'supervisor', 'oficial_gab']).execute()
+        if r_ef and r_ef.data:
+            for item in r_ef.data:
+                tid = str(item.get('telegram_id') or '').strip()
+                if tid and tid.isdigit():
+                    admin_tids.add(tid)
+        r_usr = db.table('users').select('telegram_id').in_('role', ['admin', 'supervisor']).execute()
+        if r_usr and r_usr.data:
+            for item in r_usr.data:
+                tid = str(item.get('telegram_id') or '').strip()
+                if tid and tid.isdigit():
+                    admin_tids.add(tid)
+    except Exception as e_adm:
+        print(f"[NOTIFY ADMIN DB ERR] {e_adm}")
+
+    if not admin_tids:
+        return
+
+    import telegram_bot
+    bot = telegram_bot.bot
+    if not bot:
+        return
+
+    for tid in admin_tids:
+        try:
+            await bot.send_message(tid, message_text, parse_mode='Markdown')
+        except Exception as e_send:
+            print(f"[NOTIFY ADMIN SEND ERR] {e_send}")
 

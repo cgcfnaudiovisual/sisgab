@@ -220,6 +220,7 @@ def get_date_keyboard(is_end_date=False):
     else:
         markup.row(types.KeyboardButton(f"📅 Hoje ({d0[:5]})"), types.KeyboardButton(f"📅 Amanhã ({d1[:5]})"))
         markup.row(types.KeyboardButton(f"📅 Em 3 Dias ({d3[:5]})"), types.KeyboardButton(f"📅 Em 1 Semana ({d7[:5]})"))
+        markup.row(types.KeyboardButton("📅 Data a Definir (ASD)"))
         markup.row(types.KeyboardButton("⬅️ Voltar"), types.KeyboardButton("❌ Cancelar"))
     return markup
 
