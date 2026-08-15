@@ -4,6 +4,8 @@ Visualizacao de fotos locais e do Google Drive, upload direto,
 busca inteligente por IA, curadoria e distribuicao via Telegram.
 """
 import os
+import sys
+import subprocess
 import asyncio
 from nicegui import ui, app, events
 import theme
@@ -16,6 +18,7 @@ from comsoc_galeria_components import (
 )
 
 THEME = theme.colors
+_ACTIVE_WATCHERS = {}
 
 
 def render_page(evento_id: str = None, **kwargs):
@@ -799,17 +802,81 @@ def render_page(evento_id: str = None, **kwargs):
                             ui.label('Rostos Mapeados no Evento:')
                             ui.badge(f"{emb_count} embeddings", color='amber-9').classes('font-bold')
 
-                    with ui.column().classes('w-full gap-2 q-mt-2'):
-                        ui.label('🚀 Comando para Watcher Local (10 Workers):').classes('text-xs font-bold text-amber-4')
-                        pasta_input = ui.input('Caminho da Pasta Local das Fotos', value=f"D:\\FOTOS\\{slug}").props('dark outlined dense w-full')
-                        
-                        def copiar_cmd_watcher():
-                            cmd = f'python event_photo_watcher.py --event-id "{slug}" --pasta "{pasta_input.value}"'
-                            escaped = cmd.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
-                            ui.run_javascript(f'navigator.clipboard.writeText(`{escaped}`);')
-                            ui.notify('📋 Comando copiado! Cole no terminal do PC com GPU.', color='positive', icon='content_copy')
+                    watcher_container = ui.column().classes('w-full gap-2 q-mt-2')
+                    
+                    def render_watcher_controls():
+                        watcher_container.clear()
+                        with watcher_container:
+                            proc = _ACTIVE_WATCHERS.get(slug)
+                            is_running = proc is not None and (proc.poll() is None)
 
-                        ui.button('📋 Copiar Comando Watcher', icon='terminal', on_click=copiar_cmd_watcher).props('unelevated color=amber text-color=black bold w-full')
+                            with ui.row().classes('w-full items-center justify-between'):
+                                ui.label('🚀 Controle do Watcher de Fotos (10 Workers):').classes('text-xs font-bold text-amber-4')
+                                if is_running:
+                                    ui.badge('🟢 EM EXECUÇÃO', color='positive').classes('text-xs font-black animate-pulse')
+                                else:
+                                    ui.badge('⚪ PARADO', color='grey-7').classes('text-xs')
+
+                            pasta_input = ui.input('Caminho da Pasta Local com as Fotos', value=f"D:\\FOTOS\\{slug}").props('dark outlined dense w-full')
+                            
+                            with ui.row().classes('w-full gap-2 items-center q-mt-xs flex-wrap'):
+                                if not is_running:
+                                    def iniciar_watcher_direto():
+                                        caminho_pasta = pasta_input.value.strip()
+                                        if not os.path.exists(caminho_pasta):
+                                            try:
+                                                os.makedirs(caminho_pasta, exist_ok=True)
+                                            except Exception:
+                                                pass
+                                        
+                                        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'event_photo_watcher.py')
+                                        cmd = [sys.executable, script_path, '--event-id', slug, '--pasta', caminho_pasta]
+                                        try:
+                                            p = subprocess.Popen(cmd, cwd=os.path.dirname(os.path.abspath(__file__)))
+                                            _ACTIVE_WATCHERS[slug] = p
+                                            ui.notify('🚀 Watcher iniciado em segundo plano! Processando e monitorando pasta...', color='positive', timeout=4000)
+                                            render_watcher_controls()
+                                        except Exception as ex_proc:
+                                            ui.notify(f'Erro ao iniciar watcher: {ex_proc}', color='negative')
+
+                                    ui.button('▶️ Iniciar Processamento Agora', icon='play_arrow', on_click=iniciar_watcher_direto).props('unelevated color=green-8 text-color=white bold').classes('flex-1 h-11 text-xs')
+                                else:
+                                    def parar_watcher_direto():
+                                        p = _ACTIVE_WATCHERS.get(slug)
+                                        if p:
+                                            try:
+                                                p.terminate()
+                                                _ACTIVE_WATCHERS[slug] = None
+                                                ui.notify('⏹️ Watcher encerrado com sucesso.', color='info')
+                                            except Exception as ex_kill:
+                                                ui.notify(f'Erro ao parar: {ex_kill}', color='negative')
+                                        render_watcher_controls()
+
+                                    ui.button('⏹️ Parar Processamento', icon='stop', on_click=parar_watcher_direto).props('unelevated color=red-8 text-color=white bold').classes('flex-1 h-11 text-xs')
+
+                                def abrir_pasta_local():
+                                    caminho_pasta = pasta_input.value.strip()
+                                    if not os.path.exists(caminho_pasta):
+                                        os.makedirs(caminho_pasta, exist_ok=True)
+                                    try:
+                                        if sys.platform == 'win32':
+                                            os.startfile(caminho_pasta)
+                                        else:
+                                            subprocess.Popen(['xdg-open', caminho_pasta])
+                                    except Exception as ex_open:
+                                        ui.notify(f'Não foi possível abrir a pasta: {ex_open}', color='warning')
+
+                                ui.button('📁 Abrir Pasta no PC', icon='folder', on_click=abrir_pasta_local).props('unelevated color=blue-8 text-color=white bold').classes('h-11 text-xs')
+
+                            def copiar_cmd_watcher():
+                                cmd = f'python event_photo_watcher.py --event-id "{slug}" --pasta "{pasta_input.value}"'
+                                escaped = cmd.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+                                ui.run_javascript(f'navigator.clipboard.writeText(`{escaped}`);')
+                                ui.notify('📋 Comando copiado! Você também pode rodar em um terminal externo se preferir.', color='positive', icon='content_copy')
+
+                            ui.button('📋 Copiar Comando Terminal (Opcional)', icon='terminal', on_click=copiar_cmd_watcher).props('flat dense color=amber text-color=amber').classes('text-[11px] q-mt-xs')
+
+                    render_watcher_controls()
 
                 # ── ETAPA 3: CURADORIA GERAL ──
                 with ui.tab_panel(t_cur).classes('w-full p-2 gap-4'):
