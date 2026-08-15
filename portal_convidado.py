@@ -926,17 +926,16 @@ def render_page(event_id: str):
                                     ui.notify(f"❌ Erro ao enviar e-mail: {err_mail}", color='negative')
 
                             ui.button('📧 Enviar Fotos por E-mail', on_click=send_email_action).props('unelevated color=cyan text-color=black font-bold icon=send').classes('h-11 px-6 rounded-xl text-xs')
+        def download_single(file_id: str):
+            log_portal_analytics(event_id, 'download', session_id=session_id)
+            ui.navigate.to(f"https://drive.google.com/uc?export=download&id={file_id}", new_tab=True)
 
-            def download_single(file_id: str):
-                log_portal_analytics(event_id, 'download', session_id=session_id)
-                ui.navigate.to(f"https://drive.google.com/uc?export=download&id={file_id}", new_tab=True)
+        # Auto-executa match se já houver selfies salvas na sessão persistente
+        if guest_state['selfie_embeddings']:
+            async def auto_match_on_load():
+                await execute_matching()
+                refresh_ui()
+            asyncio.create_task(auto_match_on_load())
 
-            # Auto-executa match se já houver selfies salvas na sessão persistente
-            if guest_state['selfie_embeddings']:
-                async def auto_match_on_load():
-                    await execute_matching()
-                    refresh_ui()
-                asyncio.create_task(auto_match_on_load())
-
-            # Inicializa a primeira renderização
-            refresh_ui()
+        # Inicializa a primeira renderização na raiz da página
+        refresh_ui()
