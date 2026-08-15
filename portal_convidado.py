@@ -614,7 +614,7 @@ def render_page(event_id: str):
                 with ui.element('div').classes('w-full gap-4').style('display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));'):
                     for idx, p in enumerate(photos_list):
                         fid = p.get('drive_file_id') or p.get('id')
-                        raw_thumb = p.get('thumbnailLink', '')
+                        raw_thumb = str(p.get('thumbnailLink') or '')
                         if '=s220' in raw_thumb:
                             thumb_url = raw_thumb.replace('=s220', '=s800')
                         elif '=' in raw_thumb:
