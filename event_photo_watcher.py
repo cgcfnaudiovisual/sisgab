@@ -407,7 +407,9 @@ def process_single_file(file_path: Path, event_id: str, folder_id: str, skip_ia:
         else:
             with _stats_lock:
                 _stats['upload_fail'] += 1
-                _stats['erros'].append(f"Upload falhou: {file_path.name}")
+            # Fallback: processa a IA mesmo sem o upload do Drive
+            drive_file_id = f"local_{file_hash[:16]}"
+            drive_link = f"/assets/galeria_hot/{event_id}/{file_path.name}"
 
     if drive_file_id:
         # Registrar em processed_photos
@@ -425,7 +427,7 @@ def process_single_file(file_path: Path, event_id: str, folder_id: str, skip_ia:
         except Exception:
             pass
 
-        # Processamento IA local (da imagem local no PC com GPU, ultra rápido)
+        # Processamento IA local (da imagem local no PC com GPU AMD Radeon, ultra rápido)
         if not skip_ia and _FACE_APP is not None:
             embeddings = process_faces_locally(file_path, event_id, drive_file_id, drive_link)
             if embeddings:
