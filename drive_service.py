@@ -93,17 +93,31 @@ def get_pasta_mae_id(folder_id_custom=None):
     return _pasta_mae_id
 
 
+_thread_local = threading.local()
+
+
 def get_drive_service():
-    """Retorna instância autenticada do Google Drive API v3."""
-    global _drive_service_instance
+    """Retorna instância autenticada do Google Drive API v3 isolada por thread para suporte a workers paralelos."""
+    global _service_account_info
     if not DRIVE_API_AVAILABLE:
         print("[DRIVE_SERVICE] Drive API não disponível (libs não instaladas).")
         return None
 
-    if _drive_service_instance:
-        return _drive_service_instance
+    if hasattr(_thread_local, 'service') and _thread_local.service is not None:
+        return _thread_local.service
 
-    _load_config_from_db()
+    if not _service_account_info:
+        _load_config_from_db()
+
+    if not _service_account_info:
+        # Fallback para carregar direto do arquivo local se existir
+        local_json = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sisgab-drive.json')
+        if os.path.exists(local_json):
+            try:
+                with open(local_json, 'r', encoding='utf-8') as f:
+                    _service_account_info = json.load(f)
+            except Exception:
+                pass
 
     if not _service_account_info:
         print("[DRIVE_SERVICE] Nenhuma Service Account configurada. Configure no painel Admin.")
@@ -111,20 +125,20 @@ def get_drive_service():
 
     try:
         creds = Credentials.from_service_account_info(_service_account_info, scopes=SCOPES)
-        _drive_service_instance = build('drive', 'v3', credentials=creds, cache_discovery=False)
-        print("[DRIVE_SERVICE] [OK] Google Drive API conectado com sucesso.")
-        return _drive_service_instance
+        service = build('drive', 'v3', credentials=creds, cache_discovery=False)
+        _thread_local.service = service
+        return service
     except Exception as e:
         print(f"[DRIVE_SERVICE] [ERR] Erro ao conectar ao Drive: {e}")
         traceback.print_exc()
         return None
 
 
-
 def reset_drive_service():
     """Reseta a instância do Drive para forçar reconexão."""
-    global _drive_service_instance, _service_account_info, _pasta_mae_id
-    _drive_service_instance = None
+    global _service_account_info, _pasta_mae_id
+    if hasattr(_thread_local, 'service'):
+        _thread_local.service = None
     _service_account_info = None
     _pasta_mae_id = None
 

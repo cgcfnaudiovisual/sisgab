@@ -1,19 +1,18 @@
 @echo off
-chcp 65001 >nul
 title SisGAB — Watcher de Fotos com IA Local & Upload ao Drive
-color 0b
+cls
 
 echo ===============================================================================
-echo   SISGAB — MOTOR DE IA LOCAL & UPLOAD PARALELO (10 WORKERS)
-echo   Gabinete do CGCFN / Comunicação Social
+echo   SISGAB - MOTOR DE IA LOCAL E UPLOAD PARALELO (10 WORKERS)
+echo   Gabinete do CGCFN / Comunicacao Social
 echo ===============================================================================
 echo.
 
-set /p EVENT_ID="Digite o ID/Número do Evento (ex: 50): "
+set /p EVENT_ID="Digite o ID/Numero do Evento [Padrao: 50]: "
 if "%EVENT_ID%"=="" set EVENT_ID=50
 
-set /p PASTA_FOTOS="Digite o Caminho da Pasta com as Fotos (ex: F:\CGCFN\ENCONTRO VETE): "
-if "%PASTA_FOTOS%"=="" set PASTA_FOTOS=D:\FOTOS\%EVENT_ID%
+set /p PASTA_FOTOS="Digite o Caminho da Pasta com as Fotos: "
+if "%PASTA_FOTOS%"=="" set PASTA_FOTOS=F:\CGCFN\ENCONTRO VETERANOS\FOTOS\EXPORT
 
 echo.
 echo -------------------------------------------------------------------------------
