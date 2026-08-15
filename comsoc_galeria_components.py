@@ -182,20 +182,50 @@ def empty_state(icon_name, text):
 # ─── Grids de Fotos ──────────────────────────────────────────────────
 
 def render_drive_grid(fotos, page_state, is_operator, selecao_fid, theme, is_selecao=False):
-    """Renderiza grid de fotos do Drive com miniaturas 100% maiores, proporcao completa e acoes em lote."""
+    """Renderiza grid de fotos do Drive com paginação rápida, miniaturas HD e ações em lote."""
     if not fotos:
         empty_state('photo_library', 'Nenhuma foto encontrada nesta pasta.')
         return
 
     all_ids = {f.get('id') for f in fotos if f.get('id')}
     selected_set = page_state.setdefault('selected_files', set())
+    grid_cfg = page_state.setdefault('grid_pagination', {'page': 1, 'per_page': 60})
 
     @ui.refreshable
     def _draw_grid_content():
+        total_fotos = len(fotos)
+        raw_per_page = grid_cfg.get('per_page', 60)
+        
+        if raw_per_page == 'all' or (isinstance(raw_per_page, int) and raw_per_page >= total_fotos):
+            per_page = total_fotos
+            total_pages = 1
+            cur_page = 1
+            start_idx = 0
+            end_idx = total_fotos
+        else:
+            per_page = int(raw_per_page)
+            total_pages = max(1, (total_fotos + per_page - 1) // per_page)
+            cur_page = min(max(1, grid_cfg.get('page', 1)), total_pages)
+            start_idx = (cur_page - 1) * per_page
+            end_idx = min(start_idx + per_page, total_fotos)
+
+        visible_fotos = fotos[start_idx:end_idx]
+        visible_ids = {f.get('id') for f in visible_fotos if f.get('id')}
+
+        def set_page(p):
+            grid_cfg['page'] = min(max(1, p), total_pages)
+            _draw_grid_content.refresh()
+            ui.run_javascript('window.scrollTo({ top: 380, behavior: "smooth" });')
+
+        def set_per_page(val):
+            grid_cfg['per_page'] = val
+            grid_cfg['page'] = 1
+            _draw_grid_content.refresh()
+
         # ─── BARRA DE FERRAMENTAS E SELEÇÃO EM LOTE ───
         with ui.column().classes('w-full gap-2 q-mb-md'):
-            with ui.row().classes('w-full items-center justify-between wrap gap-2 bg-slate-900/80 p-3 rounded-xl border border-cyan-500/30'):
-                with ui.row().classes('items-center gap-2'):
+            with ui.row().classes('w-full items-center justify-between wrap gap-2 bg-slate-900/90 p-3 rounded-2xl border border-cyan-500/30 shadow-md'):
+                with ui.row().classes('items-center gap-2 flex-wrap'):
                     def toggle_cur():
                         page_state['curation_mode'] = not page_state.get('curation_mode', False)
                         _draw_grid_content.refresh()
@@ -206,7 +236,11 @@ def render_drive_grid(fotos, page_state, is_operator, selecao_fid, theme, is_sel
                         'Modo Curadoria: LIGADO' if cur_active else '⚡ Ativar Modo Curadoria',
                         icon='brush' if cur_active else 'edit',
                         on_click=toggle_cur
-                    ).props(f'dense unelevated color={btn_cur_col} text-color=white bold').classes('text-xs px-3')
+                    ).props(f'dense unelevated color={btn_cur_col} text-color=white bold').classes('text-xs px-3 rounded-xl')
+
+                    def select_page():
+                        selected_set.update(visible_ids)
+                        _draw_grid_content.refresh()
 
                     def select_all():
                         selected_set.update(all_ids)
@@ -216,13 +250,14 @@ def render_drive_grid(fotos, page_state, is_operator, selecao_fid, theme, is_sel
                         selected_set.clear()
                         _draw_grid_content.refresh()
 
-                    ui.button('☑️ Selecionar Todas', on_click=select_all).props('flat dense color=cyan').classes('text-xs')
+                    ui.button(f'☑️ Selecionar Página ({len(visible_fotos)})', on_click=select_page).props('flat dense color=cyan').classes('text-xs')
+                    if total_fotos > len(visible_fotos):
+                        ui.button(f'🌟 Selecionar Todas ({total_fotos})', on_click=select_all).props('flat dense color=amber-4').classes('text-xs font-bold')
                     ui.button('⬜ Desmarcar', on_click=deselect_all).props('flat dense color=grey-4').classes('text-xs')
 
                 # Ações de Download e Curadoria
                 n_sel = len(selected_set)
-                total_fotos = len(fotos)
-                with ui.row().classes('items-center gap-2'):
+                with ui.row().classes('items-center gap-2 flex-wrap'):
                     if n_sel > 0:
                         ui.badge(f'{n_sel} selecionada(s)', color='amber').classes('text-xs text-black font-bold')
 
@@ -234,13 +269,13 @@ def render_drive_grid(fotos, page_state, is_operator, selecao_fid, theme, is_sel
 
                         ui.button(f'⬇️ Baixar Seleção ({n_sel})', icon='download', on_click=baixar_selecionadas).props(
                             'unelevated color=cyan text-color=black bold dense'
-                        ).classes('text-xs px-3')
+                        ).classes('text-xs px-3 rounded-xl')
 
                         if is_operator and not is_selecao and selecao_fid:
                             ui.button(f'⭐ Mover para SELEÇÃO ({n_sel})', icon='star',
                                       on_click=lambda: _mover_selecao(page_state, selecao_fid)).props(
                                 'unelevated color=amber text-color=black bold dense'
-                            ).classes('text-xs px-3')
+                            ).classes('text-xs px-3 rounded-xl')
 
                     def baixar_tudo():
                         if is_selecao and selecao_fid:
@@ -253,13 +288,33 @@ def render_drive_grid(fotos, page_state, is_operator, selecao_fid, theme, is_sel
 
                     ui.button(f'📦 Baixar Todas ({total_fotos})', icon='cloud_download', on_click=baixar_tudo).props(
                         'outline color=cyan dense'
-                    ).classes('text-xs px-3')
+                    ).classes('text-xs px-3 rounded-xl')
+
+            # ─── BARRA DE PAGINAÇÃO (TOPO) ───
+            if total_pages > 1 or total_fotos > 30:
+                with ui.row().classes('w-full items-center justify-between wrap gap-2 bg-slate-950 p-2.5 rounded-xl border border-white/10'):
+                    with ui.row().classes('items-center gap-1'):
+                        ui.button(icon='first_page', on_click=lambda: set_page(1)).props('flat dense color=cyan text-color=cyan round').classes('h-8 w-8').tooltip('Primeira Página')
+                        ui.button(icon='chevron_left', on_click=lambda: set_page(cur_page - 1)).props('unelevated dense color=cyan-9 text-color=white round').classes('h-8 w-8').tooltip('Página Anterior')
+                        
+                        ui.label(f'Página {cur_page} de {total_pages}').classes('text-xs font-black text-cyan-3 px-2')
+                        ui.label(f'({start_idx + 1}–{end_idx} de {total_fotos} fotos)').classes('text-[11px] text-grey-4')
+
+                        ui.button(icon='chevron_right', on_click=lambda: set_page(cur_page + 1)).props('unelevated dense color=cyan-9 text-color=white round').classes('h-8 w-8').tooltip('Próxima Página')
+                        ui.button(icon='last_page', on_click=lambda: set_page(total_pages)).props('flat dense color=cyan text-color=cyan round').classes('h-8 w-8').tooltip('Última Página')
+
+                    with ui.row().classes('items-center gap-1.5'):
+                        ui.label('Fotos por página:').classes('text-[11px] text-grey-4')
+                        for opt_val, opt_lbl in [(30, '30'), (60, '60'), (120, '120'), (240, '240'), (500, '500')]:
+                            is_curr = raw_per_page == opt_val
+                            btn_style = 'unelevated color=cyan-7 text-color=black bold' if is_curr else 'flat color=grey text-color=grey-3'
+                            ui.button(opt_lbl, on_click=lambda _, v=opt_val: set_per_page(v)).props(f'dense {btn_style}').classes('text-[11px] px-2 py-0.5 rounded-lg')
 
         # ─── GRID DE MINIATURAS (proporcao sem cortes, 260px min) ───
         with ui.element('div').classes('w-full gap-4').style(
             'display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));'
         ):
-            for f in fotos:
+            for f in visible_fotos:
                 fid = f.get('id')
                 raw_thumb = f.get('thumbnailLink', '')
                 if '=s220' in raw_thumb:
@@ -308,6 +363,17 @@ def render_drive_grid(fotos, page_state, is_operator, selecao_fid, theme, is_sel
                         ui.button('Baixar', icon='download', on_click=lambda _, u=d_url: ui.open(u, new_tab=True)).props(
                             'unelevated color=cyan text-color=black dense bold'
                         ).classes('text-[10px] px-2 py-0.5').tooltip('Baixar foto HD')
+
+        # ─── BARRA DE PAGINAÇÃO (RODAPÉ) ───
+        if total_pages > 1:
+            with ui.row().classes('w-full items-center justify-center gap-2 q-mt-md p-3 bg-slate-950/80 rounded-2xl border border-white/10'):
+                ui.button(icon='first_page', on_click=lambda: set_page(1)).props('flat dense color=cyan text-color=cyan round').classes('h-9 w-9').tooltip('Primeira Página')
+                ui.button('Anterior', icon='chevron_left', on_click=lambda: set_page(cur_page - 1)).props('unelevated color=cyan-9 text-color=white bold').classes('text-xs px-3 rounded-xl')
+                
+                ui.label(f'Página {cur_page} de {total_pages} ({start_idx + 1}–{end_idx} de {total_fotos} fotos)').classes('text-xs font-black text-cyan-3 px-3')
+
+                ui.button('Próxima', icon_right='chevron_right', on_click=lambda: set_page(cur_page + 1)).props('unelevated color=cyan-9 text-color=white bold').classes('text-xs px-3 rounded-xl')
+                ui.button(icon='last_page', on_click=lambda: set_page(total_pages)).props('flat dense color=cyan text-color=cyan round').classes('h-9 w-9').tooltip('Última Página')
 
     _draw_grid_content()
 
