@@ -2172,5 +2172,302 @@ def send_real_email_smtp(to_email: str, subject: str, body_html: str):
     return True
 
 
+# =============================================================================
+# PORTAL DO CONVIDADO — Funções de Banco de Dados
+# =============================================================================
+
+def create_public_event(event_id: str, nome: str, data_evento: str, local: str = None,
+                        banner_url: str = None, drive_folder_id: str = None,
+                        drive_geral_folder_id: str = None, demanda_id: int = None,
+                        threshold: float = 0.45, watermark_text: str = 'COMSOC / CGCFN') -> bool:
+    """Cria um novo evento público para o Portal do Convidado."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn:
+        return False
+    payload = {
+        'id': event_id.strip().lower().replace(' ', '-'),
+        'nome': nome.strip(),
+        'data_evento': data_evento,
+        'local': (local or '').strip() or None,
+        'banner_url': banner_url,
+        'drive_folder_id': drive_folder_id,
+        'drive_geral_folder_id': drive_geral_folder_id,
+        'demanda_id': demanda_id,
+        'status': 'ativo',
+        'threshold_match': threshold,
+        'watermark_enabled': True,
+        'watermark_text': watermark_text,
+    }
+    try:
+        conn.table('eventos_publicos').insert(payload).execute()
+        return True
+    except Exception as err:
+        print(f"[CREATE PUBLIC EVENT ERR] {err}")
+        return False
+
+
+def get_public_event(event_id: str) -> dict | None:
+    """Busca um evento público pelo ID. Retorna dict ou None."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn:
+        return None
+    try:
+        res = conn.table('eventos_publicos').select('*').eq('id', event_id).execute()
+        if res.data:
+            return res.data[0]
+    except Exception as err:
+        print(f"[GET PUBLIC EVENT ERR] {err}")
+    return None
+
+
+def list_active_public_events() -> list:
+    """Lista todos os eventos públicos ativos."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn:
+        return []
+    try:
+        res = conn.table('eventos_publicos').select('*').eq('status', 'ativo').order('data_evento', desc=True).execute()
+        return res.data or []
+    except Exception as err:
+        print(f"[LIST PUBLIC EVENTS ERR] {err}")
+        return []
+
+
+def update_public_event(event_id: str, updates: dict) -> bool:
+    """Atualiza campos de um evento público."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn or not updates:
+        return False
+    try:
+        conn.table('eventos_publicos').update(updates).eq('id', event_id).execute()
+        return True
+    except Exception as err:
+        print(f"[UPDATE PUBLIC EVENT ERR] {err}")
+        return False
+
+
+def update_event_email_template(event_id: str, template_html: str) -> bool:
+    """Atualiza o template de e-mail de um evento público."""
+    return update_public_event(event_id, {'email_template': template_html})
+
+
+# --- Embeddings de Fotos por Evento ---
+
+def save_event_photo_embedding(event_id: str, photo_id: str, drive_file_id: str,
+                                drive_link: str, filename: str, embedding: list,
+                                bbox: list = None, det_score: float = None) -> bool:
+    """Salva o embedding de um rosto detectado em uma foto do evento."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn:
+        return False
+    import json
+    payload = {
+        'event_id': event_id,
+        'photo_id': photo_id,
+        'drive_file_id': drive_file_id,
+        'drive_link': drive_link,
+        'photo_filename': filename,
+        'embedding': json.dumps(embedding) if isinstance(embedding, list) else embedding,
+        'bbox': json.dumps(bbox) if bbox else None,
+        'det_score': round(float(det_score), 4) if det_score is not None else None,
+    }
+    try:
+        conn.table('event_photo_embeddings').insert(payload).execute()
+        return True
+    except Exception as err:
+        print(f"[SAVE EVENT EMBEDDING ERR] {err}")
+        return False
+
+
+def save_event_photo_embeddings_batch(records: list) -> int:
+    """Salva múltiplos embeddings de uma vez (batch insert). Retorna quantidade salva."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn or not records:
+        return 0
+    import json
+    payloads = []
+    for r in records:
+        payloads.append({
+            'event_id': r['event_id'],
+            'photo_id': r.get('photo_id'),
+            'drive_file_id': r['drive_file_id'],
+            'drive_link': r.get('drive_link'),
+            'photo_filename': r.get('filename'),
+            'embedding': json.dumps(r['embedding']) if isinstance(r['embedding'], list) else r['embedding'],
+            'bbox': json.dumps(r.get('bbox')) if r.get('bbox') else None,
+            'det_score': round(float(r['det_score']), 4) if r.get('det_score') is not None else None,
+        })
+    try:
+        conn.table('event_photo_embeddings').insert(payloads).execute()
+        return len(payloads)
+    except Exception as err:
+        print(f"[SAVE BATCH EMBEDDINGS ERR] {err}")
+        return 0
+
+
+def get_event_photo_embeddings(event_id: str) -> list:
+    """Retorna todos os embeddings de fotos de um evento. Usado para montar a matriz de match."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn:
+        return []
+    try:
+        res = conn.table('event_photo_embeddings').select(
+            'id, drive_file_id, drive_link, photo_filename, embedding, bbox, det_score'
+        ).eq('event_id', event_id).execute()
+        return res.data or []
+    except Exception as err:
+        print(f"[GET EVENT EMBEDDINGS ERR] {err}")
+        return []
+
+
+def count_event_embeddings(event_id: str) -> int:
+    """Conta quantos embeddings existem para um evento."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn:
+        return 0
+    try:
+        res = conn.table('event_photo_embeddings').select('id', count='exact').eq('event_id', event_id).execute()
+        return res.count if res.count else 0
+    except Exception as err:
+        print(f"[COUNT EMBEDDINGS ERR] {err}")
+        return 0
+
+
+# --- Perfis Faciais de Convidados ---
+
+def save_guest_face_profile(event_id: str, session_id: str, embeddings: list,
+                             email: str = None, expira_dias: int = 30) -> int | None:
+    """Salva o perfil facial de um convidado (1-3 embeddings). Retorna o ID ou None."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn:
+        return None
+    import json
+    from datetime import datetime, timedelta
+    payload = {
+        'event_id': event_id,
+        'session_id': session_id,
+        'email': email.strip().lower() if email else None,
+        'embeddings': json.dumps(embeddings),
+        'notificado': False,
+        'expira_em': (datetime.utcnow() + timedelta(days=expira_dias)).isoformat(),
+    }
+    try:
+        res = conn.table('guest_face_profiles').insert(payload).execute()
+        if res.data:
+            return res.data[0].get('id')
+    except Exception as err:
+        print(f"[SAVE GUEST PROFILE ERR] {err}")
+    return None
+
+
+def get_guest_profiles_for_event(event_id: str, only_with_email: bool = False) -> list:
+    """Retorna perfis faciais de convidados de um evento. Filtro opcional por email."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn:
+        return []
+    try:
+        query = conn.table('guest_face_profiles').select('*').eq('event_id', event_id)
+        if only_with_email:
+            query = query.neq('email', None)
+        res = query.execute()
+        return res.data or []
+    except Exception as err:
+        print(f"[GET GUEST PROFILES ERR] {err}")
+        return []
+
+
+def get_guest_profiles_not_notified(event_id: str) -> list:
+    """Retorna perfis de convidados com email que ainda não foram notificados."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn:
+        return []
+    try:
+        res = conn.table('guest_face_profiles').select('*').eq(
+            'event_id', event_id
+        ).eq('notificado', False).neq('email', None).execute()
+        return res.data or []
+    except Exception as err:
+        print(f"[GET PENDING PROFILES ERR] {err}")
+        return []
+
+
+def mark_guest_notified(profile_id: int) -> bool:
+    """Marca um perfil de convidado como notificado."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn:
+        return False
+    try:
+        conn.table('guest_face_profiles').update({'notificado': True}).eq('id', profile_id).execute()
+        return True
+    except Exception as err:
+        print(f"[MARK NOTIFIED ERR] {err}")
+        return False
+
+
+# --- Entregas por E-mail ---
+
+def save_guest_delivery(event_id: str, email: str, photo_ids: str, count: int) -> bool:
+    """Registra uma entrega de fotos por e-mail."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn:
+        return False
+    payload = {
+        'event_id': event_id,
+        'guest_email': email.strip().lower(),
+        'photo_ids': photo_ids,
+        'photos_count': count,
+    }
+    try:
+        conn.table('guest_photo_deliveries').insert(payload).execute()
+        return True
+    except Exception as err:
+        print(f"[SAVE DELIVERY ERR] {err}")
+        return False
+
+
+# --- Analytics do Portal ---
+
+def log_portal_analytics(event_id: str, tipo: str, session_id: str = None, metadata: dict = None) -> bool:
+    """Registra um evento de analytics (acesso, selfie, match, download, email, whatsapp)."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn:
+        return False
+    import json
+    payload = {
+        'event_id': event_id,
+        'tipo': tipo,
+        'session_id': session_id,
+        'metadata': json.dumps(metadata) if metadata else None,
+    }
+    try:
+        conn.table('portal_analytics').insert(payload).execute()
+        return True
+    except Exception as err:
+        print(f"[LOG ANALYTICS ERR] {err}")
+        return False
+
+
+def get_portal_analytics_summary(event_id: str) -> dict:
+    """Retorna resumo de métricas do portal para um evento."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn:
+        return {}
+    summary = {
+        'acessos': 0, 'selfies': 0, 'matches': 0,
+        'downloads': 0, 'emails': 0, 'whatsapp': 0
+    }
+    try:
+        res = conn.table('portal_analytics').select('tipo').eq('event_id', event_id).execute()
+        if res.data:
+            for row in res.data:
+                tipo = row.get('tipo', '')
+                if tipo in summary:
+                    summary[tipo] += 1
+        return summary
+    except Exception as err:
+        print(f"[GET ANALYTICS ERR] {err}")
+        return summary
+
+
 
 
