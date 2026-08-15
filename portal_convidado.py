@@ -59,9 +59,6 @@ def _get_face_app():
 
     return _FACE_APP_SINGLETON
 
-# Pré-aquece o singleton logo no import
-asyncio.get_event_loop().call_soon(_get_face_app) if False else None
-
 MESES_PT = {
     1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
     5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
@@ -404,117 +401,178 @@ def render_page(event_id: str):
             border: 2px solid #00e5ff !important;
             box-shadow: 0 0 15px rgba(0,229,255,0.4) !important;
         }}
-        #turbo-loading-overlay {{
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(11, 15, 25, 0.90);
-            backdrop-filter: blur(8px);
-            z-index: 99999;
-            flex-direction: column;
+        @keyframes turbo-spin {{
+            to {{ transform: rotate(360deg); }}
+        }}
+        .turbo-upload-label {{
+            display: flex;
             align-items: center;
             justify-content: center;
-            gap: 16px;
+            height: 52px;
+            border-radius: 12px;
+            font-weight: 900;
+            font-size: 13px;
+            letter-spacing: 0.3px;
+            cursor: pointer;
+            user-select: none;
+            transition: transform 0.15s ease, filter 0.15s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            text-align: center;
+            padding: 0 12px;
+        }}
+        .turbo-upload-label:active {{
+            transform: scale(0.96);
+            filter: brightness(0.9);
+        }}
+        .turbo-btn-camera {{
+            background: #00b4d8;
+            color: #000000;
+            flex: 1;
+        }}
+        .turbo-btn-gallery {{
+            background: #ffb703;
+            color: #000000;
+            flex: 1;
         }}
     </style>
-    <div id="turbo-loading-overlay">
-        <div style="width: 50px; height: 50px; border: 4px solid rgba(0,229,255,0.2); border-top-color: #00e5ff; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
-        <style>@keyframes spin {{ to {{ transform: rotate(360deg); }} }}</style>
-        <div style="font-size: 1.1rem; font-weight: 900; color: #ffffff; letter-spacing: 0.5px; margin-top: 10px;">ANALISANDO SUA FOTO COM IA...</div>
-        <div style="font-size: 0.8rem; color: #94a3b8;">Buscando suas fotos no evento em tempo real</div>
+    <div id="turbo-loading-overlay" style="display: none; position: fixed; inset: 0; background: rgba(11, 15, 25, 0.92); backdrop-filter: blur(10px); z-index: 999999; flex-direction: column; align-items: center; justify-content: center; gap: 16px;">
+        <div style="width: 54px; height: 54px; border: 4px solid rgba(0, 229, 255, 0.2); border-top-color: #00e5ff; border-radius: 50%; animation: turbo-spin 0.8s linear infinite;"></div>
+        <div style="font-size: 1.15rem; font-weight: 900; color: #ffffff; letter-spacing: 0.5px; text-shadow: 0 0 12px rgba(0,229,255,0.6);">ANALISANDO SUA FOTO COM IA...</div>
+        <div id="turbo-status-text" style="font-size: 0.85rem; color: #94a3b8;">Buscando suas fotos no evento em tempo real</div>
     </div>
     <script>
     window._PORTAL_EVENT_ID = "{event_id}";
     window._PORTAL_SESSION_ID = "{session_id}";
 
-    // Recupera fotos identificadas persistidas na sessão do navegador
-    try {{
-        const storedMatches = sessionStorage.getItem('portal_matched_' + window._PORTAL_EVENT_ID);
-        if (storedMatches) {{
-            window._PORTAL_SAVED_MATCHES = JSON.parse(storedMatches);
-        }}
-    }} catch(e) {{}}
-
-    window.handleTurboSelfie = function(input) {{
-        if (!input.files || !input.files[0]) return;
-        const file = input.files[0];
-        const fileObj = file;
-        input.value = '';
+    async function processSelectedFile(file) {{
+        if (!file) return;
         
         const overlay = document.getElementById('turbo-loading-overlay');
+        const statusText = document.getElementById('turbo-status-text');
         if (overlay) overlay.style.display = 'flex';
+        if (statusText) statusText.innerText = 'Otimizando foto no smartphone...';
         
-        const reader = new FileReader();
-        reader.onload = function(e) {{
+        try {{
             const img = new Image();
-            img.onload = function() {{
-                const maxDim = 480;
-                let w = img.naturalWidth || img.width;
-                let h = img.naturalHeight || img.height;
-                if (w > maxDim || h > maxDim) {{
-                    if (w > h) {{
-                        h = Math.round((h * maxDim) / w);
-                        w = maxDim;
-                    }} else {{
-                        w = Math.round((w * maxDim) / h);
-                        h = maxDim;
-                    }}
+            const url = URL.createObjectURL(file);
+            
+            await new Promise((resolve, reject) => {{
+                img.onload = () => resolve();
+                img.onerror = () => reject(new Error('Falha ao decodificar a foto selecionada.'));
+                img.src = url;
+            }});
+            URL.revokeObjectURL(url);
+            
+            const maxDim = 480;
+            let w = img.naturalWidth || img.width;
+            let h = img.naturalHeight || img.height;
+            if (w > maxDim || h > maxDim) {{
+                if (w > h) {{
+                    h = Math.round((h * maxDim) / w);
+                    w = maxDim;
+                }} else {{
+                    w = Math.round((w * maxDim) / h);
+                    h = maxDim;
                 }}
-                const canvas = document.createElement('canvas');
-                canvas.width = w;
-                canvas.height = h;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, w, h);
-                
-                canvas.toBlob(async function(blob) {{
-                    if (!blob) {{
-                        if (overlay) overlay.style.display = 'none';
-                        return;
-                    }}
-                    const formData = new FormData();
-                    formData.append('file', blob, 'selfie.jpg');
-                    formData.append('event_id', window._PORTAL_EVENT_ID);
-                    formData.append('session_id', window._PORTAL_SESSION_ID || '');
-                    
+            }}
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            
+            if (statusText) statusText.innerText = 'Consultando inteligência artificial...';
+            
+            const blob = await new Promise((resolve) => {{
+                canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.82);
+            }});
+            
+            if (!blob) {{
+                throw new Error('Falha ao converter a imagem no dispositivo.');
+            }}
+            
+            const formData = new FormData();
+            formData.append('file', blob, 'selfie.jpg');
+            formData.append('event_id', window._PORTAL_EVENT_ID);
+            formData.append('session_id', window._PORTAL_SESSION_ID || '');
+            
+            const response = await fetch('/api/portal/match', {{
+                method: 'POST',
+                body: formData
+            }});
+            
+            if (!response.ok) {{
+                throw new Error('Servidor retornou erro HTTP ' + response.status);
+            }}
+            
+            const data = await response.json();
+            
+            if (data.ok) {{
+                sessionStorage.setItem('portal_matched_' + window._PORTAL_EVENT_ID, JSON.stringify(data.matched_photos || []));
+                sessionStorage.setItem('portal_searched_' + window._PORTAL_EVENT_ID, '1');
+                if (data.embedding) {{
+                    let embs = [];
                     try {{
-                        const res = await fetch('/api/portal/match', {{
-                            method: 'POST',
-                            body: formData
-                        }});
-                        const data = await res.json();
-                        if (data.ok) {{
-                            sessionStorage.setItem('portal_matched_' + window._PORTAL_EVENT_ID, JSON.stringify(data.matched_photos));
-                            sessionStorage.setItem('portal_searched_' + window._PORTAL_EVENT_ID, '1');
-                            if (data.embedding) {{
-                                let embs = JSON.parse(sessionStorage.getItem('portal_embs_' + window._PORTAL_EVENT_ID) || '[]');
-                                embs.push(data.embedding);
-                                sessionStorage.setItem('portal_embs_' + window._PORTAL_EVENT_ID, JSON.stringify(embs));
-                            }}
-                            window.location.reload();
-                        }} else {{
-                            if (overlay) overlay.style.display = 'none';
-                            alert(data.message || 'Nenhum rosto detectado na foto. Tente uma foto frontal bem iluminada.');
-                        }}
-                    }} catch (err) {{
-                        if (overlay) overlay.style.display = 'none';
-                        alert('Erro de conexão ao enviar selfie. Tente novamente.');
-                    }}
-                }}, 'image/jpeg', 0.80);
+                        embs = JSON.parse(sessionStorage.getItem('portal_embs_' + window._PORTAL_EVENT_ID) || '[]');
+                    }} catch(e) {{}}
+                    embs.push(data.embedding);
+                    sessionStorage.setItem('portal_embs_' + window._PORTAL_EVENT_ID, JSON.stringify(embs));
+                }}
+                if (statusText) statusText.innerText = 'Fotos encontradas! Carregando...';
+                window.location.reload();
+            }} else {{
+                if (overlay) overlay.style.display = 'none';
+                alert(data.message || 'Nenhum rosto identificado com clareza. Envie outra foto bem iluminada de frente.');
+            }}
+        }} catch (err) {{
+            console.error('[TURBO_UPLOAD_ERR]', err);
+            if (overlay) overlay.style.display = 'none';
+            alert('Erro ao processar foto: ' + (err.message || err));
+        }}
+    }}
+
+    function setupUploadInputs() {{
+        const camInput = document.getElementById('portal-native-camera');
+        const galInput = document.getElementById('portal-native-gallery');
+        
+        if (camInput) {{
+            camInput.onchange = function() {{
+                if (this.files && this.files[0]) {{
+                    const f = this.files[0];
+                    this.value = '';
+                    processSelectedFile(f);
+                }}
             }};
-            img.src = e.target.result;
-        }};
-        reader.readAsDataURL(fileObj);
-    }};
+        }}
+        if (galInput) {{
+            galInput.onchange = function() {{
+                if (this.files && this.files[0]) {{
+                    const f = this.files[0];
+                    this.value = '';
+                    processSelectedFile(f);
+                }}
+            }};
+        }}
+    }}
+
+    if (document.readyState === 'loading') {{
+        document.addEventListener('DOMContentLoaded', setupUploadInputs);
+    }} else {{
+        setupUploadInputs();
+    }}
+    setTimeout(setupUploadInputs, 400);
+    setTimeout(setupUploadInputs, 1200);
     </script>
     ''')
 
     # Container principal
     with ui.column().classes('w-full min-h-screen items-center justify-start p-2 sm:p-4 bg-slate-950 text-white').style('font-family: "Outfit", sans-serif;'):
 
-        # ── INPUTS NATIVOS DE UPLOAD OFF-SCREEN (100% compatíveis com iOS Safari e Android) ──
+        # ── INPUTS NATIVOS DE UPLOAD OFF-SCREEN ──
         ui.html('''
-        <input type="file" id="portal-native-camera" accept="image/*" capture="user" style="display:none" onchange="window.handleTurboSelfie(this)">
-        <input type="file" id="portal-native-gallery" accept="image/*" style="display:none" onchange="window.handleTurboSelfie(this)">
+        <input type="file" id="portal-native-camera" accept="image/*" capture="user" style="position: absolute; left: -9999px; opacity: 0; width: 1px; height: 1px;">
+        <input type="file" id="portal-native-gallery" accept="image/*" style="position: absolute; left: -9999px; opacity: 0; width: 1px; height: 1px;">
         ''')
 
         # ── CARD PRINCIPAL COMPACTO DO EVENTO ─────────────────────────────────
@@ -829,20 +887,16 @@ def render_page(event_id: str):
 
                     ui.separator().classes('w-full opacity-20 q-my-sm')
 
-                    with ui.row().classes('w-full gap-2 sm:gap-3 mt-1'):
-                        ui.button(
-                            '📸 VALIDAR COM CÂMERA',
-                            icon='photo_camera'
-                        ).props('onclick="document.getElementById(\'portal-native-camera\').click()" unelevated color=cyan-8 text-color=white bold no-caps').classes('flex-1 min-w-[150px] h-12 rounded-xl text-xs font-bold')
-
-                        ui.button(
-                            '📁 ESCOLHER FOTO DA GALERIA',
-                            icon='photo_library'
-                        ).props('onclick="document.getElementById(\'portal-native-gallery\').click()" unelevated color=amber-8 text-color=black bold no-caps').classes('flex-1 min-w-[150px] h-12 rounded-xl text-xs font-bold')
+                    ui.html('''
+                    <div style="display: flex; gap: 10px; width: 100%; margin-top: 6px;">
+                        <label for="portal-native-camera" class="turbo-upload-label turbo-btn-camera">📸 VALIDAR COM CÂMERA</label>
+                        <label for="portal-native-gallery" class="turbo-upload-label turbo-btn-gallery">📁 ESCOLHER DA GALERIA</label>
+                    </div>
+                    ''')
 
                 return
 
-            # 1. SEÇÃO DE CAPTURA BIOMÉTRICA / SELFIE (Card Compacto Direto)
+            # 1. SEÇÃO DE CAPTURA BIOMÉTRICA / SELFIE (Card Compacto Direto com Labels Nativas)
             with ui.card().classes('w-full bg-slate-900/90 border border-cyan-500/30 rounded-2xl p-3 sm:p-5 shadow-xl text-center gap-1.5'):
                 with ui.row().classes('w-full items-center justify-center gap-2'):
                     ui.icon('face_retouching_natural', size='1.5rem', color='cyan-4')
@@ -851,22 +905,17 @@ def render_page(event_id: str):
                 num_selfies = len(guest_state['selfie_embeddings'])
                 ui.label('Tire uma selfie ou escolha uma foto sua para a inteligência artificial localizar todas as suas fotos no evento:').classes('text-xs text-grey-4 max-w-xl mx-auto')
 
-                with ui.row().classes('w-full gap-2 sm:gap-3 mt-1'):
-                    btn_cam_label = '📸 TIRAR SELFIE (CÂMERA)' if num_selfies == 0 else '📸 OUTRA SELFIE'
-                    ui.button(
-                        btn_cam_label,
-                    ).props('onclick="document.getElementById(\'portal-native-camera\').click()" unelevated color=cyan-7 text-color=black bold no-caps').classes(
-                        'flex-1 h-12 sm:h-14 font-black rounded-xl text-xs sm:text-sm shadow-md active:scale-95 transition-transform'
-                    )
+                btn_cam_txt = '📸 TIRAR SELFIE (CÂMERA)' if num_selfies == 0 else '📸 OUTRA SELFIE'
+                btn_gal_txt = '📁 ESCOLHER FOTO' if num_selfies == 0 else '📁 OUTRA FOTO'
 
-                    btn_gal_label = '📁 ESCOLHER FOTO' if num_selfies == 0 else '📁 OUTRA FOTO'
-                    ui.button(
-                        btn_gal_label,
-                    ).props('onclick="document.getElementById(\'portal-native-gallery\').click()" unelevated color=amber-7 text-color=black bold no-caps').classes(
-                        'flex-1 h-12 sm:h-14 font-black rounded-xl text-xs sm:text-sm shadow-md active:scale-95 transition-transform'
-                    )
+                ui.html(f'''
+                <div style="display: flex; gap: 10px; width: 100%; margin-top: 6px;">
+                    <label for="portal-native-camera" class="turbo-upload-label turbo-btn-camera" onclick="setupUploadInputs()">{btn_cam_txt}</label>
+                    <label for="portal-native-gallery" class="turbo-upload-label turbo-btn-gallery" onclick="setupUploadInputs()">{btn_gal_txt}</label>
+                </div>
+                ''')
 
-                if num_selfies > 0:
+                if num_selfies > 0 or guest_state['has_searched']:
                     def reset_selfies():
                         guest_state['selfie_embeddings'] = []
                         guest_state['matched_photos'] = []
@@ -877,7 +926,7 @@ def render_page(event_id: str):
                         refresh_ui()
                     with ui.row().classes('items-center justify-between w-full pt-1'):
                         ui.label('🔒 Foto processada em memória e descartada.').classes('text-[10px] text-grey-5')
-                        ui.button('Recomeçar', icon='refresh', on_click=reset_selfies).props('flat dense color=grey-4 size=xs').classes('text-[10px]')
+                        ui.button('Recomeçar busca', icon='refresh', on_click=reset_selfies).props('flat dense color=grey-4 size=xs').classes('text-[10px]')
                 else:
                     ui.label('🔒 Sua foto é processada em memória e descartada imediatamente.').classes('text-[10px] text-grey-5 text-center w-full')
 
@@ -921,7 +970,6 @@ def render_page(event_id: str):
                 render_portal_content()
 
         # ── 9. RECUPERAÇÃO AUTOMÁTICA DE RESULTADOS ───────────────────────────
-        # Se o cliente já pesquisou via endpoint REST, injeta os resultados no estado
         async def check_client_session():
             js_res = await ui.run_javascript(f'''
                 (function() {{
@@ -940,7 +988,7 @@ def render_page(event_id: str):
                 guest_state['matched_photos'] = js_res.get('matches') or []
                 refresh_ui()
 
-        ui.timer(0.1, check_client_session, once=True)
+        ui.timer(0.05, check_client_session, once=True)
 
         # ── 10. INICIALIZA A PRIMEIRA RENDERIZAÇÃO NA RAIZ DA PÁGINA ──────────
         refresh_ui()
