@@ -417,9 +417,21 @@ def render_page(event_id: str):
                 log_portal_analytics(event_id, 'selfie', session_id=session_id)
 
                 # Executa match contra a matriz do evento
-                await execute_matching()
+                matched_items, n_faces = await execute_matching()
 
                 loading_dialog.close()
+
+                # Notifica resultado no contexto correto do slot NiceGUI
+                pin_req = str(event.get('pin_acesso') or '').strip()
+                if matched_items:
+                    if pin_req:
+                        app.storage.user[f'portal_auth_{event_id}'] = True
+                    ui.notify(f"🎉 {len(matched_items)} foto(s) sua(s) encontrada(s) no evento!", color='positive', timeout=5000)
+                elif n_faces == 0:
+                    ui.notify('⚠️ Nenhum rosto detectado. Tente uma foto mais nítida e de frente.', color='warning', timeout=6000)
+                else:
+                    ui.notify('ℹ️ Selfie processada. Nenhuma foto sua identificada no acervo. Veja a Galeria Oficial abaixo.', color='info', timeout=6000)
+
                 refresh_ui()
 
             async def handle_portal_upload(e):
@@ -432,13 +444,21 @@ def render_page(event_id: str):
                 except Exception as ex_up:
                     ui.notify(f"Erro no envio da foto: {ex_up}", color='negative')
 
-            async def execute_matching():
+            async def execute_matching() -> tuple[list, int]:
+                """Executa o match vetorial e retorna (matched_items, n_embeddings_selfie).
+                Nunca chama ui.notify() para evitar RuntimeError de slot vazio."""
                 matrix, records = await asyncio.to_thread(_get_event_matrix, event_id)
                 matched_items = []
+                n_faces = len(guest_state['selfie_embeddings'])
+
                 if matrix.shape[0] > 0 and guest_state['selfie_embeddings']:
                     all_scores = np.zeros(matrix.shape[0], dtype=np.float32)
                     for s_emb in guest_state['selfie_embeddings']:
                         s_vec = np.array(s_emb, dtype=np.float32)
+                        # Normaliza o vetor da selfie para garantir similaridade de cosseno correta
+                        norm = np.linalg.norm(s_vec)
+                        if norm > 0:
+                            s_vec = s_vec / norm
                         scores = matrix @ s_vec
                         all_scores = np.maximum(all_scores, scores)
 
@@ -448,8 +468,8 @@ def render_page(event_id: str):
                         if score < threshold_match:
                             break
                         rec = records[idx]
-                        fid = rec['drive_file_id']
-                        if fid not in seen_fids:
+                        fid = rec.get('drive_file_id')
+                        if fid and fid not in seen_fids:
                             seen_fids.add(fid)
                             matched_items.append({
                                 'drive_file_id': fid,
@@ -461,15 +481,17 @@ def render_page(event_id: str):
                 guest_state['matched_photos'] = matched_items
                 guest_state['has_searched'] = True
 
-                pin_req = str(event.get('pin_acesso') or '').strip()
-                if matched_items:
-                    if pin_req:
-                        app.storage.user[f'portal_auth_{event_id}'] = True
-                    log_portal_analytics(event_id, 'match', session_id=session_id, metadata={'count': len(matched_items)})
-                    ui.notify(f"🎉 Presença confirmada! Encontramos {len(matched_items)} foto(s) sua(s) no evento.", color='positive', timeout=5000)
-                else:
-                    if pin_req and not app.storage.user.get(f'portal_auth_{event_id}', False):
-                        ui.notify('⚠️ Não localizamos fotos suas no acervo. Digite o PIN do evento ou tente outra foto com melhor iluminação.', color='warning', timeout=7000)
+                # Analytics (sem chamar ui.*)
+                try:
+                    pin_req = str(event.get('pin_acesso') or '').strip()
+                    if matched_items:
+                        if pin_req:
+                            app.storage.user[f'portal_auth_{event_id}'] = True
+                        log_portal_analytics(event_id, 'match', session_id=session_id, metadata={'count': len(matched_items)})
+                except Exception:
+                    pass
+
+                return matched_items, n_faces
 
             # ── RENDERIZAÇÃO DO CONTEÚDO ──────────────────────────────────────
             def render_portal_content():
