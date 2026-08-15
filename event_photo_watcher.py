@@ -36,6 +36,15 @@ if sys.platform == 'win32':
 import numpy as np
 import cv2
 
+try:
+    from watchdog.observers import Observer
+    from watchdog.events import FileSystemEventHandler
+except ImportError:
+    class FileSystemEventHandler:
+        pass
+    class Observer:
+        pass
+
 # ============================================================================
 # CONFIGURAÇÃO
 # ============================================================================
