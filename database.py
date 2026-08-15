@@ -2314,18 +2314,29 @@ def save_event_photo_embeddings_batch(records: list) -> int:
 
 
 def get_event_photo_embeddings(event_id: str) -> list:
-    """Retorna todos os embeddings de fotos de um evento. Usado para montar a matriz de match."""
+    """Retorna todos os embeddings de fotos de um evento com paginação automática sem limite de 1000 rows."""
     conn = get_service_db_connection() or get_db_connection()
     if not conn:
         return []
-    try:
-        res = conn.table('event_photo_embeddings').select(
-            'id, drive_file_id, drive_link, photo_filename, embedding, bbox, det_score'
-        ).eq('event_id', event_id).execute()
-        return res.data or []
-    except Exception as err:
-        print(f"[GET EVENT EMBEDDINGS ERR] {err}")
-        return []
+    all_rows = []
+    page_size = 1000
+    start = 0
+    while True:
+        try:
+            res = conn.table('event_photo_embeddings').select(
+                'id, drive_file_id, drive_link, photo_filename, embedding, bbox, det_score'
+            ).eq('event_id', event_id).range(start, start + page_size - 1).execute()
+            rows = res.data or []
+            if not rows:
+                break
+            all_rows.extend(rows)
+            if len(rows) < page_size:
+                break
+            start += page_size
+        except Exception as err:
+            print(f"[GET EVENT EMBEDDINGS ERR at range {start}] {err}")
+            break
+    return all_rows
 
 
 def count_event_embeddings(event_id: str) -> int:

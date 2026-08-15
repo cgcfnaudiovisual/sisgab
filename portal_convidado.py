@@ -42,13 +42,15 @@ MESES_PT = {
 
 
 def _get_event_matrix(event_id: str) -> tuple[np.ndarray, list[dict]]:
-    """Carrega matriz NxD de embeddings do evento do cache ou do banco."""
+    """Carrega matriz NxD de embeddings do evento com cache em RAM por 1 hora."""
     now = time.time()
     if event_id in _EVENT_EMBEDDINGS_CACHE:
         cache = _EVENT_EMBEDDINGS_CACHE[event_id]
-        if now - cache['timestamp'] < 30:
+        if now - cache['timestamp'] < 3600:  # Cache persistente de 1 hora
             return cache['matrix'], cache['records']
 
+    print(f"[PORTAL_IA] 📥 Baixando embeddings faciais do evento #{event_id} do Supabase...")
+    t0 = time.time()
     raw_records = get_event_photo_embeddings(event_id)
     if not raw_records:
         return np.empty((0, 512), dtype=np.float32), []
@@ -57,7 +59,9 @@ def _get_event_matrix(event_id: str) -> tuple[np.ndarray, list[dict]]:
     valid_records = []
     for r in raw_records:
         try:
-            emb = json.loads(r['embedding']) if isinstance(r['embedding'], str) else r['embedding']
+            emb = r['embedding']
+            if isinstance(emb, str):
+                emb = json.loads(emb)
             if emb and len(emb) == 512:
                 valid_vectors.append(np.array(emb, dtype=np.float32))
                 valid_records.append(r)
@@ -73,6 +77,7 @@ def _get_event_matrix(event_id: str) -> tuple[np.ndarray, list[dict]]:
         'records': valid_records,
         'timestamp': now
     }
+    print(f"[PORTAL_IA] ✅ Matriz indexada com {len(valid_vectors)} faces em {time.time() - t0:.2f}s!")
     return matrix, valid_records
 
 
@@ -239,6 +244,9 @@ def render_page(event_id: str):
         'page': 1,
         'per_page': 60,
     }
+
+    # Pré-aquece a matriz de embeddings do evento em background na RAM
+    asyncio.create_task(asyncio.to_thread(_get_event_matrix, event_id))
 
     # Dados do evento
     nome_evento = event.get('nome', 'Evento Oficial')
@@ -609,9 +617,9 @@ def render_page(event_id: str):
                             dl_btn_label = f"📥 Baixar Selecionadas ({selected_count})" if selected_count > 0 else f"📥 Baixar Todas ({len(all_visible)})"
                             ui.button(dl_btn_label, icon='archive', on_click=download_selected_zip).props('unelevated color=amber-9 text-color=black bold size=sm no-caps').classes('text-xs font-bold rounded-xl shadow')
 
-            # ── GRADE DE FOTOS RESPONSIVA (ENCAIXADA NO ESPAÇO SEM CORTES, 260px min) ──
+            # ── GRADE DE FOTOS RESPONSIVA (2 NO CELULAR, 3 NO TABLET, 4-6 NO DESKTOP) ──
             def render_photo_grid(photos_list: list[dict], is_personal: bool = False):
-                with ui.element('div').classes('w-full gap-4').style('display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));'):
+                with ui.grid().classes('w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-4'):
                     for idx, p in enumerate(photos_list):
                         fid = p.get('drive_file_id') or p.get('id')
                         raw_thumb = str(p.get('thumbnailLink') or '')
@@ -628,9 +636,9 @@ def render_page(event_id: str):
                         border_style = 'border: 2px solid #00e5ff; box-shadow: 0 0 15px rgba(0,229,255,0.4);' if is_selected else 'border: 1px solid rgba(255,255,255,0.1);'
 
                         with ui.card().classes('q-pa-none no-shadow rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 hover:scale-[1.02]').style(f'background: #0f172a; {border_style}'):
-                            # Container com imagem perfeitamente contida/encaixada
-                            with ui.element('div').classes('relative w-full overflow-hidden').style(
-                                'height: 240px; background: #030a17; display: flex; align-items: center; justify-content: center;'
+                            # Container da imagem perfeitamente contida/encaixada (altura adaptativa para mobile)
+                            with ui.element('div').classes('relative w-full overflow-hidden bg-[#030a17] flex items-center justify-center').style(
+                                'height: 160px;'
                             ):
                                 def toggle_select(f=fid):
                                     if f in guest_state['selected_fids']:
@@ -639,24 +647,24 @@ def render_page(event_id: str):
                                         guest_state['selected_fids'].add(f)
                                     refresh_ui()
 
-                                with ui.element('div').classes('absolute top-2 left-2 z-20 bg-black/70 rounded p-1').on('click', lambda _, f=fid: toggle_select(f)):
+                                with ui.element('div').classes('absolute top-1.5 left-1.5 z-20 bg-black/70 rounded p-0.5 sm:p-1').on('click', lambda _, f=fid: toggle_select(f)):
                                     ui.checkbox(value=is_selected, on_change=lambda _, f=fid: toggle_select(f)).props('dark color=cyan dense')
 
-                                img = ui.image(thumb_url).style('max-height: 240px; width: 100%; object-fit: contain;')
+                                img = ui.image(thumb_url).style('max-height: 160px; width: 100%; object-fit: contain;')
                                 img.on('click', lambda _, i=idx, l=photos_list: open_full_lightbox(i, l))
 
                             # Rodapé do card
-                            with ui.row().classes('w-full p-2.5 items-center justify-between bg-slate-950 border-t border-white/5 gap-1.5'):
+                            with ui.row().classes('w-full p-1.5 sm:p-2.5 items-center justify-between bg-slate-950 border-t border-white/5 gap-1'):
                                 fname = p.get('filename') or p.get('name') or 'foto.jpg'
-                                ui.label(fname).classes('text-[11px] text-grey-2 font-bold truncate flex-grow')
+                                ui.label(fname).classes('text-[10px] sm:text-[11px] text-grey-2 font-bold truncate flex-grow')
                                 
                                 badge_txt = '⭐ Identificada' if is_personal else '☁️ Drive'
                                 badge_col = 'amber-9' if is_personal else 'blue-grey-8'
-                                ui.badge(badge_txt, color=badge_col).classes('text-[9px] font-bold')
+                                ui.badge(badge_txt, color=badge_col).classes('text-[8px] sm:text-[9px] font-bold px-1.5')
 
-                                with ui.row().classes('items-center gap-1'):
+                                with ui.row().classes('items-center gap-0.5 sm:gap-1'):
                                     ui.button(icon='fullscreen', on_click=lambda _, i=idx, l=photos_list: open_full_lightbox(i, l)).props('flat dense size=xs color=grey-3').tooltip('Ampliar')
-                                    ui.button(icon='download', on_click=lambda _, f=fid: download_single(f)).props('unelevated color=cyan text-color=black dense bold size=xs').classes('px-2 py-0.5 rounded').tooltip('Baixar foto HD')
+                                    ui.button(icon='download', on_click=lambda _, f=fid: download_single(f)).props('unelevated color=cyan text-color=black dense bold size=xs').classes('px-1.5 sm:px-2 py-0.5 rounded text-[10px]').tooltip('Baixar foto HD')
 
             # ── GALERIA OFICIAL COM PAGINAÇÃO COMPLETA (IGUAL COMSOC_GALERIA) ─
             def render_official_gallery(folder_id: str):
