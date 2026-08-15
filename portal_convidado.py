@@ -140,50 +140,42 @@ def render_page(event_id: str):
             ui.label(f"A galeria do evento '{event.get('nome')}' foi encerrada pela organização.").classes('text-sm text-grey-4 max-w-md')
         return
 
-    # Injeta CSS e Script JS para compressão de imagem no cliente (Canvas Resizer)
+    # Injeta CSS para componentes de upload e seleção
     ui.add_head_html('''
     <style>
-        .q-uploader__header { display: none !important; }
-        .q-uploader__list { display: none !important; }
-        .q-uploader { background: transparent !important; border: none !important; box-shadow: none !important; width: 100% !important; min-height: unset !important; }
-        .photo-card-selected { border: 2px solid #00e5ff !important; box-shadow: 0 0 15px rgba(0,229,255,0.4) !important; }
+        .portal-uploader {
+            background: rgba(15, 23, 42, 0.85) !important;
+            border-radius: 16px !important;
+            overflow: hidden !important;
+            min-height: 54px !important;
+        }
+        .portal-uploader .q-uploader__header {
+            background: transparent !important;
+            border: none !important;
+            padding: 6px 16px !important;
+            min-height: 50px !important;
+        }
+        .portal-uploader .q-uploader__header-content {
+            justify-content: center !important;
+            align-items: center !important;
+        }
+        .portal-uploader .q-uploader__title {
+            font-size: 0.88rem !important;
+            font-weight: 900 !important;
+            letter-spacing: 0.5px !important;
+            text-transform: uppercase !important;
+        }
+        .portal-uploader .q-uploader__subtitle {
+            display: none !important;
+        }
+        .portal-uploader .q-uploader__list {
+            display: none !important;
+        }
+        .photo-card-selected {
+            border: 2px solid #00e5ff !important;
+            box-shadow: 0 0 15px rgba(0,229,255,0.4) !important;
+        }
     </style>
-    <script>
-    window.processPortalImage = function(input) {
-        if (!input.files || !input.files[0]) return;
-        const file = input.files[0];
-        
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const img = new Image();
-            img.onload = function() {
-                let maxDim = 1280;
-                let width = img.width;
-                let height = img.height;
-                if (width > maxDim || height > maxDim) {
-                    if (width > height) {
-                        height = Math.round((height * maxDim) / width);
-                        width = maxDim;
-                    } else {
-                        width = Math.round((width * maxDim) / height);
-                        height = maxDim;
-                    }
-                }
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-                
-                const b64 = canvas.toDataURL('image/jpeg', 0.85);
-                emitEvent('portal_selfie_ready', b64);
-                input.value = '';
-            };
-            img.src = e.target.result;
-        };
-        reader.readAsDataURL(file);
-    };
-    </script>
     ''')
 
     # Registra analytics de acesso
@@ -228,12 +220,6 @@ def render_page(event_id: str):
 
     # Container principal responsivo que PREENCHE A TELA no PC e se adapta no mobile
     with ui.column().classes('w-full min-h-screen items-center justify-start p-2 sm:p-6 lg:p-8 bg-slate-950 text-white').style('font-family: "Outfit", sans-serif;'):
-        
-        # Inputs HTML ocultos para Câmera e Galeria
-        ui.html('''
-            <input type="file" id="portal_camera_input" accept="image/*" capture="user" style="display:none;" onchange="window.processPortalImage(this)" />
-            <input type="file" id="portal_gallery_input" accept="image/*" style="display:none;" onchange="window.processPortalImage(this)" />
-        ''')
 
         # ── HERO CARD PRINCIPAL RESPONSIVO (max-w-6xl) ────────────────────────
         with ui.card().classes('w-full max-w-6xl bg-slate-900/95 border-2 border-amber-500/30 rounded-3xl shadow-2xl overflow-hidden p-0').style('box-shadow: 0 0 50px rgba(245, 158, 11, 0.15);'):
@@ -274,7 +260,7 @@ def render_page(event_id: str):
                 with content_container:
                     render_portal_content()
 
-            # ── PROCESSAMENTO DO ARQUIVO/BASE64 RECEBIDO ──────────────────────
+            # ── PROCESSAMENTO DO ARQUIVO RECEBIDO ──────────────────────────────
             async def process_image_bytes(file_content: bytes):
                 now_t = time.time()
                 if guest_state['rate_limit_count'] >= 8 and (now_t - guest_state['last_search_time'] < 20):
@@ -324,6 +310,13 @@ def render_page(event_id: str):
                 loading_dialog.close()
                 refresh_ui()
 
+            async def handle_portal_upload(e):
+                try:
+                    content = e.content.read()
+                    await process_image_bytes(content)
+                except Exception as ex_up:
+                    ui.notify(f"Erro no envio da foto: {ex_up}", color='negative')
+
             async def execute_matching():
                 matrix, records = await asyncio.to_thread(_get_event_matrix, event_id)
                 matched_items = []
@@ -363,19 +356,6 @@ def render_page(event_id: str):
                     if pin_req and not app.storage.user.get(f'portal_auth_{event_id}', False):
                         ui.notify('⚠️ Não localizamos fotos suas no acervo. Digite o PIN do evento ou tente outra foto com melhor iluminação.', color='warning', timeout=7000)
 
-            # Listener do evento JS emitido pelo canvas resizer
-            async def on_selfie_b64_received(e):
-                b64_str = e.args
-                if isinstance(b64_str, str) and ',' in b64_str:
-                    b64_str = b64_str.split(',', 1)[1]
-                try:
-                    img_bytes = base64.b64decode(b64_str)
-                    await process_image_bytes(img_bytes)
-                except Exception as ex_b64:
-                    ui.notify(f"Erro ao processar imagem: {ex_b64}", color='negative')
-
-            ui.on('portal_selfie_ready', on_selfie_b64_received)
-
             # ── RENDERIZAÇÃO DO CONTEÚDO ──────────────────────────────────────
             def render_portal_content():
                 pin_evento = str(event.get('pin_acesso') or '').strip()
@@ -409,17 +389,19 @@ def render_page(event_id: str):
                         ui.label('Se você esteve presente e foi fotografado, sua biometria liberará seu acesso automaticamente.').classes('text-[11px] text-grey-4 max-w-sm')
 
                         with ui.row().classes('w-full justify-center gap-3 flex-wrap'):
-                            ui.button(
-                                '📸 VALIDAR COM CÂMERA',
-                                icon='photo_camera',
-                                on_click=lambda: ui.run_javascript("document.getElementById('portal_camera_input').click()")
-                            ).props('unelevated color=cyan-8 text-color=white no-caps').classes('h-12 px-5 font-bold rounded-xl shadow-md')
+                            ui.upload(
+                                label='📸 VALIDAR COM CÂMERA',
+                                on_upload=handle_portal_upload,
+                                auto_upload=True,
+                                max_files=1
+                            ).props('accept="image/*" capture="user" dark flat color=cyan-8 no-thumbnails').classes('flex-1 min-w-[220px] portal-uploader rounded-xl border border-cyan-500/40')
 
-                            ui.button(
-                                '📁 ESCOLHER FOTO DA GALERIA',
-                                icon='perm_media',
-                                on_click=lambda: ui.run_javascript("document.getElementById('portal_gallery_input').click()")
-                            ).props('outline color=cyan-4 text-color=cyan-2 no-caps').classes('h-12 px-5 font-bold rounded-xl')
+                            ui.upload(
+                                label='📁 FOTO DA GALERIA',
+                                on_upload=handle_portal_upload,
+                                auto_upload=True,
+                                max_files=1
+                            ).props('accept="image/*" dark flat color=amber-9 no-thumbnails').classes('flex-1 min-w-[220px] portal-uploader rounded-xl border border-amber-500/40')
 
                     return
 
@@ -450,20 +432,22 @@ def render_page(event_id: str):
                             ui.label('Sem óculos escuros')
 
                     # BOTÕES DUPLOS DE AÇÃO (Câmera + Galeria)
-                    with ui.row().classes('w-full max-w-xl justify-center gap-3 q-mt-xs flex-wrap'):
-                        btn_cam_label = '📸 TIRAR SELFIE COM A CÂMERA' if num_selfies == 0 else '📸 TIRAR OUTRA SELFIE'
-                        ui.button(
-                            btn_cam_label,
-                            icon='photo_camera',
-                            on_click=lambda: ui.run_javascript("document.getElementById('portal_camera_input').click()")
-                        ).props('unelevated color=cyan-8 text-color=white no-caps').classes('flex-1 min-w-[240px] h-14 text-xs sm:text-sm font-black tracking-wide rounded-2xl shadow-lg cyber-glow hover:brightness-110')
+                    with ui.row().classes('w-full max-w-2xl justify-center gap-4 q-mt-xs flex-wrap'):
+                        btn_cam_label = '📸 TIRAR SELFIE (CÂMERA)' if num_selfies == 0 else '📸 TIRAR OUTRA SELFIE'
+                        ui.upload(
+                            label=btn_cam_label,
+                            on_upload=handle_portal_upload,
+                            auto_upload=True,
+                            max_files=1
+                        ).props('accept="image/*" capture="user" dark flat color=cyan-8 no-thumbnails').classes('flex-1 min-w-[260px] portal-uploader rounded-2xl shadow-lg border border-cyan-500/50')
 
                         btn_gal_label = '📁 ESCOLHER FOTO DA GALERIA' if num_selfies == 0 else '📁 ANEXAR OUTRA FOTO'
-                        ui.button(
-                            btn_gal_label,
-                            icon='perm_media',
-                            on_click=lambda: ui.run_javascript("document.getElementById('portal_gallery_input').click()")
-                        ).props('unelevated color=amber-9 text-color=black no-caps').classes('flex-1 min-w-[240px] h-14 text-xs sm:text-sm font-black tracking-wide rounded-2xl shadow-md hover:brightness-110')
+                        ui.upload(
+                            label=btn_gal_label,
+                            on_upload=handle_portal_upload,
+                            auto_upload=True,
+                            max_files=1
+                        ).props('accept="image/*" dark flat color=amber-9 no-thumbnails').classes('flex-1 min-w-[260px] portal-uploader rounded-2xl shadow-md border border-amber-500/50')
 
                     if num_selfies > 0:
                         def reset_selfies():
