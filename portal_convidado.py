@@ -21,43 +21,32 @@ from database import (
     save_guest_delivery
 )
 
-# ── SINGLETON DO MOTOR INSIGHTFACE (Warmup no Boot) ──────────────────────────
-_FACE_APP_SINGLETON = None
+# ── MOTOR INSIGHTFACE DEDICADO A SELFIES (Sub-200ms com det_size=224x224) ────
+_SELFIE_APP_SINGLETON = None
 
-def _get_face_app():
-    """Retorna o singleton do FaceAnalysis com Warmup automático no boot."""
-    global _FACE_APP_SINGLETON
-    if _FACE_APP_SINGLETON is not None:
-        return _FACE_APP_SINGLETON
+def _get_selfie_app():
+    """Retorna motor InsightFace leve e ultra-rápido otimizado exclusivamente para selfies (sub-200ms)."""
+    global _SELFIE_APP_SINGLETON
+    if _SELFIE_APP_SINGLETON is not None:
+        return _SELFIE_APP_SINGLETON
     try:
-        from sisgab_face_worker import init_face_engine
-        _FACE_APP_SINGLETON = init_face_engine()
-        if _FACE_APP_SINGLETON:
-            print('[PORTAL_IA] ✅ Motor InsightFace carregado via sisgab_face_worker singleton!')
-    except Exception:
-        pass
-    if _FACE_APP_SINGLETON is None:
-        try:
-            from insightface.app import FaceAnalysis
-            _FACE_APP_SINGLETON = FaceAnalysis(
-                name='buffalo_l',
-                allowed_modules=['detection', 'recognition']
-            )
-            _FACE_APP_SINGLETON.prepare(ctx_id=-1, det_size=(160, 160))
-            print('[PORTAL_IA] ✅ Motor InsightFace (buffalo_l, det=160px) pronto!')
-        except Exception as e:
-            print(f'[PORTAL_IA] ❌ Falha ao inicializar InsightFace: {e}')
-            _FACE_APP_SINGLETON = None
-    
-    if _FACE_APP_SINGLETON is not None:
-        try:
-            dummy = np.zeros((480, 480, 3), dtype=np.uint8)
-            _FACE_APP_SINGLETON.get(dummy)
-            print('[PORTAL_IA] ⚡ Warmup concluído: rede neural pronta para respostas sub-100ms!')
-        except Exception as e_w:
-            print(f'[PORTAL_IA] Warmup aviso: {e_w}')
-
-    return _FACE_APP_SINGLETON
+        from insightface.app import FaceAnalysis
+        app_selfie = FaceAnalysis(
+            name='buffalo_l',
+            allowed_modules=['detection', 'recognition']
+        )
+        app_selfie.prepare(ctx_id=-1, det_size=(224, 224))
+        
+        # Warmup imediato para alocar buffers ONNX
+        dummy = np.zeros((224, 224, 3), dtype=np.uint8)
+        app_selfie.get(dummy)
+        
+        _SELFIE_APP_SINGLETON = app_selfie
+        print('[PORTAL_IA] 🚀 Motor Selfie Turbo (buffalo_l, det_size=224x224) inicializado e 100% aquecido!')
+        return _SELFIE_APP_SINGLETON
+    except Exception as e:
+        print(f'[PORTAL_IA] ❌ Falha ao inicializar Motor Selfie Turbo: {e}')
+        return None
 
 MESES_PT = {
     1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
@@ -204,7 +193,7 @@ def _get_geral_photos(folder_id: str) -> list[dict]:
         return []
 
 def _extract_selfie_embedding(image_bytes: bytes) -> tuple[bool, str, np.ndarray | None]:
-    """Extrai o embedding facial 512D da selfie com alta performance (sub-100ms)."""
+    """Extrai o embedding facial 512D da selfie com alta performance (sub-200ms)."""
     if not image_bytes:
         return False, "❌ Imagem vazia ou inválida.", None
 
@@ -235,7 +224,7 @@ def _extract_selfie_embedding(image_bytes: bytes) -> tuple[bool, str, np.ndarray
         img_bgr = cv2.resize(img_bgr, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
     try:
-        app_face = _get_face_app()
+        app_face = _get_selfie_app()
         if app_face is None:
             return False, "❌ Motor de IA não disponível no momento. Tente novamente em instantes.", None
 
@@ -414,8 +403,8 @@ def render_page(event_id: str, request: Request = None):
     threshold_match = float(event.get('threshold_match') or 0.40)
     drive_geral_id = event.get('drive_geral_folder_id') or event.get('drive_folder_id')
 
-    # Pré-aquece SIMULTANEAMENTE: IA + matriz de embeddings + fotos do Drive
-    asyncio.create_task(asyncio.to_thread(_get_face_app))
+    # Pré-aquece SIMULTANEAMENTE: IA Selfie + matriz de embeddings + fotos do Drive
+    asyncio.create_task(asyncio.to_thread(_get_selfie_app))
     asyncio.create_task(asyncio.to_thread(_get_event_matrix, event_id))
     if drive_geral_id:
         asyncio.create_task(asyncio.to_thread(_get_geral_photos, drive_geral_id))
@@ -476,7 +465,7 @@ def render_page(event_id: str, request: Request = None):
         const overlay = document.getElementById('turbo-loading-overlay');
         const statusText = document.getElementById('turbo-status-text');
         if (overlay) overlay.style.display = 'flex';
-        if (statusText) statusText.innerText = 'Otimizando foto no smartphone...';
+        if (statusText) statusText.innerText = 'Otimizando foto...';
         
         try {{
             const img = new Image();
@@ -508,7 +497,7 @@ def render_page(event_id: str, request: Request = None):
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, w, h);
             
-            if (statusText) statusText.innerText = 'Consultando inteligência artificial...';
+            if (statusText) statusText.innerText = 'Identificando seu rosto...';
             
             const blob = await new Promise((resolve) => {{
                 canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.82);
