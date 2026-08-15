@@ -2445,14 +2445,22 @@ def log_portal_analytics(event_id: str, tipo: str, session_id: str = None, metad
         'event_id': event_id,
         'tipo': tipo,
         'session_id': session_id,
-        'metadata': json.dumps(metadata) if metadata else None,
     }
+    if metadata:
+        payload['detalhes'] = json.dumps(metadata) if isinstance(metadata, dict) else metadata
     try:
         conn.table('portal_analytics').insert(payload).execute()
         return True
-    except Exception as err:
-        print(f"[LOG ANALYTICS ERR] {err}")
-        return False
+    except Exception:
+        try:
+            conn.table('portal_analytics').insert({
+                'event_id': event_id,
+                'tipo': tipo,
+                'session_id': session_id,
+            }).execute()
+            return True
+        except Exception:
+            return False
 
 
 def get_portal_analytics_summary(event_id: str) -> dict:
