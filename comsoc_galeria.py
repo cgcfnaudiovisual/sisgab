@@ -581,7 +581,7 @@ def render_page(evento_id: str = None, **kwargs):
             )
             ev_pub = get_public_event(slug) or {}
 
-        portal_url = f"https://sisgab.com/evento/{slug}"
+        portal_url = f"https://sisgab-cgcfn.ddns.net/evento/{slug}"
 
         # Gera QR Code
         import qrcode

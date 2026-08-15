@@ -380,7 +380,7 @@ def render_page(event_id: str):
                     ui.label('📥 RECEBER OU COMPARTILHAR SUAS FOTOS').classes('text-base font-black text-white tracking-wide')
                     
                     # Botão de Compartilhar no WhatsApp
-                    event_url = f"https://sisgab.com/evento/{event_id}"
+                    event_url = f"https://sisgab-cgcfn.ddns.net/evento/{event_id}"
                     whatsapp_text = f"📷 Acesse as fotos oficiais do evento {nome_evento}: {event_url}"
                     whatsapp_url = f"https://api.whatsapp.com/send?text={whatsapp_text.replace(' ', '%20')}"
 

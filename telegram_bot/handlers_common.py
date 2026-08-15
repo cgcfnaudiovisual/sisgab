@@ -1043,7 +1043,7 @@ def register_common_handlers(bot):
                         ev_item = res.data[0]
                         titulo = ev_item.get('titulo_evento', 'Evento')
                         slug = str(ev_item.get('id', ev_id))
-                        portal_url = f"https://sisgab.com/evento/{slug}"
+                        portal_url = f"https://sisgab-cgcfn.ddns.net/evento/{slug}"
                         msg_portal = (
                             f"🌐 **PORTAL DO CONVIDADO — SISGAB**\n\n"
                             f"📌 **Evento:** {titulo}\n"

@@ -274,7 +274,7 @@ def run_proactive_matching(event_id: str, new_embeddings: list):
                     <p>Evento: <strong>{event.get('nome', event_id)}</strong></p>
                     <p>{len(matched_files)} foto(s) encontrada(s):</p>
                     {links_html}
-                    <p>Acesse o portal para ver todas: <a href="https://sisgab.com/evento/{event_id}">Ver Galeria</a></p>
+                    <p>Acesse o portal para ver todas: <a href="https://sisgab-cgcfn.ddns.net/evento/{event_id}">Ver Galeria</a></p>
                     <hr>
                     <p><small>COMSOC / CGCFN</small></p>
                     """

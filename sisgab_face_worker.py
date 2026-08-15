@@ -386,7 +386,7 @@ def run_worker_cycle(db):
                                 <p>Evento: <strong>{matched_pub_event.get('nome', matched_pub_event['id'])}</strong></p>
                                 <p>{len(matched_fids)} foto(s) encontrada(s):</p>
                                 {links_html}
-                                <p>Acesse o portal: <a href="https://sisgab.com/evento/{matched_pub_event['id']}">Ver Galeria Completa</a></p>
+                                <p>Acesse o portal: <a href="https://sisgab-cgcfn.ddns.net/evento/{matched_pub_event['id']}">Ver Galeria Completa</a></p>
                                 <hr>
                                 <p><small>COMSOC / CGCFN</small></p>
                                 """
