@@ -338,7 +338,7 @@ def execute_query_safe(query_fn, db_conn=None, retries=3):
 
 def authenticate_user_supabase(email: str, password: str) -> Optional[dict]:
     """
-    Autentica o usuario no Supabase Auth e carrega seu perfil na tabela 'Users' ou 'Efetivo'.
+    Autentica o usuario no Supabase Auth e carrega seu perfil na tabela 'users' ou 'efetivo'.
     Se a autenticação no Supabase Auth for bem sucedida, garante o acesso.
     """
     if not SUPABASE_URL or not SUPABASE_KEY:
@@ -352,9 +352,9 @@ def authenticate_user_supabase(email: str, password: str) -> Optional[dict]:
             db_conn.auth.set_session(auth_response.session.access_token, auth_response.session.refresh_token)
             profile = None
             try:
-                result = db_conn.table('efetivo').select('*').eq('email', clean_email).limit(1).execute()
+                result = db_conn.table('efetivo').select('*').ilike('email', clean_email).limit(1).execute()
                 if not result.data:
-                    result = db_conn.table('users').select('*').eq('email', clean_email).limit(1).execute()
+                    result = db_conn.table('users').select('*').ilike('username', clean_email).limit(1).execute()
                 if not result.data:
                     result = db_conn.table('users').select('*').eq('id', user_id).limit(1).execute()
                 if result.data:
@@ -401,9 +401,9 @@ def authenticate_user(username: str, password: str) -> Optional[dict]:
     try:
         result = None
         if '@' in clean_user:
-            result = db.table('efetivo').select('*').eq('email', clean_user).limit(1).execute()
+            result = db.table('efetivo').select('*').ilike('email', clean_user).limit(1).execute()
             if not result or not result.data:
-                result = db.table('users').select('*').eq('email', clean_user).limit(1).execute()
+                result = db.table('users').select('*').ilike('username', clean_user).limit(1).execute()
         else:
             result = db.table('efetivo').select('*').ilike('nome_guerra', clean_user).limit(1).execute()
             if not result or not result.data:
