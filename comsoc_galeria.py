@@ -155,7 +155,7 @@ def render_page(evento_id: str = None, **kwargs):
             with ui.row().classes('items-center gap-2 flex-wrap'):
                 ui.badge('🚀 ENTREGA & IA', color='purple-10').classes('text-[10px] font-black text-amber-3 tracking-wider q-px-sm')
                 if is_operator:
-                    ui.button('Portal do Convidado (Hot Delivery)', icon='qr_code_2', on_click=_abrir_portal_convidado).props('unelevated color=amber-9 text-color=white no-caps').classes('text-xs font-black px-3.5 py-1.5 rounded-xl cyber-glow hover:brightness-110').tooltip('Gerenciar QR Code e entrega de fotos por Reconhecimento Facial')
+                    ui.button('Portal do Convidado (Hot Delivery)', icon='qr_code_2', on_click=lambda: _abrir_portal_convidado()).props('unelevated color=amber-9 text-color=white no-caps').classes('text-xs font-black px-3.5 py-1.5 rounded-xl cyber-glow hover:brightness-110').tooltip('Gerenciar QR Code e entrega de fotos por Reconhecimento Facial')
                     ui.button('Distribuir no Telegram', icon='send', on_click=lambda: _abrir_distribuir()).props('unelevated color=green-7 text-color=white no-caps').classes('text-xs font-bold px-3 py-1.5 rounded-xl hover:brightness-110').tooltip('Disparar fotos para militares e canais do Telegram')
                 ui.button('Biometria Facial', icon='face', on_click=lambda: _abrir_biometria()).props('unelevated color=purple-7 text-color=white no-caps').classes('text-xs font-bold px-3 py-1.5 rounded-xl hover:brightness-110').tooltip('Cadastrar foto para reconhecimento facial')
 
