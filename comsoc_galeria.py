@@ -423,7 +423,17 @@ def render_page(evento_id: str = None, **kwargs):
                         uploaded_bio_bytes = {'data': None}
 
                         async def handle_bio_upload(e):
-                            fb = e.content.read()
+                            try:
+                                from portal_convidado import _extract_upload_bytes
+                                fb = await _extract_upload_bytes(e)
+                            except Exception:
+                                fb = getattr(e, 'content', None) or b''
+                                if hasattr(fb, 'read'):
+                                    res = fb.read()
+                                    fb = (await res) if asyncio.iscoroutine(res) else res
+                            if not fb:
+                                ui.notify('Não foi possível ler a imagem.', color='warning')
+                                return
                             uploaded_bio_bytes['data'] = fb
                             bio_preview_box.clear()
                             with bio_preview_box:

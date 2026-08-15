@@ -75,6 +75,29 @@ def _get_event_matrix(event_id: str) -> tuple[np.ndarray, list[dict]]:
     return matrix, valid_records
 
 
+async def _extract_upload_bytes(e) -> bytes:
+    """Extrai os bytes do arquivo de forma 100% universal e compatível com NiceGUI 1.x e 2.x."""
+    try:
+        f = getattr(e, 'file', None)
+        if f is not None:
+            if hasattr(f, 'read'):
+                res = f.read()
+                if asyncio.iscoroutine(res):
+                    return await res
+                return res
+        c = getattr(e, 'content', None)
+        if c is not None:
+            if hasattr(c, 'read'):
+                res = c.read()
+                if asyncio.iscoroutine(res):
+                    return await res
+                return res
+            return c
+    except Exception as ex:
+        print(f"[EXTRACT UPLOAD BYTES ERR] {ex}")
+    return b''
+
+
 def _extract_selfie_embedding(image_bytes: bytes) -> tuple[bool, str, np.ndarray | None]:
     """Extrai o embedding facial 512D da selfie com InsightFace ou evaluate_selfie_quality."""
     try:
@@ -312,7 +335,10 @@ def render_page(event_id: str):
 
             async def handle_portal_upload(e):
                 try:
-                    content = e.content.read()
+                    content = await _extract_upload_bytes(e)
+                    if not content:
+                        ui.notify("Não foi possível ler o arquivo enviado. Tente novamente.", color='warning')
+                        return
                     await process_image_bytes(content)
                 except Exception as ex_up:
                     ui.notify(f"Erro no envio da foto: {ex_up}", color='negative')
