@@ -2214,7 +2214,19 @@ def get_public_event(event_id: str) -> dict | None:
     try:
         res = conn.table('eventos_publicos').select('*').eq('id', event_id).execute()
         if res.data:
-            return res.data[0]
+            ev = res.data[0]
+            # Extrai pin_acesso se estiver embutido em email_template (JSON metadata)
+            if 'pin_acesso' not in ev or not ev.get('pin_acesso'):
+                raw_tpl = ev.get('email_template') or ''
+                if raw_tpl.startswith('{') and raw_tpl.endswith('}'):
+                    try:
+                        import json
+                        meta = json.loads(raw_tpl)
+                        if 'pin_acesso' in meta:
+                            ev['pin_acesso'] = meta['pin_acesso']
+                    except Exception:
+                        pass
+            return ev
     except Exception as err:
         print(f"[GET PUBLIC EVENT ERR] {err}")
     return None
@@ -2234,7 +2246,7 @@ def list_active_public_events() -> list:
 
 
 def update_public_event(event_id: str, updates: dict) -> bool:
-    """Atualiza campos de um evento público."""
+    """Atualiza campos de um evento público com suporte a fallback de schema."""
     conn = get_service_db_connection() or get_db_connection()
     if not conn or not updates:
         return False
@@ -2243,6 +2255,26 @@ def update_public_event(event_id: str, updates: dict) -> bool:
         return True
     except Exception as err:
         print(f"[UPDATE PUBLIC EVENT ERR] {err}")
+        # Fallback gracioso caso a coluna pin_acesso não exista fisicamente no schema
+        if 'pin_acesso' in updates:
+            pin_val = updates.pop('pin_acesso', None)
+            try:
+                import json
+                curr = get_public_event(event_id) or {}
+                raw_tpl = curr.get('email_template') or ''
+                meta = {}
+                if raw_tpl.startswith('{') and raw_tpl.endswith('}'):
+                    try:
+                        meta = json.loads(raw_tpl)
+                    except Exception:
+                        pass
+                meta['pin_acesso'] = pin_val
+                updates['email_template'] = json.dumps(meta)
+                conn.table('eventos_publicos').update(updates).eq('id', event_id).execute()
+                print(f"[UPDATE PUBLIC EVENT] ✅ pin_acesso ({pin_val}) salvo com sucesso via metadata!")
+                return True
+            except Exception as e_fb:
+                print(f"[UPDATE PUBLIC EVENT FALLBACK ERR] {e_fb}")
         return False
 
 

@@ -844,16 +844,16 @@ def render_page(evento_id: str = None, **kwargs):
 
             # ABAS EM LINHA ÚNICA HORIZONTAL (SEM QUEBRA DE LINHA)
             with ui.tabs().props('dense no-caps inline-label mobile-arrows').classes('w-full text-cyan-3 border-b border-cyan-500/20 q-mb-md') as tabs_p:
-                t_cfg = ui.tab('cfg', label='⚙️ 1. Configuração', icon='settings').classes('px-3')
-                t_proc = ui.tab('proc', label='🚀 2. Upload & IA (GPU)', icon='memory').classes('px-3 font-bold text-amber-4')
-                t_cur = ui.tab('cur', label='📷 3. Curadoria GERAL', icon='collections').classes('px-3')
-                t_guest = ui.tab('guest', label='👥 4. Convidados & Entregas', icon='people').classes('px-3')
-                t_qr = ui.tab('qr', label='📱 5. QR Code & Divulgação', icon='qr_code').classes('px-3')
+                ui.tab('cfg', label='⚙️ 1. Configuração', icon='settings').classes('px-3')
+                ui.tab('proc', label='🚀 2. Upload & IA (GPU)', icon='memory').classes('px-3 font-bold text-amber-4')
+                ui.tab('cur', label='📷 3. Curadoria GERAL', icon='collections').classes('px-3')
+                ui.tab('guest', label='👥 4. Convidados & Entregas', icon='people').classes('px-3')
+                ui.tab('qr', label='📱 5. QR Code & Divulgação', icon='qr_code').classes('px-3')
 
-            with ui.tab_panels(tabs_p, value=t_proc).classes('w-full bg-transparent p-0'):
+            with ui.tab_panels(tabs_p, value='proc').classes('w-full bg-transparent p-0'):
                 
                 # ── ETAPA 1: CONFIGURAÇÃO ──
-                with ui.tab_panel(t_cfg).classes('w-full p-2 gap-4'):
+                with ui.tab_panel('cfg').classes('w-full p-2 gap-4'):
                     with ui.grid().classes('w-full grid-cols-1 sm:grid-cols-2 gap-4'):
                         with ui.card().classes('p-4 bg-slate-950/80 border border-slate-800 rounded-2xl gap-3'):
                             ui.label('Parâmetros de Operação & Acesso').classes('text-xs font-bold text-cyan')
@@ -883,13 +883,16 @@ def render_page(evento_id: str = None, **kwargs):
                             'watermark_text': (wm_input.value or '').strip(),
                             'banner_url': (banner_input.value or '').strip() or None,
                         }
-                        await asyncio.to_thread(update_public_event, slug, novos_dados)
-                        ui.notify('✅ Configurações do Portal salvas com sucesso!', color='positive')
+                        ok = await asyncio.to_thread(update_public_event, slug, novos_dados)
+                        if ok:
+                            ui.notify('✅ Configurações e PIN do Portal salvos com sucesso!', color='positive')
+                        else:
+                            ui.notify('❌ Erro ao salvar configurações.', color='negative')
 
                     ui.button('💾 Salvar Configurações', icon='save', on_click=salvar_configuracoes).props('unelevated color=cyan text-color=black bold w-full').classes('h-11 rounded-xl q-mt-sm')
 
                 # ── ETAPA 2: UPLOAD & PROCESSAMENTO IA (CENTRAL DE HARDWARE E LIVE MONITOR) ──
-                with ui.tab_panel(t_proc).classes('w-full p-2 gap-4'):
+                with ui.tab_panel('proc').classes('w-full p-2 gap-4'):
                     
                     # 1. CARD DE DIAGNÓSTICO DE HARDWARE & IA
                     with ui.card().classes('w-full bg-slate-950/90 border border-cyan-500/30 p-4 rounded-2xl gap-3 shadow-lg'):
@@ -1052,7 +1055,7 @@ def render_page(evento_id: str = None, **kwargs):
                     render_watcher_panel()
 
                 # ── ETAPA 3: CURADORIA GERAL ──
-                with ui.tab_panel(t_cur).classes('w-full p-2 gap-4'):
+                with ui.tab_panel('cur').classes('w-full p-2 gap-4'):
                     with ui.card().classes('w-full bg-slate-950/80 border border-slate-800 rounded-2xl p-6 text-center items-center gap-3'):
                         ui.icon('photo_library', size='3.5rem', color='cyan-4')
                         ui.label('Subpasta GERAL no Google Drive').classes('text-base font-bold text-white')
@@ -1064,7 +1067,7 @@ def render_page(evento_id: str = None, **kwargs):
                             ui.label('Subpasta GERAL não encontrada. Crie a estrutura oficial primeiro na opção "Vincular/Criar Pasta".').classes('text-xs text-amber-4')
 
                 # ── ETAPA 4: CONVIDADOS & ENTREGAS ──
-                with ui.tab_panel(t_guest).classes('w-full p-2 gap-4'):
+                with ui.tab_panel('guest').classes('w-full p-2 gap-4'):
                     metrics = get_portal_analytics_summary(slug)
                     profiles = get_guest_profiles_for_event(slug)
                     deliveries = get_guest_deliveries_for_event(slug)
@@ -1106,7 +1109,7 @@ def render_page(evento_id: str = None, **kwargs):
                                             ui.label(d_time).classes('text-grey-5 text-[10px]')
 
                 # ── ETAPA 5: QR CODE & DIVULGAÇÃO ──
-                with ui.tab_panel(t_qr).classes('w-full p-2 gap-4 items-center text-center'):
+                with ui.tab_panel('qr').classes('w-full p-2 gap-4 items-center text-center'):
                     with ui.column().classes('w-full items-center gap-3 py-2'):
                         ui.image(qr_b64).classes('w-52 h-52 rounded-2xl border-2 border-amber-500/40 p-2 bg-white shadow-2xl')
                         ui.label(portal_url).classes('text-xs font-mono text-cyan-3 font-bold bg-black/60 px-3 py-1.5 rounded-lg border border-white/10')
