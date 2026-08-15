@@ -184,17 +184,17 @@ def render_page(current_user=None):
                 # Indicador de Status do Jarvis
                 with ui.row().classes('items-center gap-2 q-mt-xs'):
                     ui.element('div').classes('w-2 h-2 rounded-full bg-emerald-400 animate-ping')
-                    ui.label('Escuta de Palavra-Chave Ativa: Diga "Jarvis" ou clique para falar').id('jarvisStatusLabel').classes('text-xs text-grey-3 font-mono')
+                    ui.label('Escuta de Palavra-Chave Ativa: Diga "Jarvis" ou clique para falar').props('id=jarvisStatusLabel').classes('text-xs text-grey-3 font-mono')
 
                 # Campo Transcrição em Tempo Real
                 with ui.column().classes('w-full q-mt-md gap-2'):
                     with ui.card().classes('w-full p-3 rounded-lg no-shadow').style('background: rgba(4, 13, 26, 0.8); border: 1px solid rgba(0,229,255,0.2);'):
                         ui.label('🗣️ O QUE VOCÊ FALOU:').classes('text-[10px] text-grey-5 font-bold')
-                        ui.label('Aguardando sua voz...').id('userTranscriptText').classes('text-sm text-cyan font-mono min-h-[24px]')
+                        ui.label('Aguardando sua voz...').props('id=userTranscriptText').classes('text-sm text-cyan font-mono min-h-[24px]')
                     
                     with ui.card().classes('w-full p-3 rounded-lg no-shadow').style('background: rgba(4, 13, 26, 0.8); border: 1px solid rgba(0,255,136,0.2);'):
                         ui.label('🤖 RESPOSTA DO JARVIS:').classes('text-[10px] text-grey-5 font-bold')
-                        ui.label('Sistemas prontos, Chefe. Como posso ajudar?').id('jarvisResponseText').classes('text-sm text-emerald-400 font-mono min-h-[30px]')
+                        ui.label('Sistemas prontos, Chefe. Como posso ajudar?').props('id=jarvisResponseText').classes('text-sm text-emerald-400 font-mono min-h-[30px]')
 
                 # Botões de Ação Rápida por Voz
                 ui.label('💡 SUGESTÕES DE COMANDOS DE VOZ:').classes('text-[11px] text-grey-4 font-bold q-mt-md')
