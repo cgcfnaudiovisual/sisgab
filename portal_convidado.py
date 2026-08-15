@@ -33,6 +33,31 @@ import drive_service
 
 # Cache em memória da matriz de embeddings por evento
 _EVENT_EMBEDDINGS_CACHE = {}
+_EVENT_GERAL_PHOTOS_CACHE = {}
+
+def _get_geral_photos(folder_id: str) -> list[dict]:
+    """Retorna a lista de fotos da pasta geral do evento com cache em RAM por 1 hora."""
+    if not folder_id:
+        return []
+    now = time.time()
+    if folder_id in _EVENT_GERAL_PHOTOS_CACHE:
+        c = _EVENT_GERAL_PHOTOS_CACHE[folder_id]
+        if now - c['time'] < 3600:
+            return c['photos']
+    try:
+        t0 = time.time()
+        files = drive_service.list_files(folder_id, page_size=5000)
+        photos = [
+            {'drive_file_id': f['id'], 'drive_link': f.get('webViewLink'), 'filename': f.get('name', 'foto.jpg'), 'thumbnailLink': f.get('thumbnailLink')}
+            for f in files
+        ] if files else []
+        _EVENT_GERAL_PHOTOS_CACHE[folder_id] = {'photos': photos, 'time': now}
+        print(f"[PORTAL_DRIVE] ☁️ {len(photos)} fotos listadas do Drive em {time.time()-t0:.2f}s (cache criado)")
+        return photos
+    except Exception as e:
+        print(f"[PORTAL_DRIVE] Erro ao listar Drive: {e}")
+        return []
+
 
 # ── SINGLETON DO MOTOR INSIGHTFACE (inicializado UMA vez, reutilizado sempre) ──
 _FACE_APP_SINGLETON = None
@@ -278,10 +303,6 @@ def render_page(event_id: str):
         'per_page': 60,
     }
 
-    # Pré-aquece SIMULTANEAMENTE: motor de IA + matriz de embeddings do evento
-    asyncio.create_task(asyncio.to_thread(_get_face_app))
-    asyncio.create_task(asyncio.to_thread(_get_event_matrix, event_id))
-
     # Dados do evento
     nome_evento = event.get('nome', 'Evento Oficial')
     local_evento = event.get('local', 'Gabinete do CGCFN')
@@ -298,6 +319,12 @@ def render_page(event_id: str):
 
     threshold_match = float(event.get('threshold_match') or 0.40)
     drive_geral_id = event.get('drive_geral_folder_id') or event.get('drive_folder_id')
+
+    # Pré-aquece SIMULTANEAMENTE: motor de IA + matriz de embeddings do evento + fotos gerais do Drive
+    asyncio.create_task(asyncio.to_thread(_get_face_app))
+    asyncio.create_task(asyncio.to_thread(_get_event_matrix, event_id))
+    if drive_geral_id:
+        asyncio.create_task(asyncio.to_thread(_get_geral_photos, drive_geral_id))
 
     # Container principal — ocupa toda a tela
     with ui.column().classes('w-full min-h-screen items-center justify-start p-2 sm:p-4 bg-slate-950 text-white').style('font-family: "Outfit", sans-serif;'):
@@ -718,12 +745,7 @@ def render_page(event_id: str):
 
                 try:
                     if not guest_state['geral_photos']:
-                        files = drive_service.list_files(folder_id, page_size=5000)
-                        if files:
-                            guest_state['geral_photos'] = [
-                                {'drive_file_id': f['id'], 'drive_link': f.get('webViewLink'), 'filename': f.get('name', 'foto.jpg'), 'thumbnailLink': f.get('thumbnailLink')}
-                                for f in files
-                            ]
+                        guest_state['geral_photos'] = _get_geral_photos(folder_id)
 
                     fotos = guest_state['geral_photos']
                     if not fotos:
@@ -911,7 +933,10 @@ def render_page(event_id: str):
 
             # Auto-executa match se já houver selfies salvas na sessão persistente
             if guest_state['selfie_embeddings']:
-                asyncio.create_task(execute_matching())
+                async def auto_match_on_load():
+                    await execute_matching()
+                    refresh_ui()
+                asyncio.create_task(auto_match_on_load())
 
             # Inicializa a primeira renderização
             refresh_ui()
