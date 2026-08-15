@@ -82,9 +82,9 @@ def salvar_demanda_drive_link(demanda_id: int, titulo_evento: str, drive_url: st
     # 1. Salvar tag resiliente [DRIVE: url] no campo autoridades de demandas_comunicacao
     if demanda_id:
         try:
-            res = db.table('demandas_comunicacao').select('autoridades, observacoes').eq('id', demanda_id).execute()
+            res = db.table('demandas_comunicacao').select('autoridades').eq('id', demanda_id).execute()
             if res.data:
-                current_obs = str(res.data[0].get('autoridades') or res.data[0].get('observacoes') or '')
+                current_obs = str(res.data[0].get('autoridades') or '')
                 import re
                 clean_obs = re.sub(r'\[DRIVE:.*?\]', '', current_obs).strip()
                 new_obs = f"{clean_obs} [DRIVE: {url}]".strip()
@@ -2335,7 +2335,7 @@ def count_event_embeddings(event_id: str) -> int:
 # --- Perfis Faciais de Convidados ---
 
 def save_guest_face_profile(event_id: str, session_id: str, embeddings: list,
-                             email: str = None, expira_dias: int = 30) -> int | None:
+                             email: str = None, nome: str = None, expira_dias: int = 30) -> int | None:
     """Salva o perfil facial de um convidado (1-3 embeddings). Retorna o ID ou None."""
     conn = get_service_db_connection() or get_db_connection()
     if not conn:

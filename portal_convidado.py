@@ -6,9 +6,11 @@ Acesso via rota dinâmica /evento/{id_evento}.
 
 import os
 import sys
+import io
 import time
 import json
 import base64
+import zipfile
 import asyncio
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +25,8 @@ from database import (
     save_guest_delivery,
     log_portal_analytics,
     send_real_email_smtp,
+    get_service_db_connection,
+    get_db_connection,
 )
 import drive_service
 
@@ -142,13 +146,13 @@ def render_page(event_id: str):
         .q-uploader__header { display: none !important; }
         .q-uploader__list { display: none !important; }
         .q-uploader { background: transparent !important; border: none !important; box-shadow: none !important; width: 100% !important; min-height: unset !important; }
+        .photo-card-selected { border: 2px solid #00e5ff !important; box-shadow: 0 0 15px rgba(0,229,255,0.4) !important; }
     </style>
     <script>
     window.processPortalImage = function(input) {
         if (!input.files || !input.files[0]) return;
         const file = input.files[0];
         
-        // Notifica início de leitura
         const reader = new FileReader();
         reader.onload = function(e) {
             const img = new Image();
@@ -171,10 +175,9 @@ def render_page(event_id: str):
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, width, height);
                 
-                // Converte para JPEG 85% (~150KB-300KB)
                 const b64 = canvas.toDataURL('image/jpeg', 0.85);
                 emitEvent('portal_selfie_ready', b64);
-                input.value = ''; // Limpa para permitir nova seleção
+                input.value = '';
             };
             img.src = e.target.result;
         };
@@ -191,12 +194,16 @@ def render_page(event_id: str):
     
     log_portal_analytics(event_id, 'acesso', session_id=session_id)
 
-    # Estado local da página do convidado
+    # Estado local persistente da sessão do convidado
+    saved_selfies = app.storage.user.get(f'portal_embs_{event_id}', [])
     guest_state = {
-        'selfie_embeddings': [],
+        'selfie_embeddings': saved_selfies or [],
         'matched_photos': [],
         'geral_photos': [],
-        'has_searched': False,
+        'selected_fids': set(),
+        'has_searched': bool(saved_selfies),
+        'guest_name': app.storage.user.get('portal_guest_name', ''),
+        'guest_email': app.storage.user.get('portal_guest_email', ''),
         'rate_limit_count': 0,
         'last_search_time': 0,
     }
@@ -219,8 +226,8 @@ def render_page(event_id: str):
     threshold_match = float(event.get('threshold_match') or 0.45)
     drive_geral_id = event.get('drive_geral_folder_id') or event.get('drive_folder_id')
 
-    # Container principal da página (Mobile-First, Acessível, Alto Contraste)
-    with ui.column().classes('w-full min-h-screen items-center justify-start p-2 sm:p-6 bg-slate-950 text-white').style('font-family: "Outfit", sans-serif;'):
+    # Container principal responsivo que PREENCHE A TELA no PC e se adapta no mobile
+    with ui.column().classes('w-full min-h-screen items-center justify-start p-2 sm:p-6 lg:p-8 bg-slate-950 text-white').style('font-family: "Outfit", sans-serif;'):
         
         # Inputs HTML ocultos para Câmera e Galeria
         ui.html('''
@@ -228,8 +235,8 @@ def render_page(event_id: str):
             <input type="file" id="portal_gallery_input" accept="image/*" style="display:none;" onchange="window.processPortalImage(this)" />
         ''')
 
-        # ── HERO CARD PRINCIPAL ───────────────────────────────────────────────
-        with ui.card().classes('w-full max-w-3xl bg-slate-900/95 border-2 border-amber-500/30 rounded-3xl shadow-2xl overflow-hidden p-0').style('box-shadow: 0 0 50px rgba(245, 158, 11, 0.15);'):
+        # ── HERO CARD PRINCIPAL RESPONSIVO (max-w-6xl) ────────────────────────
+        with ui.card().classes('w-full max-w-6xl bg-slate-900/95 border-2 border-amber-500/30 rounded-3xl shadow-2xl overflow-hidden p-0').style('box-shadow: 0 0 50px rgba(245, 158, 11, 0.15);'):
 
             # Banner do Evento / Cabeçalho Institucional
             if banner_url and len(banner_url) > 10 and banner_url != 'assets/brasao_cgcfn.png':
@@ -237,30 +244,30 @@ def render_page(event_id: str):
             else:
                 bg_header = 'background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);'
 
-            with ui.element('div').classes('w-full relative min-h-[160px] flex items-center justify-center text-center p-6').style(bg_header):
-                with ui.column().classes('w-full items-center gap-1 z-10'):
-                    ui.image('assets/brasao_cgcfn.png').style('width: 68px; height: auto; filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.4));')
-                    ui.label('MARINHA DO BRASIL').classes('text-xs font-black text-amber-4 tracking-[4px] uppercase q-mt-xs')
-                    ui.label('GABINETE DO COMANDANTE-GERAL DO CORPO DE FUZILEIROS NAVAIS').classes('text-[10px] font-bold text-cyan-3 tracking-[2px] uppercase opacity-90')
+            with ui.element('div').classes('w-full relative min-h-[160px] sm:min-h-[200px] flex items-center justify-center text-center p-6').style(bg_header):
+                with ui.column().classes('w-full items-center gap-1.5 z-10'):
+                    ui.image('assets/brasao_cgcfn.png').style('width: 76px; height: auto; filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.5));')
+                    ui.label('MARINHA DO BRASIL').classes('text-xs sm:text-sm font-black text-amber-4 tracking-[4px] uppercase q-mt-xs')
+                    ui.label('GABINETE DO COMANDANTE-GERAL DO CORPO DE FUZILEIROS NAVAIS').classes('text-[10px] sm:text-xs font-bold text-cyan-3 tracking-[2px] uppercase opacity-90')
 
             ui.separator().style('background: linear-gradient(90deg, transparent, rgba(245, 158, 11, 0.5), transparent); height: 2px;')
 
             # Título e Detalhes do Evento
-            with ui.column().classes('w-full p-4 sm:p-6 items-center text-center gap-2'):
-                ui.label(nome_evento.upper()).classes('text-xl sm:text-2xl font-black text-white tracking-wide leading-tight')
+            with ui.column().classes('w-full p-4 sm:p-8 items-center text-center gap-2'):
+                ui.label(nome_evento.upper()).classes('text-xl sm:text-3xl font-black text-white tracking-wide leading-tight')
                 
-                with ui.row().classes('items-center justify-center gap-4 text-xs sm:text-sm text-grey-4'):
+                with ui.row().classes('items-center justify-center gap-6 text-xs sm:text-sm text-grey-4 flex-wrap'):
                     if data_formatada:
-                        with ui.row().classes('items-center gap-1'):
-                            ui.icon('calendar_today', size='1.1rem', color='amber-4')
+                        with ui.row().classes('items-center gap-1.5'):
+                            ui.icon('calendar_today', size='1.2rem', color='amber-4')
                             ui.label(data_formatada).classes('font-bold text-white')
                     if local_evento:
-                        with ui.row().classes('items-center gap-1'):
-                            ui.icon('place', size='1.1rem', color='cyan-4')
+                        with ui.row().classes('items-center gap-1.5'):
+                            ui.icon('place', size='1.2rem', color='cyan-4')
                             ui.label(local_evento).classes('font-medium text-grey-3')
 
             # ── ÁREA DINÂMICA DE CONTEÚDO ─────────────────────────────────────
-            content_container = ui.column().classes('w-full p-4 sm:p-6 gap-6')
+            content_container = ui.column().classes('w-full p-4 sm:p-8 gap-6')
 
             def refresh_ui():
                 content_container.clear()
@@ -301,23 +308,32 @@ def render_page(event_id: str):
                 if len(guest_state['selfie_embeddings']) > 3:
                     guest_state['selfie_embeddings'] = guest_state['selfie_embeddings'][-3:]
 
-                # Registra perfil anônimo temporário no banco
-                save_guest_face_profile(event_id, session_id, guest_state['selfie_embeddings'])
+                # Persiste na sessão para recuperação automática em caso de queda de conexão
+                app.storage.user[f'portal_embs_{event_id}'] = guest_state['selfie_embeddings']
+
+                # Registra perfil no banco
+                save_guest_face_profile(
+                    event_id, session_id, guest_state['selfie_embeddings'],
+                    nome=guest_state['guest_name'], email=guest_state['guest_email']
+                )
                 log_portal_analytics(event_id, 'selfie', session_id=session_id)
 
                 # Executa match contra a matriz do evento
+                await execute_matching()
+
+                loading_dialog.close()
+                refresh_ui()
+
+            async def execute_matching():
                 matrix, records = await asyncio.to_thread(_get_event_matrix, event_id)
-                
                 matched_items = []
-                if matrix.shape[0] > 0:
-                    # Multi-vetor max strategy
+                if matrix.shape[0] > 0 and guest_state['selfie_embeddings']:
                     all_scores = np.zeros(matrix.shape[0], dtype=np.float32)
                     for s_emb in guest_state['selfie_embeddings']:
                         s_vec = np.array(s_emb, dtype=np.float32)
                         scores = matrix @ s_vec
                         all_scores = np.maximum(all_scores, scores)
 
-                    # Filtra por threshold e remove duplicatas de foto
                     seen_fids = set()
                     for idx in np.argsort(-all_scores):
                         score = float(all_scores[idx])
@@ -340,11 +356,6 @@ def render_page(event_id: str):
                 if matched_items:
                     log_portal_analytics(event_id, 'match', session_id=session_id, metadata={'count': len(matched_items)})
                     ui.notify(f"🎉 Encontramos {len(matched_items)} foto(s) sua(s) no evento!", color='positive', timeout=4000)
-                else:
-                    ui.notify("Biometria registrada! Você pode ver a galeria oficial abaixo.", color='info', timeout=4000)
-
-                loading_dialog.close()
-                refresh_ui()
 
             # Listener do evento JS emitido pelo canvas resizer
             async def on_selfie_b64_received(e):
@@ -359,107 +370,190 @@ def render_page(event_id: str):
 
             ui.on('portal_selfie_ready', on_selfie_b64_received)
 
-            # Handler alternativo para upload direto caso o usuário use
-            async def handle_direct_upload(e):
-                file_content = e.content.read()
-                await process_image_bytes(file_content)
-
             # ── RENDERIZAÇÃO DO CONTEÚDO ──────────────────────────────────────
             def render_portal_content():
                 num_selfies = len(guest_state['selfie_embeddings'])
 
-                # 1. SEÇÃO DE REGISTRO FACIAL / SELFIE COM 2 OPÇÕES CLARAS
-                with ui.card().classes('w-full bg-slate-950/90 border border-cyan-500/30 rounded-2xl p-4 sm:p-6 items-center text-center gap-3 shadow-xl'):
+                # 1. SEÇÃO DE REGISTRO FACIAL / SELFIE ULTRA-MODERNA
+                with ui.card().classes('w-full bg-slate-950/90 border border-cyan-500/30 rounded-3xl p-6 sm:p-8 items-center text-center gap-4 shadow-2xl backdrop-blur-xl'):
                     
                     if num_selfies == 0:
-                        ui.icon('face_retouching_natural', size='3.2rem', color='cyan-4')
-                        ui.label('📸 ENCONTRE SUAS FOTOS DO EVENTO').classes('text-lg sm:text-xl font-black text-white tracking-wide')
-                        ui.label('Tire uma selfie rápida ou anexe uma foto do seu rosto para localizar suas fotos automaticamente.').classes('text-xs sm:text-sm text-grey-3 max-w-md')
+                        ui.icon('face_retouching_natural', size='3.5rem', color='cyan-4')
+                        ui.label('📸 ENCONTRE SUAS FOTOS DO EVENTO').classes('text-xl sm:text-2xl font-black text-white tracking-wide')
+                        ui.label('Tire uma selfie ou escolha uma foto do seu rosto para localizarmos você em todas as fotos do evento instantaneamente.').classes('text-xs sm:text-sm text-grey-3 max-w-lg leading-relaxed')
                     else:
-                        ui.icon('check_circle', size='2.8rem', color='green-4')
-                        ui.label(f"✅ {num_selfies} de 3 fotos registradas").classes('text-base sm:text-lg font-bold text-green-4')
-                        ui.label('Sua biometria foi identificada com sucesso! Você pode adicionar mais uma foto para refinar ou conferir os resultados abaixo.').classes('text-xs text-grey-3 max-w-md')
+                        ui.icon('check_circle', size='3rem', color='green-4')
+                        ui.label(f"✅ Biometria Ativa ({num_selfies} foto{'s' if num_selfies>1 else ''} registrada{'s' if num_selfies>1 else ''})").classes('text-lg sm:text-xl font-bold text-green-4')
+                        ui.label('Sua identificação facial está ativa nesta sessão. Você pode adicionar mais uma foto para refinar ou conferir seus resultados abaixo.').classes('text-xs sm:text-sm text-grey-3 max-w-lg')
 
-                    # Dicas visuais amigáveis (Acessibilidade para todas as idades)
-                    with ui.row().classes('w-full justify-center gap-3 sm:gap-6 py-1 text-[11px] sm:text-xs text-grey-3'):
-                        with ui.row().classes('items-center gap-1'):
-                            ui.label('☀️').classes('text-sm')
+                    # Dicas visuais amigáveis
+                    with ui.row().classes('w-full justify-center gap-4 sm:gap-8 py-2 text-xs text-grey-3'):
+                        with ui.row().classes('items-center gap-1.5'):
+                            ui.label('☀️').classes('text-base')
                             ui.label('Boa luz')
-                        with ui.row().classes('items-center gap-1'):
-                            ui.label('👤').classes('text-sm')
+                        with ui.row().classes('items-center gap-1.5'):
+                            ui.label('👤').classes('text-base')
                             ui.label('Olhe de frente')
-                        with ui.row().classes('items-center gap-1'):
-                            ui.label('🕶️').classes('text-sm')
+                        with ui.row().classes('items-center gap-1.5'):
+                            ui.label('🕶️').classes('text-base')
                             ui.label('Sem óculos escuros')
 
-                    # BOTÕES DUPLOS DE AÇÃO (Câmera + Galeria de Arquivos) — Área de toque WCAG >= 56px
-                    with ui.column().classes('w-full max-w-md gap-3 q-mt-xs'):
-                        
-                        # Opção 1: Câmera Nativa
-                        btn_cam_label = '📸 TIRAR SELFIE NA HORA' if num_selfies == 0 else '📸 TIRAR OUTRA SELFIE (CÂMERA)'
+                    # BOTÕES DUPLOS DE AÇÃO (Câmera + Galeria)
+                    with ui.row().classes('w-full max-w-xl justify-center gap-3 q-mt-xs flex-wrap'):
+                        btn_cam_label = '📸 TIRAR SELFIE COM A CÂMERA' if num_selfies == 0 else '📸 TIRAR OUTRA SELFIE'
                         ui.button(
                             btn_cam_label,
                             icon='photo_camera',
                             on_click=lambda: ui.run_javascript("document.getElementById('portal_camera_input').click()")
-                        ).props('unelevated color=cyan-8 text-color=white no-caps').classes('w-full h-14 text-sm sm:text-base font-black tracking-wide rounded-2xl shadow-lg cyber-glow')
+                        ).props('unelevated color=cyan-8 text-color=white no-caps').classes('flex-1 min-w-[240px] h-14 text-xs sm:text-sm font-black tracking-wide rounded-2xl shadow-lg cyber-glow hover:brightness-110')
 
-                        # Opção 2: Anexar dos Arquivos / Galeria
-                        btn_gal_label = '📁 ESCOLHER FOTO DA GALERIA' if num_selfies == 0 else '📁 ANEXAR OUTRO ARQUIVO'
+                        btn_gal_label = '📁 ESCOLHER FOTO DA GALERIA' if num_selfies == 0 else '📁 ANEXAR OUTRA FOTO'
                         ui.button(
                             btn_gal_label,
                             icon='perm_media',
                             on_click=lambda: ui.run_javascript("document.getElementById('portal_gallery_input').click()")
-                        ).props('unelevated color=amber-9 text-color=black no-caps').classes('w-full h-13 text-sm font-bold tracking-wide rounded-2xl shadow-md')
+                        ).props('unelevated color=amber-9 text-color=black no-caps').classes('flex-1 min-w-[240px] h-14 text-xs sm:text-sm font-black tracking-wide rounded-2xl shadow-md hover:brightness-110')
 
-                    ui.label('🔒 Sua foto é processada em memória e descartada imediatamente.').classes('text-[10px] text-grey-5 q-mt-xs')
+                    if num_selfies > 0:
+                        def reset_selfies():
+                            guest_state['selfie_embeddings'] = []
+                            guest_state['matched_photos'] = []
+                            guest_state['has_searched'] = False
+                            app.storage.user[f'portal_embs_{event_id}'] = []
+                            ui.notify('Biometria limpa. Você pode registrar outra selfie.', color='info')
+                            refresh_ui()
 
-                # 2. SEÇÃO DE FOTOS PESSOAIS ("MAIS FOTOS DO EVENTO") — SILENCIOSA E ELEGANTE
+                        ui.button('Limpar biometria e recomeçar', icon='refresh', on_click=reset_selfies).props('flat dense color=grey-5 size=sm').classes('text-[11px]')
+
+                    ui.label('🔒 Sua foto é processada em memória e descartada imediatamente.').classes('text-[10px] text-grey-5')
+
+                # 2. BARRA DE FERRAMENTAS DE SELEÇÃO & DOWNLOAD EM LOTE
+                render_selection_toolbar()
+
+                # 3. SEÇÃO DE FOTOS PESSOAIS IDENTIFICADAS
                 if guest_state['has_searched'] and guest_state['matched_photos']:
                     with ui.column().classes('w-full gap-3 q-mt-4'):
                         with ui.row().classes('w-full items-center justify-between'):
                             with ui.row().classes('items-center gap-2'):
-                                ui.icon('auto_awesome', size='1.5rem', color='amber-4')
-                                ui.label('📷 SUAS FOTOS NO EVENTO').classes('text-base sm:text-lg font-black text-amber-4 tracking-wide')
-                            ui.badge(f"{len(guest_state['matched_photos'])} fotos encontradas", color='amber-9').classes('text-xs font-bold px-2 py-1')
+                                ui.icon('auto_awesome', size='1.6rem', color='amber-4')
+                                ui.label('📷 SUAS FOTOS IDENTIFICADAS NO EVENTO').classes('text-lg sm:text-xl font-black text-amber-4 tracking-wide')
+                            ui.badge(f"{len(guest_state['matched_photos'])} fotos encontradas", color='amber-9').classes('text-xs font-bold px-2.5 py-1 rounded-lg')
 
-                        # Grade de fotos identificadas
                         render_photo_grid(guest_state['matched_photos'], is_personal=True)
 
-                # 3. SEÇÃO DE FOTOS OFICIAIS DO EVENTO (PASTA GERAL)
-                with ui.column().classes('w-full gap-3 q-mt-4'):
+                # 4. SEÇÃO DE FOTOS OFICIAIS DO EVENTO (PASTA GERAL)
+                with ui.column().classes('w-full gap-3 q-mt-6'):
                     with ui.row().classes('w-full items-center justify-between'):
                         with ui.row().classes('items-center gap-2'):
-                            ui.icon('collections', size='1.5rem', color='cyan-4')
-                            ui.label('📷 GALERIA OFICIAL DO EVENTO').classes('text-base sm:text-lg font-black text-cyan-3 tracking-wide')
-                        ui.label('Fotos oficiais').classes('text-xs text-grey-4')
+                            ui.icon('collections', size='1.6rem', color='cyan-4')
+                            ui.label('📷 GALERIA OFICIAL DO EVENTO').classes('text-lg sm:text-xl font-black text-cyan-3 tracking-wide')
+                        ui.label('Fotos institucionais').classes('text-xs text-grey-4')
 
-                    # Carrega fotos oficiais da pasta GERAL
                     render_official_gallery(drive_geral_id)
 
-                # 4. SEÇÃO DE ENTREGA (DOWNLOAD / E-MAIL / WHATSAPP)
+                # 5. SEÇÃO DE ENTREGA (E-MAIL INSTITUCIONAL & WHATSAPP)
                 render_delivery_section()
 
-            # ── RENDERIZAÇÃO DA GRADE DE FOTOS ────────────────────────────────
-            def render_photo_grid(photos_list: list[dict], is_personal: bool = False):
-                with ui.grid().classes('w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3'):
-                    for p in photos_list:
-                        fid = p.get('drive_file_id') or p.get('id')
-                        thumb_url = f"https://drive.google.com/thumbnail?id={fid}&sz=w500-h500-c"
-                        full_url = p.get('drive_link') or f"https://drive.google.com/file/d/{fid}/view"
+            # ── BARRA DE SELEÇÃO MÚLTIPLA E DOWNLOAD EM LOTE ──────────────────
+            def render_selection_toolbar():
+                all_visible = guest_state['matched_photos'] + guest_state['geral_photos']
+                if not all_visible:
+                    return
 
-                        with ui.card().classes('p-0 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden hover:border-cyan-500/50 transition-all cursor-pointer group relative'):
-                            ui.image(thumb_url).classes('w-full aspect-square object-cover').on('click', lambda u=full_url: open_lightbox(u))
+                selected_count = len(guest_state['selected_fids'])
+
+                with ui.card().classes('w-full bg-slate-950 border border-slate-800 rounded-2xl p-3 sm:p-4 q-mt-2'):
+                    with ui.row().classes('w-full justify-between items-center gap-3 flex-wrap'):
+                        with ui.row().classes('items-center gap-2'):
+                            ui.icon('check_box', color='cyan-4', size='1.3rem')
+                            ui.label(f"Seleção de Fotos: {selected_count} selecionada(s)").classes('text-xs sm:text-sm font-bold text-white')
+
+                        with ui.row().classes('items-center gap-2 flex-wrap'):
+                            def select_all():
+                                for p in all_visible:
+                                    fid = p.get('drive_file_id') or p.get('id')
+                                    if fid: guest_state['selected_fids'].add(fid)
+                                refresh_ui()
+
+                            def clear_selection():
+                                guest_state['selected_fids'].clear()
+                                refresh_ui()
+
+                            ui.button('Selecionar Todas', icon='select_all', on_click=select_all).props('dense outline color=cyan size=sm no-caps').classes('text-xs')
+                            if selected_count > 0:
+                                ui.button('Desmarcar', icon='clear', on_click=clear_selection).props('dense flat color=grey size=sm no-caps').classes('text-xs')
+
+                            # Botão de Download em Lote (ZIP)
+                            async def download_selected_zip():
+                                fids_to_dl = list(guest_state['selected_fids']) if guest_state['selected_fids'] else [p.get('drive_file_id') for p in all_visible]
+                                if not fids_to_dl:
+                                    ui.notify('Nenhuma foto selecionada.', color='warning')
+                                    return
+
+                                n_zip = ui.notify(f"📦 Compactando {len(fids_to_dl)} foto(s) em arquivo ZIP...", color='info', spinner=True, timeout=0)
+                                try:
+                                    def build_zip():
+                                        buf = io.BytesIO()
+                                        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+                                            for idx, fid in enumerate(fids_to_dl):
+                                                img_b = drive_service.download_file(fid)
+                                                if img_b:
+                                                    zf.writestr(f"foto_{idx+1:03d}_{fid}.jpg", img_b)
+                                        buf.seek(0)
+                                        return buf.getvalue()
+
+                                    zip_bytes = await asyncio.to_thread(build_zip)
+                                    log_portal_analytics(event_id, 'download', session_id=session_id, metadata={'count': len(fids_to_dl)})
+                                    ui.download(zip_bytes, f"fotos_{event_id}.zip")
+                                    ui.notify('✅ Download do ZIP iniciado!', color='positive')
+                                except Exception as ex_zip:
+                                    ui.notify(f"Erro ao gerar ZIP: {ex_zip}", color='negative')
+                                finally:
+                                    try: n_zip.dismiss()
+                                    except Exception: pass
+
+                            dl_btn_label = f"📥 Baixar Selecionadas ({selected_count})" if selected_count > 0 else f"📥 Baixar Todas ({len(all_visible)})"
+                            ui.button(dl_btn_label, icon='archive', on_click=download_selected_zip).props('unelevated color=amber-9 text-color=black bold size=sm no-caps').classes('text-xs font-bold rounded-xl shadow')
+
+            # ── GRADE DE FOTOS RESPONSIVA (PC PREENCHE A TELA, CELULAR ADAPTA) ──
+            def render_photo_grid(photos_list: list[dict], is_personal: bool = False):
+                with ui.grid().classes('w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4'):
+                    for idx, p in enumerate(photos_list):
+                        fid = p.get('drive_file_id') or p.get('id')
+                        thumb_url = f"https://drive.google.com/thumbnail?id={fid}&sz=w600-h600-c"
+                        full_url = p.get('drive_link') or f"https://drive.google.com/file/d/{fid}/view"
+                        is_selected = fid in guest_state['selected_fids']
+
+                        card_classes = 'p-0 bg-slate-900 border rounded-2xl overflow-hidden transition-all cursor-pointer group relative shadow-md '
+                        card_classes += 'photo-card-selected border-cyan-400' if is_selected else 'border-slate-800 hover:border-cyan-500/50'
+
+                        with ui.card().classes(card_classes):
+                            # Thumbnail da foto (clique abre lightbox na posição exata)
+                            ui.image(thumb_url).classes('w-full aspect-square object-cover').on(
+                                'click', lambda _, i=idx, l=photos_list: open_full_lightbox(i, l)
+                            )
                             
-                            # Badge discreto de confiança se pessoal
+                            # Checkbox de seleção no canto superior esquerdo
+                            def toggle_select(f=fid):
+                                if f in guest_state['selected_fids']:
+                                    guest_state['selected_fids'].remove(f)
+                                else:
+                                    guest_state['selected_fids'].add(f)
+                                refresh_ui()
+
+                            with ui.element('div').classes('absolute top-2 left-2 z-10').on('click', lambda _, f=fid: toggle_select(f)):
+                                ui.checkbox(value=is_selected, on_change=lambda _, f=fid: toggle_select(f)).props('dark color=cyan dense')
+
+                            # Badge de confiança no canto superior direito
                             if is_personal and p.get('similarity'):
                                 sim_pct = int(p['similarity'] * 100)
-                                with ui.element('div').classes('absolute top-1.5 right-1.5 bg-black/75 px-1.5 py-0.5 rounded text-[9px] font-bold text-amber-3 border border-amber-500/30'):
-                                    ui.label(f"{sim_pct}%")
+                                with ui.element('div').classes('absolute top-2 right-2 bg-black/80 px-2 py-0.5 rounded-full text-[10px] font-black text-amber-3 border border-amber-500/40 backdrop-blur-sm'):
+                                    ui.label(f"{sim_pct}% match")
 
-                            # Botão de visualização/download direto
-                            with ui.row().classes('w-full p-1.5 items-center justify-between bg-black/60 backdrop-blur-sm'):
-                                ui.button(icon='open_in_new', on_click=lambda u=full_url: ui.navigate.to(u, new_tab=True)).props('flat dense size=xs color=grey-4').tooltip('Abrir original no Drive')
-                                ui.button(icon='download', on_click=lambda fid=fid: download_single(fid)).props('flat dense size=xs color=cyan-4').tooltip('Baixar foto')
+                            # Barra de ações na base do card
+                            with ui.row().classes('w-full p-2 items-center justify-between bg-black/75 backdrop-blur-sm'):
+                                ui.button(icon='fullscreen', on_click=lambda _, i=idx, l=photos_list: open_full_lightbox(i, l)).props('flat dense size=xs color=grey-3').tooltip('Ampliar com passador')
+                                ui.button(icon='download', on_click=lambda _, f=fid: download_single(f)).props('flat dense size=xs color=cyan-4').tooltip('Baixar foto')
 
             # ── GALERIA OFICIAL (PASTA GERAL) ─────────────────────────────────
             def render_official_gallery(folder_id: str):
@@ -468,7 +562,7 @@ def render_page(event_id: str):
                     return
 
                 try:
-                    files = drive_service.list_files(folder_id, page_size=24)
+                    files = drive_service.list_files(folder_id, page_size=40)
                     if not files:
                         ui.label('As fotos do evento estão sendo processadas pela equipe de Comunicação Social.').classes('text-xs text-grey-4 italic')
                         return
@@ -479,10 +573,42 @@ def render_page(event_id: str):
                 except Exception as e:
                     ui.label(f"Não foi possível carregar a galeria: {e}").classes('text-xs text-red-4')
 
-            # ── SEÇÃO DE ENTREGA (DOWNLOAD, EMAIL, WHATSAPP) ───────────────────
+            # ── LIGHTBOX AVANÇADO COM PASSADOR ⬅️ ➡️ E TECLADO ──────────────
+            def open_full_lightbox(initial_index: int, photos_list: list[dict]):
+                cur_idx = {'val': initial_index}
+
+                with ui.dialog() as dlg, ui.card().classes('bg-black/95 border border-cyan-500/40 p-2 sm:p-4 items-center rounded-3xl w-[96vw] max-w-5xl max-h-[95vh] overflow-hidden justify-between flex flex-col'):
+                    
+                    # Topo do Lightbox
+                    with ui.row().classes('w-full justify-between items-center p-2 border-b border-white/10'):
+                        counter_label = ui.label(f"Foto {cur_idx['val'] + 1} de {len(photos_list)}").classes('text-xs sm:text-sm font-bold text-cyan-3')
+                        with ui.row().classes('items-center gap-2'):
+                            btn_dl_box = ui.button(icon='download', on_click=lambda: download_single(photos_list[cur_idx['val']]['drive_file_id'])).props('flat dense size=sm color=amber')
+                            ui.button(icon='close', on_click=dlg.close).props('flat round dense text-color=white')
+
+                    # Imagem Central
+                    img_elem = ui.image(f"https://drive.google.com/thumbnail?id={photos_list[cur_idx['val']]['drive_file_id']}&sz=w1600").classes('max-w-full max-h-[72vh] object-contain rounded-2xl my-2')
+
+                    def update_lightbox_img(new_i: int):
+                        if 0 <= new_i < len(photos_list):
+                            cur_idx['val'] = new_i
+                            fid = photos_list[new_i]['drive_file_id']
+                            img_elem.set_source(f"https://drive.google.com/thumbnail?id={fid}&sz=w1600")
+                            counter_label.set_text(f"Foto {cur_idx['val'] + 1} de {len(photos_list)}")
+
+                    # Controles de Navegação (Passador Anterior / Próximo)
+                    with ui.row().classes('w-full justify-between items-center p-2 border-t border-white/10'):
+                        ui.button('⬅️ Anterior', icon='arrow_back', on_click=lambda: update_lightbox_img(cur_idx['val'] - 1)).props('unelevated color=slate-8 text-color=white bold no-caps').classes('px-4 rounded-xl text-xs')
+                        
+                        ui.button('Abrir Original no Drive', icon='open_in_new', on_click=lambda: ui.navigate.to(photos_list[cur_idx['val']].get('drive_link') or f"https://drive.google.com/file/d/{photos_list[cur_idx['val']]['drive_file_id']}/view", new_tab=True)).props('flat dense color=cyan size=sm no-caps').classes('text-xs')
+
+                        ui.button('Próxima ➡️', icon='arrow_forward', on_click=lambda: update_lightbox_img(cur_idx['val'] + 1)).props('unelevated color=cyan-8 text-color=white bold no-caps').classes('px-4 rounded-xl text-xs')
+
+                dlg.open()
+
+            # ── SEÇÃO DE ENTREGA (E-MAIL INSTITUCIONAL & WHATSAPP) ────────────
             def render_delivery_section():
                 all_photos = []
-                # Junta fotos pessoais + gerais
                 seen = set()
                 for p in (guest_state['matched_photos'] + guest_state['geral_photos']):
                     fid = p.get('drive_file_id') or p.get('id')
@@ -490,8 +616,8 @@ def render_page(event_id: str):
                         seen.add(fid)
                         all_photos.append(p)
 
-                with ui.card().classes('w-full bg-slate-950 border-t-2 border-amber-500/30 rounded-2xl p-4 sm:p-6 gap-4 q-mt-4'):
-                    ui.label('📥 RECEBER OU COMPARTILHAR SUAS FOTOS').classes('text-base font-black text-white tracking-wide')
+                with ui.card().classes('w-full bg-slate-950 border-t-2 border-amber-500/30 rounded-3xl p-6 sm:p-8 gap-5 q-mt-6'):
+                    ui.label('📥 RECEBER OU COMPARTILHAR SUAS FOTOS').classes('text-lg font-black text-white tracking-wide')
                     
                     # Botão de Compartilhar no WhatsApp
                     event_url = f"https://sisgab-cgcfn.ddns.net/evento/{event_id}"
@@ -499,17 +625,19 @@ def render_page(event_id: str):
                     whatsapp_url = f"https://api.whatsapp.com/send?text={whatsapp_text.replace(' ', '%20')}"
 
                     with ui.row().classes('w-full items-center gap-3'):
-                        ui.button('📱 Compartilhar no WhatsApp', on_click=lambda: (log_portal_analytics(event_id, 'whatsapp', session_id=session_id), ui.navigate.to(whatsapp_url, new_tab=True))).props('unelevated color=green-8 text-color=white icon=share').classes('flex-1 h-12 text-xs sm:text-sm font-bold rounded-xl')
+                        ui.button('📱 Compartilhar Galeria no WhatsApp', on_click=lambda: (log_portal_analytics(event_id, 'whatsapp', session_id=session_id), ui.navigate.to(whatsapp_url, new_tab=True))).props('unelevated color=green-8 text-color=white icon=share').classes('flex-1 h-13 text-sm font-bold rounded-2xl shadow-lg')
 
-                    # Envio por E-mail Institucional (Template HTML via SMTP)
-                    with ui.column().classes('w-full gap-2 q-mt-2'):
-                        ui.label('Ou receba os links diretos por e-mail:').classes('text-xs text-grey-4')
+                    # Envio por E-mail Institucional com Pré-Cadastro Permanente
+                    with ui.column().classes('w-full gap-3 q-mt-2'):
+                        ui.label('Ou salve seu e-mail para receber fotos automaticamente neste e em futuros eventos:').classes('text-xs text-grey-4')
                         
-                        with ui.row().classes('w-full items-center gap-2'):
-                            email_input = ui.input(placeholder='seu.email@exemplo.com').props('dark outlined dense').classes('flex-1')
+                        with ui.row().classes('w-full items-center gap-3 flex-wrap'):
+                            name_input = ui.input(placeholder='Seu Nome (opcional)', value=guest_state['guest_name']).props('dark outlined dense').classes('w-full sm:w-60')
+                            email_input = ui.input(placeholder='seu.email@exemplo.com', value=guest_state['guest_email']).props('dark outlined dense').classes('flex-1 min-w-[240px]')
                             
                             async def send_email_action():
                                 email_val = (email_input.value or '').strip()
+                                name_val = (name_input.value or '').strip()
                                 if not email_val or '@' not in email_val:
                                     ui.notify('❌ Digite um e-mail válido.', color='warning')
                                     return
@@ -518,8 +646,16 @@ def render_page(event_id: str):
                                     ui.notify('ℹ️ Nenhuma foto para enviar no momento.', color='info')
                                     return
 
-                                # Salva perfil para entrega futura proativa
-                                save_guest_face_profile(event_id, session_id, guest_state['selfie_embeddings'], email=email_val)
+                                guest_state['guest_name'] = name_val
+                                guest_state['guest_email'] = email_val
+                                app.storage.user['portal_guest_name'] = name_val
+                                app.storage.user['portal_guest_email'] = email_val
+
+                                # Salva perfil permanente no banco para histórico multi-evento
+                                save_guest_face_profile(
+                                    event_id, session_id, guest_state['selfie_embeddings'],
+                                    nome=name_val, email=email_val
+                                )
                                 
                                 links_html = ''.join(
                                     f'<p style="margin: 6px 0;">📷 <a href="https://drive.google.com/file/d/{p.get("drive_file_id")}/view" style="color: #0284c7; text-decoration: none; font-weight: bold;">Foto {i+1} — Abrir no Drive</a></p>'
@@ -533,7 +669,7 @@ def render_page(event_id: str):
                                         <p style="color: #38bdf8; margin: 4px 0 0 0; font-size: 11px; font-weight: bold; letter-spacing: 2px;">GABINETE DO COMANDANTE-GERAL DO CORPO DE FUZILEIROS NAVAIS</p>
                                     </div>
                                     <hr style="border: 0; height: 1px; background: #334155; margin: 16px 0;" />
-                                    <p style="font-size: 15px;">Prezado(a) Convidado(a),</p>
+                                    <p style="font-size: 15px;">Prezado(a) <strong>{name_val or 'Convidado(a)'}</strong>,</p>
                                     <p style="font-size: 14px; color: #cbd5e1;">Suas fotos do evento <strong>{nome_evento}</strong> já estão prontas para visualização e download:</p>
                                     <div style="background: #1e293b; padding: 16px; border-radius: 12px; margin: 16px 0;">
                                         {links_html}
@@ -562,25 +698,19 @@ def render_page(event_id: str):
                                     )
                                     save_guest_delivery(event_id, email_val, ','.join(p.get('drive_file_id') for p in all_photos), len(all_photos))
                                     log_portal_analytics(event_id, 'email', session_id=session_id)
-                                    ui.notify('✅ E-mail institucional enviado com sucesso!', color='positive')
-                                    email_input.value = ''
+                                    ui.notify('✅ E-mail institucional enviado com sucesso e perfil salvo!', color='positive')
                                 except Exception as err_mail:
                                     ui.notify(f"❌ Erro ao enviar e-mail: {err_mail}", color='negative')
 
-                            ui.button('📧 Enviar', on_click=send_email_action).props('unelevated color=cyan text-color=black font-bold icon=send').classes('h-10 px-4 rounded-lg')
-
-            # ── LIGHTBOX PARA PREVIEW HD ──────────────────────────────────────
-            def open_lightbox(photo_url: str):
-                with ui.dialog() as dlg, ui.card().classes('bg-black/90 p-2 items-center rounded-2xl max-w-4xl max-h-[90vh] overflow-hidden'):
-                    ui.image(photo_url).classes('max-w-full max-h-[80vh] object-contain rounded-xl')
-                    with ui.row().classes('w-full justify-between items-center p-2'):
-                        ui.button('Fechar', on_click=dlg.close).props('flat color=grey')
-                        ui.button('Abrir no Drive', on_click=lambda: ui.navigate.to(photo_url, new_tab=True)).props('unelevated color=cyan text-color=black size=sm')
-                dlg.open()
+                            ui.button('📧 Enviar Fotos por E-mail', on_click=send_email_action).props('unelevated color=cyan text-color=black font-bold icon=send').classes('h-11 px-6 rounded-xl text-xs')
 
             def download_single(file_id: str):
                 log_portal_analytics(event_id, 'download', session_id=session_id)
                 ui.navigate.to(f"https://drive.google.com/uc?export=download&id={file_id}", new_tab=True)
+
+            # Auto-executa match se já houver selfies salvas na sessão persistente
+            if guest_state['selfie_embeddings']:
+                asyncio.create_task(execute_matching())
 
             # Inicializa a primeira renderização
             refresh_ui()
