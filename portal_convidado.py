@@ -619,12 +619,6 @@ def render_page(event_id: str):
                             with ui.element('div').classes('absolute top-2 left-2 z-10').on('click', lambda _, f=fid: toggle_select(f)):
                                 ui.checkbox(value=is_selected, on_change=lambda _, f=fid: toggle_select(f)).props('dark color=cyan dense')
 
-                            # Badge de confiança no canto superior direito
-                            if is_personal and p.get('similarity'):
-                                sim_pct = int(p['similarity'] * 100)
-                                with ui.element('div').classes('absolute top-2 right-2 bg-black/80 px-2 py-0.5 rounded-full text-[10px] font-black text-amber-3 border border-amber-500/40 backdrop-blur-sm'):
-                                    ui.label(f"{sim_pct}% match")
-
                             # Barra de ações na base do card
                             with ui.row().classes('w-full p-2 items-center justify-between bg-black/75 backdrop-blur-sm'):
                                 ui.button(icon='fullscreen', on_click=lambda _, i=idx, l=photos_list: open_full_lightbox(i, l)).props('flat dense size=xs color=grey-3').tooltip('Ampliar com passador')
@@ -637,7 +631,7 @@ def render_page(event_id: str):
                     return
 
                 try:
-                    files = drive_service.list_files(folder_id, page_size=40)
+                    files = drive_service.list_files(folder_id, page_size=1000)
                     if not files:
                         ui.label('As fotos do evento estão sendo processadas pela equipe de Comunicação Social.').classes('text-xs text-grey-4 italic')
                         return
