@@ -619,10 +619,55 @@ def run_batch(pasta: str, event_id: str, folder_id: str, workers: int, skip_ia: 
 # ============================================================================
 # VALIDAÇÃO E CONFIGURAÇÃO DO EVENTO
 # ============================================================================
+def list_available_events() -> list:
+    """Busca eventos recentes cadastrados para seleção interativa."""
+    events_list = []
+    try:
+        from database import get_db_connection, get_demanda_drive_url
+        db = get_db_connection()
+        if db:
+            # 1. eventos_publicos
+            try:
+                res_pub = db.table('eventos_publicos').select('*').order('data_evento', desc=True).limit(10).execute()
+                for ep in (res_pub.data or []):
+                    events_list.append({
+                        'id': str(ep['id']),
+                        'nome': ep.get('nome', 'Evento Sem Título'),
+                        'data_evento': str(ep.get('data_evento', '')),
+                        'drive_folder_id': ep.get('drive_folder_id'),
+                        'tipo': 'Portal Convidado'
+                    })
+            except Exception:
+                pass
+            
+            # 2. demandas_comunicacao
+            try:
+                res_dem = db.table('demandas_comunicacao').select('*').order('data_evento', desc=True).limit(15).execute()
+                existing_ids = {e['id'] for e in events_list}
+                for dem in (res_dem.data or []):
+                    did = str(dem['id'])
+                    if did not in existing_ids:
+                        import drive_service
+                        d_url = get_demanda_drive_url(dem)
+                        dfid = drive_service.extract_folder_id_from_url(d_url) if d_url else None
+                        events_list.append({
+                            'id': did,
+                            'nome': dem.get('titulo_evento', 'Demanda'),
+                            'data_evento': str(dem.get('data_evento', '')),
+                            'drive_folder_id': dfid,
+                            'tipo': 'Demanda COMSOC'
+                        })
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"  [WARN] Erro ao listar eventos: {e}")
+    return events_list
+
+
 def validate_event(event_id: str) -> dict | None:
     """Valida se o evento existe e retorna seus dados do Supabase."""
     try:
-        from database import get_public_event, get_demanda, get_db_connection
+        from database import get_public_event, get_db_connection, get_demanda_drive_url
         # 1. Busca em eventos_publicos
         event = get_public_event(str(event_id))
         if event:
@@ -638,9 +683,8 @@ def validate_event(event_id: str) -> dict | None:
                 if res.data:
                     d = res.data[0]
                     import drive_service
-                    dfid = d.get('drive_folder_id')
-                    if not dfid and d.get('link_pasta_drive'):
-                        dfid = drive_service.extract_folder_id_from_url(d.get('link_pasta_drive'))
+                    d_url = get_demanda_drive_url(d)
+                    dfid = drive_service.extract_folder_id_from_url(d_url) if d_url else None
                     
                     print(f"  📌 Demanda/Evento Localizado: #{d.get('id')} - {d.get('titulo_evento')}")
                     return {
@@ -698,24 +742,67 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Exemplos:
-  python event_photo_watcher.py --event-id solenidade-ago-2026 --pasta "D:\\FOTOS\\Solenidade"
-  python event_photo_watcher.py --event-id formatura-2026 --pasta "./fotos" --batch-only
-  python event_photo_watcher.py --event-id teste --pasta "./fotos" --skip-ia --workers 4
+  python event_photo_watcher.py --event-id 50 --pasta "F:\\CGCFN\\ENCONTRO VETERANOS\\FOTOS\\EXPORT"
+  python event_photo_watcher.py --interactive
         """
     )
-    parser.add_argument('--event-id', required=True, help='ID do evento público (slug)')
-    parser.add_argument('--pasta', required=True, help='Caminho da pasta local com as fotos')
+    parser.add_argument('--event-id', help='ID do evento público (slug ou número)')
+    parser.add_argument('--pasta', help='Caminho da pasta local com as fotos')
+    parser.add_argument('--drive-folder', help='ID ou link da pasta do Google Drive (opcional)')
     parser.add_argument('--workers', type=int, default=MAX_UPLOAD_WORKERS, help=f'Workers paralelos (padrão: {MAX_UPLOAD_WORKERS})')
     parser.add_argument('--threshold', type=float, default=0.45, help='Threshold de match (padrão: 0.45)')
     parser.add_argument('--batch-only', action='store_true', help='Processa apenas existentes e encerra')
     parser.add_argument('--skip-ia', action='store_true', help='Apenas upload, sem InsightFace')
+    parser.add_argument('--interactive', action='store_true', help='Modo de seleção interativa de eventos')
 
     args = parser.parse_args()
 
+    event_id = args.event_id
+    pasta = args.pasta
+    custom_drive = args.drive_folder
+
+    # ── MODO INTERATIVO (se não forneceu argumentos completos) ──
+    if not event_id or not pasta or args.interactive:
+        print("\n" + "=" * 76)
+        print("  📅 SISGAB — SELEÇÃO DE EVENTOS DISPONÍVEIS NO ACERVO")
+        print("=" * 76)
+        
+        events_list = list_available_events()
+        if events_list:
+            for idx, ev in enumerate(events_list, 1):
+                df_txt = f"☁️ Drive: {ev['drive_folder_id'][:16]}..." if ev.get('drive_folder_id') else "⚠️ Sem Drive vinculado"
+                dt_txt = f"📅 {ev.get('data_evento')}" if ev.get('data_evento') else "📅 ASD"
+                print(f"  [{idx}] #{ev['id']} - {ev['nome']}")
+                print(f"      {dt_txt} | {df_txt} ({ev.get('tipo')})")
+        else:
+            print("  ℹ️ Nenhum evento encontrado na nuvem. Você pode digitar um ID avulso.")
+        
+        print("  [0] Digitar ID ou Link da pasta manualmente")
+        print("-" * 76)
+        
+        default_idx = "1" if events_list else "50"
+        escolha = input(f"\nEscolha o número do evento na lista acima [Padrão: {default_idx}]: ").strip() or default_idx
+        
+        if escolha.isdigit() and 1 <= int(escolha) <= len(events_list):
+            sel_ev = events_list[int(escolha) - 1]
+            event_id = sel_ev['id']
+            if sel_ev.get('drive_folder_id'):
+                custom_drive = sel_ev['drive_folder_id']
+            print(f"✅ Selecionado: #{event_id} - {sel_ev['nome']}")
+        elif escolha == "0":
+            event_id = input("Digite o ID do evento ou link da pasta: ").strip() or "50"
+        else:
+            event_id = escolha
+
+        if not pasta:
+            default_pasta = r"F:\CGCFN\ENCONTRO VETERANOS\FOTOS\EXPORT"
+            pasta_input = input(f"\nDigite o caminho da pasta local com as fotos [Padrão: {default_pasta}]: ").strip()
+            pasta = pasta_input if pasta_input else default_pasta
+
     # Validar pasta
-    pasta = os.path.abspath(args.pasta)
+    pasta = os.path.abspath(pasta)
     if not os.path.isdir(pasta):
-        print(f"❌ Pasta não encontrada: {pasta}")
+        print(f"\n❌ Pasta não encontrada: {pasta}")
         sys.exit(1)
 
     # Inicializar InsightFace (se não --skip-ia)
@@ -726,29 +813,29 @@ Exemplos:
             args.skip_ia = True
 
     # Validar evento no banco
-    event = validate_event(args.event_id)
+    event = validate_event(event_id)
 
     # Garantir pasta no Drive
-    folder_id = ensure_drive_folder(args.event_id, event)
+    folder_id = ensure_drive_folder(event_id, event, custom_drive)
     if not folder_id:
         print("❌ Não foi possível obter/criar a pasta do evento no Google Drive.")
         sys.exit(1)
 
     # Banner
-    print_banner(args.event_id, pasta, args.workers, args.skip_ia)
+    print_banner(event_id, pasta, args.workers, args.skip_ia)
 
     # Pré-carregar fotos já existentes no Google Drive (Modo de Indexação Inteligente)
     preload_drive_folder_files(folder_id)
 
     # Processar
     if args.batch_only:
-        run_batch(pasta, args.event_id, folder_id, args.workers, args.skip_ia)
+        run_batch(pasta, event_id, folder_id, args.workers, args.skip_ia)
     else:
         # Primeiro batch dos existentes, depois monitorar novos
         print("  📦 Processando fotos existentes na pasta...\n")
-        run_batch(pasta, args.event_id, folder_id, args.workers, args.skip_ia)
+        run_batch(pasta, event_id, folder_id, args.workers, args.skip_ia)
         print("  👁️ Iniciando monitoramento de novas fotos...\n")
-        setup_watchdog(pasta, args.event_id, folder_id, args.workers, args.skip_ia)
+        setup_watchdog(pasta, event_id, folder_id, args.workers, args.skip_ia)
 
 
 if __name__ == '__main__':
