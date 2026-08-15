@@ -7,6 +7,13 @@ echo   SISGAB - MOTOR DE IA LOCAL E UPLOAD PARALELO (10 WORKERS)
 echo   Gabinete do CGCFN / Comunicacao Social
 echo ===============================================================================
 echo.
+echo Dica de Eventos Cadastrados:
+echo   [50] ENCONTRO DE VETERANOS (OFICIAIS SUPERIORES) - 875 fotos no Drive
+echo   [34] APRESENTACAO DA BANDA SINFONICA DO CFN
+echo   [54] UM DIA FN E MN
+echo   (Ou cole o Link / ID da Pasta do Google Drive)
+echo.
+echo -------------------------------------------------------------------------------
 
 set /p EVENT_ID="Digite o ID/Numero do Evento [Padrao: 50]: "
 if "%EVENT_ID%"=="" set EVENT_ID=50

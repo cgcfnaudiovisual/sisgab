@@ -620,26 +620,65 @@ def run_batch(pasta: str, event_id: str, folder_id: str, workers: int, skip_ia: 
 # VALIDAÇÃO E CONFIGURAÇÃO DO EVENTO
 # ============================================================================
 def validate_event(event_id: str) -> dict | None:
-    """Valida se o evento existe e retorna seus dados."""
+    """Valida se o evento existe e retorna seus dados do Supabase."""
     try:
-        from database import get_public_event
-        event = get_public_event(event_id)
+        from database import get_public_event, get_demanda, get_db_connection
+        # 1. Busca em eventos_publicos
+        event = get_public_event(str(event_id))
         if event:
+            print(f"  📌 Evento Público Localizado: #{event.get('id')} - {event.get('nome')}")
             return event
-    except Exception:
-        pass
+        
+        # 2. Busca em demandas_comunicacao
+        db = get_db_connection()
+        if db:
+            p_id = int(event_id) if str(event_id).isdigit() else None
+            if p_id:
+                res = db.table('demandas_comunicacao').select('*').eq('id', p_id).execute()
+                if res.data:
+                    d = res.data[0]
+                    import drive_service
+                    dfid = d.get('drive_folder_id')
+                    if not dfid and d.get('link_pasta_drive'):
+                        dfid = drive_service.extract_folder_id_from_url(d.get('link_pasta_drive'))
+                    
+                    print(f"  📌 Demanda/Evento Localizado: #{d.get('id')} - {d.get('titulo_evento')}")
+                    return {
+                        'id': str(d.get('id')),
+                        'nome': d.get('titulo_evento', 'Evento Oficial'),
+                        'data_evento': str(d.get('data_evento', '')),
+                        'drive_folder_id': dfid
+                    }
+    except Exception as ex:
+        print(f"  [WARN] Verificação de banco: {ex}")
 
-    print(f"  ⚠️ Evento '{event_id}' não encontrado no banco. Continuando com configuração local.")
+    print(f"  ℹ️ ID '{event_id}' não associado a evento cadastrado. Usando identificador avulso.")
     return None
 
 
-def ensure_drive_folder(event_id: str, event: dict = None) -> str | None:
+def ensure_drive_folder(event_id: str, event: dict = None, custom_folder: str = None) -> str | None:
     """Garante que a pasta do evento existe no Drive. Retorna folder_id."""
+    import drive_service
+
+    # 1. Pasta customizada passada por argumento
+    if custom_folder:
+        fid = drive_service.extract_folder_id_from_url(custom_folder) or custom_folder
+        print(f"  📂 Pasta Drive especificada: {fid}")
+        return fid
+
+    # 2. Pasta do evento cadastrado
     if event and event.get('drive_folder_id'):
+        print(f"  📂 Pasta Drive vinculada ao evento: {event['drive_folder_id']}")
         return event['drive_folder_id']
 
+    # 3. Se o próprio event_id for um link ou ID do Google Drive (ex: 1cqK3F... ou https://drive.google.com/...)
+    if 'drive.google.com' in str(event_id) or len(str(event_id)) >= 25:
+        fid = drive_service.extract_folder_id_from_url(str(event_id)) or str(event_id)
+        print(f"  📂 Pasta Drive identificada pelo link/ID: {fid}")
+        return fid
+
+    # 4. Busca ou cria pasta no Drive
     try:
-        import drive_service
         folder_id = drive_service.find_or_create_folder(event_id)
         if folder_id:
             print(f"  📂 Pasta Drive: {folder_id}")
