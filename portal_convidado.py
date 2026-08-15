@@ -99,32 +99,46 @@ async def _extract_upload_bytes(e) -> bytes:
 
 
 def _extract_selfie_embedding(image_bytes: bytes) -> tuple[bool, str, np.ndarray | None]:
-    """Extrai o embedding facial 512D da selfie com InsightFace ou evaluate_selfie_quality."""
+    """Extrai o embedding facial 512D da selfie com Pillow/OpenCV e InsightFace."""
+    if not image_bytes:
+        return False, "❌ Imagem vazia ou inválida.", None
+
+    img_bgr = None
     try:
-        import cv2
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        if img is None:
-            return False, "❌ Imagem corrompida ou ilegível.", None
+        from PIL import Image
+        import io
+        pil_img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+        w, h = pil_img.size
+        if max(w, h) > 1280:
+            scale = 1280.0 / max(w, h)
+            pil_img = pil_img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
+        img_rgb = np.array(pil_img)
+        img_bgr = img_rgb[:, :, ::-1].copy()
+    except Exception as e_pil:
+        try:
+            import cv2
+            nparr = np.frombuffer(image_bytes, np.uint8)
+            img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        except Exception:
+            return False, f"❌ Erro ao decodificar imagem: {e_pil}", None
 
-        # Redimensiona para no máximo 1280px para máxima velocidade e economia de RAM
-        h, w = img.shape[:2]
-        if max(h, w) > 1280:
-            scale = 1280.0 / max(h, w)
-            img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+    if img_bgr is None:
+        return False, "❌ Não foi possível carregar a imagem enviada.", None
 
+    try:
+        app_face = None
         try:
             from sisgab_face_worker import init_face_engine
             app_face = init_face_engine()
         except Exception:
-            app_face = None
+            pass
 
         if not app_face:
             from insightface.app import FaceAnalysis
             app_face = FaceAnalysis(name='buffalo_l', allowed_modules=['detection', 'recognition'])
             app_face.prepare(ctx_id=-1, det_size=(320, 320))
 
-        faces = app_face.get(img)
+        faces = app_face.get(img_bgr)
         if not faces:
             return False, "❌ Nenhum rosto detectado na foto. Envie uma foto nítida e bem iluminada.", None
 
@@ -132,13 +146,13 @@ def _extract_selfie_embedding(image_bytes: bytes) -> tuple[bool, str, np.ndarray
             return False, f"❌ Detectamos {len(faces)} rostos. Envie uma foto individual (apenas o seu rosto).", None
 
         face = faces[0]
-        if hasattr(face, 'det_score') and face.det_score < 0.50:
+        if hasattr(face, 'det_score') and face.det_score < 0.45:
             return False, "❌ Rosto pouco nítido ou iluminação fraca. Tente em um ambiente mais claro.", None
 
         return True, "✅ Rosto identificado com sucesso!", face.normed_embedding
 
     except Exception as e:
-        return False, f"❌ Erro ao processar foto: {e}", None
+        return False, f"❌ Erro ao processar biometria: {e}", None
 
 
 def render_page(event_id: str):
