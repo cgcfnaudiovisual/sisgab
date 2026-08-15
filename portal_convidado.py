@@ -31,8 +31,39 @@ from database import (
 )
 import drive_service
 
-# Cache em memória da matriz de embeddings por evento (TTL: 30 segundos)
+# Cache em memória da matriz de embeddings por evento
 _EVENT_EMBEDDINGS_CACHE = {}
+
+# ── SINGLETON DO MOTOR INSIGHTFACE (inicializado UMA vez, reutilizado sempre) ──
+_FACE_APP_SINGLETON = None
+_FACE_APP_LOCK = asyncio.Lock() if False else None  # placeholder; lock criado dinamicamente
+
+
+def _get_face_app():
+    """Retorna o singleton do FaceAnalysis, criando-o na primeira chamada."""
+    global _FACE_APP_SINGLETON
+    if _FACE_APP_SINGLETON is not None:
+        return _FACE_APP_SINGLETON
+    try:
+        from sisgab_face_worker import init_face_engine
+        _FACE_APP_SINGLETON = init_face_engine()
+        if _FACE_APP_SINGLETON:
+            print('[PORTAL_IA] ✅ Motor InsightFace carregado via sisgab_face_worker singleton!')
+            return _FACE_APP_SINGLETON
+    except Exception:
+        pass
+    try:
+        from insightface.app import FaceAnalysis
+        _FACE_APP_SINGLETON = FaceAnalysis(
+            name='buffalo_l',
+            allowed_modules=['detection', 'recognition']
+        )
+        _FACE_APP_SINGLETON.prepare(ctx_id=-1, det_size=(160, 160))  # 160px = rápido para selfies
+        print('[PORTAL_IA] ✅ Motor InsightFace (buffalo_l, det=160px) pronto!')
+    except Exception as e:
+        print(f'[PORTAL_IA] ❌ Falha ao inicializar InsightFace: {e}')
+        _FACE_APP_SINGLETON = None
+    return _FACE_APP_SINGLETON
 
 MESES_PT = {
     1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
@@ -143,19 +174,19 @@ async def _extract_upload_bytes(e) -> bytes:
 
 
 def _extract_selfie_embedding(image_bytes: bytes) -> tuple[bool, str, np.ndarray | None]:
-    """Extrai o embedding facial 512D da selfie com Pillow/OpenCV e InsightFace."""
+    """Extrai o embedding facial 512D da selfie usando o singleton global do motor de IA."""
     if not image_bytes:
         return False, "❌ Imagem vazia ou inválida.", None
 
+    # Decodifica e redimensiona para 640px máx (suficiente para selfie, rápido)
     img_bgr = None
     try:
-        from PIL import Image
-        import io
-        pil_img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+        from PIL import Image as PILImage
+        pil_img = PILImage.open(io.BytesIO(image_bytes)).convert('RGB')
         w, h = pil_img.size
-        if max(w, h) > 1280:
-            scale = 1280.0 / max(w, h)
-            pil_img = pil_img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
+        if max(w, h) > 640:
+            scale = 640.0 / max(w, h)
+            pil_img = pil_img.resize((int(w * scale), int(h * scale)), PILImage.Resampling.LANCZOS)
         img_rgb = np.array(pil_img)
         img_bgr = img_rgb[:, :, ::-1].copy()
     except Exception as e_pil:
@@ -170,28 +201,22 @@ def _extract_selfie_embedding(image_bytes: bytes) -> tuple[bool, str, np.ndarray
         return False, "❌ Não foi possível carregar a imagem enviada.", None
 
     try:
-        app_face = None
-        try:
-            from sisgab_face_worker import init_face_engine
-            app_face = init_face_engine()
-        except Exception:
-            pass
+        app_face = _get_face_app()
+        if app_face is None:
+            return False, "❌ Motor de IA não disponível no momento. Tente novamente em instantes.", None
 
-        if not app_face:
-            from insightface.app import FaceAnalysis
-            app_face = FaceAnalysis(name='buffalo_l', allowed_modules=['detection', 'recognition'])
-            app_face.prepare(ctx_id=-1, det_size=(320, 320))
-
+        t0 = time.time()
         faces = app_face.get(img_bgr)
+        print(f'[PORTAL_IA] 🔍 Detecção facial em {time.time()-t0:.3f}s → {len(faces)} rosto(s)')
+
         if not faces:
-            return False, "❌ Nenhum rosto detectado na foto. Envie uma foto nítida e bem iluminada.", None
+            return False, "❌ Nenhum rosto detectado. Envie uma foto nítida e bem iluminada de frente.", None
 
-        if len(faces) > 1:
-            return False, f"❌ Detectamos {len(faces)} rostos. Envie uma foto individual (apenas o seu rosto).", None
+        # Seleciona o rosto com maior det_score (frente da câmera)
+        face = max(faces, key=lambda f: getattr(f, 'det_score', 0))
 
-        face = faces[0]
-        if hasattr(face, 'det_score') and face.det_score < 0.45:
-            return False, "❌ Rosto pouco nítido ou iluminação fraca. Tente em um ambiente mais claro.", None
+        if hasattr(face, 'det_score') and face.det_score < 0.40:
+            return False, "❌ Rosto pouco nítido ou desfocado. Tente em ambiente mais claro.", None
 
         return True, "✅ Rosto identificado com sucesso!", face.normed_embedding
 
@@ -283,7 +308,8 @@ def render_page(event_id: str):
         'per_page': 60,
     }
 
-    # Pré-aquece a matriz de embeddings do evento em background na RAM
+    # Pré-aquece SIMULTANEAMENTE: motor de IA + matriz de embeddings do evento
+    asyncio.create_task(asyncio.to_thread(_get_face_app))
     asyncio.create_task(asyncio.to_thread(_get_event_matrix, event_id))
 
     # Dados do evento
