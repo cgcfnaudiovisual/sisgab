@@ -71,11 +71,27 @@ async def jarvis_process_api(request: Request):
         
         try:
             import ai_helper
-            resposta_ai = ai_helper.call_gemini_text(full_prompt)
-            if not resposta_ai or "erro" in resposta_ai.lower():
-                resposta_ai = f"Pois não. Sobre '{user_prompt}', os dados atuais mostram: {contexto_sisgab[0] if contexto_sisgab else 'Sistema operacional e pronto.'}"
+            import google.generativeai as genai
+            api_key = ai_helper._get_google_api_key()
+            if api_key:
+                genai.configure(api_key=api_key)
+                model_name = ai_helper._get_gemini_model_name()
+                model = genai.GenerativeModel(model_name, system_instruction=system_instruction)
+                resp = model.generate_content(user_prompt)
+                resposta_ai = resp.text.strip() if (resp and resp.text) else ""
+            else:
+                resposta_ai = f"Pois não, senhor. {contexto_sisgab[0] if contexto_sisgab else 'Sistemas operando normalmente.'}"
         except Exception as e_ai:
             print(f"[JARVIS AI ERR] {e_ai}")
+            try:
+                import google.generativeai as genai
+                m_fb = genai.GenerativeModel("gemini-flash-latest", system_instruction=system_instruction)
+                resp_fb = m_fb.generate_content(user_prompt)
+                resposta_ai = resp_fb.text.strip() if (resp_fb and resp_fb.text) else ""
+            except Exception as e_fb:
+                print(f"[JARVIS AI FB ERR] {e_fb}")
+                resposta_ai = f"Pois não, senhor. {contexto_sisgab[0] if contexto_sisgab else 'Sistemas do SisGAB operando normalmente.'}"
+
         # 3. Síntese de Voz Neural Ultra-Realista com Edge-TTS (Antonio Neural)
         audio_b64 = None
         try:
@@ -172,7 +188,7 @@ def render_page(current_user=None):
                 with ui.row().classes('items-center gap-3'):
                     ui.icon('graphic_eq', color='cyan').classes('text-3xl animate-pulse')
                     ui.label('JARVIS VOICE AI — TEMPO REAL').classes('text-2xl font-bold text-cyan cyber-title tracking-wider')
-                ui.label('Assistente de Voz Tático com Reconhecimento Contínuo e Palavra-Chave "JARVIS"').classes('text-xs text-grey-4')
+                ui.label('Assistente de Voz Tático com Reconhecimento Contínuo, Digitação e Palavra-Chave "JARVIS"').classes('text-xs text-grey-4')
             
             with ui.row().classes('items-center gap-3'):
                 ui.badge('ONLINE', color='emerald').classes('text-xs font-bold q-px-md')
@@ -204,12 +220,25 @@ def render_page(current_user=None):
                 # Campo Transcrição em Tempo Real
                 with ui.column().classes('w-full q-mt-md gap-2'):
                     with ui.card().classes('w-full p-3 rounded-lg no-shadow').style('background: rgba(4, 13, 26, 0.8); border: 1px solid rgba(0,229,255,0.2);'):
-                        ui.label('🗣️ O QUE VOCÊ FALOU:').classes('text-[10px] text-grey-5 font-bold')
-                        ui.label('Aguardando sua voz...').props('id=userTranscriptText').classes('text-sm text-cyan font-mono min-h-[24px]')
+                        ui.label('🗣️ O QUE VOCÊ FALOU / DIGITOU:').classes('text-[10px] text-grey-5 font-bold')
+                        ui.label('Aguardando sua voz ou texto...').props('id=userTranscriptText').classes('text-sm text-cyan font-mono min-h-[24px]')
                     
                     with ui.card().classes('w-full p-3 rounded-lg no-shadow').style('background: rgba(4, 13, 26, 0.8); border: 1px solid rgba(0,255,136,0.2);'):
                         ui.label('🤖 RESPOSTA DO JARVIS:').classes('text-[10px] text-grey-5 font-bold')
                         ui.label('Sistemas prontos, Chefe. Como posso ajudar?').props('id=jarvisResponseText').classes('text-sm text-emerald-400 font-mono min-h-[30px]')
+
+                # ─── CAMPO PARA DIGITAR PERGUNTAS AO JARVIS COM RETORNO EM VOZ ───
+                with ui.row().classes('w-full items-center gap-2 q-mt-md no-wrap'):
+                    input_text = ui.input(placeholder='💬 Digite sua pergunta para o Jarvis e pressione Enter...').props('dark outlined dense').classes('flex-grow font-mono text-sm')
+                    
+                    def submit_text():
+                        val = (input_text.value or '').strip()
+                        if val:
+                            ui.run_javascript(f'sendTextToJarvis({json.dumps(val)})')
+                            input_text.value = ''
+                    
+                    input_text.on('keydown.enter', submit_text)
+                    ui.button('ENVIAR', icon='send', on_click=submit_text).props('unelevated color=cyan text-color=dark').classes('font-bold rounded-lg')
 
                 # Botões de Ação Rápida por Voz
                 ui.label('💡 SUGESTÕES DE COMANDOS DE VOZ:').classes('text-[11px] text-grey-4 font-bold q-mt-md')
@@ -222,7 +251,7 @@ def render_page(current_user=None):
                     ]:
                         ui.button(
                             cmd,
-                            on_click=lambda _, c=cmd: ui.run_javascript(f'sendTextToJarvis("{c}")')
+                            on_click=lambda _, c=cmd: ui.run_javascript(f'sendTextToJarvis({json.dumps(c)})')
                         ).props('outline dense color=cyan text-color=white').classes('text-xs rounded-full')
 
         # ─── MOTOR JAVASCRIPT CLIENT-SIDE (WEBSPEECH STT + WAKE WORD + TTS) ───

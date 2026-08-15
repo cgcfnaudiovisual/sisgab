@@ -429,14 +429,14 @@ def _get_google_api_key() -> str:
 
 
 def _get_gemini_model_name() -> str:
-    """Retorna o modelo de IA configurado ou o padrão válido 'gemini-2.5-flash'."""
+    """Retorna o modelo de IA configurado ou o padrão ativo 'gemini-flash-latest'."""
     global GEMINI_MODEL_NAME
     if not GEMINI_MODEL_NAME:
-        GEMINI_MODEL_NAME = get_config_value("gemini_model_name", "gemini-2.5-flash")
-        if not GEMINI_MODEL_NAME:
-            GEMINI_MODEL_NAME = "gemini-2.5-flash"
-    if "3.6" in str(GEMINI_MODEL_NAME):
-        return "gemini-2.5-flash"
+        GEMINI_MODEL_NAME = get_config_value("gemini_model_name", "gemini-flash-latest")
+        if not GEMINI_MODEL_NAME or GEMINI_MODEL_NAME in ("gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"):
+            GEMINI_MODEL_NAME = "gemini-flash-latest"
+    if str(GEMINI_MODEL_NAME) in ("gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"):
+        return "gemini-flash-latest"
     return GEMINI_MODEL_NAME
 
 
