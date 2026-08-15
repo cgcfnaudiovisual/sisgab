@@ -298,11 +298,66 @@ def run_proactive_matching(event_id: str, new_embeddings: list):
         print(f"  ⚠️ Erro no match proativo: {e}")
 
 
+# Dicionário de fotos já existentes no Google Drive {filename_lower: {'id': file_id, 'webViewLink': link}}
+_DRIVE_EXISTING_FILES = {}
+_drive_files_lock = threading.Lock()
+
+
+def preload_drive_folder_files(folder_id: str):
+    """Busca fotos já enviadas para o Google Drive para indexação instantânea sem re-upload."""
+    global _DRIVE_EXISTING_FILES
+    if not folder_id:
+        return
+
+    try:
+        import drive_service
+        print("  🔍 Verificando fotos já existentes na pasta do Google Drive...")
+        existing = drive_service.list_files(folder_id, page_size=2000)
+        
+        with _drive_files_lock:
+            for f in existing:
+                fname = f.get('name', '').strip().lower()
+                if fname:
+                    _DRIVE_EXISTING_FILES[fname] = {
+                        'id': f['id'],
+                        'webViewLink': f.get('webViewLink') or f"https://drive.google.com/file/d/{f['id']}/view"
+                    }
+
+        # Verifica também se existem subpastas (GERAL, SELEÇÃO)
+        try:
+            service = drive_service.get_drive_service()
+            if service:
+                q_sub = f"'{folder_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+                sub_res = service.files().list(q=q_sub, fields='files(id, name)', supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
+                for sub_f in (sub_res.get('files') or []):
+                    sub_files = drive_service.list_files(sub_f['id'], page_size=2000)
+                    with _drive_files_lock:
+                        for sf in sub_files:
+                            sfname = sf.get('name', '').strip().lower()
+                            if sfname and sfname not in _DRIVE_EXISTING_FILES:
+                                _DRIVE_EXISTING_FILES[sfname] = {
+                                    'id': sf['id'],
+                                    'webViewLink': sf.get('webViewLink') or f"https://drive.google.com/file/d/{sf['id']}/view"
+                                }
+        except Exception:
+            pass
+
+        count_found = len(_DRIVE_EXISTING_FILES)
+        if count_found > 0:
+            print(f"  ✨ [GOOGLE DRIVE] {count_found} fotos já identificadas na nuvem!")
+            print("  🚀 Modo de Indexação Inteligente ativado: Processando IA local e vinculando ao Drive sem re-upload!\n")
+        else:
+            print("  ℹ️ Nenhuma foto pré-existente encontrada na pasta do Drive. Modo de upload ativo.\n")
+
+    except Exception as ex_preload:
+        print(f"  ⚠️ Aviso ao verificar Drive: {ex_preload}\n")
+
+
 # ============================================================================
 # PROCESSAMENTO DE UM ARQUIVO (UPLOAD + IA)
 # ============================================================================
 def process_single_file(file_path: Path, event_id: str, folder_id: str, skip_ia: bool = False):
-    """Processa um único arquivo: upload ao Drive + IA local."""
+    """Processa um único arquivo: verifica se já existe no Drive ou faz upload + IA local."""
     # Deduplicação por hash MD5
     try:
         with open(file_path, 'rb') as f:
@@ -315,31 +370,48 @@ def process_single_file(file_path: Path, event_id: str, folder_id: str, skip_ia:
             return
         _processed_hashes.add(file_hash)
 
-    # Upload ao Drive
-    result = upload_with_retry(file_path, folder_id)
-    if result and result.get('id'):
-        drive_file_id = result['id']
-        drive_link = result.get('webViewLink', f"https://drive.google.com/file/d/{drive_file_id}/view")
+    fname_key = file_path.name.strip().lower()
+    existing_drive_item = _DRIVE_EXISTING_FILES.get(fname_key)
 
+    drive_file_id = None
+    drive_link = None
+
+    if existing_drive_item:
+        # Foto JÁ EXISTE no Google Drive: vincula diretamente sem gastar cota/tempo de upload!
+        drive_file_id = existing_drive_item['id']
+        drive_link = existing_drive_item['webViewLink']
         with _stats_lock:
             _stats['upload_ok'] += 1
+    else:
+        # Foto nova: tenta upload com retry
+        result = upload_with_retry(file_path, folder_id)
+        if result and result.get('id'):
+            drive_file_id = result['id']
+            drive_link = result.get('webViewLink', f"https://drive.google.com/file/d/{drive_file_id}/view")
+            with _stats_lock:
+                _stats['upload_ok'] += 1
+        else:
+            with _stats_lock:
+                _stats['upload_fail'] += 1
+                _stats['erros'].append(f"Upload falhou: {file_path.name}")
 
+    if drive_file_id:
         # Registrar em processed_photos
         try:
             from database import get_service_db_connection, get_db_connection
             conn = get_service_db_connection() or get_db_connection()
             if conn:
-                conn.table('processed_photos').insert({
+                conn.table('processed_photos').upsert({
                     'event_name': event_id,
                     'filename': file_path.name,
                     'drive_file_id': drive_file_id,
                     'drive_link': drive_link,
                     'status': 'pendente' if skip_ia else 'processando',
-                }).execute()
-        except Exception as e_db:
-            print(f"  ⚠️ Erro ao registrar {file_path.name} no banco: {e_db}")
+                }, on_conflict='drive_file_id').execute()
+        except Exception:
+            pass
 
-        # Processamento IA local (paralelo — do arquivo local, sem baixar do Drive)
+        # Processamento IA local (da imagem local no PC com GPU, ultra rápido)
         if not skip_ia and _FACE_APP is not None:
             embeddings = process_faces_locally(file_path, event_id, drive_file_id, drive_link)
             if embeddings:
@@ -351,7 +423,7 @@ def process_single_file(file_path: Path, event_id: str, folder_id: str, skip_ia:
                 with _stats_lock:
                     _stats['ia_skip'] += 1
 
-            # Atualizar status da foto
+            # Atualizar status da foto no banco
             try:
                 from database import get_service_db_connection, get_db_connection
                 conn = get_service_db_connection() or get_db_connection()
@@ -362,10 +434,6 @@ def process_single_file(file_path: Path, event_id: str, folder_id: str, skip_ia:
                     }).eq('drive_file_id', drive_file_id).execute()
             except Exception:
                 pass
-    else:
-        with _stats_lock:
-            _stats['upload_fail'] += 1
-            _stats['erros'].append(f"Upload falhou: {file_path.name}")
 
 
 # ============================================================================
@@ -629,6 +697,9 @@ Exemplos:
 
     # Banner
     print_banner(args.event_id, pasta, args.workers, args.skip_ia)
+
+    # Pré-carregar fotos já existentes no Google Drive (Modo de Indexação Inteligente)
+    preload_drive_folder_files(folder_id)
 
     # Processar
     if args.batch_only:

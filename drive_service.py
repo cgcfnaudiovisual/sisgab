@@ -284,26 +284,37 @@ def criar_pasta_evento(titulo_evento, data_evento_str, pasta_mae_id=None):
 
 # ─── Operações de Arquivos ──────────────────────────────────────────────
 
-def list_files(folder_id, mime_filter=None, page_size=100):
+def list_files(folder_id, mime_filter=None, page_size=1000):
     """
-    Lista arquivos de uma pasta do Drive.
+    Lista arquivos de uma pasta do Drive com suporte a paginação completa e Shared Drives.
     Retorna lista de dicts: [{'id', 'name', 'mimeType', 'size', 'thumbnailLink', 'webViewLink'}]
     """
     service = get_drive_service()
-    if not service:
+    if not service or not folder_id:
         return []
     try:
         q = f"'{folder_id}' in parents and trashed = false"
         if mime_filter:
             q += f" and mimeType contains '{mime_filter}'"
 
-        result = service.files().list(
-            q=q,
-            fields='files(id, name, mimeType, size, thumbnailLink, webViewLink, createdTime)',
-            pageSize=page_size,
-            orderBy='createdTime desc'
-        ).execute()
-        return result.get('files', [])
+        all_files = []
+        page_token = None
+        while True:
+            result = service.files().list(
+                q=q,
+                fields='nextPageToken, files(id, name, mimeType, size, thumbnailLink, webViewLink, createdTime)',
+                pageSize=min(page_size, 1000),
+                pageToken=page_token,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+                orderBy='createdTime desc'
+            ).execute()
+            items = result.get('files', [])
+            all_files.extend(items)
+            page_token = result.get('nextPageToken')
+            if not page_token or len(all_files) >= page_size:
+                break
+        return all_files
     except Exception as e:
         print(f"[DRIVE_SERVICE] Erro ao listar arquivos: {e}")
         return []
