@@ -1,71 +1,33 @@
-"""
-portal_convidado.py — Portal do Convidado (Real-Time Hot Photo Delivery)
-Módulo público de zero fricção para entrega de fotos em tempo real via reconhecimento facial.
-Acesso via rota dinâmica /evento/{id_evento}.
-"""
-
 import os
-import sys
 import io
 import time
 import json
 import base64
-import zipfile
 import asyncio
-import math
-from datetime import datetime
 from pathlib import Path
-from nicegui import ui, app
+from datetime import datetime
 import numpy as np
 
+from fastapi import Request, UploadFile, File, Form
+from fastapi.responses import JSONResponse
+from nicegui import ui, app
+
 import theme
+import drive_service
 from database import (
     get_public_event,
-    get_event_photo_embeddings,
     save_guest_face_profile,
-    save_guest_delivery,
     log_portal_analytics,
-    send_real_email_smtp,
-    get_service_db_connection,
-    get_db_connection,
+    get_guest_face_profile,
+    create_photo_delivery_request,
+    check_rate_limit
 )
-import drive_service
 
-# Cache em memória da matriz de embeddings por evento
-_EVENT_EMBEDDINGS_CACHE = {}
-_EVENT_GERAL_PHOTOS_CACHE = {}
-
-def _get_geral_photos(folder_id: str) -> list[dict]:
-    """Retorna a lista de fotos da pasta geral do evento com cache em RAM por 1 hora."""
-    if not folder_id:
-        return []
-    now = time.time()
-    if folder_id in _EVENT_GERAL_PHOTOS_CACHE:
-        c = _EVENT_GERAL_PHOTOS_CACHE[folder_id]
-        if now - c['time'] < 3600:
-            return c['photos']
-    try:
-        t0 = time.time()
-        files = drive_service.list_files(folder_id, page_size=5000)
-        photos = [
-            {'drive_file_id': f['id'], 'drive_link': f.get('webViewLink'), 'filename': f.get('name', 'foto.jpg'), 'thumbnailLink': f.get('thumbnailLink')}
-            for f in files
-        ] if files else []
-        _EVENT_GERAL_PHOTOS_CACHE[folder_id] = {'photos': photos, 'time': now}
-        print(f"[PORTAL_DRIVE] ☁️ {len(photos)} fotos listadas do Drive em {time.time()-t0:.2f}s (cache criado)")
-        return photos
-    except Exception as e:
-        print(f"[PORTAL_DRIVE] Erro ao listar Drive: {e}")
-        return []
-
-
-# ── SINGLETON DO MOTOR INSIGHTFACE (inicializado UMA vez, reutilizado sempre) ──
+# ── SINGLETON DO MOTOR INSIGHTFACE (Warmup no Boot) ──────────────────────────
 _FACE_APP_SINGLETON = None
-_FACE_APP_LOCK = asyncio.Lock() if False else None  # placeholder; lock criado dinamicamente
-
 
 def _get_face_app():
-    """Retorna o singleton do FaceAnalysis, criando-o na primeira chamada."""
+    """Retorna o singleton do FaceAnalysis com Warmup automático no boot."""
     global _FACE_APP_SINGLETON
     if _FACE_APP_SINGLETON is not None:
         return _FACE_APP_SINGLETON
@@ -74,21 +36,33 @@ def _get_face_app():
         _FACE_APP_SINGLETON = init_face_engine()
         if _FACE_APP_SINGLETON:
             print('[PORTAL_IA] ✅ Motor InsightFace carregado via sisgab_face_worker singleton!')
-            return _FACE_APP_SINGLETON
     except Exception:
         pass
-    try:
-        from insightface.app import FaceAnalysis
-        _FACE_APP_SINGLETON = FaceAnalysis(
-            name='buffalo_l',
-            allowed_modules=['detection', 'recognition']
-        )
-        _FACE_APP_SINGLETON.prepare(ctx_id=-1, det_size=(160, 160))  # 160px = rápido para selfies
-        print('[PORTAL_IA] ✅ Motor InsightFace (buffalo_l, det=160px) pronto!')
-    except Exception as e:
-        print(f'[PORTAL_IA] ❌ Falha ao inicializar InsightFace: {e}')
-        _FACE_APP_SINGLETON = None
+    if _FACE_APP_SINGLETON is None:
+        try:
+            from insightface.app import FaceAnalysis
+            _FACE_APP_SINGLETON = FaceAnalysis(
+                name='buffalo_l',
+                allowed_modules=['detection', 'recognition']
+            )
+            _FACE_APP_SINGLETON.prepare(ctx_id=-1, det_size=(160, 160))
+            print('[PORTAL_IA] ✅ Motor InsightFace (buffalo_l, det=160px) pronto!')
+        except Exception as e:
+            print(f'[PORTAL_IA] ❌ Falha ao inicializar InsightFace: {e}')
+            _FACE_APP_SINGLETON = None
+    
+    if _FACE_APP_SINGLETON is not None:
+        try:
+            dummy = np.zeros((480, 480, 3), dtype=np.uint8)
+            _FACE_APP_SINGLETON.get(dummy)
+            print('[PORTAL_IA] ⚡ Warmup concluído: rede neural pronta para respostas sub-100ms!')
+        except Exception as e_w:
+            print(f'[PORTAL_IA] Warmup aviso: {e_w}')
+
     return _FACE_APP_SINGLETON
+
+# Pré-aquece o singleton logo no import
+asyncio.get_event_loop().call_soon(_get_face_app) if False else None
 
 MESES_PT = {
     1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
@@ -96,16 +70,17 @@ MESES_PT = {
     9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
 }
 
+_EVENT_EMBEDDINGS_CACHE = {}
+_EVENT_GERAL_PHOTOS_CACHE = {}
 
 def _get_event_matrix(event_id: str) -> tuple[np.ndarray, list[dict]]:
     """Carrega matriz NxD de embeddings do evento com cache em RAM e arquivo binário em disco (.npz)."""
     now = time.time()
     if event_id in _EVENT_EMBEDDINGS_CACHE:
         cache = _EVENT_EMBEDDINGS_CACHE[event_id]
-        if now - cache['timestamp'] < 86400:  # Cache em RAM por 24 horas
+        if now - cache['timestamp'] < 86400:
             return cache['matrix'], cache['records']
 
-    # 1. Tenta carregar do arquivo binário em disco (velocidade: 0.01s)
     cache_dir = Path('data')
     cache_dir.mkdir(exist_ok=True)
     npz_path = cache_dir / f"event_embeddings_{event_id}.npz"
@@ -123,80 +98,115 @@ def _get_event_matrix(event_id: str) -> tuple[np.ndarray, list[dict]]:
                 'records': records,
                 'timestamp': now
             }
-            print(f"[PORTAL_IA] ⚡ Matriz ({matrix.shape[0]} faces) carregada do disco em {time.time() - t0:.3f}s!")
+            print(f"[PORTAL_IA] ⚡ Matriz ({matrix.shape[0]} faces) carregada do disco em {time.time()-t0:.3f}s!")
             return matrix, records
-        except Exception as e_npz:
-            print(f"[PORTAL_IA] Erro ao ler cache em disco: {e_npz}")
+        except Exception as e_disk:
+            print(f"[PORTAL_IA] ⚠️ Erro ao ler cache em disco do evento {event_id}: {e_disk}")
 
-    # 2. Se não estiver em disco, baixa do banco e salva em disco
-    print(f"[PORTAL_IA] 📥 Baixando embeddings faciais do evento #{event_id} do Supabase...")
-    t0 = time.time()
-    raw_records = get_event_photo_embeddings(event_id)
-    if not raw_records:
-        return np.empty((0, 512), dtype=np.float32), []
+    try:
+        from database import get_supabase_client
+        sb = get_supabase_client()
+        t0 = time.time()
+        print(f"[PORTAL_IA] 🔄 Baixando embeddings do Supabase para o evento {event_id}...")
 
-    valid_vectors = []
-    valid_records = []
-    for r in raw_records:
-        try:
-            emb = r['embedding']
+        all_records = []
+        offset = 0
+        limit = 1000
+        while True:
+            res = sb.table('face_embeddings') \
+                .select('id, photo_id, embedding, processed_photos(drive_file_id, drive_link, photo_filename, storage_path)') \
+                .eq('event_id', event_id) \
+                .range(offset, offset + limit - 1) \
+                .execute()
+            rows = res.data or []
+            all_records.extend(rows)
+            if len(rows) < limit:
+                break
+            offset += limit
+
+        if not all_records:
+            print(f"[PORTAL_IA] ℹ️ Nenhuma face encontrada no Supabase para evento {event_id}")
+            empty_mat = np.empty((0, 512), dtype=np.float32)
+            _EVENT_EMBEDDINGS_CACHE[event_id] = {'matrix': empty_mat, 'records': [], 'timestamp': now}
+            return empty_mat, []
+
+        vectors = []
+        cleaned_records = []
+        for r in all_records:
+            emb = r.get('embedding')
+            if not emb:
+                continue
             if isinstance(emb, str):
-                emb = json.loads(emb)
-            if emb and len(emb) == 512:
-                valid_vectors.append(np.array(emb, dtype=np.float32))
-                valid_records.append({
-                    'id': r.get('id'),
-                    'drive_file_id': r.get('drive_file_id'),
-                    'drive_link': r.get('drive_link'),
-                    'photo_filename': r.get('photo_filename')
-                })
-        except Exception:
-            continue
+                try:
+                    emb = json.loads(emb)
+                except Exception:
+                    continue
+            vec = np.array(emb, dtype=np.float32)
+            if vec.shape[0] != 512:
+                continue
+            norm = np.linalg.norm(vec)
+            if norm > 0:
+                vec = vec / norm
+            vectors.append(vec)
 
-    if not valid_vectors:
-        return np.empty((0, 512), dtype=np.float32), []
+            photo_data = r.get('processed_photos') or {}
+            cleaned_records.append({
+                'face_id': r.get('id'),
+                'photo_id': r.get('photo_id'),
+                'drive_file_id': photo_data.get('drive_file_id'),
+                'drive_link': photo_data.get('drive_link'),
+                'photo_filename': photo_data.get('photo_filename'),
+                'storage_path': photo_data.get('storage_path')
+            })
 
-    matrix = np.stack(valid_vectors)  # Shape: (N, 512)
-    _EVENT_EMBEDDINGS_CACHE[event_id] = {
-        'matrix': matrix,
-        'records': valid_records,
-        'timestamp': now
-    }
+        if vectors:
+            matrix = np.vstack(vectors).astype(np.float32)
+        else:
+            matrix = np.empty((0, 512), dtype=np.float32)
+
+        try:
+            np.savez_compressed(npz_path, matrix=matrix)
+            with open(json_path, 'w', encoding='utf-8') as f:
+                json.dump(cleaned_records, f, ensure_ascii=False)
+            print(f"[PORTAL_IA] 💾 Cache binário salvo em disco para evento {event_id} ({matrix.shape[0]} faces)")
+        except Exception as e_save:
+            print(f"[PORTAL_IA] ⚠️ Erro ao salvar cache em disco: {e_save}")
+
+        _EVENT_EMBEDDINGS_CACHE[event_id] = {
+            'matrix': matrix,
+            'records': cleaned_records,
+            'timestamp': now
+        }
+        print(f"[PORTAL_IA] 🚀 {matrix.shape[0]} faces carregadas do Supabase em {time.time()-t0:.2f}s!")
+        return matrix, cleaned_records
+
+    except Exception as e:
+        print(f"[PORTAL_IA] ❌ Erro crítico ao carregar embeddings: {e}")
+        empty_mat = np.empty((0, 512), dtype=np.float32)
+        return empty_mat, []
+
+def _get_geral_photos(folder_id: str) -> list[dict]:
+    """Lista fotos da pasta geral do Google Drive com cache em RAM."""
+    now = time.time()
+    if folder_id in _EVENT_GERAL_PHOTOS_CACHE:
+        cache = _EVENT_GERAL_PHOTOS_CACHE[folder_id]
+        if now - cache['timestamp'] < 1800:
+            return cache['photos']
 
     try:
-        np.savez_compressed(npz_path, matrix=matrix)
-        with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(valid_records, f)
-        print(f"[PORTAL_IA] 💾 Cache em disco salvo ({matrix.shape[0]} faces)!")
-    except Exception as e_save:
-        print(f"[PORTAL_IA] Erro ao salvar cache em disco: {e_save}")
-
-    print(f"[PORTAL_IA] ✅ Matriz indexada com {len(valid_vectors)} faces em {time.time() - t0:.2f}s!")
-    return matrix, valid_records
-
-
-async def _extract_upload_bytes(e) -> bytes:
-    """Extrai os bytes do arquivo de forma 100% universal e compatível com NiceGUI 1.x e 2.x."""
-    try:
-        f = getattr(e, 'file', None)
-        if f is not None:
-            if hasattr(f, 'read'):
-                res = f.read()
-                if asyncio.iscoroutine(res):
-                    return await res
-                return res
-        c = getattr(e, 'content', None)
-        if c is not None:
-            if hasattr(c, 'read'):
-                res = c.read()
-                if asyncio.iscoroutine(res):
-                    return await res
-                return res
-            return c
-    except Exception as ex:
-        print(f"[EXTRACT UPLOAD BYTES ERR] {ex}")
-    return b''
-
+        t0 = time.time()
+        photos = drive_service.list_files_in_folder(folder_id)
+        if photos:
+            photos.sort(key=lambda x: x.get('name', ''), reverse=True)
+            _EVENT_GERAL_PHOTOS_CACHE[folder_id] = {
+                'photos': photos,
+                'timestamp': now
+            }
+            print(f"[PORTAL_DRIVE] ☁️ {len(photos)} fotos listadas do Drive em {time.time()-t0:.2f}s (cache criado)")
+        return photos or []
+    except Exception as e:
+        print(f"[PORTAL_DRIVE] ⚠️ Erro ao listar fotos da pasta geral {folder_id}: {e}")
+        return []
 
 def _extract_selfie_embedding(image_bytes: bytes) -> tuple[bool, str, np.ndarray | None]:
     """Extrai o embedding facial 512D da selfie com alta performance (sub-100ms)."""
@@ -223,7 +233,6 @@ def _extract_selfie_embedding(image_bytes: bytes) -> tuple[bool, str, np.ndarray
     if img_bgr is None:
         return False, "❌ Não foi possível carregar a imagem enviada.", None
 
-    # Redimensiona se necessário para max 480px (ultra-rápido para selfies)
     h, w = img_bgr.shape[:2]
     if max(h, w) > 480:
         scale = 480.0 / max(h, w)
@@ -253,56 +262,77 @@ def _extract_selfie_embedding(image_bytes: bytes) -> tuple[bool, str, np.ndarray
         return False, f"❌ Erro ao processar biometria: {e}", None
 
 
+# ── FASTAPI TURBO MATCH ENDPOINT ─────────────────────────────────────────────
+@app.post('/api/portal/match')
+async def api_portal_match(
+    request: Request,
+    event_id: str = Form(...),
+    session_id: str = Form(''),
+    file: UploadFile = File(...)
+):
+    """Endpoint REST ultra-rápido para recepção direta da selfie do navegador."""
+    try:
+        content = await file.read()
+        if not content:
+            return JSONResponse({'ok': False, 'message': 'Foto vazia.'}, status_code=400)
+        
+        ok, msg, embedding = await asyncio.to_thread(_extract_selfie_embedding, content)
+        if not ok or embedding is None:
+            return JSONResponse({'ok': False, 'message': msg})
+        
+        matrix, records = await asyncio.to_thread(_get_event_matrix, event_id)
+        event = get_public_event(event_id) or {}
+        threshold_match = float(event.get('threshold_match') or 0.40)
+        
+        matched_items = []
+        if matrix.shape[0] > 0:
+            s_vec = np.array(embedding, dtype=np.float32)
+            norm = np.linalg.norm(s_vec)
+            if norm > 0:
+                s_vec = s_vec / norm
+            scores = matrix @ s_vec
+            
+            seen_fids = set()
+            for idx in np.argsort(-scores):
+                score = float(scores[idx])
+                if score < threshold_match:
+                    break
+                rec = records[idx]
+                fid = rec.get('drive_file_id')
+                if fid and fid not in seen_fids:
+                    seen_fids.add(fid)
+                    matched_items.append({
+                        'drive_file_id': fid,
+                        'drive_link': rec.get('drive_link') or f"https://drive.google.com/file/d/{fid}/view",
+                        'filename': rec.get('photo_filename', 'foto.jpg'),
+                        'similarity': score
+                    })
+        
+        # Gravação assíncrona no Supabase em segundo plano
+        if session_id:
+            asyncio.create_task(asyncio.to_thread(
+                save_guest_face_profile,
+                event_id, session_id, [embedding.tolist()]
+            ))
+            asyncio.create_task(asyncio.to_thread(
+                log_portal_analytics,
+                event_id, 'match', session_id=session_id, metadata={'count': len(matched_items)}
+            ))
+
+        return JSONResponse({
+            'ok': True,
+            'count': len(matched_items),
+            'matched_photos': matched_items,
+            'embedding': embedding.tolist()
+        })
+    except Exception as e:
+        print(f"[API_PORTAL_MATCH_ERR] {e}")
+        return JSONResponse({'ok': False, 'message': str(e)}, status_code=500)
+
+
 def render_page(event_id: str):
     """Renderiza a página completa do Portal do Convidado para o evento especificado."""
     theme.apply_global_styles()
-    ui.add_head_html('''
-    <style>
-        .photo-card-selected {
-            border: 2px solid #00e5ff !important;
-            box-shadow: 0 0 15px rgba(0,229,255,0.4) !important;
-        }
-    </style>
-    <script>
-    window.handleTurboSelfie = function(input) {
-        if (!input.files || !input.files[0]) return;
-        const file = input.files[0];
-        input.value = '';
-        
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const img = new Image();
-            img.onload = function() {
-                const maxDim = 480;
-                let w = img.naturalWidth || img.width;
-                let h = img.naturalHeight || img.height;
-                if (w > maxDim || h > maxDim) {
-                    if (w > h) {
-                        h = Math.round((h * maxDim) / w);
-                        w = maxDim;
-                    } else {
-                        w = Math.round((w * maxDim) / h);
-                        h = maxDim;
-                    }
-                }
-                const canvas = document.createElement('canvas');
-                canvas.width = w;
-                canvas.height = h;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, w, h);
-                
-                // Exporta JPEG ultra leve (~35KB a 50KB) em menos de 15ms
-                const b64 = canvas.toDataURL('image/jpeg', 0.80);
-                if (typeof emitEvent === 'function') {
-                    emitEvent('turbo_selfie_upload', { b64: b64 });
-                }
-            };
-            img.src = e.target.result;
-        };
-        reader.readAsDataURL(file);
-    };
-    </script>
-    ''')
 
     event = get_public_event(event_id)
 
@@ -322,15 +352,15 @@ def render_page(event_id: str):
             ui.label(f"A galeria do evento '{event.get('nome')}' foi encerrada pela organização.").classes('text-sm text-grey-4 max-w-md')
         return
 
-    # Registra analytics de acesso
+    # Registra analytics de acesso em background
     session_id = app.storage.user.get('portal_session_id')
     if not session_id:
         session_id = f"guest_{int(time.time()*1000)}"
         app.storage.user['portal_session_id'] = session_id
     
-    log_portal_analytics(event_id, 'acesso', session_id=session_id)
+    asyncio.create_task(asyncio.to_thread(log_portal_analytics, event_id, 'acesso', session_id=session_id))
 
-    # Estado local persistente da sessão do convidado
+    # Estado local da sessão do convidado
     saved_selfies = app.storage.user.get(f'portal_embs_{event_id}', [])
     guest_state = {
         'selfie_embeddings': saved_selfies or [],
@@ -363,34 +393,131 @@ def render_page(event_id: str):
     threshold_match = float(event.get('threshold_match') or 0.40)
     drive_geral_id = event.get('drive_geral_folder_id') or event.get('drive_folder_id')
 
-    # Pré-aquece SIMULTANEAMENTE: motor de IA + matriz de embeddings do evento + fotos gerais do Drive
+    # Pré-aquece SIMULTANEAMENTE: IA + matriz de embeddings + fotos do Drive
     asyncio.create_task(asyncio.to_thread(_get_face_app))
     asyncio.create_task(asyncio.to_thread(_get_event_matrix, event_id))
     if drive_geral_id:
         asyncio.create_task(asyncio.to_thread(_get_geral_photos, drive_geral_id))
 
-    # Container principal — ocupa toda a tela
+    # Injeta CSS e Script Turbo Client-Side no Header
+    ui.add_head_html(f'''
+    <style>
+        .photo-card-selected {{
+            border: 2px solid #00e5ff !important;
+            box-shadow: 0 0 15px rgba(0,229,255,0.4) !important;
+        }}
+        #turbo-loading-overlay {{
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(11, 15, 25, 0.90);
+            backdrop-filter: blur(8px);
+            z-index: 99999;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+        }}
+    </style>
+    <div id="turbo-loading-overlay">
+        <div style="width: 50px; height: 50px; border: 4px solid rgba(0,229,255,0.2); border-top-color: #00e5ff; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+        <style>@keyframes spin {{ to {{ transform: rotate(360deg); }} }}</style>
+        <div style="font-size: 1.1rem; font-weight: 900; color: #ffffff; letter-spacing: 0.5px; margin-top: 10px;">ANALISANDO SUA FOTO COM IA...</div>
+        <div style="font-size: 0.8rem; color: #94a3b8;">Buscando suas fotos no evento em tempo real</div>
+    </div>
+    <script>
+    window._PORTAL_EVENT_ID = "{event_id}";
+    window._PORTAL_SESSION_ID = "{session_id}";
+
+    // Recupera fotos identificadas persistidas na sessão do navegador
+    try {{
+        const storedMatches = sessionStorage.getItem('portal_matched_' + window._PORTAL_EVENT_ID);
+        if (storedMatches) {{
+            window._PORTAL_SAVED_MATCHES = JSON.parse(storedMatches);
+        }}
+    }} catch(e) {{}}
+
+    window.handleTurboSelfie = function(input) {{
+        if (!input.files || !input.files[0]) return;
+        const file = input.files[0];
+        const fileObj = file;
+        input.value = '';
+        
+        const overlay = document.getElementById('turbo-loading-overlay');
+        if (overlay) overlay.style.display = 'flex';
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {{
+            const img = new Image();
+            img.onload = function() {{
+                const maxDim = 480;
+                let w = img.naturalWidth || img.width;
+                let h = img.naturalHeight || img.height;
+                if (w > maxDim || h > maxDim) {{
+                    if (w > h) {{
+                        h = Math.round((h * maxDim) / w);
+                        w = maxDim;
+                    }} else {{
+                        w = Math.round((w * maxDim) / h);
+                        h = maxDim;
+                    }}
+                }}
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, w, h);
+                
+                canvas.toBlob(async function(blob) {{
+                    if (!blob) {{
+                        if (overlay) overlay.style.display = 'none';
+                        return;
+                    }}
+                    const formData = new FormData();
+                    formData.append('file', blob, 'selfie.jpg');
+                    formData.append('event_id', window._PORTAL_EVENT_ID);
+                    formData.append('session_id', window._PORTAL_SESSION_ID || '');
+                    
+                    try {{
+                        const res = await fetch('/api/portal/match', {{
+                            method: 'POST',
+                            body: formData
+                        }});
+                        const data = await res.json();
+                        if (data.ok) {{
+                            sessionStorage.setItem('portal_matched_' + window._PORTAL_EVENT_ID, JSON.stringify(data.matched_photos));
+                            sessionStorage.setItem('portal_searched_' + window._PORTAL_EVENT_ID, '1');
+                            if (data.embedding) {{
+                                let embs = JSON.parse(sessionStorage.getItem('portal_embs_' + window._PORTAL_EVENT_ID) || '[]');
+                                embs.push(data.embedding);
+                                sessionStorage.setItem('portal_embs_' + window._PORTAL_EVENT_ID, JSON.stringify(embs));
+                            }}
+                            window.location.reload();
+                        }} else {{
+                            if (overlay) overlay.style.display = 'none';
+                            alert(data.message || 'Nenhum rosto detectado na foto. Tente uma foto frontal bem iluminada.');
+                        }}
+                    }} catch (err) {{
+                        if (overlay) overlay.style.display = 'none';
+                        alert('Erro de conexão ao enviar selfie. Tente novamente.');
+                    }}
+                }}, 'image/jpeg', 0.80);
+            }};
+            img.src = e.target.result;
+        }};
+        reader.readAsDataURL(fileObj);
+    }};
+    </script>
+    ''')
+
+    # Container principal
     with ui.column().classes('w-full min-h-screen items-center justify-start p-2 sm:p-4 bg-slate-950 text-white').style('font-family: "Outfit", sans-serif;'):
 
-        # ── INPUTS DE UPLOAD OFF-SCREEN COM COMPRESSÃO TURBO CLIENT-SIDE ──
+        # ── INPUTS NATIVOS DE UPLOAD OFF-SCREEN (100% compatíveis com iOS Safari e Android) ──
         ui.html('''
         <input type="file" id="portal-native-camera" accept="image/*" capture="user" style="display:none" onchange="window.handleTurboSelfie(this)">
         <input type="file" id="portal-native-gallery" accept="image/*" style="display:none" onchange="window.handleTurboSelfie(this)">
         ''')
-
-        async def handle_turbo_selfie(e):
-            try:
-                b64_str = (e.args or {}).get('b64', '')
-                if not b64_str:
-                    return
-                if ',' in b64_str:
-                    b64_str = b64_str.split(',', 1)[1]
-                img_bytes = base64.b64decode(b64_str)
-                await process_image_bytes(img_bytes)
-            except Exception as err:
-                ui.notify(f"Erro no processamento da foto: {err}", color='negative')
-
-        ui.on('turbo_selfie_upload', handle_turbo_selfie)
 
         # ── CARD PRINCIPAL COMPACTO DO EVENTO ─────────────────────────────────
         with ui.card().classes('w-full max-w-5xl bg-slate-900/90 border border-amber-500/30 rounded-2xl shadow-xl overflow-hidden p-3 sm:p-5 text-center gap-1.5'):
@@ -404,239 +531,118 @@ def render_page(event_id: str):
         # ── ÁREA DINÂMICA DE CONTEÚDO ─────────────────────────────────────────
         content_container = ui.column().classes('w-full max-w-5xl p-0 gap-4 mt-2')
 
-        def refresh_ui():
-            content_container.clear()
-            with content_container:
-                render_portal_content()
-
-        # ── PROCESSAMENTO DO ARQUIVO RECEBIDO ──────────────────────────────────
-        async def process_image_from_upload(e):
-            try:
-                content = await _extract_upload_bytes(e)
-                if not content:
-                    ui.notify("Não foi possível ler o arquivo enviado. Tente novamente.", color='warning')
-                    return
-                await process_image_bytes(content)
-            except Exception as ex_up:
-                ui.notify(f"Erro no envio da foto: {ex_up}", color='negative')
-
-        async def process_image_bytes(file_content: bytes):
-            now_t = time.time()
-            if guest_state['rate_limit_count'] >= 8 and (now_t - guest_state['last_search_time'] < 20):
-                ui.notify('⏳ Por favor, aguarde alguns segundos antes de tentar novamente.', color='warning')
-                return
-
-            guest_state['rate_limit_count'] += 1
-            guest_state['last_search_time'] = now_t
-
-            if not file_content or len(file_content) < 1000:
-                ui.notify('❌ Imagem inválida ou vazia.', color='negative')
-                return
-
-            # Spinner de busca amigável
-            with ui.dialog() as loading_dialog, ui.card().classes('bg-slate-900 border border-cyan-500/40 p-6 items-center text-center gap-4 rounded-2xl'):
-                ui.spinner(size='3rem', color='cyan')
-                ui.label('Analisando sua foto com IA...').classes('text-lg font-bold text-white')
-                ui.label('Buscando suas fotos no evento em tempo real.').classes('text-xs text-grey-4')
-            loading_dialog.open()
-
-            # Processa embedding da selfie em thread com downscaling
-            ok, msg, embedding = await asyncio.to_thread(_extract_selfie_embedding, file_content)
-
-            if not ok or embedding is None:
-                loading_dialog.close()
-                ui.notify(msg, color='negative', timeout=6000)
-                return
-
-            # Adiciona o vetor à lista de selfies do convidado (até 3)
-            guest_state['selfie_embeddings'].append(embedding.tolist())
-            if len(guest_state['selfie_embeddings']) > 3:
-                guest_state['selfie_embeddings'] = guest_state['selfie_embeddings'][-3:]
-
-            # Persiste na sessão para recuperação automática em caso de queda de conexão
-            app.storage.user[f'portal_embs_{event_id}'] = guest_state['selfie_embeddings']
-
-            # Registra perfil no banco
-            save_guest_face_profile(
-                event_id, session_id, guest_state['selfie_embeddings'],
-                nome=guest_state['guest_name'], email=guest_state['guest_email']
-            )
-            log_portal_analytics(event_id, 'selfie', session_id=session_id)
-
-            # Executa match contra a matriz do evento
-            matched_items, n_faces = await execute_matching()
-
-            loading_dialog.close()
-
-            # Notifica resultado no contexto correto do slot NiceGUI
-            pin_req = str(event.get('pin_acesso') or '').strip()
-            if matched_items:
-                if pin_req:
-                    app.storage.user[f'portal_auth_{event_id}'] = True
-                ui.notify(f"🎉 {len(matched_items)} foto(s) sua(s) encontrada(s) no evento!", color='positive', timeout=5000)
-            elif n_faces == 0:
-                ui.notify('⚠️ Nenhum rosto detectado. Tente uma foto mais nítida e de frente.', color='warning', timeout=6000)
-            else:
-                ui.notify('ℹ️ Nenhuma foto sua identificada nesta busca. Veja a Galeria Oficial abaixo.', color='info', timeout=6000)
-
-            refresh_ui()
-
-        async def execute_matching() -> tuple[list, int]:
-            """Executa o match vetorial e retorna (matched_items, n_embeddings_selfie)."""
-            matrix, records = await asyncio.to_thread(_get_event_matrix, event_id)
-            matched_items = []
-            n_faces = len(guest_state['selfie_embeddings'])
-
-            if matrix.shape[0] > 0 and guest_state['selfie_embeddings']:
-                all_scores = np.zeros(matrix.shape[0], dtype=np.float32)
-                for s_emb in guest_state['selfie_embeddings']:
-                    s_vec = np.array(s_emb, dtype=np.float32)
-                    norm = np.linalg.norm(s_vec)
-                    if norm > 0:
-                        s_vec = s_vec / norm
-                    scores = matrix @ s_vec
-                    all_scores = np.maximum(all_scores, scores)
-
-                seen_fids = set()
-                for idx in np.argsort(-all_scores):
-                    score = float(all_scores[idx])
-                    if score < threshold_match:
-                        break
-                    rec = records[idx]
-                    fid = rec.get('drive_file_id')
-                    if fid and fid not in seen_fids:
-                        seen_fids.add(fid)
-                        matched_items.append({
-                            'drive_file_id': fid,
-                            'drive_link': rec.get('drive_link') or f"https://drive.google.com/file/d/{fid}/view",
-                            'filename': rec.get('photo_filename', 'foto.jpg'),
-                            'similarity': score
-                        })
-
-            guest_state['matched_photos'] = matched_items
-            guest_state['has_searched'] = True
-
-            try:
-                pin_req = str(event.get('pin_acesso') or '').strip()
-                if matched_items:
-                    if pin_req:
-                        app.storage.user[f'portal_auth_{event_id}'] = True
-                    log_portal_analytics(event_id, 'match', session_id=session_id, metadata={'count': len(matched_items)})
-            except Exception:
-                pass
-
-            return matched_items, n_faces
-
-        # ── 1. DOWNLOAD INDIVIDUAL DE FOTO EM HD ──────────────────────────────
+        # ── 1. DOWNLOAD INDIVIDUAL ────────────────────────────────────────────
         def download_single(file_id: str):
-            log_portal_analytics(event_id, 'download', session_id=session_id)
-            ui.navigate.to(f"https://drive.google.com/uc?export=download&id={file_id}", new_tab=True)
+            dl_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+            ui.run_javascript(f'window.open("{dl_url}", "_blank")')
+            ui.notify('Iniciando download da foto em alta resolução...', color='info', timeout=3000)
 
-        # ── 2. LIGHTBOX AVANÇADO COM PASSADOR ⬅️ ➡️ E TECLADO ───────────────
+        # ── 2. LIGHTBOX PROFISSIONAL FULLSCREEN ───────────────────────────────
         def open_full_lightbox(initial_index: int, photos_list: list[dict]):
-            cur_idx = {'val': initial_index}
+            if not photos_list:
+                return
 
-            with ui.dialog() as dlg, ui.card().classes('bg-black/95 border border-cyan-500/40 p-2 sm:p-4 items-center rounded-3xl w-[96vw] max-w-5xl max-h-[95vh] overflow-hidden justify-between flex flex-col'):
-                
-                # Topo do Lightbox
-                with ui.row().classes('w-full justify-between items-center p-2 border-b border-white/10'):
-                    counter_label = ui.label(f"Foto {cur_idx['val'] + 1} de {len(photos_list)}").classes('text-xs sm:text-sm font-bold text-cyan-3')
-                    with ui.row().classes('items-center gap-2'):
-                        btn_dl_box = ui.button(icon='download', on_click=lambda: download_single(photos_list[cur_idx['val']]['drive_file_id'])).props('flat dense size=sm color=amber')
-                        ui.button(icon='close', on_click=dlg.close).props('flat round dense text-color=white')
+            current_idx = {'value': initial_index}
 
-                # Imagem Central
-                img_elem = ui.image(f"https://drive.google.com/thumbnail?id={photos_list[cur_idx['val']]['drive_file_id']}&sz=w1600").classes('max-w-full max-h-[72vh] object-contain rounded-2xl my-2')
+            with ui.dialog().classes('w-full h-full max-w-none max-h-none m-0 p-0').props('maximized transition-show=fade transition-hide=fade') as dialog:
+                with ui.card().classes('w-full h-full bg-black/95 text-white p-0 m-0 flex flex-col justify-between items-center relative overflow-hidden select-none'):
+                    with ui.row().classes('w-full items-center justify-between p-3 sm:p-4 bg-gradient-to-b from-black/80 to-transparent z-10'):
+                        counter_label = ui.label(f"{current_idx['value'] + 1} / {len(photos_list)}").classes('text-xs sm:text-sm font-mono text-grey-4')
+                        with ui.row().classes('items-center gap-2'):
+                            def dl_current():
+                                photo = photos_list[current_idx['value']]
+                                fid = photo.get('drive_file_id') or photo.get('id')
+                                if fid:
+                                    download_single(fid)
+                            ui.button(icon='download', on_click=dl_current).props('round flat color=cyan size=sm').classes('bg-slate-800/80')
+                            ui.button(icon='close', on_click=dialog.close).props('round flat color=white size=sm').classes('bg-slate-800/80')
 
-                def update_lightbox_img(new_i: int):
-                    if 0 <= new_i < len(photos_list):
-                        cur_idx['val'] = new_i
-                        fid = photos_list[new_i]['drive_file_id']
-                        img_elem.set_source(f"https://drive.google.com/thumbnail?id={fid}&sz=w1600")
-                        counter_label.set_text(f"Foto {cur_idx['val'] + 1} de {len(photos_list)}")
+                    img_container = ui.column().classes('w-full flex-1 items-center justify-center p-2 relative overflow-hidden')
 
-                # Controles de Navegação (Passador Anterior / Próximo)
-                with ui.row().classes('w-full justify-between items-center p-2 border-t border-white/10'):
-                    ui.button('⬅️ Anterior', icon='arrow_back', on_click=lambda: update_lightbox_img(cur_idx['val'] - 1)).props('unelevated color=slate-8 text-color=white bold no-caps').classes('px-4 rounded-xl text-xs')
-                    
-                    ui.button('Abrir Original no Drive', icon='open_in_new', on_click=lambda: ui.navigate.to(photos_list[cur_idx['val']].get('drive_link') or f"https://drive.google.com/file/d/{photos_list[cur_idx['val']]['drive_file_id']}/view", new_tab=True)).props('flat dense color=cyan size=sm no-caps').classes('text-xs')
+                    def update_lightbox_image():
+                        img_container.clear()
+                        photo = photos_list[current_idx['value']]
+                        fid = photo.get('drive_file_id') or photo.get('id')
+                        img_url = f"https://drive.google.com/thumbnail?id={fid}&sz=w1600"
+                        with img_container:
+                            ui.image(img_url).classes('max-h-[82vh] max-w-full object-contain rounded-lg shadow-2xl')
+                        counter_label.set_text(f"{current_idx['value'] + 1} / {len(photos_list)}")
 
-                    ui.button('Próxima ➡️', icon='arrow_forward', on_click=lambda: update_lightbox_img(cur_idx['val'] + 1)).props('unelevated color=cyan-8 text-color=white bold no-caps').classes('px-4 rounded-xl text-xs')
+                    update_lightbox_image()
 
-            dlg.open()
+                    def prev_photo():
+                        if current_idx['value'] > 0:
+                            current_idx['value'] -= 1
+                            update_lightbox_image()
 
-        # ── 3. GRADE DE FOTOS RESPONSIVA (HORIZONTAL ASPECT 16:10) ────────────
+                    def next_photo():
+                        if current_idx['value'] < len(photos_list) - 1:
+                            current_idx['value'] += 1
+                            update_lightbox_image()
+
+                    if len(photos_list) > 1:
+                        ui.button(icon='chevron_left', on_click=prev_photo).props('round unelevated color=slate-900/80 text-color=white size=md').classes('absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-10 border border-white/20')
+                        ui.button(icon='chevron_right', on_click=next_photo).props('round unelevated color=slate-900/80 text-color=white size=md').classes('absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 border border-white/20')
+
+            dialog.open()
+
+        # ── 3. RENDERIZADOR DE GRADE DE FOTOS (Proporção Panorâmica 16:10) ─────
         def render_photo_grid(photos_list: list[dict], is_personal: bool = False):
-            with ui.grid().classes('w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3'):
-                for idx, p in enumerate(photos_list):
-                    fid = p.get('drive_file_id') or p.get('id')
-                    raw_thumb = str(p.get('thumbnailLink') or '')
-                    if '=s220' in raw_thumb:
-                        thumb_url = raw_thumb.replace('=s220', '=s800')
-                    elif '=' in raw_thumb:
-                        thumb_url = raw_thumb.split('=')[0] + '=s800'
-                    elif fid:
-                        thumb_url = f"https://drive.google.com/thumbnail?id={fid}&sz=w800"
-                    else:
-                        thumb_url = ''
+            if not photos_list:
+                return
 
+            with ui.element('div').classes('w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3'):
+                for idx, photo in enumerate(photos_list):
+                    fid = photo.get('drive_file_id') or photo.get('id')
+                    if not fid:
+                        continue
+                    thumb_url = f"https://drive.google.com/thumbnail?id={fid}&sz=w800"
                     is_selected = fid in guest_state['selected_fids']
-                    border_style = 'border: 2px solid #00e5ff; box-shadow: 0 0 12px rgba(0,229,255,0.4);' if is_selected else 'border: 1px solid rgba(255,255,255,0.08);'
 
-                    with ui.card().classes('q-pa-none no-shadow rounded-xl overflow-hidden cursor-pointer transition-transform duration-150 active:scale-[0.98]').style(f'background: #0f172a; {border_style}'):
-                        # Container da foto com formato horizontal landscape (16:10)
-                        with ui.element('div').classes('relative w-full bg-[#030a17] flex items-center justify-center overflow-hidden').style('aspect-ratio: 16/10;'):
-                            def toggle_select(f=fid):
+                    card_border = 'photo-card-selected' if is_selected else 'border border-slate-800'
+                    with ui.card().classes(f"w-full bg-slate-900 rounded-xl overflow-hidden shadow-md {card_border} p-0 relative transition-all duration-200"):
+                        with ui.element('div').classes('w-full relative aspect-[16/10] overflow-hidden bg-slate-950 cursor-pointer').on('click', lambda _, i=idx, pl=photos_list: open_full_lightbox(i, pl)):
+                            ui.image(thumb_url).classes('w-full h-full object-cover')
+
+                        with ui.row().classes('w-full items-center justify-between px-2 py-1.5 bg-slate-900/90 gap-1'):
+                            def toggle_select(_, f=fid):
                                 if f in guest_state['selected_fids']:
                                     guest_state['selected_fids'].remove(f)
                                 else:
                                     guest_state['selected_fids'].add(f)
                                 refresh_ui()
 
-                            # Checkbox compacto no canto superior
-                            with ui.element('div').classes('absolute top-1 left-1 z-20 bg-black/70 backdrop-blur-md rounded-md p-0.5').on('click', lambda _, f=fid: toggle_select(f)):
-                                ui.checkbox(value=is_selected, on_change=lambda _, f=fid: toggle_select(f)).props('dark color=cyan dense size=xs')
+                            ui.button(
+                                icon='check_circle' if is_selected else 'radio_button_unchecked',
+                                on_click=lambda _, f=fid: toggle_select(None, f)
+                            ).props(f"flat dense round size=sm {'color=cyan-4' if is_selected else 'color=grey-5'}").classes('text-xs')
 
-                            img = ui.image(thumb_url).classes('w-full h-full').style('object-fit: cover;')
-                            img.on('click', lambda _, i=idx, l=photos_list: open_full_lightbox(i, l))
+                            ui.button(
+                                icon='download',
+                                on_click=lambda _, f=fid: download_single(f)
+                            ).props('flat dense round color=grey-4 size=sm').classes('text-xs')
 
-                        # Rodapé em duas linhas compactas
-                        with ui.column().classes('w-full p-1.5 sm:p-2 bg-slate-950/95 border-t border-white/5 gap-0.5'):
-                            fname = p.get('filename') or p.get('name') or 'foto.jpg'
-                            ui.label(fname).classes('text-[10px] text-slate-300 font-semibold truncate w-full')
-                            
-                            with ui.row().classes('w-full items-center justify-between gap-1'):
-                                badge_txt = '⭐ Sua foto' if is_personal else '☁️ Drive'
-                                badge_col = 'amber-9' if is_personal else 'blue-grey-8'
-                                ui.badge(badge_txt, color=badge_col).classes('text-[8px] font-bold px-1.5 py-0.5')
-
-                                with ui.row().classes('items-center gap-0.5'):
-                                    ui.button(icon='fullscreen', on_click=lambda _, i=idx, l=photos_list: open_full_lightbox(i, l)).props('flat dense size=xs color=grey-4').classes('p-0.5').tooltip('Ampliar')
-                                    ui.button(icon='download', on_click=lambda _, f=fid: download_single(f)).props('unelevated color=cyan text-color=black dense bold size=xs').classes('px-1.5 py-0.2 rounded text-[9px]').tooltip('Baixar foto HD')
-
-        # ── 4. BARRA DE SELEÇÃO MÚLTIPLA E DOWNLOAD EM LOTE ───────────────────
+        # ── 4. BARRA DE FERRAMENTAS DE SELEÇÃO ─────────────────────────────────
         def render_selection_toolbar():
-            all_visible = guest_state['matched_photos'] + guest_state['geral_photos']
+            all_visible = guest_state['matched_photos'] if guest_state['matched_photos'] else guest_state['geral_photos']
             if not all_visible:
                 return
 
-            total_geral = len(guest_state['geral_photos'])
-            per_p = guest_state.get('per_page', 60)
-            cur_p = guest_state.get('page', 1)
-            start_i = (cur_p - 1) * per_p
-            end_i = min(start_i + per_p, total_geral)
-            page_geral = guest_state['geral_photos'][start_i:end_i]
-            page_all = guest_state['matched_photos'] + page_geral
-
             selected_count = len(guest_state['selected_fids'])
 
-            with ui.card().classes('w-full bg-slate-900/90 border border-white/10 rounded-2xl p-2.5 sm:p-3 shadow-md'):
+            with ui.card().classes('w-full bg-slate-900/95 border border-slate-700/60 rounded-xl p-2 sm:p-3 shadow-lg'):
                 with ui.row().classes('w-full items-center justify-between flex-wrap gap-2'):
-                    with ui.row().classes('items-center gap-1.5'):
-                        ui.icon('check_box', size='1.2rem', color='cyan-4')
-                        ui.label(f"{selected_count} selecionada(s)").classes('text-xs font-bold text-white')
+                    with ui.row().classes('items-center gap-2'):
+                        ui.icon('photo_library', color='cyan-4', size='1.3rem')
+                        ui.label(f"{len(all_visible)} foto(s) disponíveis").classes('text-xs sm:text-sm font-bold text-white')
+                        if selected_count > 0:
+                            ui.badge(f"{selected_count} selecionada(s)", color='cyan-9').classes('text-xs font-bold px-2 py-0.5 rounded-md')
 
-                    with ui.row().classes('items-center gap-1.5 flex-wrap'):
+                    with ui.row().classes('items-center gap-1.5 sm:gap-2 flex-wrap'):
+                        start_idx = (guest_state['page'] - 1) * guest_state['per_page']
+                        end_idx = start_idx + guest_state['per_page']
+                        page_all = all_visible[start_idx:end_idx]
+
                         def select_page():
                             for p in page_all:
                                 fid = p.get('drive_file_id') or p.get('id')
@@ -660,13 +666,14 @@ def render_page(event_id: str):
                             ui.button('Desmarcar', icon='clear', on_click=clear_selection).props('flat color=grey-4 dense size=sm no-caps').classes('text-[11px] px-1.5')
 
                         async def download_selected_zip():
-                            fids_to_dl = list(guest_state['selected_fids']) if guest_state['selected_fids'] else [p.get('drive_file_id') for p in all_visible]
+                            fids_to_dl = list(guest_state['selected_fids']) if guest_state['selected_fids'] else [p.get('drive_file_id') or p.get('id') for p in all_visible]
                             if not fids_to_dl:
                                 ui.notify('Nenhuma foto selecionada.', color='warning')
                                 return
 
                             n_zip = ui.notify(f"📦 Compactando {len(fids_to_dl)} foto(s) em arquivo ZIP...", color='info', spinner=True, timeout=0)
                             try:
+                                import zipfile
                                 def build_zip():
                                     buf = io.BytesIO()
                                     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -675,262 +682,190 @@ def render_page(event_id: str):
                                             if img_b:
                                                 zf.writestr(f"foto_{idx+1:03d}_{fid}.jpg", img_b)
                                     buf.seek(0)
-                                    return buf.getvalue()
+                                    return buf.read()
 
                                 zip_bytes = await asyncio.to_thread(build_zip)
-                                log_portal_analytics(event_id, 'download', session_id=session_id, metadata={'count': len(fids_to_dl)})
-                                ui.download(zip_bytes, f"fotos_{event_id}.zip")
-                                ui.notify('✅ Download do ZIP iniciado!', color='positive')
-                            except Exception as ex_zip:
-                                ui.notify(f"Erro ao gerar ZIP: {ex_zip}", color='negative')
-                            finally:
-                                try: n_zip.dismiss()
-                                except Exception: pass
+                                n_zip.dismiss()
 
-                        dl_btn_label = f"📥 Baixar ({selected_count})" if selected_count > 0 else f"📥 Baixar Todas ({len(all_visible)})"
-                        ui.button(dl_btn_label, icon='archive', on_click=download_selected_zip).props('unelevated color=amber-8 text-color=black bold size=sm no-caps').classes('text-[11px] font-bold rounded-xl px-2.5')
+                                if not zip_bytes:
+                                    ui.notify('Falha ao baixar fotos para o ZIP.', color='negative')
+                                    return
 
-        # ── 5. GALERIA OFICIAL COM PAGINAÇÃO NO RODAPÉ ────────────────────────
+                                b64_zip = base64.b64encode(zip_bytes).decode('ascii')
+                                filename = f"fotos_{event.get('nome', 'evento')[:15]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+                                js_dl = f'''
+                                    var a = document.createElement("a");
+                                    a.href = "data:application/zip;base64,{b64_zip}";
+                                    a.download = "{filename}";
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                '''
+                                ui.run_javascript(js_dl)
+                                ui.notify(f"✅ ZIP com {len(fids_to_dl)} foto(s) baixado com sucesso!", color='positive')
+                            except Exception as e_zip:
+                                n_zip.dismiss()
+                                ui.notify(f"Erro ao gerar ZIP: {e_zip}", color='negative')
+
+                        ui.button('Baixar ZIP', icon='archive', on_click=download_selected_zip).props('unelevated color=cyan-7 text-color=black bold dense size=sm no-caps').classes('text-[11px] rounded-lg px-2.5 shadow')
+
+        # ── 5. GALERIA OFICIAL DO EVENTO COM PAGINAÇÃO NO RODAPÉ ──────────────
         def render_official_gallery(folder_id: str):
             if not folder_id:
-                ui.label('Nenhuma foto oficial disponibilizada ainda.').classes('text-xs text-grey-5 italic')
+                with ui.card().classes('w-full bg-slate-900/60 p-4 text-center rounded-xl'):
+                    ui.label('Fotos da galeria oficial serão disponibilizadas em breve.').classes('text-xs text-grey-5')
                 return
 
-            try:
-                if not guest_state['geral_photos']:
-                    guest_state['geral_photos'] = _get_geral_photos(folder_id)
+            photos = _get_geral_photos(folder_id)
+            guest_state['geral_photos'] = photos
 
-                fotos = guest_state['geral_photos']
-                if not fotos:
-                    ui.label('As fotos do evento estão sendo processadas pela equipe de Comunicação Social.').classes('text-xs text-grey-4 italic')
-                    return
+            if not photos:
+                with ui.card().classes('w-full bg-slate-900/60 p-4 text-center rounded-xl'):
+                    ui.label('Nenhuma foto encontrada na galeria oficial deste evento.').classes('text-xs text-grey-5')
+                return
 
-                total_fotos = len(fotos)
-                per_page = guest_state.get('per_page', 60)
-                total_pages = max(1, math.ceil(total_fotos / per_page))
-                cur_page = max(1, min(guest_state.get('page', 1), total_pages))
-                guest_state['page'] = cur_page
+            total_photos = len(photos)
+            per_page = guest_state['per_page']
+            total_pages = max(1, (total_photos + per_page - 1) // per_page)
+            current_page = max(1, min(guest_state['page'], total_pages))
 
-                start_idx = (cur_page - 1) * per_page
-                end_idx = min(start_idx + per_page, total_fotos)
-                visible_fotos = fotos[start_idx:end_idx]
+            start_idx = (current_page - 1) * per_page
+            end_idx = min(start_idx + per_page, total_photos)
+            current_batch = photos[start_idx:end_idx]
 
-                def set_page(p):
-                    guest_state['page'] = max(1, min(p, total_pages))
-                    refresh_ui()
+            render_photo_grid(current_batch, is_personal=False)
 
-                def set_per_page(v):
-                    guest_state['per_page'] = v
-                    guest_state['page'] = 1
-                    refresh_ui()
-
-                # ─── GRID DE FOTOS DA PÁGINA ───
-                render_photo_grid(visible_fotos, is_personal=False)
-
-                # ─── PAGINAÇÃO APENAS NO RODAPÉ: centralizada, linha única com seletor ───
-                with ui.row().classes('w-full items-center justify-center flex-wrap gap-2 sm:gap-3 mt-4 pt-3 border-t border-white/10'):
-                    ui.button(icon='first_page', on_click=lambda: set_page(1)).props('flat dense color=cyan round size=sm').tooltip('Primeira')
-                    ui.button(icon='chevron_left', on_click=lambda: set_page(cur_page - 1)).props('unelevated dense color=cyan-9 text-color=white round size=sm').tooltip('Anterior')
-
-                    ui.label(f'Pág. {cur_page}/{total_pages}').classes('text-xs font-bold text-cyan-3 px-1')
-                    ui.label(f'({start_idx+1}–{end_idx} de {total_fotos})').classes('text-[11px] text-grey-5')
-
-                    ui.button(icon='chevron_right', on_click=lambda: set_page(cur_page + 1)).props('unelevated dense color=cyan-9 text-color=white round size=sm').tooltip('Próxima')
-                    ui.button(icon='last_page', on_click=lambda: set_page(total_pages)).props('flat dense color=cyan round size=sm').tooltip('Última')
-
-                    ui.separator().props('vertical').classes('h-6 opacity-30')
-
-                    for opt_val, opt_lbl in [(30,'30'),(60,'60'),(120,'120'),(240,'240'),(500,'500')]:
-                        is_curr = per_page == opt_val
-                        ui.button(opt_lbl, on_click=lambda _, v=opt_val: set_per_page(v)).props(
-                            f'dense {"unelevated color=cyan-7 text-color=black" if is_curr else "flat color=grey text-color=grey-4"}'
-                        ).classes('text-[11px] px-2 rounded-lg min-w-[28px]')
-
-            except Exception as e:
-                ui.label(f"Não foi possível carregar a galeria: {e}").classes('text-xs text-red-4')
-
-        # ── 6. SEÇÃO DE ENTREGA (E-MAIL INSTITUCIONAL & WHATSAPP) ─────────────
-        def render_delivery_section():
-            all_photos = []
-            seen = set()
-            for p in (guest_state['matched_photos'] + guest_state['geral_photos']):
-                fid = p.get('drive_file_id') or p.get('id')
-                if fid and fid not in seen:
-                    seen.add(fid)
-                    all_photos.append(p)
-
-            with ui.card().classes('w-full max-w-5xl bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 gap-3 q-mt-4'):
-                ui.label('📥 RECEBER OU COMPARTILHAR SUAS FOTOS').classes('text-sm sm:text-base font-black text-white tracking-wide')
-                
-                # Botão de Compartilhar no WhatsApp
-                event_url = f"https://sisgab-cgcfn.ddns.net/evento/{event_id}"
-                whatsapp_text = f"📷 Acesse as fotos oficiais do evento {nome_evento}: {event_url}"
-                whatsapp_url = f"https://api.whatsapp.com/send?text={whatsapp_text.replace(' ', '%20')}"
-
-                with ui.row().classes('w-full items-center gap-3'):
-                    ui.button('Compartilhar Galeria no WhatsApp', icon='share', on_click=lambda: (log_portal_analytics(event_id, 'whatsapp', session_id=session_id), ui.navigate.to(whatsapp_url, new_tab=True))).props('unelevated color=green-7 text-color=white bold no-caps').classes('w-full h-12 text-xs sm:text-sm font-bold rounded-xl shadow-md')
-
-                # Envio por E-mail Institucional com Pré-Cadastro Permanente
-                with ui.column().classes('w-full gap-2.5 q-mt-1'):
-                    ui.label('Ou salve seu e-mail para receber fotos automaticamente neste e em futuros eventos:').classes('text-[11px] sm:text-xs text-grey-4')
-                    
-                    with ui.row().classes('w-full items-center gap-3 flex-wrap'):
-                        name_input = ui.input(placeholder='Seu Nome (opcional)', value=guest_state['guest_name']).props('dark outlined dense').classes('w-full sm:w-60')
-                        email_input = ui.input(placeholder='seu.email@exemplo.com', value=guest_state['guest_email']).props('dark outlined dense').classes('flex-1 min-w-[240px]')
-                        
-                        async def send_email_action():
-                            email_val = (email_input.value or '').strip()
-                            name_val = (name_input.value or '').strip()
-                            if not email_val or '@' not in email_val:
-                                ui.notify('❌ Digite um e-mail válido.', color='warning')
-                                return
-                            
-                            if not all_photos:
-                                ui.notify('ℹ️ Nenhuma foto para enviar no momento.', color='info')
-                                return
-
-                            guest_state['guest_name'] = name_val
-                            guest_state['guest_email'] = email_val
-                            app.storage.user['portal_guest_name'] = name_val
-                            app.storage.user['portal_guest_email'] = email_val
-
-                            # Salva perfil permanente no banco para histórico multi-evento
-                            save_guest_face_profile(
-                                event_id, session_id, guest_state['selfie_embeddings'],
-                                nome=name_val, email=email_val
-                            )
-                            
-                            links_html = ''.join(
-                                f'<p style="margin: 6px 0;">📷 <a href="https://drive.google.com/file/d/{p.get("drive_file_id")}/view" style="color: #0284c7; text-decoration: none; font-weight: bold;">Foto {i+1} — Abrir no Drive</a></p>'
-                                for i, p in enumerate(all_photos[:30])
-                            )
-
-                            default_template = f"""
-                            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0f172a; color: #f8fafc; padding: 24px; border-radius: 16px; border: 1px solid #334155;">
-                                <div style="text-align: center; margin-bottom: 20px;">
-                                    <h2 style="color: #f59e0b; margin: 0; font-size: 20px; text-transform: uppercase;">MARINHA DO BRASIL</h2>
-                                    <p style="color: #38bdf8; margin: 4px 0 0 0; font-size: 11px; font-weight: bold; letter-spacing: 2px;">GABINETE DO COMANDANTE-GERAL DO CORPO DE FUZILEIROS NAVAIS</p>
-                                </div>
-                                <hr style="border: 0; height: 1px; background: #334155; margin: 16px 0;" />
-                                <p style="font-size: 15px;">Prezado(a) <strong>{name_val or 'Convidado(a)'}</strong>,</p>
-                                <p style="font-size: 14px; color: #cbd5e1;">Suas fotos do evento <strong>{nome_evento}</strong> já estão prontas para visualização e download:</p>
-                                <div style="background: #1e293b; padding: 16px; border-radius: 12px; margin: 16px 0;">
-                                    {links_html}
-                                </div>
-                                <p style="text-align: center; margin-top: 20px;">
-                                    <a href="{event_url}" style="background: #0284c7; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Ver Galeria Completa</a>
-                                </p>
-                                <hr style="border: 0; height: 1px; background: #334155; margin: 20px 0;" />
-                                <p style="font-size: 11px; color: #64748b; text-align: center;">Comunicação Social — CGCFN • Este é um e-mail automático institucional.</p>
-                            </div>
-                            """
-
-                            template_to_use = event.get('email_template') or default_template
-                            template_to_use = template_to_use.replace('{EVENTO_NOME}', nome_evento)
-                            template_to_use = template_to_use.replace('{EVENTO_DATA}', data_formatada)
-                            template_to_use = template_to_use.replace('{EVENTO_LOCAL}', local_evento)
-                            template_to_use = template_to_use.replace('{FOTOS_LINKS}', links_html)
-                            template_to_use = template_to_use.replace('{TOTAL_FOTOS}', str(len(all_photos)))
-
-                            try:
-                                await asyncio.to_thread(
-                                    send_real_email_smtp,
-                                    email_val,
-                                    f"📷 Suas fotos do evento {nome_evento}",
-                                    template_to_use
-                                )
-                                save_guest_delivery(event_id, email_val, ','.join(p.get('drive_file_id') for p in all_photos), len(all_photos))
-                                log_portal_analytics(event_id, 'email', session_id=session_id)
-                                ui.notify('✅ E-mail institucional enviado com sucesso e perfil salvo!', color='positive')
-                            except Exception as err_mail:
-                                ui.notify(f"❌ Erro ao enviar e-mail: {err_mail}", color='negative')
-
-                        ui.button('📧 Enviar Fotos por E-mail', on_click=send_email_action).props('unelevated color=cyan text-color=black font-bold icon=send').classes('h-11 px-6 rounded-xl text-xs')
-
-        # ── 7. RENDERIZAÇÃO DO CONTEÚDO COMPLETO DO PORTAL ────────────────────
-        def render_portal_content():
-            pin_evento = str(event.get('pin_acesso') or '').strip()
-            is_auth = True
-            if pin_evento:
-                is_auth = app.storage.user.get(f'portal_auth_{event_id}', False)
-
-            # Se o evento possui PIN e o usuário ainda não autenticou
-            if not is_auth:
-                with ui.card().classes('w-full bg-slate-950/95 border-2 border-amber-500/40 rounded-2xl p-4 sm:p-6 items-center text-center gap-4 shadow-2xl'):
-                    ui.icon('lock', size='3rem', color='amber-4')
-                    ui.label('ACESSO RESTRITO AO EVENTO').classes('text-base sm:text-xl font-black text-white tracking-wider')
-                    ui.label('Digite o PIN do evento ou valide sua presença com uma selfie facial.').classes('text-xs text-grey-3 max-w-sm')
-
-                    pin_box = ui.input('PIN do Evento', placeholder='Digite o PIN').props('dark outlined dense type=password').classes('w-full max-w-xs text-center text-lg tracking-widest')
-                    
-                    def verificar_pin():
-                        val = (pin_box.value or '').strip()
-                        if val.lower() == pin_evento.lower():
-                            app.storage.user[f'portal_auth_{event_id}'] = True
-                            ui.notify('✅ Acesso liberado!', color='positive')
+            if total_pages > 1:
+                with ui.card().classes('w-full bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 mt-3 shadow-md'):
+                    with ui.row().classes('w-full items-center justify-center gap-2 sm:gap-4 flex-nowrap'):
+                        def go_first():
+                            guest_state['page'] = 1
                             refresh_ui()
+
+                        def go_prev():
+                            if guest_state['page'] > 1:
+                                guest_state['page'] -= 1
+                                refresh_ui()
+
+                        def go_next():
+                            if guest_state['page'] < total_pages:
+                                guest_state['page'] += 1
+                                refresh_ui()
+
+                        def go_last():
+                            guest_state['page'] = total_pages
+                            refresh_ui()
+
+                        ui.button(icon='first_page', on_click=go_first).props('flat dense round color=grey-4 size=sm').set_visibility(current_page > 1)
+                        ui.button(icon='chevron_left', on_click=go_prev).props('flat dense round color=cyan-4 size=md').set_visibility(current_page > 1)
+
+                        ui.label(f"Página {current_page} de {total_pages}").classes('text-xs sm:text-sm font-bold text-white font-mono px-2')
+
+                        ui.button(icon='chevron_right', on_click=go_next).props('flat dense round color=cyan-4 size=md').set_visibility(current_page < total_pages)
+                        ui.button(icon='last_page', on_click=go_last).props('flat dense round color=grey-4 size=sm').set_visibility(current_page < total_pages)
+
+        # ── 6. SEÇÃO DE ENTREGA ───────────────────────────────────────────────
+        def render_delivery_section():
+            with ui.column().classes('w-full gap-2.5 q-mt-4'):
+                with ui.card().classes('w-full bg-slate-900/90 border border-cyan-500/20 rounded-2xl p-4 sm:p-5 gap-3 shadow-xl'):
+                    with ui.row().classes('items-center gap-2'):
+                        ui.icon('forward_to_inbox', size='1.5rem', color='cyan-4')
+                        ui.label('RECEBER FOTOS EM ALTA RESOLUÇÃO').classes('text-sm sm:text-base font-black text-cyan-3 tracking-wide')
+
+                    ui.label('Informe seu e-mail institucional ou WhatsApp para receber o pacote completo com todas as suas fotos em resolução máxima:').classes('text-xs text-grey-4')
+
+                    with ui.row().classes('w-full gap-2 sm:gap-3 flex-wrap'):
+                        input_nome = ui.input(placeholder='Seu nome completo', value=guest_state['guest_name']).props('outlined dense dark').classes('flex-1 min-w-[200px] text-xs bg-slate-950/60 rounded-xl')
+                        input_email = ui.input(placeholder='Seu e-mail (@marinha.mil.br ou pessoal)', value=guest_state['guest_email']).props('outlined dense dark').classes('flex-1 min-w-[220px] text-xs bg-slate-950/60 rounded-xl')
+
+                    async def submit_delivery():
+                        nome = input_nome.value.strip()
+                        email = input_email.value.strip()
+                        if not email:
+                            ui.notify('Por favor, informe seu e-mail.', color='warning')
+                            return
+
+                        guest_state['guest_name'] = nome
+                        guest_state['guest_email'] = email
+                        app.storage.user['portal_guest_name'] = nome
+                        app.storage.user['portal_guest_email'] = email
+
+                        fids = list(guest_state['selected_fids']) if guest_state['selected_fids'] else [p.get('drive_file_id') or p.get('id') for p in (guest_state['matched_photos'] or guest_state['geral_photos'])]
+                        
+                        ok = await asyncio.to_thread(
+                            create_photo_delivery_request,
+                            event_id=event_id,
+                            session_id=session_id,
+                            guest_name=nome,
+                            guest_email=email,
+                            photo_fids=fids
+                        )
+                        if ok:
+                            ui.notify(f"✅ Solicitação registrada com sucesso! Enviaremos as fotos para {email}.", color='positive', timeout=6000)
                         else:
-                            ui.notify('❌ PIN incorreto. Tente novamente ou use a validação por Selfie.', color='negative')
+                            ui.notify('Erro ao registrar solicitação. Tente novamente.', color='negative')
 
-                    ui.button('🔓 DESBLOQUEAR COM PIN', icon='key', on_click=verificar_pin).props('unelevated color=amber-9 text-color=black bold').classes('w-full max-w-xs h-12 rounded-xl text-xs font-bold')
+                    with ui.row().classes('w-full justify-end mt-1'):
+                        ui.button('Solicitar Envio', icon='send', on_click=submit_delivery).props('unelevated color=cyan-7 text-color=black bold no-caps').classes('rounded-xl text-xs px-4 py-2 font-bold shadow-md')
 
-                    ui.separator().classes('w-full').style('background: linear-gradient(90deg, transparent, rgba(245, 158, 11, 0.4), transparent);')
+        # ── 7. MONTAGEM DO CONTEÚDO PRINCIPAL ─────────────────────────────────
+        def render_portal_content():
+            pin_req = str(event.get('pin_acesso') or '').strip()
+            is_authenticated = app.storage.user.get(f'portal_auth_{event_id}', False)
 
-                    ui.label('OU VALIDE SUA PRESENÇA COM UMA SELFIE').classes('text-xs font-bold text-cyan-4 tracking-wider')
+            if pin_req and not is_authenticated:
+                with ui.card().classes('w-full bg-slate-900/95 border border-amber-500/40 rounded-2xl p-5 sm:p-7 text-center items-center gap-3 shadow-2xl'):
+                    ui.icon('lock', size='3rem', color='amber-4')
+                    ui.label('EVENTO RESTRITO — INSIRA O PIN').classes('cyber-title text-base sm:text-xl font-black text-amber-4')
+                    ui.label('Este evento possui controle de acesso. Digite o PIN de 4 dígitos ou valide sua presença com uma selfie:').classes('text-xs text-grey-4 max-w-md')
 
-                    with ui.row().classes('w-full justify-center gap-2 sm:gap-3 flex-wrap'):
+                    with ui.row().classes('items-center justify-center gap-2 q-my-sm'):
+                        pin_input = ui.input(placeholder='PIN').props('outlined dense dark type=password maxlength=6').classes('w-32 text-center text-lg font-mono bg-slate-950 rounded-xl')
+                        def check_pin():
+                            if pin_input.value.strip() == pin_req:
+                                app.storage.user[f'portal_auth_{event_id}'] = True
+                                ui.notify('✅ Acesso liberado!', color='positive')
+                                refresh_ui()
+                            else:
+                                ui.notify('❌ PIN incorreto.', color='negative')
+                        ui.button('Entrar', on_click=check_pin).props('unelevated color=amber-7 text-color=black bold').classes('rounded-xl text-xs h-10 px-4')
+
+                    ui.separator().classes('w-full opacity-20 q-my-sm')
+
+                    with ui.row().classes('w-full gap-2 sm:gap-3 mt-1'):
                         ui.button(
                             '📸 VALIDAR COM CÂMERA',
-                            icon='photo_camera',
-                            on_click=lambda: ui.run_javascript('document.getElementById("portal-native-camera")?.click()')
-                        ).props('unelevated color=cyan-8 text-color=white bold no-caps').classes('flex-1 min-w-[150px] h-12 rounded-xl text-xs font-bold')
+                            icon='photo_camera'
+                        ).props('onclick="document.getElementById(\'portal-native-camera\').click()" unelevated color=cyan-8 text-color=white bold no-caps').classes('flex-1 min-w-[150px] h-12 rounded-xl text-xs font-bold')
 
                         ui.button(
                             '📁 ESCOLHER FOTO DA GALERIA',
-                            icon='photo_library',
-                            on_click=lambda: ui.run_javascript('document.getElementById("portal-native-gallery")?.click()')
-                        ).props('unelevated color=amber-8 text-color=black bold no-caps').classes('flex-1 min-w-[150px] h-12 rounded-xl text-xs font-bold')
+                            icon='photo_library'
+                        ).props('onclick="document.getElementById(\'portal-native-gallery\').click()" unelevated color=amber-8 text-color=black bold no-caps').classes('flex-1 min-w-[150px] h-12 rounded-xl text-xs font-bold')
 
                 return
 
-            # 1. SEÇÃO DE BUSCA FACIAL — COMPACTA E DIRETA
-            num_selfies = len(guest_state['selfie_embeddings'])
-            with ui.card().classes('w-full bg-slate-900/90 border border-cyan-500/30 rounded-2xl p-3 sm:p-5 gap-2.5 shadow-xl'):
+            # 1. SEÇÃO DE CAPTURA BIOMÉTRICA / SELFIE (Card Compacto Direto)
+            with ui.card().classes('w-full bg-slate-900/90 border border-cyan-500/30 rounded-2xl p-3 sm:p-5 shadow-xl text-center gap-1.5'):
+                with ui.row().classes('w-full items-center justify-center gap-2'):
+                    ui.icon('face_retouching_natural', size='1.5rem', color='cyan-4')
+                    ui.label('ENCONTRE SUAS FOTOS DO EVENTO').classes('text-sm sm:text-base font-black text-cyan-3 tracking-wide')
 
-                if num_selfies == 0:
-                    with ui.row().classes('w-full items-center justify-between'):
-                        with ui.row().classes('items-center gap-1.5'):
-                            ui.icon('face', size='1.4rem', color='cyan-4')
-                            ui.label('ENCONTRE SUAS FOTOS DO EVENTO').classes('text-xs sm:text-base font-black text-white tracking-wide')
-                        ui.badge('✨ IA Facial', color='cyan-9').classes('text-[10px] font-bold px-1.5')
+                num_selfies = len(guest_state['selfie_embeddings'])
+                ui.label('Tire uma selfie ou escolha uma foto sua para a inteligência artificial localizar todas as suas fotos no evento:').classes('text-xs text-grey-4 max-w-xl mx-auto')
 
-                    # Orientações em linha única
-                    with ui.row().classes('w-full justify-center gap-2 text-[11px] text-grey-3 py-0.5 flex-wrap'):
-                        ui.label('☀️ Boa luz').classes('bg-slate-950 px-2 py-0.5 rounded-md border border-white/5')
-                        ui.label('👤 De frente').classes('bg-slate-950 px-2 py-0.5 rounded-md border border-white/5')
-                        ui.label('🚫 Sem óculos').classes('bg-slate-950 px-2 py-0.5 rounded-md border border-white/5')
-                else:
-                    with ui.row().classes('w-full items-center justify-between'):
-                        with ui.row().classes('items-center gap-1.5'):
-                            ui.icon('check_circle', size='1.4rem', color='green-4')
-                            ui.label(f"Biometria ativa ({num_selfies} foto{'s' if num_selfies>1 else ''})").classes('text-xs sm:text-sm font-bold text-green-4')
-                        ui.badge('Ativo', color='green-9').classes('text-[10px] font-bold px-1.5')
-
-                # BOTÕES NATIVOS 100% CLICÁVEIS
                 with ui.row().classes('w-full gap-2 sm:gap-3 mt-1'):
                     btn_cam_label = '📸 TIRAR SELFIE (CÂMERA)' if num_selfies == 0 else '📸 OUTRA SELFIE'
                     ui.button(
                         btn_cam_label,
-                        on_click=lambda: ui.run_javascript('document.getElementById("portal-native-camera")?.click()')
-                    ).props('unelevated color=cyan-7 text-color=black bold no-caps').classes(
+                    ).props('onclick="document.getElementById(\'portal-native-camera\').click()" unelevated color=cyan-7 text-color=black bold no-caps').classes(
                         'flex-1 h-12 sm:h-14 font-black rounded-xl text-xs sm:text-sm shadow-md active:scale-95 transition-transform'
                     )
 
                     btn_gal_label = '📁 ESCOLHER FOTO' if num_selfies == 0 else '📁 OUTRA FOTO'
                     ui.button(
                         btn_gal_label,
-                        on_click=lambda: ui.run_javascript('document.getElementById("portal-native-gallery")?.click()')
-                    ).props('unelevated color=amber-7 text-color=black bold no-caps').classes(
+                    ).props('onclick="document.getElementById(\'portal-native-gallery\').click()" unelevated color=amber-7 text-color=black bold no-caps').classes(
                         'flex-1 h-12 sm:h-14 font-black rounded-xl text-xs sm:text-sm shadow-md active:scale-95 transition-transform'
                     )
 
@@ -940,6 +875,7 @@ def render_page(event_id: str):
                         guest_state['matched_photos'] = []
                         guest_state['has_searched'] = False
                         app.storage.user[f'portal_embs_{event_id}'] = []
+                        ui.run_javascript(f"sessionStorage.removeItem('portal_matched_{event_id}'); sessionStorage.removeItem('portal_searched_{event_id}'); sessionStorage.removeItem('portal_embs_{event_id}');")
                         ui.notify('Biometria limpa.', color='info')
                         refresh_ui()
                     with ui.row().classes('items-center justify-between w-full pt-1'):
@@ -987,12 +923,27 @@ def render_page(event_id: str):
             with content_container:
                 render_portal_content()
 
-        # ── 9. AUTO-MATCH SE JÁ HOUVER SELFIES SALVAS NA SESSÃO ───────────────
-        if guest_state['selfie_embeddings']:
-            async def auto_match_on_load():
-                await execute_matching()
+        # ── 9. RECUPERAÇÃO AUTOMÁTICA DE RESULTADOS ───────────────────────────
+        # Se o cliente já pesquisou via endpoint REST, injeta os resultados no estado
+        async def check_client_session():
+            js_res = await ui.run_javascript(f'''
+                (function() {{
+                    try {{
+                        var raw = sessionStorage.getItem("portal_matched_{event_id}");
+                        var searched = sessionStorage.getItem("portal_searched_{event_id}");
+                        if (raw && searched) {{
+                            return {{ searched: true, matches: JSON.parse(raw) }};
+                        }}
+                    }} catch(e) {{}}
+                    return null;
+                }})()
+            ''')
+            if js_res and js_res.get('searched'):
+                guest_state['has_searched'] = True
+                guest_state['matched_photos'] = js_res.get('matches') or []
                 refresh_ui()
-            asyncio.create_task(auto_match_on_load())
+
+        ui.timer(0.1, check_client_session, once=True)
 
         # ── 10. INICIALIZA A PRIMEIRA RENDERIZAÇÃO NA RAIZ DA PÁGINA ──────────
         refresh_ui()
