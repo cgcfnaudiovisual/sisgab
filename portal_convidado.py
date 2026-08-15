@@ -193,7 +193,7 @@ def _get_geral_photos(folder_id: str) -> list[dict]:
 
     try:
         t0 = time.time()
-        photos = drive_service.list_files_in_folder(folder_id)
+        photos = drive_service.list_files(folder_id)
         if photos:
             photos.sort(key=lambda x: x.get('name', ''), reverse=True)
             _EVENT_GERAL_PHOTOS_CACHE[folder_id] = {
