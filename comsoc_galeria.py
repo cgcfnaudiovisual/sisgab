@@ -762,7 +762,7 @@ def render_page(evento_id: str = None, **kwargs):
         from database import (
             get_public_event, create_public_event, update_public_event,
             count_event_embeddings, get_guest_profiles_for_event,
-            get_portal_analytics_summary
+            get_portal_analytics_summary, get_event_photo_embeddings
         )
 
         ev_pub = get_public_event(slug)

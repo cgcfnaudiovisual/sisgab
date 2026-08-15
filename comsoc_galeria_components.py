@@ -370,9 +370,7 @@ def render_drive_grid(fotos, page_state, is_operator, selecao_fid, theme, is_sel
                 ui.button(icon='first_page', on_click=lambda: set_page(1)).props('flat dense color=cyan text-color=cyan round').classes('h-9 w-9').tooltip('Primeira Página')
                 ui.button('Anterior', icon='chevron_left', on_click=lambda: set_page(cur_page - 1)).props('unelevated color=cyan-9 text-color=white bold').classes('text-xs px-3 rounded-xl')
                 
-                ui.label(f'Página {cur_page} de {total_pages} ({start_idx + 1}–{end_idx} de {total_fotos} fotos)').classes('text-xs font-black text-cyan-3 px-3')
-
-                ui.button('Próxima', icon_right='chevron_right', on_click=lambda: set_page(cur_page + 1)).props('unelevated color=cyan-9 text-color=white bold').classes('text-xs px-3 rounded-xl')
+                ui.button('Próxima', icon='chevron_right', on_click=lambda: set_page(cur_page + 1)).props('unelevated color=cyan-9 text-color=white bold icon-right=chevron_right').classes('text-xs px-3 rounded-xl')
                 ui.button(icon='last_page', on_click=lambda: set_page(total_pages)).props('flat dense color=cyan text-color=cyan round').classes('h-9 w-9').tooltip('Última Página')
 
     _draw_grid_content()
