@@ -18,7 +18,7 @@ from database import (
     get_public_event,
     save_guest_face_profile,
     log_portal_analytics,
-    create_photo_delivery_request,
+    save_guest_delivery,
     check_rate_limit
 )
 
@@ -792,12 +792,11 @@ def render_page(event_id: str):
                         fids = list(guest_state['selected_fids']) if guest_state['selected_fids'] else [p.get('drive_file_id') or p.get('id') for p in (guest_state['matched_photos'] or guest_state['geral_photos'])]
                         
                         ok = await asyncio.to_thread(
-                            create_photo_delivery_request,
+                            save_guest_delivery,
                             event_id=event_id,
-                            session_id=session_id,
-                            guest_name=nome,
-                            guest_email=email,
-                            photo_fids=fids
+                            email=email,
+                            photo_ids=','.join(fids),
+                            count=len(fids)
                         )
                         if ok:
                             ui.notify(f"✅ Solicitação registrada com sucesso! Enviaremos as fotos para {email}.", color='positive', timeout=6000)
