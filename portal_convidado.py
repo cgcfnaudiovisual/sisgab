@@ -4,6 +4,7 @@ import time
 import json
 import base64
 import asyncio
+import threading
 from pathlib import Path
 from datetime import datetime
 import numpy as np
@@ -23,30 +24,40 @@ from database import (
 
 # ── MOTOR INSIGHTFACE DEDICADO A SELFIES (Sub-200ms com det_size=224x224) ────
 _SELFIE_APP_SINGLETON = None
+_SELFIE_APP_LOCK = threading.Lock()
 
 def _get_selfie_app():
     """Retorna motor InsightFace leve e ultra-rápido otimizado exclusivamente para selfies (sub-200ms)."""
     global _SELFIE_APP_SINGLETON
     if _SELFIE_APP_SINGLETON is not None:
         return _SELFIE_APP_SINGLETON
-    try:
-        from insightface.app import FaceAnalysis
-        app_selfie = FaceAnalysis(
-            name='buffalo_l',
-            allowed_modules=['detection', 'recognition']
-        )
-        app_selfie.prepare(ctx_id=-1, det_size=(224, 224))
-        
-        # Warmup imediato para alocar buffers ONNX
-        dummy = np.zeros((224, 224, 3), dtype=np.uint8)
-        app_selfie.get(dummy)
-        
-        _SELFIE_APP_SINGLETON = app_selfie
-        print('[PORTAL_IA] 🚀 Motor Selfie Turbo (buffalo_l, det_size=224x224) inicializado e 100% aquecido!')
-        return _SELFIE_APP_SINGLETON
-    except Exception as e:
-        print(f'[PORTAL_IA] ❌ Falha ao inicializar Motor Selfie Turbo: {e}')
-        return None
+    with _SELFIE_APP_LOCK:
+        if _SELFIE_APP_SINGLETON is not None:
+            return _SELFIE_APP_SINGLETON
+        try:
+            from insightface.app import FaceAnalysis
+            app_selfie = FaceAnalysis(
+                name='buffalo_l',
+                allowed_modules=['detection', 'recognition']
+            )
+            app_selfie.prepare(ctx_id=-1, det_size=(224, 224))
+            
+            # Warmup imediato para alocar buffers ONNX
+            dummy = np.zeros((224, 224, 3), dtype=np.uint8)
+            app_selfie.get(dummy)
+            
+            _SELFIE_APP_SINGLETON = app_selfie
+            print('[PORTAL_IA] 🚀 Motor Selfie Turbo (buffalo_l, det_size=224x224) 100% pronto em RAM!')
+            return _SELFIE_APP_SINGLETON
+        except Exception as e:
+            print(f'[PORTAL_IA] ❌ Falha ao inicializar Motor Selfie Turbo: {e}')
+            return None
+
+# Pré-inicializa o motor no boot da aplicação
+try:
+    threading.Thread(target=_get_selfie_app, daemon=True).start()
+except Exception:
+    pass
 
 MESES_PT = {
     1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
@@ -497,7 +508,7 @@ def render_page(event_id: str, request: Request = None):
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, w, h);
             
-            if (statusText) statusText.innerText = 'Identificando seu rosto...';
+            if (statusText) statusText.innerText = 'Identificando seu rosto com IA...';
             
             const blob = await new Promise((resolve) => {{
                 canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.82);
