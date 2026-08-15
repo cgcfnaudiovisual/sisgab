@@ -18,8 +18,7 @@ from database import (
     get_public_event,
     save_guest_face_profile,
     log_portal_analytics,
-    save_guest_delivery,
-    check_rate_limit
+    save_guest_delivery
 )
 
 # ── SINGLETON DO MOTOR INSIGHTFACE (Warmup no Boot) ──────────────────────────
