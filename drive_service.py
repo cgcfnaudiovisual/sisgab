@@ -284,7 +284,7 @@ def criar_pasta_evento(titulo_evento, data_evento_str, pasta_mae_id=None):
 
 # ─── Operações de Arquivos ──────────────────────────────────────────────
 
-def list_files(folder_id, mime_filter=None, page_size=1000):
+def list_files(folder_id, mime_filter=None, page_size=5000):
     """
     Lista arquivos de uma pasta do Drive com suporte a paginação completa e Shared Drives.
     Retorna lista de dicts: [{'id', 'name', 'mimeType', 'size', 'thumbnailLink', 'webViewLink'}]

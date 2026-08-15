@@ -184,9 +184,22 @@ def render_page(evento_id: str = None, **kwargs):
                             for h in ['Data', 'Evento / Pauta', 'Fotos', 'Status Drive', 'Ações']:
                                 with ui.element('th').classes('text-left text-cyan-3 font-bold q-pa-sm'):
                                     ui.label(h)
+                                    
+                    # Funções de ação do mural
+                    def _open_drive_tab(link_url):
+                        if link_url:
+                            ui.run_javascript(f'window.open("{link_url}", "_blank");')
+                        else:
+                            ui.notify('Link do Google Drive não disponível para este evento.', color='warning')
+
+                    def _carregar_galeria_evento(target_id, target_name):
+                        _on_event_change(target_id)
+                        ui.notify(f'📂 Carregando galeria: {target_name}', color='positive', timeout=2500)
+                        ui.run_javascript('window.scrollTo({ top: 400, behavior: "smooth" });')
+
                     # Body
                     with ui.element('tbody'):
-                        for eid, ev in list(pautas_data.items())[:25]:
+                        for eid, ev in list(pautas_data.items())[:100]:
                             raw_dt = str(ev.get('data_evento') or '').strip()
                             data_ev = raw_dt[:10] if raw_dt and raw_dt.upper() != 'ASD' else 'ASD'
                             titulo = ev.get('titulo_evento', 'Sem título')
@@ -208,7 +221,7 @@ def render_page(evento_id: str = None, **kwargs):
                                         ui.label(data_ev)
 
                                 # Evento
-                                with ui.element('td').classes('q-pa-sm cursor-pointer').on('click', lambda _, _id=eid: _on_event_change(_id)):
+                                with ui.element('td').classes('q-pa-sm cursor-pointer').on('click', lambda _, _id=eid, _t=titulo: _carregar_galeria_evento(_id, _t)):
                                     ui.label(titulo).classes(
                                         'text-xs text-cyan-2 font-bold' if is_sel else 'text-xs text-white font-medium hover:text-cyan'
                                     )
@@ -234,12 +247,13 @@ def render_page(evento_id: str = None, **kwargs):
                                     with ui.row().classes('gap-2 items-center no-wrap'):
                                         if drive_url or dfid:
                                             target_link = drive_url or f"https://drive.google.com/drive/folders/{dfid}"
-                                            ui.button('Drive', icon='open_in_new', on_click=lambda _, u=target_link: ui.open(u, new_tab=True)).props(
+                                            ui.button('Drive', icon='open_in_new', on_click=lambda _, l=target_link: _open_drive_tab(l)).props(
                                                 'unelevated dense color=blue-8 text-color=white no-caps'
-                                            ).classes('text-[11px] font-bold px-2 py-1 rounded-lg hover:brightness-110').tooltip('Abrir pasta no Google Drive')
-                                        ui.button('Ver Galeria', icon='photo_library', on_click=lambda _, _id=eid: _on_event_change(_id)).props(
+                                            ).classes('text-[11px] font-bold px-2.5 py-1 rounded-lg hover:brightness-110').tooltip('Abrir pasta no Google Drive em nova aba')
+                                        
+                                        ui.button('Ver Galeria', icon='photo_library', on_click=lambda _, _id=eid, _t=titulo: _carregar_galeria_evento(_id, _t)).props(
                                             'unelevated dense color=amber-8 text-color=black no-caps'
-                                        ).classes('text-[11px] font-bold px-2 py-1 rounded-lg hover:brightness-110').tooltip('Carregar fotos deste evento na tela')
+                                        ).classes('text-[11px] font-bold px-2.5 py-1 rounded-lg hover:brightness-110 cyber-glow').tooltip('Carregar fotos deste evento na tela')
         else:
             empty_state('event_busy', 'Nenhum evento cadastrado ainda.')
 
@@ -268,12 +282,9 @@ def render_page(evento_id: str = None, **kwargs):
                 fid = get_drive_folder_id(pauta)
                 if fid:
                     try:
-                        await asyncio.wait_for(
-                            asyncio.to_thread(drive_service.upload_file, content, fname, fid), timeout=15.0
-                        )
-                        ui.notify(f'{fname} enviada ao Drive!', color='info')
-                    except Exception as ex:
-                        print(f"[GALERIA] [WARN] Upload Drive falhou: {ex}")
+                        drive_service.upload_file(content, fname, fid)
+                    except Exception:
+                        pass
                 render_main_content.refresh()
 
             ui.upload(on_upload=handle_photo_upload, auto_upload=True, multiple=True,
@@ -289,10 +300,10 @@ def render_page(evento_id: str = None, **kwargs):
         drive_photos, drive_selecao, selecao_fid = [], [], None
         if dfid:
             try:
-                drive_photos = drive_service.list_files(dfid, mime_filter='image/') or []
+                drive_photos = drive_service.list_files(dfid, mime_filter='image/', page_size=5000) or []
                 selecao_fid = drive_service.find_folder('SELEÇÃO', dfid)
                 if selecao_fid:
-                    drive_selecao = drive_service.list_files(selecao_fid, mime_filter='image/') or []
+                    drive_selecao = drive_service.list_files(selecao_fid, mime_filter='image/', page_size=5000) or []
             except Exception as e:
                 print(f"[GALERIA] [WARN] Drive list: {e}")
         n_local, n_drive, n_sel = len(local_photos), len(drive_photos), len(drive_selecao)
