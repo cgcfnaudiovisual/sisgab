@@ -79,53 +79,29 @@ def salvar_demanda_drive_link(demanda_id: int, titulo_evento: str, drive_url: st
 
     success = False
 
-    # 1. Tentar salvar nas colunas da tabela demandas_comunicacao
+    # 1. Salvar tag resiliente [DRIVE: url] no campo autoridades de demandas_comunicacao
+    if demanda_id:
+        try:
+            res = db.table('demandas_comunicacao').select('autoridades, observacoes').eq('id', demanda_id).execute()
+            if res.data:
+                current_obs = str(res.data[0].get('autoridades') or res.data[0].get('observacoes') or '')
+                import re
+                clean_obs = re.sub(r'\[DRIVE:.*?\]', '', current_obs).strip()
+                new_obs = f"{clean_obs} [DRIVE: {url}]".strip()
+                db.table('demandas_comunicacao').update({'autoridades': new_obs}).eq('id', demanda_id).execute()
+                success = True
+        except Exception as e_d:
+            print(f"[DB] Erro salvando link no campo autoridades: {e_d}")
+
+    # 2. Tentar atualizar colunas se existirem
     if demanda_id:
         try:
             db.table('demandas_comunicacao').update({
                 'drive_url': url,
                 'drive_folder_id': fid
             }).eq('id', demanda_id).execute()
-            success = True
         except Exception:
-            # Fallback 2: Embutir tag [DRIVE: url] no campo autoridades/observacoes
-            try:
-                res = db.table('demandas_comunicacao').select('autoridades, observacoes').eq('id', demanda_id).execute()
-                if res.data:
-                    current_obs = str(res.data[0].get('autoridades') or res.data[0].get('observacoes') or '')
-                    import re
-                    clean_obs = re.sub(r'\[DRIVE:.*?\]', '', current_obs).strip()
-                    new_obs = f"{clean_obs} [DRIVE: {url}]".strip()
-                    db.table('demandas_comunicacao').update({'autoridades': new_obs}).eq('id', demanda_id).execute()
-                    success = True
-            except Exception:
-                pass
-
-    # 3. Salvar/atualizar na tabela processed_photos como registro oficial de pasta
-    if titulo_evento or demanda_id:
-        try:
-            payload = {
-                'filename': 'drive_folder_link',
-                'drive_link': url,
-                'event_name': titulo_evento or 'Evento'
-            }
-            if demanda_id:
-                payload['demanda_id'] = demanda_id
-                
-            q = db.table('processed_photos').select('id').eq('filename', 'drive_folder_link')
-            if titulo_evento:
-                q = q.eq('event_name', titulo_evento)
-            elif demanda_id:
-                q = q.eq('demanda_id', demanda_id)
-            exist = q.execute()
-
-            if exist.data:
-                db.table('processed_photos').update(payload).eq('id', exist.data[0]['id']).execute()
-            else:
-                db.table('processed_photos').insert(payload).execute()
-            success = True
-        except Exception as ex:
-            print(f"[DB] Erro salvando link no processed_photos: {ex}")
+            pass
 
     return success
 

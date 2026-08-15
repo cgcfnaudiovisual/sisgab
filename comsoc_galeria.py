@@ -138,6 +138,7 @@ def render_page(evento_id: str = None, **kwargs):
                     ui.notify('Pasta nao vinculada.', color='warning')
             ui.button('Abrir Drive', icon='folder_open', on_click=_open_drive).props('dense outline color=cyan').classes('text-xs')
             if is_operator:
+                ui.button('🔄 Sincronizar Pastas do Drive', icon='sync', on_click=lambda: _sincronizar_todas_pastas_drive()).props('dense unelevated color=blue-7 text-color=white font-bold').classes('text-xs cyber-glow')
                 ui.button('Distribuir', icon='send', on_click=lambda: _abrir_distribuir()).props('dense outline color=green').classes('text-xs')
                 ui.button('Vincular/Criar Pasta', icon='link', on_click=lambda: _abrir_vincular()).props('dense outline color=amber').classes('text-xs')
                 ui.button('🌐 Portal do Convidado', icon='qr_code_2', on_click=lambda: _abrir_portal_convidado()).props('dense unelevated color=amber-9 text-color=white font-bold').classes('text-xs cyber-glow')
@@ -393,6 +394,60 @@ def render_page(evento_id: str = None, **kwargs):
                 ui.notify('Falha ao criar pasta. Verifique credenciais.', color='warning')
         except Exception as ex:
             ui.notify(f'Erro: {ex}', color='negative')
+        finally:
+            try: n.dismiss()
+            except Exception: pass
+
+    async def _sincronizar_todas_pastas_drive():
+        n = ui.notify('🔄 Sincronizando pastas do Google Drive com as demandas...', color='info', spinner=True, timeout=0)
+        try:
+            import unicodedata, re
+            from database import salvar_demanda_drive_link, get_db_connection
+
+            def normalize_txt(text):
+                if not text: return ""
+                text = unicodedata.normalize('NFKD', str(text)).encode('ASCII', 'ignore').decode('ASCII')
+                return re.sub(r'[^a-zA-Z0-9]', '', text).upper()
+
+            drive_service.reset_drive_service()
+            svc = drive_service.get_drive_service()
+            pasta_mae = drive_service.get_pasta_mae_id()
+            if not svc or not pasta_mae:
+                ui.notify('Google Drive não configurado no Painel Admin.', color='warning')
+                return
+
+            # Lista todas as subpastas da pasta mãe
+            query = f"'{pasta_mae}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+            res = await asyncio.to_thread(lambda: svc.files().list(q=query, fields='files(id, name, webViewLink)', pageSize=150).execute())
+            drive_folders = res.get('files', []) if res else []
+
+            vinculados = 0
+            for eid, p in pautas_data.items():
+                cur_fid = get_drive_folder_id(p)
+                tit = p.get('titulo_evento', '')
+                norm_tit = normalize_txt(tit)
+                if not norm_tit:
+                    continue
+
+                best_match = None
+                for df in drive_folders:
+                    df_name = df['name']
+                    norm_df = normalize_txt(df_name)
+                    if norm_tit in norm_df or norm_df in norm_tit or (len(norm_tit) > 8 and norm_tit[:15] in norm_df):
+                        best_match = df
+                        break
+
+                if best_match:
+                    p['drive_folder_id'] = best_match['id']
+                    p['drive_url'] = best_match.get('webViewLink') or f"https://drive.google.com/drive/folders/{best_match['id']}"
+                    salvar_demanda_drive_link(p.get('id'), tit, p['drive_url'], best_match['id'])
+                    vinculados += 1
+
+            ui.notify(f'✅ {vinculados} evento(s) sincronizados com pastas existentes no Google Drive!', color='positive', timeout=6000)
+            render_main_content.refresh()
+        except Exception as ex:
+            print(f"[GALERIA SYNC ERR] {ex}")
+            ui.notify(f'Erro na sincronização: {ex}', color='negative')
         finally:
             try: n.dismiss()
             except Exception: pass
