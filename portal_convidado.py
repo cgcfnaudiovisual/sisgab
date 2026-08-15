@@ -18,7 +18,6 @@ from database import (
     get_public_event,
     save_guest_face_profile,
     log_portal_analytics,
-    get_guest_face_profile,
     create_photo_delivery_request,
     check_rate_limit
 )
