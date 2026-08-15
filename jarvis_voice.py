@@ -76,12 +76,25 @@ async def jarvis_process_api(request: Request):
                 resposta_ai = f"Pois não. Sobre '{user_prompt}', os dados atuais mostram: {contexto_sisgab[0] if contexto_sisgab else 'Sistema operacional e pronto.'}"
         except Exception as e_ai:
             print(f"[JARVIS AI ERR] {e_ai}")
-            resposta_ai = "Pronto ao seu comando. Todos os sistemas do SisGAB operando normalmente."
+        # 3. Síntese de Voz Neural Ultra-Realista com Edge-TTS (Antonio Neural)
+        audio_b64 = None
+        try:
+            import base64
+            import edge_tts
+            communicate = edge_tts.Communicate(resposta_ai, 'pt-BR-AntonioNeural', rate='+5%')
+            audio_data = bytearray()
+            async for chunk in communicate.stream():
+                if chunk['type'] == 'audio':
+                    audio_data.extend(chunk['data'])
+            if audio_data:
+                audio_b64 = base64.b64encode(audio_data).decode('utf-8')
+        except Exception as e_tts:
+            print(f"[JARVIS EDGE TTS ERR] {e_tts}")
 
-        return {"text": resposta_ai}
+        return {"text": resposta_ai, "audio_b64": audio_b64}
     except Exception as e:
         print(f"[JARVIS PROCESS ERR] {e}")
-        return {"text": "Desculpe, tive uma oscilação na conexão interna. Como posso ajudar?"}
+        return {"text": "Desculpe, tive uma oscilação na conexão interna. Como posso ajudar?", "audio_b64": None}
 
 
 # --- PÁGINA DEDICADA DO JARVIS NO NICEGUI ---
@@ -318,14 +331,18 @@ def render_page(current_user=None):
                 }
             }
 
+            let currentAudioPlayer = null;
+
             function sendTextToJarvis(text) {
-                document.getElementById('userTranscriptText').innerText = text;
+                const userTxt = document.getElementById('userTranscriptText');
+                if (userTxt) userTxt.innerText = text;
                 processUserInput(text);
             }
 
             async function processUserInput(userText) {
                 setHudState('processing');
-                document.getElementById('jarvisStatusLabel').innerText = "🧠 Jarvis está processando sua solicitação...";
+                const lbl = document.getElementById('jarvisStatusLabel');
+                if (lbl) lbl.innerText = "🧠 Jarvis está processando sua solicitação...";
                 
                 try {
                     const response = await fetch('/api/jarvis_process', {
@@ -335,17 +352,62 @@ def render_page(current_user=None):
                     });
                     const data = await response.json();
                     const replyText = data.text || "Comando recebido.";
+                    const audioB64 = data.audio_b64;
                     
-                    document.getElementById('jarvisResponseText').innerText = replyText;
-                    speakJarvisResponse(replyText);
+                    const jResp = document.getElementById('jarvisResponseText');
+                    if (jResp) jResp.innerText = replyText;
+                    speakJarvisResponse(replyText, audioB64);
                 } catch (err) {
-                    document.getElementById('jarvisResponseText').innerText = "Erro de conexão ao processar com a IA.";
+                    const jResp = document.getElementById('jarvisResponseText');
+                    if (jResp) jResp.innerText = "Erro de conexão ao processar com a IA.";
                     setHudState('idle');
                     startWakeWordListener();
                 }
             }
 
-            function speakJarvisResponse(text) {
+            function speakJarvisResponse(text, audioB64) {
+                if (currentAudioPlayer) {
+                    try { currentAudioPlayer.pause(); currentAudioPlayer = null; } catch(e){}
+                }
+
+                // 1. Reprodução de Voz Neural Edge TTS (Antonio Neural)
+                if (audioB64) {
+                    try {
+                        const audio = new Audio("data:audio/mp3;base64," + audioB64);
+                        currentAudioPlayer = audio;
+                        
+                        audio.onplay = () => {
+                            isSpeaking = true;
+                            setHudState('speaking');
+                            const lbl = document.getElementById('jarvisStatusLabel');
+                            if (lbl) lbl.innerText = "🔊 Jarvis falando (Voz Neural Antonio)...";
+                        };
+                        
+                        audio.onended = () => {
+                            isSpeaking = false;
+                            setHudState('idle');
+                            const lbl = document.getElementById('jarvisStatusLabel');
+                            if (lbl) lbl.innerText = "Escuta de Palavra-Chave Ativa: Diga 'Jarvis' ou clique para falar.";
+                            startWakeWordListener();
+                        };
+                        
+                        audio.onerror = (e) => {
+                            console.log("Erro ao tocar áudio neural, usando fallback:", e);
+                            fallbackWebSpeech(text);
+                        };
+
+                        audio.play();
+                        return;
+                    } catch(e) {
+                        console.log("Falha ao instanciar áudio neural:", e);
+                    }
+                }
+
+                // 2. Fallback para WebSpeech API do navegador
+                fallbackWebSpeech(text);
+            }
+
+            function fallbackWebSpeech(text) {
                 if (!synth) return;
                 synth.cancel();
 
@@ -363,13 +425,15 @@ def render_page(current_user=None):
                 utterance.onstart = () => {
                     isSpeaking = true;
                     setHudState('speaking');
-                    document.getElementById('jarvisStatusLabel').innerText = "🔊 Jarvis está falando...";
+                    const lbl = document.getElementById('jarvisStatusLabel');
+                    if (lbl) lbl.innerText = "🔊 Jarvis está falando...";
                 };
 
                 utterance.onend = () => {
                     isSpeaking = false;
                     setHudState('idle');
-                    document.getElementById('jarvisStatusLabel').innerText = "Escuta de Palavra-Chave Ativa: Diga 'Jarvis' ou clique para falar.";
+                    const lbl = document.getElementById('jarvisStatusLabel');
+                    if (lbl) lbl.innerText = "Escuta de Palavra-Chave Ativa: Diga 'Jarvis' ou clique para falar.";
                     startWakeWordListener();
                 };
 
