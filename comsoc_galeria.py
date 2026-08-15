@@ -730,6 +730,30 @@ def render_page(evento_id: str = None, **kwargs):
 
         portal_url = f"https://sisgab-cgcfn.ddns.net/evento/{slug}"
 
+        # Diagnóstico de Hardware & GPU em tempo real
+        hw_info = {
+            'gpu_type': 'CPU (Otimizado)',
+            'is_gpu': False,
+            'det_size': '320x320',
+            'engine_status': 'InsightFace buffalo_l (512D)',
+            'provider': 'CPUExecutionProvider'
+        }
+        try:
+            import onnxruntime as ort
+            providers = ort.get_available_providers()
+            if 'CUDAExecutionProvider' in providers:
+                hw_info['gpu_type'] = 'NVIDIA CUDA (Alta Performance)'
+                hw_info['is_gpu'] = True
+                hw_info['det_size'] = '640x640 HD'
+                hw_info['provider'] = 'CUDAExecutionProvider'
+            elif 'DmlExecutionProvider' in providers:
+                hw_info['gpu_type'] = 'DirectML GPU (DirectX 12 — AMD / Intel / NVIDIA)'
+                hw_info['is_gpu'] = True
+                hw_info['det_size'] = '640x640 HD'
+                hw_info['provider'] = 'DmlExecutionProvider'
+        except Exception:
+            pass
+
         # Gera QR Code
         import qrcode
         import io
@@ -742,183 +766,233 @@ def render_page(evento_id: str = None, **kwargs):
         img_qr.save(buf, format="PNG")
         qr_b64 = f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode('utf-8')}"
 
-        with ui.dialog() as dlg_portal, ui.card().classes('q-pa-md max-w-3xl w-full rounded-2xl bg-slate-900 border border-cyan-500/30 text-white').style('box-shadow: 0 0 40px rgba(0,229,255,0.15);'):
-            # Header
-            with ui.row().classes('w-full justify-between items-center border-b border-cyan-500/20 pb-2'):
+        # MODAL EXPANDIDO E ESPAÇOSO (940px)
+        with ui.dialog() as dlg_portal, ui.card().classes('w-[940px] max-w-[96vw] max-h-[92vh] q-pa-lg rounded-3xl bg-slate-900 border-2 border-cyan-500/30 text-white flex flex-col justify-start overflow-y-auto').style('box-shadow: 0 0 50px rgba(0,229,255,0.2);'):
+            
+            # CABEÇALHO DO MODAL
+            with ui.row().classes('w-full justify-between items-center border-b border-cyan-500/20 pb-3 mb-2'):
                 with ui.column().classes('gap-0'):
                     with ui.row().classes('items-center gap-2'):
-                        ui.icon('qr_code_2', size='1.5rem', color='amber-4')
-                        ui.label('🌐 GESTÃO DO PORTAL DO CONVIDADO').classes('text-base font-black text-amber-4 tracking-wide')
-                    ui.label(f"{titulo} ({data_ev})").classes('text-xs text-grey-4 truncate max-w-[450px]')
-                ui.button(icon='close', on_click=dlg_portal.close).props('flat round dense text-color=white')
+                        ui.icon('qr_code_2', size='1.8rem', color='amber-4')
+                        ui.label('🌐 GESTÃO DO PORTAL DO CONVIDADO (HOT DELIVERY)').classes('text-lg font-black text-amber-4 tracking-wider cyber-title')
+                    ui.label(f"📌 {titulo.upper()} • 📅 {data_ev or 'Data a definir'} • 📍 {local_ev}").classes('text-xs text-cyan-2 font-medium truncate max-w-[700px]')
+                ui.button(icon='close', on_click=dlg_portal.close).props('flat round dense text-color=grey-4')
 
-            # Abas das 5 Etapas
-            with ui.tabs().classes('w-full text-cyan') as tabs_p:
-                t_cfg = ui.tab('cfg', label='⚙️ 1. Configuração', icon='settings')
-                t_proc = ui.tab('proc', label='⬆️ 2. Upload & IA', icon='memory')
-                t_cur = ui.tab('cur', label='📷 3. Curadoria GERAL', icon='collections')
-                t_guest = ui.tab('guest', label='👥 4. Convidados', icon='people')
-                t_qr = ui.tab('qr', label='📱 5. QR Code & Divulgação', icon='qr_code')
+            # ABAS EM LINHA ÚNICA HORIZONTAL (SEM QUEBRA DE LINHA)
+            with ui.tabs().props('dense no-caps inline-label mobile-arrows').classes('w-full text-cyan-3 border-b border-cyan-500/20 q-mb-md') as tabs_p:
+                t_cfg = ui.tab('cfg', label='⚙️ 1. Configuração', icon='settings').classes('px-3')
+                t_proc = ui.tab('proc', label='🚀 2. Upload & IA (GPU)', icon='memory').classes('px-3 font-bold text-amber-4')
+                t_cur = ui.tab('cur', label='📷 3. Curadoria GERAL', icon='collections').classes('px-3')
+                t_guest = ui.tab('guest', label='👥 4. Convidados', icon='people').classes('px-3')
+                t_qr = ui.tab('qr', label='📱 5. QR Code & Divulgação', icon='qr_code').classes('px-3')
 
-            with ui.tab_panels(tabs_p, value=t_cfg).classes('w-full bg-transparent p-0 q-mt-sm'):
+            with ui.tab_panels(tabs_p, value=t_proc).classes('w-full bg-transparent p-0'):
                 
                 # ── ETAPA 1: CONFIGURAÇÃO ──
                 with ui.tab_panel(t_cfg).classes('w-full p-2 gap-4'):
-                    with ui.column().classes('w-full gap-3'):
-                        status_val = ev_pub.get('status', 'ativo')
-                        sw_status = ui.switch('Status do Portal (Ativo / Inativo)', value=(status_val == 'ativo')).props('dark color=green')
-                        
-                        threshold_slider = ui.slider(min=0.35, max=0.70, step=0.01, value=float(ev_pub.get('threshold_match') or 0.45)).props('dark label-always color=amber')
-                        ui.label(f'Threshold de Similaridade Facial: {threshold_slider.value:.2f} (padrão: 0.45)').classes('text-xs text-grey-4')
+                    with ui.grid().classes('w-full grid-cols-1 sm:grid-cols-2 gap-4'):
+                        with ui.card().classes('p-4 bg-slate-950/80 border border-slate-800 rounded-2xl gap-3'):
+                            ui.label('Parâmetros de Operação').classes('text-xs font-bold text-cyan')
+                            
+                            status_val = ev_pub.get('status', 'ativo')
+                            sw_status = ui.switch('Status da Galeria (Ativa / Inativa)', value=(status_val == 'ativo')).props('dark color=green')
+                            
+                            threshold_slider = ui.slider(min=0.35, max=0.70, step=0.01, value=float(ev_pub.get('threshold_match') or 0.45)).props('dark label-always color=amber')
+                            ui.label(f'Threshold de Similaridade Facial: {threshold_slider.value:.2f} (0.45 = Precisão Equilibrada)').classes('text-xs text-grey-4')
 
-                        wm_check = ui.checkbox('Habilitar Marca d\'Água Institucional nas Fotos', value=bool(ev_pub.get('watermark_enabled', True))).props('dark color=cyan dense')
-                        wm_input = ui.input('Texto da Marca d\'Água', value=ev_pub.get('watermark_text') or 'COMSOC / CGCFN').props('dark outlined dense w-full')
-                        banner_input = ui.input('URL do Banner / Cartaz (opcional)', value=ev_pub.get('banner_url') or '').props('dark outlined dense w-full')
+                        with ui.card().classes('p-4 bg-slate-950/80 border border-slate-800 rounded-2xl gap-3'):
+                            ui.label('Marca d\'Água & Visual').classes('text-xs font-bold text-amber-4')
+                            
+                            wm_check = ui.checkbox('Aplicar Marca d\'Água Institucional', value=bool(ev_pub.get('watermark_enabled', True))).props('dark color=cyan dense')
+                            wm_input = ui.input('Texto da Marca d\'Água', value=ev_pub.get('watermark_text') or 'COMSOC / CGCFN').props('dark outlined dense w-full')
+                            banner_input = ui.input('URL do Banner / Cartaz (opcional)', value=ev_pub.get('banner_url') or '').props('dark outlined dense w-full')
 
-                        def salvar_configuracoes():
-                            novos_dados = {
-                                'status': 'ativo' if sw_status.value else 'inativo',
-                                'threshold_match': float(threshold_slider.value),
-                                'watermark_enabled': wm_check.value,
-                                'watermark_text': (wm_input.value or '').strip(),
-                                'banner_url': (banner_input.value or '').strip() or None,
-                            }
-                            update_public_event(slug, novos_dados)
-                            ui.notify('✅ Configurações do Portal salvas com sucesso!', color='positive')
+                    def salvar_configuracoes():
+                        novos_dados = {
+                            'status': 'ativo' if sw_status.value else 'inativo',
+                            'threshold_match': float(threshold_slider.value),
+                            'watermark_enabled': wm_check.value,
+                            'watermark_text': (wm_input.value or '').strip(),
+                            'banner_url': (banner_input.value or '').strip() or None,
+                        }
+                        update_public_event(slug, novos_dados)
+                        ui.notify('✅ Configurações do Portal salvas com sucesso!', color='positive')
 
-                        ui.button('💾 Salvar Configurações', icon='save', on_click=salvar_configuracoes).props('unelevated color=cyan text-color=black bold w-full').classes('q-mt-sm')
+                    ui.button('💾 Salvar Configurações', icon='save', on_click=salvar_configuracoes).props('unelevated color=cyan text-color=black bold w-full').classes('h-11 rounded-xl q-mt-sm')
 
-                # ── ETAPA 2: UPLOAD & PROCESSAMENTO ──
+                # ── ETAPA 2: UPLOAD & PROCESSAMENTO IA (CENTRAL DE HARDWARE E LIVE MONITOR) ──
                 with ui.tab_panel(t_proc).classes('w-full p-2 gap-4'):
-                    with ui.card().classes('w-full bg-slate-950/80 border border-cyan-500/20 p-4 rounded-xl gap-2'):
-                        ui.label('📊 Status do Acervo & Embeddings IA').classes('text-sm font-bold text-cyan')
-                        emb_count = count_event_embeddings(slug)
-                        ws = check_worker_status()
-                        
-                        with ui.row().classes('w-full justify-between items-center text-xs py-1'):
-                            ui.label('Motor de IA Local (GPU):')
-                            ui.badge('Online' if ws == 'online' else 'Offline', color='positive' if ws == 'online' else 'warning')
-                        with ui.row().classes('w-full justify-between items-center text-xs py-1'):
-                            ui.label('Rostos Mapeados no Evento:')
-                            ui.badge(f"{emb_count} embeddings", color='amber-9').classes('font-bold')
-
-                    watcher_container = ui.column().classes('w-full gap-2 q-mt-2')
                     
-                    def render_watcher_controls():
-                        watcher_container.clear()
-                        with watcher_container:
+                    # 1. CARD DE DIAGNÓSTICO DE HARDWARE & IA
+                    with ui.card().classes('w-full bg-slate-950/90 border border-cyan-500/30 p-4 rounded-2xl gap-3 shadow-lg'):
+                        with ui.row().classes('w-full justify-between items-center'):
+                            with ui.row().classes('items-center gap-2'):
+                                ui.icon('developer_board', size='1.5rem', color='cyan-4')
+                                ui.label('DIAGNÓSTICO DO MOTOR DE IA & ACELERAÇÃO POR GPU').classes('text-sm font-black text-cyan-3 tracking-wide')
+                            
+                            if hw_info['is_gpu']:
+                                ui.badge('🟢 ACELERAÇÃO POR GPU ATIVA', color='positive').classes('text-xs font-black px-2 py-1')
+                            else:
+                                ui.badge('🟡 CPU FALLBACK ATIVO', color='amber-9').classes('text-xs font-bold px-2 py-1')
+
+                        with ui.grid().classes('w-full grid-cols-2 sm:grid-cols-4 gap-2 text-xs pt-1'):
+                            with ui.column().classes('p-2 bg-black/50 rounded-xl border border-white/5 gap-0.5'):
+                                ui.label('🎮 Placa de Vídeo / Hardware').classes('text-[10px] text-grey-4')
+                                ui.label(hw_info['gpu_type']).classes('font-bold text-white truncate')
+                            
+                            with ui.column().classes('p-2 bg-black/50 rounded-xl border border-white/5 gap-0.5'):
+                                ui.label('🧠 Motor Facial InsightFace').classes('text-[10px] text-grey-4')
+                                ui.label('buffalo_l (512D)').classes('font-bold text-green-4')
+
+                            with ui.column().classes('p-2 bg-black/50 rounded-xl border border-white/5 gap-0.5'):
+                                ui.label('🎯 Resolução de Detecção').classes('text-[10px] text-grey-4')
+                                ui.label(hw_info['det_size']).classes('font-bold text-amber-4')
+
+                            with ui.column().classes('p-2 bg-black/50 rounded-xl border border-white/5 gap-0.5'):
+                                ui.label('⚡ Workers Paralelos').classes('text-[10px] text-grey-4')
+                                ui.label('10 Threads Simultâneas').classes('font-bold text-cyan-4')
+
+                    # 2. MÉTRICAS AO VIVO DO EVENTO
+                    watcher_dynamic_container = ui.column().classes('w-full gap-3 q-mt-1')
+
+                    def render_watcher_panel():
+                        watcher_dynamic_container.clear()
+                        with watcher_dynamic_container:
+                            emb_count = count_event_embeddings(slug)
                             proc = _ACTIVE_WATCHERS.get(slug)
                             is_running = proc is not None and (proc.poll() is None)
 
-                            with ui.row().classes('w-full items-center justify-between'):
-                                ui.label('🚀 Controle do Watcher de Fotos (10 Workers):').classes('text-xs font-bold text-amber-4')
-                                if is_running:
-                                    ui.badge('🟢 EM EXECUÇÃO', color='positive').classes('text-xs font-black animate-pulse')
-                                else:
-                                    ui.badge('⚪ PARADO', color='grey-7').classes('text-xs')
+                            # Grid de KPIs
+                            with ui.grid().classes('w-full grid-cols-2 sm:grid-cols-4 gap-3'):
+                                with ui.card().classes('p-3 bg-slate-950/80 border border-slate-800 rounded-2xl text-center'):
+                                    ui.label('📁').classes('text-xl')
+                                    ui.label('Status do Watcher').classes('text-[10px] text-grey-4')
+                                    if is_running:
+                                        ui.label('RODANDO').classes('text-sm font-black text-green-4 animate-pulse')
+                                    else:
+                                        ui.label('PARADO').classes('text-sm font-bold text-grey-5')
 
-                            pasta_input = ui.input('Caminho da Pasta Local com as Fotos', value=f"D:\\FOTOS\\{slug}").props('dark outlined dense w-full')
-                            
-                            with ui.row().classes('w-full gap-2 items-center q-mt-xs flex-wrap'):
-                                if not is_running:
-                                    def iniciar_watcher_direto():
+                                with ui.card().classes('p-3 bg-slate-950/80 border border-slate-800 rounded-2xl text-center'):
+                                    ui.label('👤').classes('text-xl')
+                                    ui.label('Rostos Mapeados').classes('text-[10px] text-grey-4')
+                                    ui.label(str(emb_count)).classes('text-xl font-black text-amber-4')
+
+                                with ui.card().classes('p-3 bg-slate-950/80 border border-slate-800 rounded-2xl text-center'):
+                                    ui.label('☁️').classes('text-xl')
+                                    ui.label('Subpasta GERAL').classes('text-[10px] text-grey-4')
+                                    ui.label('Conectada' if geral_fid else 'Pendente').classes('text-sm font-bold text-cyan-4')
+
+                                with ui.card().classes('p-3 bg-slate-950/80 border border-slate-800 rounded-2xl text-center'):
+                                    ui.label('⚡').classes('text-xl')
+                                    ui.label('Velocidade Upload').classes('text-[10px] text-grey-4')
+                                    ui.label('10x Paralelo').classes('text-sm font-bold text-purple-4')
+
+                            # Controles da Pasta e Execução
+                            with ui.card().classes('w-full bg-slate-950/90 border border-slate-800 rounded-2xl p-4 gap-3'):
+                                ui.label('📂 Pasta Local com as Fotos da Câmera:').classes('text-xs font-bold text-amber-3')
+                                pasta_input = ui.input(placeholder='Ex: D:\\FOTOS\\50 ou F:\\CGCFN\\EVENTO', value=f"D:\\FOTOS\\{slug}").props('dark outlined dense w-full')
+
+                                with ui.row().classes('w-full gap-3 items-center flex-wrap'):
+                                    if not is_running:
+                                        def iniciar_watcher_direto():
+                                            caminho_pasta = pasta_input.value.strip()
+                                            if not os.path.exists(caminho_pasta):
+                                                try:
+                                                    os.makedirs(caminho_pasta, exist_ok=True)
+                                                except Exception:
+                                                    pass
+                                            
+                                            script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'event_photo_watcher.py')
+                                            cmd = [sys.executable, script_path, '--event-id', slug, '--pasta', caminho_pasta]
+                                            try:
+                                                p = subprocess.Popen(cmd, cwd=os.path.dirname(os.path.abspath(__file__)))
+                                                _ACTIVE_WATCHERS[slug] = p
+                                                ui.notify('🚀 Processamento iniciado em segundo plano! Fotos sendo enviadas e processadas pela IA.', color='positive', timeout=5000)
+                                                render_watcher_panel()
+                                            except Exception as ex_proc:
+                                                ui.notify(f'Erro ao iniciar processamento: {ex_proc}', color='negative')
+
+                                        ui.button('▶️ INICIAR PROCESSAMENTO AGORA (1 CLIQUE)', icon='play_arrow', on_click=iniciar_watcher_direto).props('unelevated color=green-8 text-color=white bold').classes('flex-1 h-13 text-sm font-black rounded-xl cyber-glow')
+                                    else:
+                                        def parar_watcher_direto():
+                                            p = _ACTIVE_WATCHERS.get(slug)
+                                            if p:
+                                                try:
+                                                    p.terminate()
+                                                    _ACTIVE_WATCHERS[slug] = None
+                                                    ui.notify('⏹️ Processamento encerrado com sucesso.', color='info')
+                                                except Exception as ex_kill:
+                                                    ui.notify(f'Erro ao parar: {ex_kill}', color='negative')
+                                            render_watcher_panel()
+
+                                        ui.button('⏹️ PARAR PROCESSAMENTO', icon='stop', on_click=parar_watcher_direto).props('unelevated color=red-8 text-color=white bold').classes('flex-1 h-13 text-sm font-black rounded-xl')
+
+                                    def abrir_pasta_local():
                                         caminho_pasta = pasta_input.value.strip()
                                         if not os.path.exists(caminho_pasta):
-                                            try:
-                                                os.makedirs(caminho_pasta, exist_ok=True)
-                                            except Exception:
-                                                pass
-                                        
-                                        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'event_photo_watcher.py')
-                                        cmd = [sys.executable, script_path, '--event-id', slug, '--pasta', caminho_pasta]
+                                            os.makedirs(caminho_pasta, exist_ok=True)
                                         try:
-                                            p = subprocess.Popen(cmd, cwd=os.path.dirname(os.path.abspath(__file__)))
-                                            _ACTIVE_WATCHERS[slug] = p
-                                            ui.notify('🚀 Watcher iniciado em segundo plano! Processando e monitorando pasta...', color='positive', timeout=4000)
-                                            render_watcher_controls()
-                                        except Exception as ex_proc:
-                                            ui.notify(f'Erro ao iniciar watcher: {ex_proc}', color='negative')
+                                            if sys.platform == 'win32':
+                                                os.startfile(caminho_pasta)
+                                            else:
+                                                subprocess.Popen(['xdg-open', caminho_pasta])
+                                        except Exception as ex_open:
+                                            ui.notify(f'Não foi possível abrir a pasta: {ex_open}', color='warning')
 
-                                    ui.button('▶️ Iniciar Processamento Agora', icon='play_arrow', on_click=iniciar_watcher_direto).props('unelevated color=green-8 text-color=white bold').classes('flex-1 h-11 text-xs')
-                                else:
-                                    def parar_watcher_direto():
-                                        p = _ACTIVE_WATCHERS.get(slug)
-                                        if p:
-                                            try:
-                                                p.terminate()
-                                                _ACTIVE_WATCHERS[slug] = None
-                                                ui.notify('⏹️ Watcher encerrado com sucesso.', color='info')
-                                            except Exception as ex_kill:
-                                                ui.notify(f'Erro ao parar: {ex_kill}', color='negative')
-                                        render_watcher_controls()
+                                    ui.button('📁 Abrir Pasta no PC', icon='folder_open', on_click=abrir_pasta_local).props('unelevated color=blue-9 text-color=white bold').classes('h-13 px-4 rounded-xl text-xs')
+                                    ui.button(icon='refresh', on_click=render_watcher_panel).props('unelevated color=slate-8 text-color=cyan round').classes('h-13 w-13').tooltip('Atualizar contadores e status')
 
-                                    ui.button('⏹️ Parar Processamento', icon='stop', on_click=parar_watcher_direto).props('unelevated color=red-8 text-color=white bold').classes('flex-1 h-11 text-xs')
+                                def copiar_cmd_watcher():
+                                    cmd = f'python event_photo_watcher.py --event-id "{slug}" --pasta "{pasta_input.value}"'
+                                    escaped = cmd.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+                                    ui.run_javascript(f'navigator.clipboard.writeText(`{escaped}`);')
+                                    ui.notify('📋 Comando copiado! Você também pode rodar no terminal externo se preferir.', color='positive', icon='content_copy')
 
-                                def abrir_pasta_local():
-                                    caminho_pasta = pasta_input.value.strip()
-                                    if not os.path.exists(caminho_pasta):
-                                        os.makedirs(caminho_pasta, exist_ok=True)
-                                    try:
-                                        if sys.platform == 'win32':
-                                            os.startfile(caminho_pasta)
-                                        else:
-                                            subprocess.Popen(['xdg-open', caminho_pasta])
-                                    except Exception as ex_open:
-                                        ui.notify(f'Não foi possível abrir a pasta: {ex_open}', color='warning')
+                                ui.button('📋 Copiar Comando Terminal (Modo Avançado)', icon='terminal', on_click=copiar_cmd_watcher).props('flat dense color=amber text-color=amber').classes('text-[11px] q-mt-xs')
 
-                                ui.button('📁 Abrir Pasta no PC', icon='folder', on_click=abrir_pasta_local).props('unelevated color=blue-8 text-color=white bold').classes('h-11 text-xs')
-
-                            def copiar_cmd_watcher():
-                                cmd = f'python event_photo_watcher.py --event-id "{slug}" --pasta "{pasta_input.value}"'
-                                escaped = cmd.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
-                                ui.run_javascript(f'navigator.clipboard.writeText(`{escaped}`);')
-                                ui.notify('📋 Comando copiado! Você também pode rodar em um terminal externo se preferir.', color='positive', icon='content_copy')
-
-                            ui.button('📋 Copiar Comando Terminal (Opcional)', icon='terminal', on_click=copiar_cmd_watcher).props('flat dense color=amber text-color=amber').classes('text-[11px] q-mt-xs')
-
-                    render_watcher_controls()
+                    render_watcher_panel()
 
                 # ── ETAPA 3: CURADORIA GERAL ──
                 with ui.tab_panel(t_cur).classes('w-full p-2 gap-4'):
-                    with ui.column().classes('w-full gap-2 text-center items-center'):
-                        ui.icon('photo_library', size='3rem', color='cyan-4')
-                        ui.label('Subpasta GERAL no Google Drive').classes('text-sm font-bold text-white')
-                        ui.label('As fotos colocadas dentro da subpasta GERAL serão exibidas para TODOS os convidados que acessarem o link.').classes('text-xs text-grey-4 max-w-md')
+                    with ui.card().classes('w-full bg-slate-950/80 border border-slate-800 rounded-2xl p-6 text-center items-center gap-3'):
+                        ui.icon('photo_library', size='3.5rem', color='cyan-4')
+                        ui.label('Subpasta GERAL no Google Drive').classes('text-base font-bold text-white')
+                        ui.label('As fotos colocadas dentro da subpasta GERAL serão exibidas para TODOS os convidados que acessarem o link oficial do evento.').classes('text-xs text-grey-3 max-w-lg leading-relaxed')
                         
                         if geral_fid:
-                            ui.button('📂 Abrir Pasta GERAL no Drive', icon='open_in_new', on_click=lambda: ui.open(f'https://drive.google.com/drive/folders/{geral_fid}', new_tab=True)).props('unelevated color=cyan text-color=black bold').classes('q-mt-sm')
+                            ui.button('📂 ABRIR PASTA GERAL NO GOOGLE DRIVE', icon='open_in_new', on_click=lambda: ui.open(f'https://drive.google.com/drive/folders/{geral_fid}', new_tab=True)).props('unelevated color=cyan text-color=black bold').classes('h-12 px-6 rounded-xl q-mt-sm')
                         else:
-                            ui.label('Pasta GERAL não encontrada. Crie a estrutura de pastas do evento primeiro.').classes('text-xs text-amber-4')
+                            ui.label('Subpasta GERAL não encontrada. Crie a estrutura oficial primeiro na opção "Vincular/Criar Pasta".').classes('text-xs text-amber-4')
 
                 # ── ETAPA 4: CONVIDADOS & ENTREGAS ──
                 with ui.tab_panel(t_guest).classes('w-full p-2 gap-4'):
                     metrics = get_portal_analytics_summary(slug)
                     profiles = get_guest_profiles_for_event(slug)
 
-                    with ui.grid().classes('w-full grid-cols-3 gap-2'):
-                        with ui.card().classes('p-2 bg-slate-950 text-center rounded-lg border border-slate-800'):
-                            ui.label(str(metrics.get('acessos', 0))).classes('text-lg font-black text-cyan-4')
-                            ui.label('Acessos').classes('text-[10px] text-grey-4')
-                        with ui.card().classes('p-2 bg-slate-950 text-center rounded-lg border border-slate-800'):
-                            ui.label(str(len(profiles))).classes('text-lg font-black text-amber-4')
-                            ui.label('Convidados').classes('text-[10px] text-grey-4')
-                        with ui.card().classes('p-2 bg-slate-950 text-center rounded-lg border border-slate-800'):
-                            ui.label(str(metrics.get('emails', 0))).classes('text-lg font-black text-green-4')
-                            ui.label('E-mails').classes('text-[10px] text-grey-4')
+                    with ui.grid().classes('w-full grid-cols-3 gap-3'):
+                        with ui.card().classes('p-3 bg-slate-950 text-center rounded-2xl border border-slate-800'):
+                            ui.label(str(metrics.get('acessos', 0))).classes('text-2xl font-black text-cyan-4')
+                            ui.label('Total de Acessos').classes('text-xs text-grey-4')
+                        with ui.card().classes('p-3 bg-slate-950 text-center rounded-2xl border border-slate-800'):
+                            ui.label(str(len(profiles))).classes('text-2xl font-black text-amber-4')
+                            ui.label('Convidados com Selfie').classes('text-xs text-grey-4')
+                        with ui.card().classes('p-3 bg-slate-950 text-center rounded-2xl border border-slate-800'):
+                            ui.label(str(metrics.get('emails', 0))).classes('text-2xl font-black text-green-4')
+                            ui.label('E-mails Entregues').classes('text-xs text-grey-4')
 
                 # ── ETAPA 5: QR CODE & DIVULGAÇÃO ──
                 with ui.tab_panel(t_qr).classes('w-full p-2 gap-4 items-center text-center'):
-                    with ui.column().classes('w-full items-center gap-3'):
-                        ui.image(qr_b64).classes('w-44 h-44 rounded-xl border-2 border-amber-500/40 p-1 bg-white')
-                        ui.label(portal_url).classes('text-xs font-mono text-cyan-3 font-bold')
+                    with ui.column().classes('w-full items-center gap-3 py-2'):
+                        ui.image(qr_b64).classes('w-52 h-52 rounded-2xl border-2 border-amber-500/40 p-2 bg-white shadow-2xl')
+                        ui.label(portal_url).classes('text-xs font-mono text-cyan-3 font-bold bg-black/60 px-3 py-1.5 rounded-lg border border-white/10')
 
-                        with ui.row().classes('w-full justify-center gap-2 flex-wrap'):
+                        with ui.row().classes('w-full justify-center gap-3 flex-wrap q-mt-2'):
                             def copiar_link_portal():
                                 escaped = portal_url.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
                                 ui.run_javascript(f'navigator.clipboard.writeText(`{escaped}`);')
-                                ui.notify('📋 Link do Portal copiado!', color='positive', icon='content_copy')
+                                ui.notify('📋 Link do Portal copiado para a área de transferência!', color='positive', icon='content_copy')
 
-                            ui.button('📋 Copiar Link', icon='content_copy', on_click=copiar_link_portal).props('dense outline color=cyan').classes('text-xs')
-                            ui.button('🌐 Testar / Abrir Portal', icon='open_in_new', on_click=lambda: ui.open(portal_url, new_tab=True)).props('dense unelevated color=amber-9 text-color=white bold').classes('text-xs')
+                            ui.button('📋 Copiar Link do Portal', icon='content_copy', on_click=copiar_link_portal).props('unelevated color=cyan-8 text-color=white bold').classes('h-11 px-4 rounded-xl text-xs')
+                            ui.button('🌐 Testar / Abrir Portal', icon='open_in_new', on_click=lambda: ui.open(portal_url, new_tab=True)).props('unelevated color=amber-9 text-color=black bold').classes('h-11 px-4 rounded-xl text-xs')
 
         dlg_portal.open()
