@@ -107,35 +107,36 @@ def salvar_demanda_drive_link(demanda_id: int, titulo_evento: str, drive_url: st
 
 
 _global_service_db = None
-_global_bot_db = None
+import threading
+_thread_local_db = threading.local()
 
 def get_bot_db_connection():
-    """Retorna uma conexão dedicada para tarefas de segundo plano (como o Bot do Telegram)."""
-    global _global_bot_db
+    """Retorna uma conexão dedicada para tarefas de segundo plano (thread-safe)."""
     if DB_MODE == "local":
         return get_local_db_connection()
-    if _global_bot_db:
-        return _global_bot_db
+    if hasattr(_thread_local_db, 'bot_client') and _thread_local_db.bot_client:
+        return _thread_local_db.bot_client
     if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
         try:
-            _global_bot_db = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-            return _global_bot_db
+            client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+            _thread_local_db.bot_client = client
+            return client
         except Exception as e:
             print(f"[ERRO BOT DB CLIENT] Falha ao criar cliente com service_role: {e}")
     return get_db_connection()
 
 
 def get_service_db_connection():
-    """Retorna uma conexão com service_role_key para operações admin privilegiadas."""
-    global _global_service_db
+    """Retorna uma conexão com service_role_key para operações admin privilegiadas (thread-safe)."""
     if DB_MODE == "local":
         return get_local_db_connection()
-    if _global_service_db:
-        return _global_service_db
+    if hasattr(_thread_local_db, 'service_client') and _thread_local_db.service_client:
+        return _thread_local_db.service_client
     if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
         try:
-            _global_service_db = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-            return _global_service_db
+            client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+            _thread_local_db.service_client = client
+            return client
         except Exception as e:
             print(f"[ERRO SERVICE DB] Falha ao criar cliente service_role: {e}")
     return None
@@ -2279,11 +2280,11 @@ def save_event_photo_embedding(event_id: str, photo_id: str, drive_file_id: str,
 
 
 def save_event_photo_embeddings_batch(records: list) -> int:
-    """Salva múltiplos embeddings de uma vez (batch insert). Retorna quantidade salva."""
-    conn = get_service_db_connection() or get_db_connection()
-    if not conn or not records:
+    """Salva múltiplos embeddings de uma vez (batch insert com retry). Retorna quantidade salva."""
+    if not records:
         return 0
     import json
+    import time
     payloads = []
     for r in records:
         payloads.append({
@@ -2296,12 +2297,20 @@ def save_event_photo_embeddings_batch(records: list) -> int:
             'bbox': json.dumps(r.get('bbox')) if r.get('bbox') else None,
             'det_score': round(float(r['det_score']), 4) if r.get('det_score') is not None else None,
         })
-    try:
-        conn.table('event_photo_embeddings').insert(payloads).execute()
-        return len(payloads)
-    except Exception as err:
-        print(f"[SAVE BATCH EMBEDDINGS ERR] {err}")
-        return 0
+    for attempt in range(3):
+        conn = get_service_db_connection() or get_db_connection()
+        if not conn:
+            time.sleep(0.3)
+            continue
+        try:
+            conn.table('event_photo_embeddings').insert(payloads).execute()
+            return len(payloads)
+        except Exception as err:
+            if attempt < 2:
+                time.sleep(0.4 * (attempt + 1))
+            else:
+                print(f"[SAVE BATCH EMBEDDINGS ERR] {err}")
+    return 0
 
 
 def get_event_photo_embeddings(event_id: str) -> list:

@@ -234,24 +234,38 @@ def process_faces_locally(file_path: Path, event_id: str, drive_file_id: str,
 
 
 # ============================================================================
-# MATCH PROATIVO CONTRA CONVIDADOS PRÉ-CADASTRADOS
+# MATCH PROATIVO CONTRA CONVIDADOS PRÉ-CADASTRADOS (CACHE EM MEMÓRIA)
 # ============================================================================
+_CACHED_PROFILES = None
+_CACHED_EVENT = None
+_profiles_lock = threading.Lock()
+
+def get_cached_profiles(event_id: str):
+    global _CACHED_PROFILES, _CACHED_EVENT
+    with _profiles_lock:
+        if _CACHED_PROFILES is None:
+            try:
+                from database import get_guest_profiles_not_notified, get_public_event
+                _CACHED_PROFILES = get_guest_profiles_not_notified(event_id) or []
+                _CACHED_EVENT = get_public_event(event_id) or {}
+            except Exception:
+                _CACHED_PROFILES = []
+                _CACHED_EVENT = {}
+        return _CACHED_PROFILES, _CACHED_EVENT
+
+
 def run_proactive_matching(event_id: str, new_embeddings: list):
-    """Compara novos embeddings contra perfis de convidados já cadastrados."""
+    """Compara novos embeddings contra perfis de convidados já cadastrados em memória."""
     if not new_embeddings:
         return
 
     try:
-        from database import (get_guest_profiles_not_notified, get_public_event,
-                              mark_guest_notified, save_guest_delivery,
-                              send_real_email_smtp)
-
-        profiles = get_guest_profiles_not_notified(event_id)
+        profiles, event = get_cached_profiles(event_id)
         if not profiles:
             return
 
-        event = get_public_event(event_id)
         threshold = event.get('threshold_match', 0.45) if event else 0.45
+        from database import mark_guest_notified, save_guest_delivery, send_real_email_smtp
 
         for profile in profiles:
             guest_embeddings = json.loads(profile['embeddings']) if isinstance(profile['embeddings'], str) else profile['embeddings']
