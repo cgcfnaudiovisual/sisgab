@@ -632,11 +632,35 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
         except Exception as e:
             print(f"[EFETIVO LOAD ERR] {e}")
 
-    with ui.dialog() as tramitar_dialog, ui.card().classes('w-[620px] max-w-[95vw] q-pa-lg border').style(
-        f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]}; border-radius: 16px; max-height: 90vh; overflow-y: auto;'
+    with ui.dialog() as tramitar_dialog, ui.card().classes('w-[680px] max-w-[95vw] q-pa-lg rounded-2xl bg-slate-900 text-white').style(
+        f'border: 1px solid rgba(0, 229, 255, 0.25); box-shadow: 0 0 40px rgba(0,0,0,0.8), 0 0 20px rgba(0, 229, 255, 0.1); max-height: 92vh; overflow-y: auto;'
     ):
-        ui.label(f"⚖️ Tramitação & Parecer: {demanda.get('titulo_evento','')}").classes('text-white text-md font-bold cyber-title q-mb-xs')
-        ui.label(f"Solicitante: {demanda.get('solicitante_nome','')} ({demanda.get('setor','')})").classes('text-xs text-grey-4 q-mb-md')
+        # Header com título e botão de fechar
+        with ui.row().classes('w-full justify-between items-center border-b border-cyan-500/20 pb-3 mb-2'):
+            with ui.column().classes('gap-0.5'):
+                with ui.row().classes('items-center gap-2'):
+                    ui.icon('gavel', color='amber-4').classes('text-xl')
+                    ui.label('TRAMITAÇÃO & PARECER DA CHEFIA').classes('text-white text-base font-black tracking-wide cyber-title')
+                ui.label(f"📌 {demanda.get('titulo_evento','Sem Título')}").classes('text-xs font-bold text-cyan-3 truncate max-w-[500px]')
+            ui.button(icon='close', on_click=tramitar_dialog.close).props('flat round dense text-color=grey-4')
+
+        # Card de Resumo da Demanda
+        with ui.row().classes('w-full items-center justify-between p-2.5 rounded-xl bg-slate-950/80 border border-cyan-500/10 text-xs mb-3 flex-wrap gap-2'):
+            with ui.row().classes('items-center gap-2'):
+                ui.icon('person', color='cyan-4').classes('text-sm')
+                ui.label(f"Solicitante:").classes('text-grey-4 font-semibold')
+                ui.label(f"{demanda.get('solicitante_nome','N/I')}").classes('text-white font-bold')
+                if demanda.get('setor'):
+                    ui.badge(demanda.get('setor'), color='primary').classes('text-[10px] q-px-xs')
+            with ui.row().classes('items-center gap-3'):
+                if demanda.get('data_evento'):
+                    with ui.row().classes('items-center gap-1'):
+                        ui.icon('event', color='amber-4').classes('text-xs')
+                        ui.label(f"{demanda.get('data_evento','')} {demanda.get('hora_evento','')[:5] if demanda.get('hora_evento') else ''}").classes('text-amber-3 font-mono text-[11px]')
+                if demanda.get('local_evento'):
+                    with ui.row().classes('items-center gap-1'):
+                        ui.icon('place', color='purple-4').classes('text-xs')
+                        ui.label(f"{demanda.get('local_evento','')}").classes('text-purple-3 text-[11px] truncate max-w-[150px]')
         
         mids_str = demanda.get('notificar_militar_ids') or '[]'
         try:
@@ -676,24 +700,29 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
             efetivo_options[des_id] = str(des_id) if isinstance(des_id, str) else f"Militar (ID: {des_id})"
 
         with ui.column().classes('w-full gap-3 text-xs'):
-            with ui.row().classes('w-full gap-2 no-wrap'):
+            # Seleção de Militares (Grid de 2 colunas)
+            with ui.row().classes('w-full gap-3 items-center flex-wrap sm:flex-nowrap'):
                 encarregado_select = ui.select(
                     efetivo_options,
                     value=enc_id,
-                    label='👤 Encarregado da Missão',
+                    label='👤 Encarregado da Missão (Fotógrafo / Líder)',
                     with_input=True,
                     clearable=True
-                ).props('dark outlined dense option-dark new-value-mode=add-unique').classes('w-1/2').tooltip('Selecione do efetivo ou digite o nome do militar')
+                ).props('dark outlined dense option-dark new-value-mode=add-unique').classes('flex-1 w-full').tooltip('Selecione do efetivo ou digite o nome')
 
                 designer_select = ui.select(
                     efetivo_options,
                     value=des_id,
-                    label='🎨 Militar Designado (Arte / Design)',
+                    label='🎨 Militar Designado (Arte / Redação)',
                     with_input=True,
                     clearable=True
-                ).props('dark outlined dense option-dark new-value-mode=add-unique').classes('w-1/2').tooltip('Selecione do efetivo ou digite o nome do militar')
+                ).props('dark outlined dense option-dark new-value-mode=add-unique').classes('flex-1 w-full').tooltip('Selecione do efetivo ou digite o nome')
             
-            parecer_input = ui.textarea('✍️ Parecer da Chefia / Despacho', placeholder='Digite o parecer ou instruções...').props('dark outlined dense w-full rows=3')
+            parecer_input = ui.textarea(
+                '✍️ Parecer da Chefia / Instruções Operacionais',
+                placeholder='Digite observações, orientações para a equipe ou motivo do parecer...'
+            ).props('dark outlined dense w-full rows=3').classes('w-full')
+            
             error_lbl = ui.label('').classes('text-xs text-red font-bold')
 
             def submeter_tramitacao(novo_status, acao_nome):
@@ -758,12 +787,11 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
                         
                         if novo_status in ('aprovado', 'aprovada'):
                             import drive_service
+                            from database import salvar_demanda_drive_link
                             result = drive_service.criar_pasta_evento(demanda['titulo_evento'], demanda.get('data_evento', ''))
-                            if result:
-                                db.table('demandas_comunicacao').update({
-                                    'drive_url': result['evento_link']
-                                }).eq('id', dem_id).execute()
-                                ui.notify(f"📂 Pasta criada no Drive!", color='success')
+                            if result and result.get('evento_link'):
+                                salvar_demanda_drive_link(dem_id, demanda['titulo_evento'], result['evento_link'], result.get('evento_folder_id'))
+                                ui.notify(f"📂 Pasta criada e vinculada no Drive!", color='success')
 
                         ui.notify(f"Demanda tramitada: {acao_nome}", color='success')
 
@@ -814,14 +842,21 @@ def open_tramitar_dialog(demanda, user_name_guerra="SUPERVISOR", is_approver=Tru
                         ui.button('🗑️ Excluir Permanentemente', on_click=efetuar_delecao).props('unelevated color=red text-color=white bold')
                 confirm_del_dialog.open()
 
-            with ui.row().classes('w-full justify-between gap-2 q-mt-xs flex-wrap'):
-                ui.button('Rejeitar', on_click=lambda: submeter_tramitacao('rejeitado', 'Demanda Rejeitada')).props('unelevated color=red text-color=white bold').classes('col q-py-sm rounded-lg')
-                ui.button('Pedir Ajustes', on_click=lambda: submeter_tramitacao('ajustes', 'Solicitado Ajustes')).props('unelevated color=orange text-color=black bold').classes('col q-py-sm rounded-lg')
-                ui.button('Aprovar', on_click=lambda: submeter_tramitacao('aprovada', 'Demanda Aprovada')).props('unelevated color=green text-color=white bold').classes('col q-py-sm rounded-lg')
-                ui.button('🎯 Concluir Missão', on_click=lambda: (tramitar_dialog.close(), open_concluir_missao_dialog(demanda, user_name_guerra, callback_refresh))).props('unelevated color=cyan text-color=black bold').classes('col q-py-sm rounded-lg')
-                ui.button('🗑️ Excluir Pauta', on_click=deletar_pauta_confirm).props('outline color=red text-color=red bold icon=delete').classes('col q-py-sm rounded-lg')
+            # Separador estético
+            ui.separator().classes('my-2 border-slate-800')
 
-        ui.button('Fechar', on_click=tramitar_dialog.close).props('flat color=grey').classes('w-full q-mt-md text-xs bold')
+            # Grade Harmônica de Ações (4 botões principais com mesma altura e estilo consistente)
+            with ui.row().classes('w-full grid grid-cols-2 sm:grid-cols-4 gap-2 items-center'):
+                ui.button('REJEITAR', icon='cancel', on_click=lambda: submeter_tramitacao('rejeitado', 'Demanda Rejeitada')).props('unelevated color=red-9 text-color=white no-caps').classes('w-full py-2.5 font-bold text-xs rounded-xl hover:brightness-110')
+                ui.button('PEDIR AJUSTES', icon='edit_note', on_click=lambda: submeter_tramitacao('ajustes', 'Solicitado Ajustes')).props('unelevated color=amber-9 text-color=black no-caps').classes('w-full py-2.5 font-bold text-xs rounded-xl hover:brightness-110')
+                ui.button('APROVAR', icon='check_circle', on_click=lambda: submeter_tramitacao('aprovada', 'Demanda Aprovada')).props('unelevated color=green-7 text-color=white no-caps').classes('w-full py-2.5 font-bold text-xs rounded-xl hover:brightness-110')
+                ui.button('CONCLUIR', icon='task_alt', on_click=lambda: (tramitar_dialog.close(), open_concluir_missao_dialog(demanda, user_name_guerra, callback_refresh))).props('unelevated color=cyan-7 text-color=black no-caps').classes('w-full py-2.5 font-bold text-xs rounded-xl hover:brightness-110')
+
+            # Rodapé: Ações Secundárias (Exclusão & Fechar)
+            with ui.row().classes('w-full justify-between items-center pt-2 border-t border-slate-800/80 q-mt-xs'):
+                ui.button('Excluir Pauta', icon='delete_forever', on_click=deletar_pauta_confirm).props('flat dense color=red-4 text-color=red-4 no-caps').classes('text-xs hover:bg-red-500/10 rounded-lg')
+                ui.button('Fechar', icon='close', on_click=tramitar_dialog.close).props('flat dense color=grey-4 no-caps').classes('text-xs hover:text-white')
+
     tramitar_dialog.open()
 
 
