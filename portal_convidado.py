@@ -12,6 +12,7 @@ import json
 import base64
 import zipfile
 import asyncio
+import math
 from datetime import datetime
 from pathlib import Path
 from nicegui import ui, app
@@ -235,6 +236,8 @@ def render_page(event_id: str):
         'guest_email': app.storage.user.get('portal_guest_email', ''),
         'rate_limit_count': 0,
         'last_search_time': 0,
+        'page': 1,
+        'per_page': 60,
     }
 
     # Dados do evento
@@ -535,6 +538,14 @@ def render_page(event_id: str):
                 if not all_visible:
                     return
 
+                total_geral = len(guest_state['geral_photos'])
+                per_p = guest_state.get('per_page', 60)
+                cur_p = guest_state.get('page', 1)
+                start_i = (cur_p - 1) * per_p
+                end_i = min(start_i + per_p, total_geral)
+                page_geral = guest_state['geral_photos'][start_i:end_i]
+                page_all = guest_state['matched_photos'] + page_geral
+
                 selected_count = len(guest_state['selected_fids'])
 
                 with ui.card().classes('w-full bg-slate-950 border border-slate-800 rounded-2xl p-3 sm:p-4 q-mt-2'):
@@ -544,6 +555,12 @@ def render_page(event_id: str):
                             ui.label(f"Seleção de Fotos: {selected_count} selecionada(s)").classes('text-xs sm:text-sm font-bold text-white')
 
                         with ui.row().classes('items-center gap-2 flex-wrap'):
+                            def select_page():
+                                for p in page_all:
+                                    fid = p.get('drive_file_id') or p.get('id')
+                                    if fid: guest_state['selected_fids'].add(fid)
+                                refresh_ui()
+
                             def select_all():
                                 for p in all_visible:
                                     fid = p.get('drive_file_id') or p.get('id')
@@ -554,7 +571,9 @@ def render_page(event_id: str):
                                 guest_state['selected_fids'].clear()
                                 refresh_ui()
 
-                            ui.button('Selecionar Todas', icon='select_all', on_click=select_all).props('dense outline color=cyan size=sm no-caps').classes('text-xs')
+                            if page_all:
+                                ui.button(f'Selecionar Página ({len(page_all)})', icon='check_box', on_click=select_page).props('dense outline color=cyan size=sm no-caps').classes('text-xs')
+                            ui.button(f'Selecionar Todas ({len(all_visible)})', icon='select_all', on_click=select_all).props('dense outline color=amber size=sm no-caps').classes('text-xs')
                             if selected_count > 0:
                                 ui.button('Desmarcar', icon='clear', on_click=clear_selection).props('dense flat color=grey size=sm no-caps').classes('text-xs')
 
@@ -590,55 +609,126 @@ def render_page(event_id: str):
                             dl_btn_label = f"📥 Baixar Selecionadas ({selected_count})" if selected_count > 0 else f"📥 Baixar Todas ({len(all_visible)})"
                             ui.button(dl_btn_label, icon='archive', on_click=download_selected_zip).props('unelevated color=amber-9 text-color=black bold size=sm no-caps').classes('text-xs font-bold rounded-xl shadow')
 
-            # ── GRADE DE FOTOS RESPONSIVA (PC PREENCHE A TELA, CELULAR ADAPTA) ──
+            # ── GRADE DE FOTOS RESPONSIVA (ENCAIXADA NO ESPAÇO SEM CORTES, 260px min) ──
             def render_photo_grid(photos_list: list[dict], is_personal: bool = False):
-                with ui.grid().classes('w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4'):
+                with ui.element('div').classes('w-full gap-4').style('display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));'):
                     for idx, p in enumerate(photos_list):
                         fid = p.get('drive_file_id') or p.get('id')
-                        thumb_url = f"https://drive.google.com/thumbnail?id={fid}&sz=w600-h600-c"
-                        full_url = p.get('drive_link') or f"https://drive.google.com/file/d/{fid}/view"
+                        raw_thumb = p.get('thumbnailLink', '')
+                        if '=s220' in raw_thumb:
+                            thumb_url = raw_thumb.replace('=s220', '=s800')
+                        elif '=' in raw_thumb:
+                            thumb_url = raw_thumb.split('=')[0] + '=s800'
+                        elif fid:
+                            thumb_url = f"https://drive.google.com/thumbnail?id={fid}&sz=w800"
+                        else:
+                            thumb_url = ''
+
                         is_selected = fid in guest_state['selected_fids']
+                        border_style = 'border: 2px solid #00e5ff; box-shadow: 0 0 15px rgba(0,229,255,0.4);' if is_selected else 'border: 1px solid rgba(255,255,255,0.1);'
 
-                        card_classes = 'p-0 bg-slate-900 border rounded-2xl overflow-hidden transition-all cursor-pointer group relative shadow-md '
-                        card_classes += 'photo-card-selected border-cyan-400' if is_selected else 'border-slate-800 hover:border-cyan-500/50'
+                        with ui.card().classes('q-pa-none no-shadow rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 hover:scale-[1.02]').style(f'background: #0f172a; {border_style}'):
+                            # Container com imagem perfeitamente contida/encaixada
+                            with ui.element('div').classes('relative w-full overflow-hidden').style(
+                                'height: 240px; background: #030a17; display: flex; align-items: center; justify-content: center;'
+                            ):
+                                def toggle_select(f=fid):
+                                    if f in guest_state['selected_fids']:
+                                        guest_state['selected_fids'].remove(f)
+                                    else:
+                                        guest_state['selected_fids'].add(f)
+                                    refresh_ui()
 
-                        with ui.card().classes(card_classes):
-                            # Thumbnail da foto (clique abre lightbox na posição exata)
-                            ui.image(thumb_url).classes('w-full aspect-square object-cover').on(
-                                'click', lambda _, i=idx, l=photos_list: open_full_lightbox(i, l)
-                            )
-                            
-                            # Checkbox de seleção no canto superior esquerdo
-                            def toggle_select(f=fid):
-                                if f in guest_state['selected_fids']:
-                                    guest_state['selected_fids'].remove(f)
-                                else:
-                                    guest_state['selected_fids'].add(f)
-                                refresh_ui()
+                                with ui.element('div').classes('absolute top-2 left-2 z-20 bg-black/70 rounded p-1').on('click', lambda _, f=fid: toggle_select(f)):
+                                    ui.checkbox(value=is_selected, on_change=lambda _, f=fid: toggle_select(f)).props('dark color=cyan dense')
 
-                            with ui.element('div').classes('absolute top-2 left-2 z-10').on('click', lambda _, f=fid: toggle_select(f)):
-                                ui.checkbox(value=is_selected, on_change=lambda _, f=fid: toggle_select(f)).props('dark color=cyan dense')
+                                img = ui.image(thumb_url).style('max-height: 240px; width: 100%; object-fit: contain;')
+                                img.on('click', lambda _, i=idx, l=photos_list: open_full_lightbox(i, l))
 
-                            # Barra de ações na base do card
-                            with ui.row().classes('w-full p-2 items-center justify-between bg-black/75 backdrop-blur-sm'):
-                                ui.button(icon='fullscreen', on_click=lambda _, i=idx, l=photos_list: open_full_lightbox(i, l)).props('flat dense size=xs color=grey-3').tooltip('Ampliar com passador')
-                                ui.button(icon='download', on_click=lambda _, f=fid: download_single(f)).props('flat dense size=xs color=cyan-4').tooltip('Baixar foto')
+                            # Rodapé do card
+                            with ui.row().classes('w-full p-2.5 items-center justify-between bg-slate-950 border-t border-white/5 gap-1.5'):
+                                fname = p.get('filename') or p.get('name') or 'foto.jpg'
+                                ui.label(fname).classes('text-[11px] text-grey-2 font-bold truncate flex-grow')
+                                
+                                badge_txt = '⭐ Identificada' if is_personal else '☁️ Drive'
+                                badge_col = 'amber-9' if is_personal else 'blue-grey-8'
+                                ui.badge(badge_txt, color=badge_col).classes('text-[9px] font-bold')
 
-            # ── GALERIA OFICIAL (PASTA GERAL) ─────────────────────────────────
+                                with ui.row().classes('items-center gap-1'):
+                                    ui.button(icon='fullscreen', on_click=lambda _, i=idx, l=photos_list: open_full_lightbox(i, l)).props('flat dense size=xs color=grey-3').tooltip('Ampliar')
+                                    ui.button(icon='download', on_click=lambda _, f=fid: download_single(f)).props('unelevated color=cyan text-color=black dense bold size=xs').classes('px-2 py-0.5 rounded').tooltip('Baixar foto HD')
+
+            # ── GALERIA OFICIAL COM PAGINAÇÃO COMPLETA (IGUAL COMSOC_GALERIA) ─
             def render_official_gallery(folder_id: str):
                 if not folder_id:
                     ui.label('Nenhuma foto oficial disponibilizada ainda.').classes('text-xs text-grey-5 italic')
                     return
 
                 try:
-                    files = drive_service.list_files(folder_id, page_size=1000)
-                    if not files:
+                    if not guest_state['geral_photos']:
+                        files = drive_service.list_files(folder_id, page_size=5000)
+                        if files:
+                            guest_state['geral_photos'] = [
+                                {'drive_file_id': f['id'], 'drive_link': f.get('webViewLink'), 'filename': f.get('name', 'foto.jpg'), 'thumbnailLink': f.get('thumbnailLink')}
+                                for f in files
+                            ]
+
+                    fotos = guest_state['geral_photos']
+                    if not fotos:
                         ui.label('As fotos do evento estão sendo processadas pela equipe de Comunicação Social.').classes('text-xs text-grey-4 italic')
                         return
 
-                    photo_items = [{'drive_file_id': f['id'], 'drive_link': f.get('webViewLink'), 'filename': f['name']} for f in files]
-                    guest_state['geral_photos'] = photo_items
-                    render_photo_grid(photo_items, is_personal=False)
+                    total_fotos = len(fotos)
+                    per_page = guest_state.get('per_page', 60)
+                    total_pages = max(1, math.ceil(total_fotos / per_page))
+                    cur_page = max(1, min(guest_state.get('page', 1), total_pages))
+                    guest_state['page'] = cur_page
+
+                    start_idx = (cur_page - 1) * per_page
+                    end_idx = min(start_idx + per_page, total_fotos)
+                    visible_fotos = fotos[start_idx:end_idx]
+
+                    def set_page(p):
+                        guest_state['page'] = max(1, min(p, total_pages))
+                        refresh_ui()
+
+                    def set_per_page(v):
+                        guest_state['per_page'] = v
+                        guest_state['page'] = 1
+                        refresh_ui()
+
+                    # ─── BARRA DE PAGINAÇÃO (TOPO) ───
+                    if total_pages > 1 or total_fotos > 30:
+                        with ui.row().classes('w-full items-center justify-between wrap gap-2 bg-slate-950 p-2.5 rounded-xl border border-white/10 q-mb-3'):
+                            with ui.row().classes('items-center gap-1'):
+                                ui.button(icon='first_page', on_click=lambda: set_page(1)).props('flat dense color=cyan text-color=cyan round').classes('h-8 w-8').tooltip('Primeira Página')
+                                ui.button(icon='chevron_left', on_click=lambda: set_page(cur_page - 1)).props('unelevated dense color=cyan-9 text-color=white round').classes('h-8 w-8').tooltip('Página Anterior')
+                                
+                                ui.label(f'Página {cur_page} de {total_pages}').classes('text-xs font-black text-cyan-3 px-2')
+                                ui.label(f'({start_idx + 1}–{end_idx} de {total_fotos} fotos)').classes('text-[11px] text-grey-4')
+
+                                ui.button(icon='chevron_right', on_click=lambda: set_page(cur_page + 1)).props('unelevated dense color=cyan-9 text-color=white round').classes('h-8 w-8').tooltip('Próxima Página')
+                                ui.button(icon='last_page', on_click=lambda: set_page(total_pages)).props('flat dense color=cyan text-color=cyan round').classes('h-8 w-8').tooltip('Última Página')
+
+                            with ui.row().classes('items-center gap-1.5'):
+                                ui.label('Fotos por página:').classes('text-[11px] text-grey-4')
+                                for opt_val, opt_lbl in [(30, '30'), (60, '60'), (120, '120'), (240, '240'), (500, '500')]:
+                                    is_curr = per_page == opt_val
+                                    btn_style = 'unelevated color=cyan-7 text-color=black bold' if is_curr else 'flat color=grey text-color=grey-3'
+                                    ui.button(opt_lbl, on_click=lambda _, v=opt_val: set_per_page(v)).props(f'dense {btn_style}').classes('text-[11px] px-2 py-0.5 rounded-lg')
+
+                    # ─── GRID DE FOTOS DA PÁGINA ───
+                    render_photo_grid(visible_fotos, is_personal=False)
+
+                    # ─── BARRA DE PAGINAÇÃO (RODAPÉ) ───
+                    if total_pages > 1:
+                        with ui.row().classes('w-full items-center justify-center gap-2 q-mt-md p-3 bg-slate-950/80 rounded-2xl border border-white/10'):
+                            ui.button(icon='first_page', on_click=lambda: set_page(1)).props('flat dense color=cyan text-color=cyan round').classes('h-9 w-9').tooltip('Primeira Página')
+                            ui.button('Anterior', icon='chevron_left', on_click=lambda: set_page(cur_page - 1)).props('unelevated color=cyan-9 text-color=white bold').classes('text-xs px-3 rounded-xl')
+                            ui.label(f'Página {cur_page} de {total_pages}').classes('text-xs font-bold text-cyan-3 px-2')
+                            ui.button('Próxima', icon='chevron_right', on_click=lambda: set_page(cur_page + 1)).props('unelevated color=cyan-9 text-color=white bold icon-right=chevron_right').classes('text-xs px-3 rounded-xl')
+                            ui.button(icon='last_page', on_click=lambda: set_page(total_pages)).props('flat dense color=cyan text-color=cyan round').classes('h-9 w-9').tooltip('Última Página')
+
                 except Exception as e:
                     ui.label(f"Não foi possível carregar a galeria: {e}").classes('text-xs text-red-4')
 
