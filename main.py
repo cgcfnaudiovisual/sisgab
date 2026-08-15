@@ -312,6 +312,7 @@ import modulo_presenca
 import qrcode_generator
 import telegram_metrics
 import portal_convidado
+import jarvis_voice
 from database import authenticate_user, get_user_by_id
 
 from services import data_service
@@ -355,6 +356,7 @@ sisgab_menu_categories = [
         'category': '📣 COMUNICAÇÃO & MÍDIA',
         'items': [
             {'name': 'Central de IA', 'icon': 'psychology', 'path': '/assistente_ia', 'roles': ['admin', 'supervisor', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design'], 'subtitle': 'Chat, redator e triagem de demandas'},
+            {'name': 'Jarvis Assistente de Voz', 'icon': 'graphic_eq', 'path': '/jarvis', 'roles': ['admin', 'supervisor', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'operador'], 'subtitle': 'Voz em tempo real e palavra-chave Jarvis'},
             {'name': 'Smart Editor IA', 'icon': 'movie_filter', 'path': '/smart_editor', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'supervisor'], 'subtitle': 'Cortes com IA, SFX e FCPXML'},
             {'name': 'Estúdio Gráfico (Canva)', 'icon': 'palette', 'path': '/estudio_grafico', 'roles': ['admin', 'oficial_gab', 'praca_gab', 'comsoc', 'comsoc_design', 'supervisor'], 'subtitle': 'Editor visual de artes e impressos', 'new_tab': True},
             {'name': 'Galeria de Fotos & Acervo', 'icon': 'photo_library', 'path': '/comsoc_galeria', 'roles': ['admin', 'supervisor', 'oficial_gab', 'oficial', 'praca_gab', 'comsoc', 'comsoc_design', 'militar'], 'subtitle': 'Visualizador do Drive, Seleção Curada e Reconhecimento Facial'},
@@ -960,6 +962,12 @@ def qrcode_generator_page():
 def telegram_metrics_page():
     app.storage.user['current_path'] = '/telegram_metrics'
     build_layout(telegram_metrics.render_page)()
+
+
+@ui.page('/jarvis')
+def jarvis_page():
+    app.storage.user['current_path'] = '/jarvis'
+    build_layout(jarvis_voice.render_page)()
 
 
 @ui.page('/rsvp/{token}')
