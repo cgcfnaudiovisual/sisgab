@@ -446,6 +446,7 @@ def get_acervo_actions_keyboard(ev_id):
     markup.add(
         types.InlineKeyboardButton("⭐ Receber Álbum HD (Fotos)", callback_data=f"acervo_album:{ev_id}"),
         types.InlineKeyboardButton("🔗 Ver Link & Detalhes do Acervo", callback_data=f"acervo_links:{ev_id}"),
+        types.InlineKeyboardButton("🌐 Portal do Convidado (Link / QR)", callback_data=f"acervo_portal:{ev_id}"),
         types.InlineKeyboardButton("❌ Cancelar", callback_data="acervo_cancel")
     )
     return markup

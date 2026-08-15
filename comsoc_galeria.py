@@ -140,6 +140,7 @@ def render_page(evento_id: str = None, **kwargs):
             if is_operator:
                 ui.button('Distribuir', icon='send', on_click=lambda: _abrir_distribuir()).props('dense outline color=green').classes('text-xs')
                 ui.button('Vincular/Criar Pasta', icon='link', on_click=lambda: _abrir_vincular()).props('dense outline color=amber').classes('text-xs')
+                ui.button('🌐 Portal do Convidado', icon='qr_code_2', on_click=lambda: _abrir_portal_convidado()).props('dense unelevated color=amber-9 text-color=white font-bold').classes('text-xs cyber-glow')
             ui.button('Biometria Facial', icon='face', on_click=lambda: _abrir_biometria()).props('dense outline color=purple').classes('text-xs')
 
     # ─── MURAL DE EVENTOS RECENTES ───
@@ -544,3 +545,169 @@ def render_page(evento_id: str = None, **kwargs):
                             ).classes('text-xs')
 
         dlg.open()
+
+    def _abrir_portal_convidado():
+        pauta = pautas_data.get(str(page_state['pauta_id']), {})
+        if not pauta or not pauta.get('id'):
+            ui.notify('Selecione um evento válido para gerenciar o Portal do Convidado.', color='warning')
+            return
+
+        p_id = str(pauta.get('id'))
+        slug = str(pauta.get('id'))
+        titulo = pauta.get('titulo_evento', 'Evento Oficial')
+        data_ev = pauta.get('data_evento', '')
+        local_ev = pauta.get('local_evento', 'Gabinete do CGCFN')
+        drive_fid = get_drive_folder_id(pauta)
+        geral_fid = None
+        if drive_fid:
+            geral_fid = drive_service.find_folder('GERAL', drive_fid) or drive_fid
+
+        from database import (
+            get_public_event, create_public_event, update_public_event,
+            count_event_embeddings, get_guest_profiles_for_event,
+            get_portal_analytics_summary
+        )
+
+        ev_pub = get_public_event(slug)
+        if not ev_pub:
+            create_public_event(
+                event_id=slug,
+                nome=titulo,
+                data_evento=data_ev or '2026-08-15',
+                local=local_ev,
+                drive_folder_id=drive_fid,
+                drive_geral_folder_id=geral_fid,
+                demanda_id=int(p_id) if p_id.isdigit() else None
+            )
+            ev_pub = get_public_event(slug) or {}
+
+        portal_url = f"https://sisgab.com/evento/{slug}"
+
+        # Gera QR Code
+        import qrcode
+        import io
+        import base64
+        qr = qrcode.QRCode(box_size=8, border=2)
+        qr.add_data(portal_url)
+        qr.make(fit=True)
+        img_qr = qr.make_image(fill_color="black", back_color="white")
+        buf = io.BytesIO()
+        img_qr.save(buf, format="PNG")
+        qr_b64 = f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode('utf-8')}"
+
+        with ui.dialog() as dlg_portal, ui.card().classes('q-pa-md max-w-3xl w-full rounded-2xl bg-slate-900 border border-cyan-500/30 text-white').style('box-shadow: 0 0 40px rgba(0,229,255,0.15);'):
+            # Header
+            with ui.row().classes('w-full justify-between items-center border-b border-cyan-500/20 pb-2'):
+                with ui.column().classes('gap-0'):
+                    with ui.row().classes('items-center gap-2'):
+                        ui.icon('qr_code_2', size='1.5rem', color='amber-4')
+                        ui.label('🌐 GESTÃO DO PORTAL DO CONVIDADO').classes('text-base font-black text-amber-4 tracking-wide')
+                    ui.label(f"{titulo} ({data_ev})").classes('text-xs text-grey-4 truncate max-w-[450px]')
+                ui.button(icon='close', on_click=dlg_portal.close).props('flat round dense text-color=white')
+
+            # Abas das 5 Etapas
+            with ui.tabs().classes('w-full text-cyan') as tabs_p:
+                t_cfg = ui.tab('cfg', label='⚙️ 1. Configuração', icon='settings')
+                t_proc = ui.tab('proc', label='⬆️ 2. Upload & IA', icon='memory')
+                t_cur = ui.tab('cur', label='📷 3. Curadoria GERAL', icon='collections')
+                t_guest = ui.tab('guest', label='👥 4. Convidados', icon='people')
+                t_qr = ui.tab('qr', label='📱 5. QR Code & Divulgação', icon='qr_code')
+
+            with ui.tab_panels(tabs_p, value=t_cfg).classes('w-full bg-transparent p-0 q-mt-sm'):
+                
+                # ── ETAPA 1: CONFIGURAÇÃO ──
+                with ui.tab_panel(t_cfg).classes('w-full p-2 gap-4'):
+                    with ui.column().classes('w-full gap-3'):
+                        status_val = ev_pub.get('status', 'ativo')
+                        sw_status = ui.switch('Status do Portal (Ativo / Inativo)', value=(status_val == 'ativo')).props('dark color=green')
+                        
+                        threshold_slider = ui.slider(min=0.35, max=0.70, step=0.01, value=float(ev_pub.get('threshold_match') or 0.45)).props('dark label-always color=amber')
+                        ui.label(f'Threshold de Similaridade Facial: {threshold_slider.value:.2f} (padrão: 0.45)').classes('text-xs text-grey-4')
+
+                        wm_check = ui.checkbox('Habilitar Marca d\'Água Institucional nas Fotos', value=bool(ev_pub.get('watermark_enabled', True))).props('dark color=cyan dense')
+                        wm_input = ui.input('Texto da Marca d\'Água', value=ev_pub.get('watermark_text') or 'COMSOC / CGCFN').props('dark outlined dense w-full')
+                        banner_input = ui.input('URL do Banner / Cartaz (opcional)', value=ev_pub.get('banner_url') or '').props('dark outlined dense w-full')
+
+                        def salvar_configuracoes():
+                            novos_dados = {
+                                'status': 'ativo' if sw_status.value else 'inativo',
+                                'threshold_match': float(threshold_slider.value),
+                                'watermark_enabled': wm_check.value,
+                                'watermark_text': (wm_input.value or '').strip(),
+                                'banner_url': (banner_input.value or '').strip() or None,
+                            }
+                            update_public_event(slug, novos_dados)
+                            ui.notify('✅ Configurações do Portal salvas com sucesso!', color='positive')
+
+                        ui.button('💾 Salvar Configurações', icon='save', on_click=salvar_configuracoes).props('unelevated color=cyan text-color=black bold w-full').classes('q-mt-sm')
+
+                # ── ETAPA 2: UPLOAD & PROCESSAMENTO ──
+                with ui.tab_panel(t_proc).classes('w-full p-2 gap-4'):
+                    with ui.card().classes('w-full bg-slate-950/80 border border-cyan-500/20 p-4 rounded-xl gap-2'):
+                        ui.label('📊 Status do Acervo & Embeddings IA').classes('text-sm font-bold text-cyan')
+                        emb_count = count_event_embeddings(slug)
+                        ws = check_worker_status()
+                        
+                        with ui.row().classes('w-full justify-between items-center text-xs py-1'):
+                            ui.label('Motor de IA Local (GPU):')
+                            ui.badge('Online' if ws == 'online' else 'Offline', color='positive' if ws == 'online' else 'warning')
+                        with ui.row().classes('w-full justify-between items-center text-xs py-1'):
+                            ui.label('Rostos Mapeados no Evento:')
+                            ui.badge(f"{emb_count} embeddings", color='amber-9').classes('font-bold')
+
+                    with ui.column().classes('w-full gap-2 q-mt-2'):
+                        ui.label('🚀 Comando para Watcher Local (10 Workers):').classes('text-xs font-bold text-amber-4')
+                        pasta_input = ui.input('Caminho da Pasta Local das Fotos', value=f"D:\\FOTOS\\{slug}").props('dark outlined dense w-full')
+                        
+                        def copiar_cmd_watcher():
+                            cmd = f'python event_photo_watcher.py --event-id "{slug}" --pasta "{pasta_input.value}"'
+                            escaped = cmd.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+                            ui.run_javascript(f'navigator.clipboard.writeText(`{escaped}`);')
+                            ui.notify('📋 Comando copiado! Cole no terminal do PC com GPU.', color='positive', icon='content_copy')
+
+                        ui.button('📋 Copiar Comando Watcher', icon='terminal', on_click=copiar_cmd_watcher).props('unelevated color=amber text-color=black bold w-full')
+
+                # ── ETAPA 3: CURADORIA GERAL ──
+                with ui.tab_panel(t_cur).classes('w-full p-2 gap-4'):
+                    with ui.column().classes('w-full gap-2 text-center items-center'):
+                        ui.icon('photo_library', size='3rem', color='cyan-4')
+                        ui.label('Subpasta GERAL no Google Drive').classes('text-sm font-bold text-white')
+                        ui.label('As fotos colocadas dentro da subpasta GERAL serão exibidas para TODOS os convidados que acessarem o link.').classes('text-xs text-grey-4 max-w-md')
+                        
+                        if geral_fid:
+                            ui.button('📂 Abrir Pasta GERAL no Drive', icon='open_in_new', on_click=lambda: ui.open(f'https://drive.google.com/drive/folders/{geral_fid}', new_tab=True)).props('unelevated color=cyan text-color=black bold').classes('q-mt-sm')
+                        else:
+                            ui.label('Pasta GERAL não encontrada. Crie a estrutura de pastas do evento primeiro.').classes('text-xs text-amber-4')
+
+                # ── ETAPA 4: CONVIDADOS & ENTREGAS ──
+                with ui.tab_panel(t_guest).classes('w-full p-2 gap-4'):
+                    metrics = get_portal_analytics_summary(slug)
+                    profiles = get_guest_profiles_for_event(slug)
+
+                    with ui.grid().classes('w-full grid-cols-3 gap-2'):
+                        with ui.card().classes('p-2 bg-slate-950 text-center rounded-lg border border-slate-800'):
+                            ui.label(str(metrics.get('acessos', 0))).classes('text-lg font-black text-cyan-4')
+                            ui.label('Acessos').classes('text-[10px] text-grey-4')
+                        with ui.card().classes('p-2 bg-slate-950 text-center rounded-lg border border-slate-800'):
+                            ui.label(str(len(profiles))).classes('text-lg font-black text-amber-4')
+                            ui.label('Convidados').classes('text-[10px] text-grey-4')
+                        with ui.card().classes('p-2 bg-slate-950 text-center rounded-lg border border-slate-800'):
+                            ui.label(str(metrics.get('emails', 0))).classes('text-lg font-black text-green-4')
+                            ui.label('E-mails').classes('text-[10px] text-grey-4')
+
+                # ── ETAPA 5: QR CODE & DIVULGAÇÃO ──
+                with ui.tab_panel(t_qr).classes('w-full p-2 gap-4 items-center text-center'):
+                    with ui.column().classes('w-full items-center gap-3'):
+                        ui.image(qr_b64).classes('w-44 h-44 rounded-xl border-2 border-amber-500/40 p-1 bg-white')
+                        ui.label(portal_url).classes('text-xs font-mono text-cyan-3 font-bold')
+
+                        with ui.row().classes('w-full justify-center gap-2 flex-wrap'):
+                            def copiar_link_portal():
+                                escaped = portal_url.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+                                ui.run_javascript(f'navigator.clipboard.writeText(`{escaped}`);')
+                                ui.notify('📋 Link do Portal copiado!', color='positive', icon='content_copy')
+
+                            ui.button('📋 Copiar Link', icon='content_copy', on_click=copiar_link_portal).props('dense outline color=cyan').classes('text-xs')
+                            ui.button('🌐 Testar / Abrir Portal', icon='open_in_new', on_click=lambda: ui.open(portal_url, new_tab=True)).props('dense unelevated color=amber-9 text-color=white bold').classes('text-xs')
+
+        dlg_portal.open()

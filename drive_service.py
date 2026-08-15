@@ -249,13 +249,17 @@ def criar_pasta_evento(titulo_evento, data_evento_str, pasta_mae_id=None):
         # Criar subpasta SELEÇÃO
         selecao_id = find_or_create_folder('SELEÇÃO', evento_id)
 
+        # Criar subpasta GERAL (Portal do Convidado / Galeria Oficial)
+        geral_id = find_or_create_folder('GERAL', evento_id)
+
         # Gerar link compartilhável
         link = get_shareable_link(evento_id)
 
-        print(f"[DRIVE_SERVICE] [OK] Estrutura criada para '{titulo_clean}': evento={evento_id}, selecao={selecao_id}")
+        print(f"[DRIVE_SERVICE] [OK] Estrutura criada para '{titulo_clean}': evento={evento_id}, selecao={selecao_id}, geral={geral_id}")
         return {
             'evento_folder_id': evento_id,
             'selecao_folder_id': selecao_id,
+            'geral_folder_id': geral_id,
             'evento_link': link or f"https://drive.google.com/drive/folders/{evento_id}"
         }
     except Exception as e:

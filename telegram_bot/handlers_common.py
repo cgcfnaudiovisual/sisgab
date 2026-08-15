@@ -1031,6 +1031,34 @@ def register_common_handlers(bot):
             clear_state(chat_id)
             return
 
+        if data.startswith('acervo_portal:'):
+            ev_id = data.split(':')[1]
+            await bot.answer_callback_query(call.id)
+            db = get_db_connection()
+            if db:
+                try:
+                    ev_id_val = int(ev_id) if ev_id.isdigit() else ev_id
+                    res = db.table('demandas_comunicacao').select('*').eq('id', ev_id_val).execute()
+                    if res.data:
+                        ev_item = res.data[0]
+                        titulo = ev_item.get('titulo_evento', 'Evento')
+                        slug = str(ev_item.get('id', ev_id))
+                        portal_url = f"https://sisgab.com/evento/{slug}"
+                        msg_portal = (
+                            f"🌐 **PORTAL DO CONVIDADO — SISGAB**\n\n"
+                            f"📌 **Evento:** {titulo}\n"
+                            f"📅 **Data:** {ev_item.get('data_evento', 'N/I')}\n\n"
+                            f"🔗 **Link Público de Entrega:**\n{portal_url}\n\n"
+                            f"💡 *Convidados podem acessar este link, registrar uma selfie e receber suas fotos automaticamente em tempo real!*"
+                        )
+                        await bot.send_message(chat_id, msg_portal, parse_mode='Markdown')
+                    else:
+                        await bot.send_message(chat_id, "⚠️ Evento não localizado no banco.")
+                except Exception as e_p:
+                    await bot.send_message(chat_id, f"❌ Erro ao consultar portal: {e_p}")
+            clear_state(chat_id)
+            return
+
         if data.startswith('confirm_ia_demanda:'):
             action_code = data.split(':')[1]
             await bot.answer_callback_query(call.id)
