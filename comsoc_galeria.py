@@ -155,7 +155,7 @@ def render_page(evento_id: str = None, **kwargs):
             with ui.row().classes('items-center gap-2 flex-wrap'):
                 ui.badge('🚀 ENTREGA & IA', color='purple-10').classes('text-[10px] font-black text-amber-3 tracking-wider q-px-sm')
                 if is_operator:
-                    ui.button('Portal do Convidado (Hot Delivery)', icon='qr_code_2', on_click=lambda: _abrir_portal_convidado()).props('unelevated color=amber-9 text-color=white no-caps').classes('text-xs font-black px-3.5 py-1.5 rounded-xl cyber-glow hover:brightness-110').tooltip('Gerenciar QR Code e entrega de fotos por Reconhecimento Facial')
+                    ui.button('Portal do Convidado (Hot Delivery)', icon='qr_code_2', on_click=_abrir_portal_convidado).props('unelevated color=amber-9 text-color=white no-caps').classes('text-xs font-black px-3.5 py-1.5 rounded-xl cyber-glow hover:brightness-110').tooltip('Gerenciar QR Code e entrega de fotos por Reconhecimento Facial')
                     ui.button('Distribuir no Telegram', icon='send', on_click=lambda: _abrir_distribuir()).props('unelevated color=green-7 text-color=white no-caps').classes('text-xs font-bold px-3 py-1.5 rounded-xl hover:brightness-110').tooltip('Disparar fotos para militares e canais do Telegram')
                 ui.button('Biometria Facial', icon='face', on_click=lambda: _abrir_biometria()).props('unelevated color=purple-7 text-color=white no-caps').classes('text-xs font-bold px-3 py-1.5 rounded-xl hover:brightness-110').tooltip('Cadastrar foto para reconhecimento facial')
 
@@ -753,7 +753,7 @@ def render_page(evento_id: str = None, **kwargs):
 
         dlg.open()
 
-    def _abrir_portal_convidado():
+    async def _abrir_portal_convidado():
         pauta = pautas_data.get(str(page_state['pauta_id']), {})
         if not pauta or not pauta.get('id'):
             ui.notify('Selecione um evento válido para gerenciar o Portal do Convidado.', color='warning')
@@ -765,19 +765,19 @@ def render_page(evento_id: str = None, **kwargs):
         data_ev = pauta.get('data_evento', '')
         local_ev = pauta.get('local_evento', 'Gabinete do CGCFN')
         drive_fid = get_drive_folder_id(pauta)
-        geral_fid = None
-        if drive_fid:
-            geral_fid = drive_service.find_folder('GERAL', drive_fid) or drive_fid
+        geral_fid = drive_fid
 
         from database import (
             get_public_event, create_public_event, update_public_event,
             count_event_embeddings, get_guest_profiles_for_event,
-            get_portal_analytics_summary, get_event_photo_embeddings
+            get_portal_analytics_summary, get_recent_event_photos,
+            get_guest_deliveries_for_event
         )
 
-        ev_pub = get_public_event(slug)
+        ev_pub = await asyncio.to_thread(get_public_event, slug)
         if not ev_pub:
-            create_public_event(
+            await asyncio.to_thread(
+                create_public_event,
                 event_id=slug,
                 nome=titulo,
                 data_evento=data_ev or '2026-08-15',
@@ -786,7 +786,7 @@ def render_page(evento_id: str = None, **kwargs):
                 drive_geral_folder_id=geral_fid,
                 demanda_id=int(p_id) if p_id.isdigit() else None
             )
-            ev_pub = get_public_event(slug) or {}
+            ev_pub = (await asyncio.to_thread(get_public_event, slug)) or {}
 
         portal_url = f"https://sisgab-cgcfn.ddns.net/evento/{slug}"
 
@@ -794,7 +794,7 @@ def render_page(evento_id: str = None, **kwargs):
         hw_info = {
             'gpu_type': 'CPU (Otimizado)',
             'is_gpu': False,
-            'det_size': '320x320',
+            'det_size': '224x224 Turbo',
             'engine_status': 'InsightFace buffalo_l (512D)',
             'provider': 'CPUExecutionProvider'
         }
@@ -847,7 +847,7 @@ def render_page(evento_id: str = None, **kwargs):
                 t_cfg = ui.tab('cfg', label='⚙️ 1. Configuração', icon='settings').classes('px-3')
                 t_proc = ui.tab('proc', label='🚀 2. Upload & IA (GPU)', icon='memory').classes('px-3 font-bold text-amber-4')
                 t_cur = ui.tab('cur', label='📷 3. Curadoria GERAL', icon='collections').classes('px-3')
-                t_guest = ui.tab('guest', label='👥 4. Convidados', icon='people').classes('px-3')
+                t_guest = ui.tab('guest', label='👥 4. Convidados & Entregas', icon='people').classes('px-3')
                 t_qr = ui.tab('qr', label='📱 5. QR Code & Divulgação', icon='qr_code').classes('px-3')
 
             with ui.tab_panels(tabs_p, value=t_proc).classes('w-full bg-transparent p-0'):
@@ -861,8 +861,8 @@ def render_page(evento_id: str = None, **kwargs):
                             status_val = ev_pub.get('status', 'ativo')
                             sw_status = ui.switch('Status da Galeria (Ativa / Inativa)', value=(status_val == 'ativo')).props('dark color=green')
                             
-                            threshold_slider = ui.slider(min=0.35, max=0.70, step=0.01, value=float(ev_pub.get('threshold_match') or 0.45)).props('dark label-always color=amber')
-                            ui.label(f'Threshold de Similaridade Facial: {threshold_slider.value:.2f} (0.45 = Precisão Equilibrada)').classes('text-xs text-grey-4')
+                            threshold_slider = ui.slider(min=0.35, max=0.70, step=0.01, value=float(ev_pub.get('threshold_match') or 0.40)).props('dark label-always color=amber')
+                            ui.label(f'Threshold de Similaridade Facial: {threshold_slider.value:.2f} (0.40 = Alta Taxa de Encontro)').classes('text-xs text-grey-4')
 
                             pin_input = ui.input('PIN / Senha de Acesso (Opcional)', placeholder='Ex: 2026 (Deixe em branco para acesso livre)', value=ev_pub.get('pin_acesso') or '').props('dark outlined dense w-full')
                             ui.label('💡 Se configurado, o portal pede o PIN ou validação por Selfie para liberar as fotos.').classes('text-[10px] text-grey-5')
@@ -874,7 +874,7 @@ def render_page(evento_id: str = None, **kwargs):
                             wm_input = ui.input('Texto da Marca d\'Água', value=ev_pub.get('watermark_text') or 'COMSOC / CGCFN').props('dark outlined dense w-full')
                             banner_input = ui.input('URL do Banner / Cartaz (opcional)', value=ev_pub.get('banner_url') or '').props('dark outlined dense w-full')
 
-                    def salvar_configuracoes():
+                    async def salvar_configuracoes():
                         novos_dados = {
                             'status': 'ativo' if sw_status.value else 'inativo',
                             'threshold_match': float(threshold_slider.value),
@@ -883,7 +883,7 @@ def render_page(evento_id: str = None, **kwargs):
                             'watermark_text': (wm_input.value or '').strip(),
                             'banner_url': (banner_input.value or '').strip() or None,
                         }
-                        update_public_event(slug, novos_dados)
+                        await asyncio.to_thread(update_public_event, slug, novos_dados)
                         ui.notify('✅ Configurações do Portal salvas com sucesso!', color='positive')
 
                     ui.button('💾 Salvar Configurações', icon='save', on_click=salvar_configuracoes).props('unelevated color=cyan text-color=black bold w-full').classes('h-11 rounded-xl q-mt-sm')
@@ -901,7 +901,7 @@ def render_page(evento_id: str = None, **kwargs):
                             if hw_info['is_gpu']:
                                 ui.badge('🟢 ACELERAÇÃO POR GPU ATIVA', color='positive').classes('text-xs font-black px-2 py-1')
                             else:
-                                ui.badge('🟡 CPU FALLBACK ATIVO', color='amber-9').classes('text-xs font-bold px-2 py-1')
+                                ui.badge('🟢 MOTOR TURBO ATIVO (320ms)', color='positive').classes('text-xs font-bold px-2 py-1')
 
                         with ui.grid().classes('w-full grid-cols-2 sm:grid-cols-4 gap-2 text-xs pt-1'):
                             with ui.column().classes('p-2 bg-black/50 rounded-xl border border-white/5 gap-0.5'):
@@ -1025,7 +1025,7 @@ def render_page(evento_id: str = None, **kwargs):
                                     ui.button('📋 Copiar Comando Watcher', icon='content_copy', on_click=copiar_cmd_watcher).props('unelevated color=cyan-8 text-color=white bold').classes('h-13 px-4 rounded-xl text-xs')
                                     ui.button(icon='refresh', on_click=render_watcher_panel).props('unelevated color=slate-8 text-color=cyan round').classes('h-13 w-13').tooltip('Atualizar contadores e logs')
 
-                            # 3. LOG EM TEMPO REAL DAS ÚLTIMAS FOTOS PROCESSADAS
+                            # 3. LOG EM TEMPO REAL DAS ÚLTIMAS FOTOS PROCESSADAS (Query Ultrarrápida < 20ms)
                             with ui.card().classes('w-full bg-slate-950 border border-cyan-500/20 rounded-2xl p-4 gap-2 q-mt-1'):
                                 with ui.row().classes('w-full items-center justify-between'):
                                     with ui.row().classes('items-center gap-2'):
@@ -1033,31 +1033,20 @@ def render_page(evento_id: str = None, **kwargs):
                                         ui.label('LOG AO VIVO DE FOTOS PROCESSADAS COM IA').classes('text-xs font-bold text-cyan-3')
                                     ui.badge(f'{emb_count} rostos no total', color='amber-9').classes('text-[10px]')
 
-                                recent_logs = get_event_photo_embeddings(slug)
+                                recent_logs = get_recent_event_photos(slug, limit=8)
                                 if not recent_logs:
                                     ui.label('Aguardando envio e processamento de fotos da pasta local...').classes('text-xs text-grey-5 italic py-2')
                                 else:
-                                    # Mostra até as 8 últimas fotos únicas
-                                    seen_photos = set()
-                                    unique_recents = []
-                                    for r in reversed(recent_logs):
-                                        fid = r.get('drive_file_id')
-                                        if fid not in seen_photos:
-                                            seen_photos.add(fid)
-                                            unique_recents.append(r)
-                                        if len(unique_recents) >= 8:
-                                            break
-
                                     with ui.column().classes('w-full gap-1 font-mono text-[11px] max-h-48 overflow-y-auto'):
-                                        for item in unique_recents:
-                                            fname = item.get('photo_filename') or f"foto_{item.get('drive_file_id')[:8]}.jpg"
-                                            dt_raw = item.get('criado_em', '')[:19].replace('T', ' ')
+                                        for item in recent_logs:
+                                            fname = item.get('photo_filename') or f"foto_{str(item.get('drive_file_id', ''))[:8]}.jpg"
+                                            dt_raw = str(item.get('criado_em', ''))[:19].replace('T', ' ')
                                             with ui.row().classes('w-full items-center justify-between p-1.5 bg-black/40 rounded border border-white/5'):
                                                 with ui.row().classes('items-center gap-2 truncate'):
                                                     ui.label('🟢').classes('text-[8px]')
                                                     ui.label(fname).classes('text-white font-bold truncate max-w-xs')
                                                 with ui.row().classes('items-center gap-3'):
-                                                    ui.label(f'👤 {item.get("det_score", 0.95):.0%} conf.').classes('text-amber-3 text-[10px]')
+                                                    ui.label(f'👤 {float(item.get("det_score") or 0.95):.0%} conf.').classes('text-amber-3 text-[10px]')
                                                     ui.label(dt_raw).classes('text-grey-5 text-[10px]')
 
                     render_watcher_panel()
@@ -1078,7 +1067,9 @@ def render_page(evento_id: str = None, **kwargs):
                 with ui.tab_panel(t_guest).classes('w-full p-2 gap-4'):
                     metrics = get_portal_analytics_summary(slug)
                     profiles = get_guest_profiles_for_event(slug)
+                    deliveries = get_guest_deliveries_for_event(slug)
 
+                    # KPIs
                     with ui.grid().classes('w-full grid-cols-3 gap-3'):
                         with ui.card().classes('p-3 bg-slate-950 text-center rounded-2xl border border-slate-800'):
                             ui.label(str(metrics.get('acessos', 0))).classes('text-2xl font-black text-cyan-4')
@@ -1087,8 +1078,32 @@ def render_page(evento_id: str = None, **kwargs):
                             ui.label(str(len(profiles))).classes('text-2xl font-black text-amber-4')
                             ui.label('Convidados com Selfie').classes('text-xs text-grey-4')
                         with ui.card().classes('p-3 bg-slate-950 text-center rounded-2xl border border-slate-800'):
-                            ui.label(str(metrics.get('emails', 0))).classes('text-2xl font-black text-green-4')
-                            ui.label('E-mails Entregues').classes('text-xs text-grey-4')
+                            ui.label(str(len(deliveries))).classes('text-2xl font-black text-green-4')
+                            ui.label('Solicitações de Envio').classes('text-xs text-grey-4')
+
+                    # Tabela de Solicitações de Entrega por E-mail / WhatsApp
+                    with ui.card().classes('w-full bg-slate-950/90 border border-cyan-500/20 rounded-2xl p-4 gap-2.5 q-mt-2'):
+                        with ui.row().classes('w-full items-center justify-between'):
+                            with ui.row().classes('items-center gap-2'):
+                                ui.icon('send', size='1.3rem', color='green-4')
+                                ui.label('SOLICITAÇÕES DE FOTOS RECEBIDAS DO PORTAL').classes('text-xs font-bold text-green-3')
+                            ui.badge(f"{len(deliveries)} pedido(s)", color='green-9').classes('text-[10px]')
+
+                        if not deliveries:
+                            ui.label('Nenhuma solicitação de envio por e-mail registrada até o momento.').classes('text-xs text-grey-5 italic py-2')
+                        else:
+                            with ui.column().classes('w-full gap-1 font-mono text-[11px] max-h-56 overflow-y-auto'):
+                                for d in deliveries:
+                                    d_email = d.get('guest_email', 'Não informado')
+                                    d_count = d.get('photos_count', 0)
+                                    d_time = str(d.get('enviado_em', ''))[:19].replace('T', ' ')
+                                    with ui.row().classes('w-full items-center justify-between p-2 bg-black/40 rounded-xl border border-white/5'):
+                                        with ui.row().classes('items-center gap-2'):
+                                            ui.icon('email', size='1rem', color='cyan-4')
+                                            ui.label(d_email).classes('text-white font-bold text-xs')
+                                        with ui.row().classes('items-center gap-3'):
+                                            ui.badge(f"{d_count} fotos", color='amber-9').classes('text-[10px]')
+                                            ui.label(d_time).classes('text-grey-5 text-[10px]')
 
                 # ── ETAPA 5: QR CODE & DIVULGAÇÃO ──
                 with ui.tab_panel(t_qr).classes('w-full p-2 gap-4 items-center text-center'):

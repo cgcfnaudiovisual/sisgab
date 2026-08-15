@@ -2339,6 +2339,24 @@ def get_event_photo_embeddings(event_id: str) -> list:
     return all_rows
 
 
+def get_recent_event_photos(event_id: str, limit: int = 8) -> list:
+    """Retorna os registros mais recentes de fotos processadas sem carregar os vetores pesados de 512D."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn:
+        return []
+    try:
+        res = conn.table('event_photo_embeddings') \
+            .select('id, drive_file_id, photo_filename, det_score, criado_em') \
+            .eq('event_id', event_id) \
+            .order('criado_em', desc=True) \
+            .limit(limit) \
+            .execute()
+        return res.data or []
+    except Exception as err:
+        print(f"[GET RECENT PHOTOS ERR] {err}")
+        return []
+
+
 def count_event_embeddings(event_id: str) -> int:
     """Conta quantos embeddings existem para um evento."""
     conn = get_service_db_connection() or get_db_connection()
@@ -2442,6 +2460,23 @@ def save_guest_delivery(event_id: str, email: str, photo_ids: str, count: int) -
     except Exception as err:
         print(f"[SAVE DELIVERY ERR] {err}")
         return False
+
+
+def get_guest_deliveries_for_event(event_id: str) -> list:
+    """Retorna as solicitações de entrega de fotos cadastradas para um evento."""
+    conn = get_service_db_connection() or get_db_connection()
+    if not conn:
+        return []
+    try:
+        res = conn.table('guest_photo_deliveries') \
+            .select('*') \
+            .eq('event_id', event_id) \
+            .order('enviado_em', desc=True) \
+            .execute()
+        return res.data or []
+    except Exception as err:
+        print(f"[GET GUEST DELIVERIES ERR] {err}")
+        return []
 
 
 # --- Analytics do Portal ---
