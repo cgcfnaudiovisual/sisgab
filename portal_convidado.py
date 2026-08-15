@@ -42,13 +42,37 @@ MESES_PT = {
 
 
 def _get_event_matrix(event_id: str) -> tuple[np.ndarray, list[dict]]:
-    """Carrega matriz NxD de embeddings do evento com cache em RAM por 1 hora."""
+    """Carrega matriz NxD de embeddings do evento com cache em RAM e arquivo binário em disco (.npz)."""
     now = time.time()
     if event_id in _EVENT_EMBEDDINGS_CACHE:
         cache = _EVENT_EMBEDDINGS_CACHE[event_id]
-        if now - cache['timestamp'] < 3600:  # Cache persistente de 1 hora
+        if now - cache['timestamp'] < 86400:  # Cache em RAM por 24 horas
             return cache['matrix'], cache['records']
 
+    # 1. Tenta carregar do arquivo binário em disco (velocidade: 0.01s)
+    cache_dir = Path('data')
+    cache_dir.mkdir(exist_ok=True)
+    npz_path = cache_dir / f"event_embeddings_{event_id}.npz"
+    json_path = cache_dir / f"event_records_{event_id}.json"
+
+    if npz_path.exists() and json_path.exists():
+        try:
+            t0 = time.time()
+            data = np.load(npz_path)
+            matrix = data['matrix']
+            with open(json_path, 'r', encoding='utf-8') as f:
+                records = json.load(f)
+            _EVENT_EMBEDDINGS_CACHE[event_id] = {
+                'matrix': matrix,
+                'records': records,
+                'timestamp': now
+            }
+            print(f"[PORTAL_IA] ⚡ Matriz ({matrix.shape[0]} faces) carregada do disco em {time.time() - t0:.3f}s!")
+            return matrix, records
+        except Exception as e_npz:
+            print(f"[PORTAL_IA] Erro ao ler cache em disco: {e_npz}")
+
+    # 2. Se não estiver em disco, baixa do banco e salva em disco
     print(f"[PORTAL_IA] 📥 Baixando embeddings faciais do evento #{event_id} do Supabase...")
     t0 = time.time()
     raw_records = get_event_photo_embeddings(event_id)
@@ -64,7 +88,12 @@ def _get_event_matrix(event_id: str) -> tuple[np.ndarray, list[dict]]:
                 emb = json.loads(emb)
             if emb and len(emb) == 512:
                 valid_vectors.append(np.array(emb, dtype=np.float32))
-                valid_records.append(r)
+                valid_records.append({
+                    'id': r.get('id'),
+                    'drive_file_id': r.get('drive_file_id'),
+                    'drive_link': r.get('drive_link'),
+                    'photo_filename': r.get('photo_filename')
+                })
         except Exception:
             continue
 
@@ -77,6 +106,15 @@ def _get_event_matrix(event_id: str) -> tuple[np.ndarray, list[dict]]:
         'records': valid_records,
         'timestamp': now
     }
+
+    try:
+        np.savez_compressed(npz_path, matrix=matrix)
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(valid_records, f)
+        print(f"[PORTAL_IA] 💾 Cache em disco salvo ({matrix.shape[0]} faces)!")
+    except Exception as e_save:
+        print(f"[PORTAL_IA] Erro ao salvar cache em disco: {e_save}")
+
     print(f"[PORTAL_IA] ✅ Matriz indexada com {len(valid_vectors)} faces em {time.time() - t0:.2f}s!")
     return matrix, valid_records
 
@@ -262,8 +300,8 @@ def render_page(event_id: str):
     else:
         data_formatada = ''
 
-    banner_url = event.get('banner_url') or 'assets/brasao_cgcfn.png'
-    threshold_match = float(event.get('threshold_match') or 0.45)
+    banner_url = event.get('banner_url') or '/assets/brasao_cgcfn.png'
+    threshold_match = float(event.get('threshold_match') or 0.40)
     drive_geral_id = event.get('drive_geral_folder_id') or event.get('drive_folder_id')
 
     # Container principal responsivo que PREENCHE A TELA no PC e se adapta no mobile
@@ -273,14 +311,14 @@ def render_page(event_id: str):
         with ui.card().classes('w-full max-w-6xl bg-slate-900/95 border-2 border-amber-500/30 rounded-3xl shadow-2xl overflow-hidden p-0').style('box-shadow: 0 0 50px rgba(245, 158, 11, 0.15);'):
 
             # Banner do Evento / Cabeçalho Institucional
-            if banner_url and len(banner_url) > 10 and banner_url != 'assets/brasao_cgcfn.png':
+            if banner_url and len(banner_url) > 10 and banner_url != '/assets/brasao_cgcfn.png' and banner_url != 'assets/brasao_cgcfn.png':
                 bg_header = f'background: linear-gradient(180deg, rgba(15, 23, 42, 0.4) 0%, rgba(15, 23, 42, 0.95) 100%), url("{banner_url}") center/cover no-repeat;'
             else:
                 bg_header = 'background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);'
 
-            with ui.element('div').classes('w-full relative min-h-[160px] sm:min-h-[200px] flex items-center justify-center text-center p-6').style(bg_header):
+            with ui.element('div').classes('w-full relative min-h-[160px] sm:min-h-[200px] flex items-center justify-center text-center p-4 sm:p-6').style(bg_header):
                 with ui.column().classes('w-full items-center gap-1.5 z-10'):
-                    ui.image('assets/brasao_cgcfn.png').style('width: 76px; height: auto; filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.5));')
+                    ui.image('/assets/brasao_cgcfn.png').style('width: 76px; height: auto; filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.5));')
                     ui.label('MARINHA DO BRASIL').classes('text-xs sm:text-sm font-black text-amber-4 tracking-[4px] uppercase q-mt-xs')
                     ui.label('GABINETE DO COMANDANTE-GERAL DO CORPO DE FUZILEIROS NAVAIS').classes('text-[10px] sm:text-xs font-bold text-cyan-3 tracking-[2px] uppercase opacity-90')
 
@@ -517,15 +555,21 @@ def render_page(event_id: str):
                 render_selection_toolbar()
 
                 # 3. SEÇÃO DE FOTOS PESSOAIS IDENTIFICADAS
-                if guest_state['has_searched'] and guest_state['matched_photos']:
-                    with ui.column().classes('w-full gap-3 q-mt-4'):
-                        with ui.row().classes('w-full items-center justify-between'):
-                            with ui.row().classes('items-center gap-2'):
-                                ui.icon('auto_awesome', size='1.6rem', color='amber-4')
-                                ui.label('📷 SUAS FOTOS IDENTIFICADAS NO EVENTO').classes('text-lg sm:text-xl font-black text-amber-4 tracking-wide')
-                            ui.badge(f"{len(guest_state['matched_photos'])} fotos encontradas", color='amber-9').classes('text-xs font-bold px-2.5 py-1 rounded-lg')
+                if guest_state['has_searched']:
+                    if guest_state['matched_photos']:
+                        with ui.column().classes('w-full gap-3 q-mt-4'):
+                            with ui.row().classes('w-full items-center justify-between'):
+                                with ui.row().classes('items-center gap-2'):
+                                    ui.icon('auto_awesome', size='1.6rem', color='amber-4')
+                                    ui.label('📷 SUAS FOTOS IDENTIFICADAS NO EVENTO').classes('text-base sm:text-xl font-black text-amber-4 tracking-wide')
+                                ui.badge(f"{len(guest_state['matched_photos'])} fotos", color='amber-9').classes('text-xs font-bold px-2.5 py-1 rounded-lg')
 
-                        render_photo_grid(guest_state['matched_photos'], is_personal=True)
+                            render_photo_grid(guest_state['matched_photos'], is_personal=True)
+                    else:
+                        with ui.card().classes('w-full bg-slate-900/90 border border-amber-500/30 rounded-2xl p-4 text-center items-center gap-1.5 q-mt-4 shadow-lg'):
+                            ui.icon('person_search', size='2.5rem', color='amber-4')
+                            ui.label('Nenhuma foto sua identificada com esta selfie').classes('text-sm font-bold text-white')
+                            ui.label('Dica: Envie outra foto bem iluminada de frente, ou explore a Galeria Oficial do evento abaixo.').classes('text-xs text-grey-4 max-w-md')
 
                 # 4. SEÇÃO DE FOTOS OFICIAIS DO EVENTO (PASTA GERAL)
                 with ui.column().classes('w-full gap-3 q-mt-6'):
