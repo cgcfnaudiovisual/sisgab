@@ -680,8 +680,8 @@ def render_page(event_id: str):
                     border_style = 'border: 2px solid #00e5ff; box-shadow: 0 0 12px rgba(0,229,255,0.4);' if is_selected else 'border: 1px solid rgba(255,255,255,0.08);'
 
                     with ui.card().classes('q-pa-none no-shadow rounded-xl overflow-hidden cursor-pointer transition-transform duration-150 active:scale-[0.98]').style(f'background: #0f172a; {border_style}'):
-                        # Container da foto com proporção harmoniosa sem barras pretas gigantes
-                        with ui.element('div').classes('relative w-full h-32 sm:h-44 bg-[#030a17] flex items-center justify-center overflow-hidden'):
+                        # Container da foto com formato horizontal landscape (16:10)
+                        with ui.element('div').classes('relative w-full bg-[#030a17] flex items-center justify-center overflow-hidden').style('aspect-ratio: 16/10;'):
                             def toggle_select(f=fid):
                                 if f in guest_state['selected_fids']:
                                     guest_state['selected_fids'].remove(f)
@@ -693,7 +693,7 @@ def render_page(event_id: str):
                             with ui.element('div').classes('absolute top-1 left-1 z-20 bg-black/70 backdrop-blur-md rounded-md p-0.5').on('click', lambda _, f=fid: toggle_select(f)):
                                 ui.checkbox(value=is_selected, on_change=lambda _, f=fid: toggle_select(f)).props('dark color=cyan dense size=xs')
 
-                            img = ui.image(thumb_url).classes('w-full h-full').style('max-height: 100%; object-fit: contain;')
+                            img = ui.image(thumb_url).classes('w-full h-full').style('object-fit: cover;')
                             img.on('click', lambda _, i=idx, l=photos_list: open_full_lightbox(i, l))
 
                         # Rodapé em duas linhas compactas
@@ -704,11 +704,11 @@ def render_page(event_id: str):
                             with ui.row().classes('w-full items-center justify-between gap-1'):
                                 badge_txt = '⭐ Sua foto' if is_personal else '☁️ Drive'
                                 badge_col = 'amber-9' if is_personal else 'blue-grey-8'
-                                ui.badge(badge_txt, color=badge_col).classes('text-[8px] sm:text-[9px] font-bold px-1.5')
+                                ui.badge(badge_txt, color=badge_col).classes('text-[8px] font-bold px-1.5 py-0.5')
 
-                                with ui.row().classes('items-center gap-0.5 sm:gap-1'):
-                                    ui.button(icon='fullscreen', on_click=lambda _, i=idx, l=photos_list: open_full_lightbox(i, l)).props('flat dense size=xs color=grey-3').tooltip('Ampliar')
-                                    ui.button(icon='download', on_click=lambda _, f=fid: download_single(f)).props('unelevated color=cyan text-color=black dense bold size=xs').classes('px-1.5 sm:px-2 py-0.5 rounded text-[10px]').tooltip('Baixar foto HD')
+                                with ui.row().classes('items-center gap-0.5'):
+                                    ui.button(icon='fullscreen', on_click=lambda _, i=idx, l=photos_list: open_full_lightbox(i, l)).props('flat dense size=xs color=grey-4').classes('p-0.5').tooltip('Ampliar')
+                                    ui.button(icon='download', on_click=lambda _, f=fid: download_single(f)).props('unelevated color=cyan text-color=black dense bold size=xs').classes('px-1.5 py-0.2 rounded text-[9px]').tooltip('Baixar foto HD')
 
             # ── GALERIA OFICIAL COM PAGINAÇÃO COMPLETA (IGUAL COMSOC_GALERIA) ─
             def render_official_gallery(folder_id: str):
