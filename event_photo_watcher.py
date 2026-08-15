@@ -700,24 +700,45 @@ def validate_event(event_id: str) -> dict | None:
     return None
 
 
+def _extract_drive_id(url: str) -> str:
+    """Extrai o ID da pasta do Google Drive ou retorna a string limpa."""
+    if not url:
+        return ""
+    u = str(url).strip()
+    if not u.startswith('http') and '/' not in u and ' ' not in u:
+        return u
+    import re
+    m = re.search(r'folders/([a-zA-Z0-9_-]+)', u)
+    if m:
+        return m.group(1)
+    m = re.search(r'id=([a-zA-Z0-9_-]+)', u)
+    if m:
+        return m.group(1)
+    m = re.search(r'd/([a-zA-Z0-9_-]+)', u)
+    if m:
+        return m.group(1)
+    return u
+
+
 def ensure_drive_folder(event_id: str, event: dict = None, custom_folder: str = None) -> str | None:
     """Garante que a pasta do evento existe no Drive. Retorna folder_id."""
     import drive_service
 
     # 1. Pasta customizada passada por argumento
     if custom_folder:
-        fid = drive_service.extract_folder_id_from_url(custom_folder) or custom_folder
+        fid = _extract_drive_id(custom_folder)
         print(f"  📂 Pasta Drive especificada: {fid}")
         return fid
 
     # 2. Pasta do evento cadastrado
     if event and event.get('drive_folder_id'):
-        print(f"  📂 Pasta Drive vinculada ao evento: {event['drive_folder_id']}")
-        return event['drive_folder_id']
+        fid = _extract_drive_id(event['drive_folder_id'])
+        print(f"  📂 Pasta Drive vinculada ao evento: {fid}")
+        return fid
 
-    # 3. Se o próprio event_id for um link ou ID do Google Drive (ex: 1cqK3F... ou https://drive.google.com/...)
+    # 3. Se o próprio event_id for um link ou ID do Google Drive
     if 'drive.google.com' in str(event_id) or len(str(event_id)) >= 25:
-        fid = drive_service.extract_folder_id_from_url(str(event_id)) or str(event_id)
+        fid = _extract_drive_id(str(event_id))
         print(f"  📂 Pasta Drive identificada pelo link/ID: {fid}")
         return fid
 

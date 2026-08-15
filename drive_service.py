@@ -283,6 +283,27 @@ def criar_pasta_evento(titulo_evento, data_evento_str, pasta_mae_id=None):
         return None
 
 
+def extract_folder_id_from_url(url: str) -> str | None:
+    """Extrai o ID da pasta do Google Drive a partir de uma URL ou retorna o próprio ID."""
+    if not url:
+        return None
+    url = str(url).strip()
+    if not url.startswith('http') and '/' not in url and ' ' not in url:
+        return url
+    import re
+    m = re.search(r'folders/([a-zA-Z0-9_-]+)', url)
+    if m:
+        return m.group(1)
+    m = re.search(r'id=([a-zA-Z0-9_-]+)', url)
+    if m:
+        return m.group(1)
+    m = re.search(r'd/([a-zA-Z0-9_-]+)', url)
+    if m:
+        return m.group(1)
+    return url
+
+
+
 # ─── Operações de Arquivos ──────────────────────────────────────────────
 
 def list_files(folder_id, mime_filter=None, page_size=5000):
