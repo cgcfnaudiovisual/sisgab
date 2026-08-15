@@ -246,36 +246,50 @@ def render_page(event_id: str):
             ui.label(f"A galeria do evento '{event.get('nome')}' foi encerrada pela organização.").classes('text-sm text-grey-4 max-w-md')
         return
 
-    # Injeta CSS para componentes de upload e seleção
     ui.add_head_html('''
     <style>
+        /* Upload buttons: full-area clickable, no "+" add button */
         .portal-uploader {
-            background: rgba(15, 23, 42, 0.85) !important;
-            border-radius: 16px !important;
+            background: transparent !important;
+            border-radius: 14px !important;
             overflow: hidden !important;
-            min-height: 54px !important;
+            min-height: 52px !important;
+            cursor: pointer !important;
         }
         .portal-uploader .q-uploader__header {
             background: transparent !important;
             border: none !important;
-            padding: 6px 16px !important;
-            min-height: 50px !important;
+            padding: 0 !important;
+            min-height: 52px !important;
+            cursor: pointer !important;
         }
         .portal-uploader .q-uploader__header-content {
             justify-content: center !important;
             align-items: center !important;
+            padding: 0 16px !important;
+            gap: 8px !important;
         }
         .portal-uploader .q-uploader__title {
-            font-size: 0.88rem !important;
+            font-size: 0.85rem !important;
             font-weight: 900 !important;
             letter-spacing: 0.5px !important;
             text-transform: uppercase !important;
         }
-        .portal-uploader .q-uploader__subtitle {
-            display: none !important;
-        }
-        .portal-uploader .q-uploader__list {
-            display: none !important;
+        .portal-uploader .q-uploader__subtitle { display: none !important; }
+        .portal-uploader .q-uploader__list { display: none !important; }
+        /* Hide the small "+" add button completely */
+        .portal-uploader .q-uploader__input + .q-btn { display: none !important; }
+        .portal-uploader .q-btn[aria-label="Add files"] { display: none !important; }
+        .portal-uploader .q-btn:has(.q-icon[role="img"]) { display: none !important; }
+        /* Make the entire header area act as the file input trigger */
+        .portal-uploader .q-uploader__input {
+            width: 100% !important;
+            height: 100% !important;
+            opacity: 0 !important;
+            position: absolute !important;
+            top: 0 !important; left: 0 !important;
+            cursor: pointer !important;
+            z-index: 10 !important;
         }
         .photo-card-selected {
             border: 2px solid #00e5ff !important;
@@ -330,42 +344,28 @@ def render_page(event_id: str):
     threshold_match = float(event.get('threshold_match') or 0.40)
     drive_geral_id = event.get('drive_geral_folder_id') or event.get('drive_folder_id')
 
-    # Container principal responsivo que PREENCHE A TELA no PC e se adapta no mobile
-    with ui.column().classes('w-full min-h-screen items-center justify-start p-2 sm:p-6 lg:p-8 bg-slate-950 text-white').style('font-family: "Outfit", sans-serif;'):
+    # Container principal — ocupa toda a tela
+    with ui.column().classes('w-full min-h-screen items-center justify-start p-2 sm:p-4 bg-slate-950 text-white').style('font-family: "Outfit", sans-serif;'):
 
-        # ── HERO CARD PRINCIPAL RESPONSIVO (max-w-6xl) ────────────────────────
-        with ui.card().classes('w-full max-w-6xl bg-slate-900/95 border-2 border-amber-500/30 rounded-3xl shadow-2xl overflow-hidden p-0').style('box-shadow: 0 0 50px rgba(245, 158, 11, 0.15);'):
+        # ── CARD PRINCIPAL COMPACTO ───────────────────────────────────────────
+        with ui.card().classes('w-full max-w-5xl bg-slate-900/95 border border-amber-500/20 rounded-2xl shadow-2xl overflow-hidden p-0').style('box-shadow: 0 0 40px rgba(245,158,11,0.1);'):
 
-            # Banner do Evento / Cabeçalho Institucional
-            if banner_url and len(banner_url) > 10 and banner_url != '/assets/brasao_cgcfn.png' and banner_url != 'assets/brasao_cgcfn.png':
-                bg_header = f'background: linear-gradient(180deg, rgba(15, 23, 42, 0.4) 0%, rgba(15, 23, 42, 0.95) 100%), url("{banner_url}") center/cover no-repeat;'
-            else:
-                bg_header = 'background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);'
-
-            with ui.element('div').classes('w-full relative min-h-[160px] sm:min-h-[200px] flex items-center justify-center text-center p-4 sm:p-6').style(bg_header):
-                with ui.column().classes('w-full items-center gap-1.5 z-10'):
-                    ui.image('/assets/brasao_cgcfn.png').style('width: 76px; height: auto; filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.5));')
-                    ui.label('MARINHA DO BRASIL').classes('text-xs sm:text-sm font-black text-amber-4 tracking-[4px] uppercase q-mt-xs')
-                    ui.label('GABINETE DO COMANDANTE-GERAL DO CORPO DE FUZILEIROS NAVAIS').classes('text-[10px] sm:text-xs font-bold text-cyan-3 tracking-[2px] uppercase opacity-90')
-
-            ui.separator().style('background: linear-gradient(90deg, transparent, rgba(245, 158, 11, 0.5), transparent); height: 2px;')
-
-            # Título e Detalhes do Evento
-            with ui.column().classes('w-full p-4 sm:p-8 items-center text-center gap-2'):
-                ui.label(nome_evento.upper()).classes('text-xl sm:text-3xl font-black text-white tracking-wide leading-tight')
-                
-                with ui.row().classes('items-center justify-center gap-6 text-xs sm:text-sm text-grey-4 flex-wrap'):
+            # Cabeçalho mínimo: só título do evento + data/local em uma linha
+            with ui.element('div').classes('w-full px-4 py-3 sm:py-4 text-center border-b border-white/10').style('background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);'):
+                ui.label(nome_evento.upper()).classes('text-base sm:text-2xl font-black text-white tracking-wide leading-tight')
+                with ui.row().classes('items-center justify-center gap-4 text-[11px] sm:text-xs text-grey-4 flex-wrap mt-1'):
                     if data_formatada:
-                        with ui.row().classes('items-center gap-1.5'):
-                            ui.icon('calendar_today', size='1.2rem', color='amber-4')
-                            ui.label(data_formatada).classes('font-bold text-white')
+                        with ui.row().classes('items-center gap-1'):
+                            ui.icon('calendar_today', size='0.9rem', color='amber-4')
+                            ui.label(data_formatada).classes('font-semibold text-amber-3')
                     if local_evento:
-                        with ui.row().classes('items-center gap-1.5'):
-                            ui.icon('place', size='1.2rem', color='cyan-4')
-                            ui.label(local_evento).classes('font-medium text-grey-3')
+                        with ui.row().classes('items-center gap-1'):
+                            ui.icon('place', size='0.9rem', color='cyan-4')
+                            ui.label(local_evento).classes('text-grey-3')
 
-            # ── ÁREA DINÂMICA DE CONTEÚDO ─────────────────────────────────────
-            content_container = ui.column().classes('w-full p-4 sm:p-8 gap-6')
+
+            # ── ÁREA DINÂMICA DE CONTEÚDO ───────────────────────────────────
+            content_container = ui.column().classes('w-full p-3 sm:p-6 gap-4')
 
             def refresh_ui():
                 content_container.clear()
@@ -533,58 +533,49 @@ def render_page(event_id: str):
                                 max_files=1
                             ).props('accept="image/*" capture="user" dark flat color=cyan-8 no-thumbnails').classes('flex-1 min-w-[220px] portal-uploader rounded-xl border border-cyan-500/40')
 
-                            ui.upload(
-                                label='📁 FOTO DA GALERIA',
-                                on_upload=handle_portal_upload,
-                                auto_upload=True,
-                                max_files=1
-                            ).props('accept="image/*" dark flat color=amber-9 no-thumbnails').classes('flex-1 min-w-[220px] portal-uploader rounded-xl border border-amber-500/40')
-
                     return
 
+                # 1. SEÇÃO DE BUSCA FACIAL — COMPACTA E DIRETA
                 num_selfies = len(guest_state['selfie_embeddings'])
+                with ui.card().classes('w-full bg-slate-950/90 border border-cyan-500/20 rounded-2xl p-3 sm:p-5 gap-3 shadow-xl'):
 
-                # 1. SEÇÃO DE REGISTRO FACIAL / SELFIE ULTRA-MODERNA
-                with ui.card().classes('w-full bg-slate-950/90 border border-cyan-500/30 rounded-3xl p-6 sm:p-8 items-center text-center gap-4 shadow-2xl backdrop-blur-xl'):
-                    
                     if num_selfies == 0:
-                        ui.icon('face_retouching_natural', size='3.5rem', color='cyan-4')
-                        ui.label('📸 ENCONTRE SUAS FOTOS DO EVENTO').classes('text-xl sm:text-2xl font-black text-white tracking-wide')
-                        ui.label('Tire uma selfie ou escolha uma foto do seu rosto para localizarmos você em todas as fotos do evento instantaneamente.').classes('text-xs sm:text-sm text-grey-3 max-w-lg leading-relaxed')
+                        # Título compacto
+                        with ui.row().classes('w-full items-center gap-2'):
+                            ui.icon('face_retouching_natural', size='1.6rem', color='cyan-4')
+                            ui.label('ENCONTRE SUAS FOTOS DO EVENTO').classes('text-sm sm:text-base font-black text-white tracking-wide')
+
+                        # Orientações em linha única
+                        with ui.row().classes('items-center gap-4 text-[11px] text-grey-4'):
+                            ui.label('☀️ Boa luz').classes()
+                            ui.label('👤 De frente').classes()
+                            ui.label('🚫 Sem óculos').classes()
                     else:
-                        ui.icon('check_circle', size='3rem', color='green-4')
-                        ui.label(f"✅ Biometria Ativa ({num_selfies} foto{'s' if num_selfies>1 else ''} registrada{'s' if num_selfies>1 else ''})").classes('text-lg sm:text-xl font-bold text-green-4')
-                        ui.label('Sua identificação facial está ativa nesta sessão. Você pode adicionar mais uma foto para refinar ou conferir seus resultados abaixo.').classes('text-xs sm:text-sm text-grey-3 max-w-lg')
+                        with ui.row().classes('w-full items-center gap-2'):
+                            ui.icon('check_circle', size='1.6rem', color='green-4')
+                            ui.label(f"Biometria ativa — {num_selfies} foto(s) registrada(s)").classes('text-sm font-bold text-green-4 flex-grow')
 
-                    # Dicas visuais amigáveis
-                    with ui.row().classes('w-full justify-center gap-4 sm:gap-8 py-2 text-xs text-grey-3'):
-                        with ui.row().classes('items-center gap-1.5'):
-                            ui.label('☀️').classes('text-base')
-                            ui.label('Boa luz')
-                        with ui.row().classes('items-center gap-1.5'):
-                            ui.label('👤').classes('text-base')
-                            ui.label('Olhe de frente')
-                        with ui.row().classes('items-center gap-1.5'):
-                            ui.label('🕶️').classes('text-base')
-                            ui.label('Sem óculos escuros')
-
-                    # BOTÕES DUPLOS DE AÇÃO (Câmera + Galeria)
-                    with ui.row().classes('w-full max-w-2xl justify-center gap-4 q-mt-xs flex-wrap'):
-                        btn_cam_label = '📸 TIRAR SELFIE (CÂMERA)' if num_selfies == 0 else '📸 TIRAR OUTRA SELFIE'
+                    # BOTÕES GRANDES TOTALMENTE CLICÁVEIS
+                    with ui.row().classes('w-full gap-2 sm:gap-3'):
+                        btn_cam_label = '📸 TIRAR SELFIE (CÂMERA)' if num_selfies == 0 else '📸 OUTRA SELFIE'
                         ui.upload(
                             label=btn_cam_label,
                             on_upload=handle_portal_upload,
                             auto_upload=True,
                             max_files=1
-                        ).props('accept="image/*" capture="user" dark flat color=cyan-8 no-thumbnails').classes('flex-1 min-w-[260px] portal-uploader rounded-2xl shadow-lg border border-cyan-500/50')
+                        ).props('accept="image/*" capture="user" color=cyan-8 no-thumbnails').classes(
+                            'flex-1 portal-uploader rounded-xl h-12 sm:h-14'
+                        ).style('min-width: 140px; background: #0e7490; font-weight: 900;')
 
-                        btn_gal_label = '📁 ESCOLHER FOTO DA GALERIA' if num_selfies == 0 else '📁 ANEXAR OUTRA FOTO'
+                        btn_gal_label = '📁 ESCOLHER FOTO' if num_selfies == 0 else '📁 OUTRA FOTO'
                         ui.upload(
                             label=btn_gal_label,
                             on_upload=handle_portal_upload,
                             auto_upload=True,
                             max_files=1
-                        ).props('accept="image/*" dark flat color=amber-9 no-thumbnails').classes('flex-1 min-w-[260px] portal-uploader rounded-2xl shadow-md border border-amber-500/50')
+                        ).props('accept="image/*" color=amber-9 no-thumbnails').classes(
+                            'flex-1 portal-uploader rounded-xl h-12 sm:h-14'
+                        ).style('min-width: 140px; background: #b45309; font-weight: 900;')
 
                     if num_selfies > 0:
                         def reset_selfies():
@@ -797,37 +788,27 @@ def render_page(event_id: str):
                         guest_state['page'] = 1
                         refresh_ui()
 
-                    # ─── BARRA DE PAGINAÇÃO (TOPO) ───
-                    if total_pages > 1 or total_fotos > 30:
-                        with ui.row().classes('w-full items-center justify-between wrap gap-2 bg-slate-950 p-2.5 rounded-xl border border-white/10 q-mb-3'):
-                            with ui.row().classes('items-center gap-1'):
-                                ui.button(icon='first_page', on_click=lambda: set_page(1)).props('flat dense color=cyan text-color=cyan round').classes('h-8 w-8').tooltip('Primeira Página')
-                                ui.button(icon='chevron_left', on_click=lambda: set_page(cur_page - 1)).props('unelevated dense color=cyan-9 text-color=white round').classes('h-8 w-8').tooltip('Página Anterior')
-                                
-                                ui.label(f'Página {cur_page} de {total_pages}').classes('text-xs font-black text-cyan-3 px-2')
-                                ui.label(f'({start_idx + 1}–{end_idx} de {total_fotos} fotos)').classes('text-[11px] text-grey-4')
-
-                                ui.button(icon='chevron_right', on_click=lambda: set_page(cur_page + 1)).props('unelevated dense color=cyan-9 text-color=white round').classes('h-8 w-8').tooltip('Próxima Página')
-                                ui.button(icon='last_page', on_click=lambda: set_page(total_pages)).props('flat dense color=cyan text-color=cyan round').classes('h-8 w-8').tooltip('Última Página')
-
-                            with ui.row().classes('items-center gap-1.5'):
-                                ui.label('Fotos por página:').classes('text-[11px] text-grey-4')
-                                for opt_val, opt_lbl in [(30, '30'), (60, '60'), (120, '120'), (240, '240'), (500, '500')]:
-                                    is_curr = per_page == opt_val
-                                    btn_style = 'unelevated color=cyan-7 text-color=black bold' if is_curr else 'flat color=grey text-color=grey-3'
-                                    ui.button(opt_lbl, on_click=lambda _, v=opt_val: set_per_page(v)).props(f'dense {btn_style}').classes('text-[11px] px-2 py-0.5 rounded-lg')
-
                     # ─── GRID DE FOTOS DA PÁGINA ───
                     render_photo_grid(visible_fotos, is_personal=False)
 
-                    # ─── BARRA DE PAGINAÇÃO (RODAPÉ) ───
-                    if total_pages > 1:
-                        with ui.row().classes('w-full items-center justify-center gap-2 q-mt-md p-3 bg-slate-950/80 rounded-2xl border border-white/10'):
-                            ui.button(icon='first_page', on_click=lambda: set_page(1)).props('flat dense color=cyan text-color=cyan round').classes('h-9 w-9').tooltip('Primeira Página')
-                            ui.button('Anterior', icon='chevron_left', on_click=lambda: set_page(cur_page - 1)).props('unelevated color=cyan-9 text-color=white bold').classes('text-xs px-3 rounded-xl')
-                            ui.label(f'Página {cur_page} de {total_pages}').classes('text-xs font-bold text-cyan-3 px-2')
-                            ui.button('Próxima', icon='chevron_right', on_click=lambda: set_page(cur_page + 1)).props('unelevated color=cyan-9 text-color=white bold icon-right=chevron_right').classes('text-xs px-3 rounded-xl')
-                            ui.button(icon='last_page', on_click=lambda: set_page(total_pages)).props('flat dense color=cyan text-color=cyan round').classes('h-9 w-9').tooltip('Última Página')
+                    # ─── PAGINAÇÃO APENAS NO RODAPÉ: centralizada, linha única com seletor ───
+                    with ui.row().classes('w-full items-center justify-center flex-wrap gap-2 sm:gap-3 mt-4 pt-3 border-t border-white/10'):
+                        ui.button(icon='first_page', on_click=lambda: set_page(1)).props('flat dense color=cyan round size=sm').tooltip('Primeira')
+                        ui.button(icon='chevron_left', on_click=lambda: set_page(cur_page - 1)).props('unelevated dense color=cyan-9 text-color=white round size=sm').tooltip('Anterior')
+
+                        ui.label(f'Pág. {cur_page}/{total_pages}').classes('text-xs font-bold text-cyan-3 px-1')
+                        ui.label(f'({start_idx+1}–{end_idx} de {total_fotos})').classes('text-[11px] text-grey-5')
+
+                        ui.button(icon='chevron_right', on_click=lambda: set_page(cur_page + 1)).props('unelevated dense color=cyan-9 text-color=white round size=sm').tooltip('Próxima')
+                        ui.button(icon='last_page', on_click=lambda: set_page(total_pages)).props('flat dense color=cyan round size=sm').tooltip('Última')
+
+                        ui.separator().props('vertical').classes('h-6 opacity-30')
+
+                        for opt_val, opt_lbl in [(30,'30'),(60,'60'),(120,'120'),(240,'240'),(500,'500')]:
+                            is_curr = per_page == opt_val
+                            ui.button(opt_lbl, on_click=lambda _, v=opt_val: set_per_page(v)).props(
+                                f'dense {"unelevated color=cyan-7 text-color=black" if is_curr else "flat color=grey text-color=grey-4"}'
+                            ).classes('text-[11px] px-2 rounded-lg min-w-[28px]')
 
                 except Exception as e:
                     ui.label(f"Não foi possível carregar a galeria: {e}").classes('text-xs text-red-4')
