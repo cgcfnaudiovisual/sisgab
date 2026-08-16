@@ -102,8 +102,23 @@ async def send_weekly_summary_report(bot, chat_id=None):
         print(f"[CRON] Erro ao enviar resumo semanal: {e}")
 
 
-async def trigger_daily_attendance_call(bot):
-    """Envia a chamada matutina para todos os militares ativos com Telegram ID às 07:00h (excluindo os em férias/licença ativas)."""
+import unicodedata
+import re
+
+def _clean_military_name(name_str: str) -> str:
+    """Normaliza nome de militar removendo postos/graduações, acentos e caracteres especiais para comparação segura."""
+    if not name_str:
+        return ""
+    text = unicodedata.normalize('NFKD', str(name_str)).encode('ASCII', 'ignore').decode('ASCII').upper()
+    # Remove postos e graduações comuns
+    pat = r'\b(AE|VA|CA|CMG|CF|CC|CT|1TEN|2TEN|GM|SO|1SG|2SG|3SG|SG|CB|SD|MN|CAP|TEN|CEL|MAJ|MILITAR)\b'
+    text = re.sub(pat, '', text)
+    # Remove caracteres não alfanuméricos e espaços extras
+    text = re.sub(r'[^A-Z0-9]', ' ', text)
+    return ' '.join(text.split())
+
+async def trigger_daily_attendance_call(bot, force_now=False):
+    """Envia a chamada matutina para todos os militares ativos com Telegram ID às 07:00h (apenas dias úteis, exceto quando forçado)."""
     try:
         from timezone import timezone, timedelta
     except Exception:
@@ -111,6 +126,12 @@ async def trigger_daily_attendance_call(bot):
         
     tz_gmt3 = timezone(timedelta(hours=-3))
     now = datetime.now(tz_gmt3)
+
+    # Bloqueia chamada matutina automática em finais de semana (Sábado=5, Domingo=6)
+    if not force_now and now.weekday() >= 5:
+        print(f"[ATTENDANCE CALL] Fim de semana (dia {now.weekday()}). Chamada matutina automática não enviada.", flush=True)
+        return
+
     hoje_str = now.strftime('%Y-%m-%d')
     
     def _fetch_call_data():
@@ -119,7 +140,7 @@ async def trigger_daily_attendance_call(bot):
             conn = get_db_connection()
             if not conn: return None, set()
             
-            res_ef = conn.table('efetivo').select('telegram_id, nome_guerra').execute()
+            res_ef = conn.table('efetivo').select('id, telegram_id, nome_guerra, posto_grad').execute()
             ef_data = res_ef.data if res_ef and res_ef.data else []
 
             isentos = set()
@@ -128,8 +149,12 @@ async def trigger_daily_attendance_call(bot):
                 if res_ext and res_ext.data:
                     for item in res_ext.data:
                         df = item.get('data_fim')
-                        if df and df >= hoje_str:
-                            isentos.add(item.get('nome_guerra', '').upper())
+                        if df and str(df)[:10] >= hoje_str:
+                            ng = str(item.get('nome_guerra') or '').strip()
+                            if ng:
+                                isentos.add(ng.upper())
+                                clean_ng = _clean_military_name(ng)
+                                if clean_ng: isentos.add(clean_ng)
             except Exception:
                 pass
             return ef_data, isentos
@@ -151,18 +176,21 @@ async def trigger_daily_attendance_call(bot):
     )
     
     for m in ef_data:
-        nome_g = str(m.get('nome_guerra') or '').upper()
+        nome_g = str(m.get('nome_guerra') or '').strip().upper()
+        clean_g = _clean_military_name(nome_g)
         tg_id = m.get('telegram_id')
-        if tg_id and nome_g not in isentos:
+        
+        is_isento = (nome_g in isentos) or (clean_g in isentos) or any(t in isentos for t in clean_g.split() if len(t) >= 3)
+        if tg_id and not is_isento:
             try:
                 await bot.send_message(str(tg_id).strip(), msg, reply_markup=get_presenca_keyboard(), parse_mode='Markdown')
-                await asyncio.sleep(0.02)  # Cede o controle ao loop do asyncio
+                await asyncio.sleep(0.03)  # Cede o controle ao loop do asyncio
             except Exception as e_send:
                 print(f"[ATTENDANCE CALL SEND ERR] {tg_id}: {e_send}")
 
 
 async def trigger_10min_attendance_reminder(bot, force_now=False):
-    """Verifica militares pendentes de chamada no dia atual (fuso GMT-3) e envia aviso/cobrança insistente via Telegram."""
+    """Verifica militares pendentes de chamada no dia atual e envia lembrete inteligente (ignora fins de semana salvo solicitação manual)."""
     try:
         from timezone import timezone, timedelta
     except Exception:
@@ -171,8 +199,13 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
     tz_gmt3 = timezone(timedelta(hours=-3))
     now = datetime.now(tz_gmt3)
     
-    if not force_now and not (7 <= now.hour <= 9):
-        return 0
+    # Bloqueia lembrete em finais de semana (Sábado=5, Domingo=6) salvo se forçado pelo admin/sargenteante
+    if not force_now:
+        if now.weekday() >= 5:
+            print(f"[ATTENDANCE REMINDER] Fim de semana (dia {now.weekday()}). Lembrete automático suspenso.", flush=True)
+            return 0
+        if not (7 <= now.hour <= 9):
+            return 0
         
     hoje_str = now.strftime('%Y-%m-%d')
 
@@ -180,58 +213,90 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
         try:
             from database import get_bot_db_connection as get_db_connection
             conn = get_db_connection()
-            if not conn: return None, set(), {}
+            if not conn: return None, set(), set(), {}
             
-            res_ef = conn.table('efetivo').select('nome_guerra, telegram_id, posto_grad').execute()
+            res_ef = conn.table('efetivo').select('id, nome_guerra, telegram_id, posto_grad').execute()
             ef_data = res_ef.data if res_ef and res_ef.data else []
-            if not ef_data: return None, set(), {}
+            if not ef_data: return None, set(), set(), {}
 
-            respondidos = {}
+            respondidos_nomes = set()
             respondidos_tids = set()
+
+            # 1. Checa escala_diaria (Supabase)
             try:
                 res_esc = conn.table('escala_diaria').select('nome, cargo').eq('data', hoje_str).execute()
                 if res_esc and res_esc.data:
                     for item in res_esc.data:
                         c_val = str(item.get('cargo') or '').strip().upper()
-                        if c_val and c_val not in ('PENDENTE', 'NONE', 'NULL'):
-                            n_val = str(item.get('nome') or '').strip().upper()
-                            if n_val: respondidos[n_val] = c_val
+                        if c_val and c_val not in ('PENDENTE', 'NONE', 'NULL', ''):
+                            n_val = str(item.get('nome') or '').strip()
+                            if n_val:
+                                respondidos_nomes.add(n_val.upper())
+                                clean_n = _clean_military_name(n_val)
+                                if clean_n: respondidos_nomes.add(clean_n)
             except Exception:
                 pass
 
+            # 2. Checa presenca_diaria (Supabase)
             try:
                 res_pr = conn.table('presenca_diaria').select('nome_guerra, telegram_id, user_id, militar_id, status').eq('data', hoje_str).execute()
                 if res_pr and res_pr.data:
                     for p in res_pr.data:
                         st = str(p.get('status') or '').strip().upper()
-                        if st and st not in ('PENDENTE', 'NONE', 'NULL'):
-                            ng = str(p.get('nome_guerra') or '').strip().upper()
+                        if st and st not in ('PENDENTE', 'NONE', 'NULL', ''):
+                            ng = str(p.get('nome_guerra') or '').strip()
                             p_tid = str(p.get('telegram_id') or '').strip()
                             p_uid = str(p.get('user_id') or '').strip()
                             p_mid = str(p.get('militar_id') or '').strip()
-                            if ng: respondidos[ng] = st
-                            if p_tid: respondidos_tids.add(p_tid)
+                            if ng:
+                                respondidos_nomes.add(ng.upper())
+                                clean_ng = _clean_military_name(ng)
+                                if clean_ng: respondidos_nomes.add(clean_ng)
+                            if p_tid and p_tid.isdigit(): respondidos_tids.add(p_tid)
                             if p_uid: respondidos_tids.add(p_uid)
                             if p_mid: respondidos_tids.add(p_mid)
             except Exception:
                 pass
             
+            # 3. Checa presenca_diaria local (SQLite fallback)
+            try:
+                from sqlite_adapter import LocalSQLiteClient
+                local_db = LocalSQLiteClient()
+                res_loc = local_db.table('presenca_diaria').select('nome_guerra, telegram_id, user_id, status').eq('data', hoje_str).execute()
+                if res_loc and res_loc.data:
+                    for lp in res_loc.data:
+                        st = str(lp.get('status') or '').strip().upper()
+                        if st and st not in ('PENDENTE', 'NONE', 'NULL', ''):
+                            ng = str(lp.get('nome_guerra') or '').strip()
+                            p_tid = str(lp.get('telegram_id') or '').strip()
+                            if ng:
+                                respondidos_nomes.add(ng.upper())
+                                clean_ng = _clean_military_name(ng)
+                                if clean_ng: respondidos_nomes.add(clean_ng)
+                            if p_tid and p_tid.isdigit(): respondidos_tids.add(p_tid)
+            except Exception:
+                pass
+
+            # 4. Afastados (Férias, Licença, Dispensa Médica)
             try:
                 res_ext = conn.table('presenca_diaria').select('nome_guerra, telegram_id, data_fim').in_('status', ['FE', 'L', 'DM']).lte('data', hoje_str).execute()
                 if res_ext and res_ext.data:
                     for item in res_ext.data:
                         df = item.get('data_fim')
-                        if df and df >= hoje_str:
-                            ng_ext = item.get('nome_guerra', '').upper()
+                        if df and str(df)[:10] >= hoje_str:
+                            ng_ext = str(item.get('nome_guerra') or '').strip()
                             e_tid = str(item.get('telegram_id') or '').strip()
-                            if ng_ext: respondidos[ng_ext] = 'AFASTADO'
-                            if e_tid: respondidos_tids.add(e_tid)
+                            if ng_ext:
+                                respondidos_nomes.add(ng_ext.upper())
+                                clean_ng = _clean_military_name(ng_ext)
+                                if clean_ng: respondidos_nomes.add(clean_ng)
+                            if e_tid and e_tid.isdigit(): respondidos_tids.add(e_tid)
             except Exception:
                 pass
                 
             user_tg_map = {}
             try:
-                res_u = conn.table('users').select('nome, username, telegram_id').execute()
+                res_u = conn.table('users').select('id, nome, username, telegram_id').execute()
                 if res_u and res_u.data:
                     for u_row in res_u.data:
                         tid = u_row.get('telegram_id')
@@ -242,20 +307,20 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
                             nm = str(u_row.get('nome') or '').strip().upper()
                             if nm:
                                 user_tg_map[nm] = tid_str
+                                clean_nm = _clean_military_name(nm)
+                                if clean_nm: user_tg_map[clean_nm] = tid_str
                                 parts = nm.split()
                                 if len(parts) > 1:
                                     user_tg_map[parts[-1]] = tid_str
-                                    if len(parts) > 2:
-                                        user_tg_map[' '.join(parts[1:])] = tid_str
             except Exception:
                 pass
 
-            return ef_data, respondidos, respondidos_tids, user_tg_map
+            return ef_data, respondidos_nomes, respondidos_tids, user_tg_map
         except Exception as e_f:
             print(f"[REMINDER FETCH ERR] {e_f}")
-            return None, {}, set(), {}
+            return None, set(), set(), {}
 
-    ef_data, respondidos, respondidos_tids, user_tg_map = await asyncio.to_thread(_fetch_reminder_data)
+    ef_data, respondidos_nomes, respondidos_tids, user_tg_map = await asyncio.to_thread(_fetch_reminder_data)
     if not ef_data:
         return 0
 
@@ -281,35 +346,63 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
             f"Consta pendência no seu registro diário. Regularize sua situação para a sargenteação:"
         )
 
+    def _is_militar_respondido(m_nome, m_pg, m_tid, m_id):
+        # 1. Checa correspondência direta por Telegram ID ou ID
+        if m_tid and str(m_tid).strip() in respondidos_tids:
+            return True
+        if m_id and str(m_id).strip() in respondidos_tids:
+            return True
+
+        # 2. Checa por Nome de Guerra / Nome Completo Normalizado
+        clean_m = _clean_military_name(m_nome)
+        if not clean_m:
+            return False
+
+        if (m_nome.upper() in respondidos_nomes) or (clean_m in respondidos_nomes):
+            return True
+
+        for r_nome in respondidos_nomes:
+            clean_r = _clean_military_name(r_nome)
+            if not clean_r:
+                continue
+            if clean_m == clean_r or clean_m in clean_r or clean_r in clean_m:
+                return True
+            # Tokens de nome significativos (ex: CALACA, SILVA, SANTOS)
+            m_tokens = [t for t in clean_m.split() if len(t) >= 3]
+            r_tokens = [t for t in clean_r.split() if len(t) >= 3]
+            if any(t in r_tokens for t in m_tokens):
+                return True
+        return False
+
     notified_count = 0
     for m in ef_data:
         nome_g = str(m.get('nome_guerra') or '').strip().upper()
         pg = str(m.get('posto_grad') or '').strip()
+        m_id = str(m.get('id') or '').strip()
         tg_id = m.get('telegram_id')
         if not tg_id or not str(tg_id).strip():
             tg_id = (
                 user_tg_map.get(nome_g)
                 or user_tg_map.get(f"{pg} {nome_g}".strip())
                 or user_tg_map.get(nome_g.split()[-1] if nome_g else '')
+                or user_tg_map.get(_clean_military_name(nome_g))
             )
         
         if nome_g and tg_id and str(tg_id).strip():
             tid = str(tg_id).strip()
-            is_respondido = (tid in respondidos_tids) or (nome_g in respondidos) or any(w in respondidos for w in nome_g.split() if len(w) > 2)
-            if is_respondido:
-                print(f'[15MIN-CHECK] Militar {nome_g} telegram_id={tid} -> presenca ok, skipping reminder')
+            if _is_militar_respondido(nome_g, pg, tid, m_id):
+                print(f'[10MIN-CHECK] Militar {pg} {nome_g} (ID: {tid}) -> Presença já registrada, ignorando lembrete.', flush=True)
             else:
                 try:
                     personalized_msg = f"{hdr}\n\n👤 *Militar:* {pg} {nome_g}\n{body}"
                     await bot.send_message(tid, personalized_msg, reply_markup=get_presenca_keyboard(), parse_mode='Markdown')
                     notified_count += 1
-                    await asyncio.sleep(0.02)  # Cede o controle ao loop do asyncio
+                    await asyncio.sleep(0.03)  # Cede o controle ao loop do asyncio
                 except Exception as e_send:
                     print(f"[ATTENDANCE REMIND ERR] {tid}: {e_send}")
 
     total_militares = len(ef_data)
-    respondidos_count = len(respondidos)
-    print(f"[CHAMADA MATUTINA {now.strftime('%H:%M')}] 🔔 {notified_count} lembretes enviados | {respondidos_count}/{total_militares} já responderam.")
+    print(f"[CHAMADA MATUTINA {now.strftime('%H:%M')}] 🔔 {notified_count} cobranças enviadas | Total efetivo: {total_militares}")
 
     return notified_count
 

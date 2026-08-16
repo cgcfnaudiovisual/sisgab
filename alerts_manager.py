@@ -444,31 +444,6 @@ class AlertsManager:
                             )
                             cls._triggered_custom_alerts_today[alert_id] = today_str
 
-                # Trigger da Chamada Matutina no Telegram (07:00) e Cobrança Recorrente (07:10 às 09:30)
-                try:
-                    import telegram_bot
-                    bot_inst = getattr(telegram_bot, 'bot', None)
-                    if bot_inst:
-                        # Chamada Matutina: dispara exatamente às 07:00
-                        if hour_min == "07:00" and cls._triggered_custom_alerts_today.get('chamada_0700') != today_str:
-                            cls._triggered_custom_alerts_today['chamada_0700'] = today_str
-                            from telegram_bot.scheduled_jobs import trigger_daily_attendance_call
-                            asyncio.create_task(trigger_daily_attendance_call(bot_inst))
-                            
-                        # Cobrança Recorrente: intervalo baseado em timestamp (a cada ~10 min)
-                        now_ts = now.timestamp()
-                        last_lembrete_ts = cls._triggered_custom_alerts_today.get('last_lembrete_ts', 0)
-                        janela_ativa = (now.hour == 7 and now.minute >= 10) or (now.hour == 8) or (now.hour == 9 and now.minute <= 30)
-                        intervalo_ok = (now_ts - last_lembrete_ts) >= 600  # 10 minutos em segundos
-                        
-                        if janela_ativa and intervalo_ok:
-                            cls._triggered_custom_alerts_today['last_lembrete_ts'] = now_ts
-                            from telegram_bot.scheduled_jobs import trigger_10min_attendance_reminder
-                            asyncio.create_task(trigger_10min_attendance_reminder(bot_inst))
-                            print(f"[SCHEDULER LEMBRETE] Cobrança de presença disparada às {hour_min}")
-                except Exception as tg_sched_err:
-                    print(f"[ATTENDANCE SCHEDULER ERR] {tg_sched_err}")
-
                 # Keep-Alive Self-Ping (disparado a cada 5 minutos para impedir Sleep Mode na nuvem)
                 try:
                     now_ts = datetime.now().timestamp()

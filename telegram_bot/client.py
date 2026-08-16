@@ -62,7 +62,12 @@ async def _morning_attendance_loop():
                 today_str = now.strftime('%Y-%m-%d')
                 now_ts = now.timestamp()
                 
-                # 1. Chamada Matutina Geral exatamente às 07:00 (disparada 1 vez por dia)
+                # Não executa chamadas automáticas em finais de semana (Sábado = 5, Domingo = 6)
+                if now.weekday() >= 5:
+                    await asyncio.sleep(60)
+                    continue
+
+                # 1. Chamada Matutina Geral exatamente às 07:00 (disparada 1 vez por dia nos dias úteis)
                 if now.hour == 7 and now.minute == 0 and last_0700_date != today_str:
                     last_0700_date = today_str
                     print(f"[BOT MORNING CRON] Disparando Chamada Matutina das 07:00h para o efetivo...", flush=True)
