@@ -321,8 +321,8 @@ async def api_portal_match(
             'matched_photos': matched_items,
             'embedding': embedding.tolist()
         })
-        response.set_cookie(f'portal_m_{event_id}', matched_fids_str, max_age=86400, path='/')
-        response.set_cookie(f'portal_s_{event_id}', '1', max_age=86400, path='/')
+        response.set_cookie(f'portal_m_{event_id}', matched_fids_str, max_age=86400, path='/', secure=True, samesite='lax')
+        response.set_cookie(f'portal_s_{event_id}', '1', max_age=86400, path='/', secure=True, samesite='lax')
         return response
     except Exception as e:
         print(f"[API_PORTAL_MATCH_ERR] {e}")
