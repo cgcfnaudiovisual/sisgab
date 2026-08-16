@@ -910,6 +910,11 @@ def render_page(event_id: str, request: Request = None):
                     </div>
                     ''')
 
+                    # Rodapé Institucional (Restrito)
+                    with ui.column().classes('w-full items-center justify-center pt-4 text-center gap-1 opacity-90'):
+                        ui.label('Comando-Geral do Corpo de Fuzileiros Navais • Assessoria COMSOC').classes('text-[10px] sm:text-xs text-grey-4 font-semibold tracking-wide')
+                        ui.label('🚀 Desenvolvido por Sargento Calaça 🇧🇷').classes('text-amber-4 text-xs font-bold tracking-wider')
+
                 return
 
             # 1. SEÇÃO DE CAPTURA BIOMÉTRICA / SELFIE (Card Compacto Direto com Labels Nativas)
@@ -975,6 +980,11 @@ def render_page(event_id: str, request: Request = None):
 
             # 5. SEÇÃO DE ENTREGA (E-MAIL INSTITUCIONAL & WHATSAPP)
             render_delivery_section()
+
+            # 6. RODAPÉ INSTITUCIONAL (FOOTER)
+            with ui.column().classes('w-full items-center justify-center py-6 q-mt-md border-t border-cyan-500/20 text-center gap-1 opacity-90'):
+                ui.label('Comando-Geral do Corpo de Fuzileiros Navais • Assessoria COMSOC').classes('text-[11px] sm:text-xs text-grey-4 font-semibold tracking-wide')
+                ui.label('🚀 Desenvolvido por Sargento Calaça 🇧🇷').classes('text-amber-4 text-xs font-bold tracking-wider')
 
         # ── 8. REFRESH UI (CONTAINER DINÂMICO) ────────────────────────────────
         def refresh_ui():

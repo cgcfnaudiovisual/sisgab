@@ -850,9 +850,7 @@ def render_page(evento_id: str = None, **kwargs):
                 t_guest = ui.tab('👥 4. Convidados & Entregas', icon='people').classes('px-3')
                 t_qr = ui.tab('📱 5. QR Code & Divulgação', icon='qr_code').classes('px-3')
 
-            tabs_p.set_value(t_proc)
-
-            with ui.tab_panels(tabs_p, value=t_proc).classes('w-full bg-transparent p-0'):
+            with ui.tab_panels(tabs_p, value=t_cfg, animated=False, keep_alive=True).classes('w-full bg-transparent p-0'):
                 
                 # ── ETAPA 1: CONFIGURAÇÃO ──
                 with ui.tab_panel(t_cfg).classes('w-full p-2 gap-4'):
