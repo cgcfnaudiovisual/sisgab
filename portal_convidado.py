@@ -649,8 +649,9 @@ def render_page(event_id: str, request: Request = None):
         <input type="file" id="portal-native-gallery" accept="image/*" style="position: absolute; left: -9999px; opacity: 0; width: 1px; height: 1px;">
         ''')
 
-        # ── CARD PRINCIPAL COMPACTO DO EVENTO ─────────────────────────────────
+        # ── CARD PRINCIPAL COMPACTO DO EVENTO COM BRASÃO OFICIAL ─────────────────────────────
         with ui.card().classes('w-full max-w-5xl bg-slate-900/80 backdrop-blur-md border border-amber-500/30 rounded-2xl shadow-2xl overflow-hidden p-4 sm:p-6 text-center items-center justify-center gap-2'):
+            ui.image('/assets/brasao_cgcfn.png').classes('w-16 sm:w-20 h-auto drop-shadow-[0_4px_12px_rgba(255,183,3,0.35)] q-mb-xs transition-transform hover:scale-105').style('max-height: 80px; object-fit: contain;')
             ui.label(nome_evento.upper()).classes('text-base sm:text-2xl font-black text-white tracking-wide leading-tight text-center w-full')
             with ui.row().classes('w-full items-center justify-center gap-3 sm:gap-6 text-xs text-grey-4 flex-wrap mt-0.5 text-center'):
                 if data_formatada:
