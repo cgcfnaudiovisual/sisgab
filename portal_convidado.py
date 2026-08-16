@@ -435,7 +435,7 @@ def render_page(event_id: str, request: Request = None):
             align-items: center;
             justify-content: center;
             height: 52px;
-            border-radius: 12px;
+            border-radius: 14px;
             font-weight: 900;
             font-size: 13px;
             letter-spacing: 0.3px;
@@ -444,21 +444,22 @@ def render_page(event_id: str, request: Request = None):
             transition: transform 0.15s ease, filter 0.15s ease;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             text-align: center;
-            padding: 0 12px;
+            padding: 0 16px;
+            flex: 1 1 0%;
+            width: 100%;
+            box-sizing: border-box;
         }}
         .turbo-upload-label:active {{
-            transform: scale(0.96);
+            transform: scale(0.97);
             filter: brightness(0.9);
         }}
         .turbo-btn-camera {{
             background: #00b4d8;
             color: #000000;
-            flex: 1;
         }}
         .turbo-btn-gallery {{
             background: #ffb703;
             color: #000000;
-            flex: 1;
         }}
     </style>
     <div id="turbo-loading-overlay" style="display: none; position: fixed; inset: 0; background: rgba(11, 15, 25, 0.94); backdrop-filter: blur(10px); z-index: 999999; flex-direction: column; align-items: center; justify-content: center; gap: 16px;">
@@ -592,9 +593,9 @@ def render_page(event_id: str, request: Request = None):
         ''')
 
         # ── CARD PRINCIPAL COMPACTO DO EVENTO ─────────────────────────────────
-        with ui.card().classes('w-full max-w-5xl bg-slate-900/90 border border-amber-500/30 rounded-2xl shadow-xl overflow-hidden p-3 sm:p-5 text-center gap-1.5'):
-            ui.label(nome_evento.upper()).classes('text-base sm:text-2xl font-black text-white tracking-wide leading-tight')
-            with ui.row().classes('items-center justify-center gap-3 sm:gap-5 text-xs text-grey-4 flex-wrap mt-0.5'):
+        with ui.card().classes('w-full max-w-5xl bg-slate-900/90 border border-amber-500/30 rounded-2xl shadow-xl overflow-hidden p-4 sm:p-6 text-center items-center justify-center gap-2'):
+            ui.label(nome_evento.upper()).classes('text-base sm:text-2xl font-black text-white tracking-wide leading-tight text-center w-full')
+            with ui.row().classes('w-full items-center justify-center gap-3 sm:gap-6 text-xs text-grey-4 flex-wrap mt-0.5 text-center'):
                 if data_formatada:
                     ui.label(f"📅 {data_formatada}").classes('font-bold text-amber-3')
                 if local_evento:
