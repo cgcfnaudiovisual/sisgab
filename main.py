@@ -1839,8 +1839,11 @@ host_env = os.environ.get('HOST', '0.0.0.0')
 secret_env = os.environ.get('STORAGE_SECRET') or "sisgab-secret-key-cgcfn-audiovisual-2026-prod-fallback"
 
 # Desativamos o 'reload' por padrão para rodar em Modo Produção super leve, veloz, estável e sem reinícios.
+favicon_path = os.path.join(assets_dir, 'favicon.ico') if os.path.exists(os.path.join(assets_dir, 'favicon.ico')) else os.path.join(assets_dir, 'flavicon.ico')
+
 ui.run(
     title='SisGAB', 
+    favicon=favicon_path,
     dark=True, 
     storage_secret=secret_env, 
     reconnect_timeout=10.0, # 10 segundos de tolerância contra pequenas oscilações de rede antes de mostrar 'Connection lost'
