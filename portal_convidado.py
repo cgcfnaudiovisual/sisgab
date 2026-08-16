@@ -641,7 +641,7 @@ def render_page(event_id: str, request: Request = None):
     ''')
 
     # Container principal
-    with ui.column().classes('w-full min-h-screen items-center justify-start p-2 sm:p-4 bg-slate-950 text-white').style('font-family: "Outfit", sans-serif;'):
+    with ui.column().classes('w-full min-h-screen items-center justify-start p-2 sm:p-4 text-white').style('background: transparent; position: relative; z-index: 1; font-family: "Outfit", sans-serif;'):
 
         # ── INPUTS NATIVOS DE UPLOAD OFF-SCREEN ──
         ui.html('''
@@ -650,7 +650,7 @@ def render_page(event_id: str, request: Request = None):
         ''')
 
         # ── CARD PRINCIPAL COMPACTO DO EVENTO ─────────────────────────────────
-        with ui.card().classes('w-full max-w-5xl bg-slate-900/90 border border-amber-500/30 rounded-2xl shadow-xl overflow-hidden p-4 sm:p-6 text-center items-center justify-center gap-2'):
+        with ui.card().classes('w-full max-w-5xl bg-slate-900/80 backdrop-blur-md border border-amber-500/30 rounded-2xl shadow-2xl overflow-hidden p-4 sm:p-6 text-center items-center justify-center gap-2'):
             ui.label(nome_evento.upper()).classes('text-base sm:text-2xl font-black text-white tracking-wide leading-tight text-center w-full')
             with ui.row().classes('w-full items-center justify-center gap-3 sm:gap-6 text-xs text-grey-4 flex-wrap mt-0.5 text-center'):
                 if data_formatada:
@@ -962,11 +962,11 @@ def render_page(event_id: str, request: Request = None):
                     ui.separator().classes('w-full opacity-20 q-my-sm')
 
                     ui.html('''
-                    <div style="display: flex; gap: 10px; width: 100%; margin-top: 6px;">
+                    <div style="display: flex; gap: 12px; width: 100%; margin-top: 8px;">
                         <label for="portal-native-camera" class="turbo-upload-label turbo-btn-camera">📸 VALIDAR COM CÂMERA</label>
                         <label for="portal-native-gallery" class="turbo-upload-label turbo-btn-gallery">📁 ESCOLHER DA GALERIA</label>
                     </div>
-                    ''')
+                    ''').classes('w-full')
 
                     # Rodapé Institucional (Restrito)
                     with ui.column().classes('w-full items-center justify-center pt-4 text-center gap-1 opacity-90'):
@@ -976,7 +976,7 @@ def render_page(event_id: str, request: Request = None):
                 return
 
             # 1. SEÇÃO DE CAPTURA BIOMÉTRICA / SELFIE (Card Compacto Direto com Labels Nativas)
-            with ui.card().classes('w-full bg-slate-900/90 border border-cyan-500/30 rounded-2xl p-3 sm:p-5 shadow-xl text-center gap-1.5'):
+            with ui.card().classes('w-full bg-slate-900/80 backdrop-blur-md border border-cyan-500/30 rounded-2xl p-4 sm:p-6 shadow-xl text-center items-center gap-2'):
                 with ui.row().classes('w-full items-center justify-center gap-2'):
                     ui.icon('face_retouching_natural', size='1.5rem', color='cyan-4')
                     ui.label('ENCONTRE SUAS FOTOS DO EVENTO').classes('text-sm sm:text-base font-black text-cyan-3 tracking-wide')
@@ -988,11 +988,11 @@ def render_page(event_id: str, request: Request = None):
                 btn_gal_txt = '📁 ESCOLHER FOTO' if num_matches == 0 else '📁 OUTRA FOTO'
 
                 ui.html(f'''
-                <div style="display: flex; gap: 10px; width: 100%; margin-top: 6px;">
+                <div style="display: flex; gap: 12px; width: 100%; margin-top: 8px;">
                     <label for="portal-native-camera" class="turbo-upload-label turbo-btn-camera">{btn_cam_txt}</label>
                     <label for="portal-native-gallery" class="turbo-upload-label turbo-btn-gallery">{btn_gal_txt}</label>
                 </div>
-                ''')
+                ''').classes('w-full')
 
                 if guest_state['has_searched']:
                     def reset_selfies():
