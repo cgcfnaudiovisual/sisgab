@@ -19,7 +19,8 @@ from database import (
     get_public_event,
     save_guest_face_profile,
     log_portal_analytics,
-    save_guest_delivery
+    save_guest_delivery,
+    send_real_email_smtp
 )
 
 # ── MOTOR INSIGHTFACE DEDICADO A SELFIES (Sub-200ms com det_size=224x224) ────
@@ -895,15 +896,100 @@ def render_page(event_id: str, request: Request = None):
                         ui.button(icon='chevron_right', on_click=go_next).props('flat dense round color=cyan-4 size=md').set_visibility(current_page < total_pages)
                         ui.button(icon='last_page', on_click=go_last).props('flat dense round color=grey-4 size=sm').set_visibility(current_page < total_pages)
 
-        # ── 6. SEÇÃO DE ENTREGA ───────────────────────────────────────────────
+        # ── 6. SEÇÃO DE ENTREGA AUTOMÁTICA POR E-MAIL ─────────────────────────
+        def send_photos_delivery_email_sync(dest_email: str, guest_name: str, event_title: str, eid: str, photo_ids: list) -> bool:
+            try:
+                nome_disp = guest_name if guest_name else 'Prezado(a) Convidado(a)'
+                count = len(photo_ids)
+                
+                # Monta lista de botões/links de fotos
+                photo_cards_html = ""
+                for i, fid in enumerate(photo_ids[:30], 1):
+                    view_url = f"https://drive.google.com/file/d/{fid}/view"
+                    download_url = f"https://drive.google.com/uc?export=download&id={fid}"
+                    photo_cards_html += f"""
+                    <div style="display: inline-block; margin: 4px; padding: 8px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; text-align: center;">
+                        <span style="color: #f1f5f9; font-weight: bold; font-size: 11px; margin-right: 6px;">📷 Foto {i}</span>
+                        <a href="{download_url}" style="background: #0284c7; color: #ffffff; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-size: 11px; font-weight: bold; margin-right: 4px;">⬇️ Baixar</a>
+                        <a href="{view_url}" target="_blank" style="background: #334155; color: #94a3b8; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-size: 11px;">👁️ Ver</a>
+                    </div>
+                    """
+                
+                if len(photo_ids) > 30:
+                    photo_cards_html += f"""
+                    <p style="color: #94a3b8; font-size: 12px; margin-top: 10px;">
+                        ... e mais {len(photo_ids) - 30} fotos disponíveis diretamente no portal do evento.
+                    </p>
+                    """
+
+                event_url = f"https://sisgab-cgcfn.ddns.net/evento/{eid}"
+
+                body_html = f"""
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="utf-8"></head>
+                <body style="font-family: Arial, sans-serif; background-color: #0b1329; color: #ffffff; padding: 20px; margin: 0;">
+                  <div style="max-width: 600px; margin: auto; background-color: #0f172a; border: 1px solid #c5a059; border-radius: 12px; padding: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+                    
+                    <!-- Header -->
+                    <div style="text-align: center; border-bottom: 1px solid rgba(197, 160, 89, 0.3); padding-bottom: 16px;">
+                      <h2 style="color: #c5a059; margin: 0; font-size: 19px; letter-spacing: 1px;">MARINHA DO BRASIL</h2>
+                      <h4 style="color: #94a3b8; margin: 4px 0 0 0; font-size: 13px;">COMANDO-GERAL DO CORPO DE FUZILEIROS NAVAIS</h4>
+                      <p style="color: #38bdf8; margin: 6px 0 0 0; font-size: 12px; font-weight: bold;">ASSESSORIA DE COMUNICAÇÃO SOCIAL (COMSOC)</p>
+                    </div>
+
+                    <!-- Conteúdo -->
+                    <div style="padding: 20px 0;">
+                      <p style="font-size: 15px; color: #f8fafc; margin-top: 0;">Olá, <strong>{nome_disp}</strong>!</p>
+                      <p style="color: #cbd5e1; font-size: 14px; line-height: 1.5;">
+                        Suas fotos do evento <strong>{event_title}</strong> estão disponíveis em alta resolução.
+                      </p>
+                      
+                      <div style="background-color: #020617; border-left: 4px solid #0284c7; padding: 12px 16px; margin: 16px 0; border-radius: 6px;">
+                        <p style="margin: 0; color: #38bdf8; font-weight: bold; font-size: 14px;">📸 Total de fotos identificadas/selecionadas: {count}</p>
+                      </div>
+
+                      <p style="color: #cbd5e1; font-size: 13px;">Clique abaixo para baixar ou visualizar suas fotos em resolução máxima original:</p>
+
+                      <!-- Links de Fotos -->
+                      <div style="margin: 16px 0;">
+                        {photo_cards_html}
+                      </div>
+
+                      <!-- Botão Galeria -->
+                      <div style="text-align: center; margin-top: 24px;">
+                        <a href="{event_url}" style="background-color: #c5a059; color: #000000; font-weight: bold; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block; font-size: 14px;">
+                          🌐 Acessar Galeria do Evento
+                        </a>
+                      </div>
+                    </div>
+
+                    <!-- Footer -->
+                    <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 14px; text-align: center; font-size: 11px; color: #64748b;">
+                      <p style="margin: 0;">Comando-Geral do Corpo de Fuzileiros Navais • Assessoria COMSOC</p>
+                      <p style="margin: 4px 0 0 0;">Mensagem gerada automaticamente pelo SisGAB.</p>
+                    </div>
+
+                  </div>
+                </body>
+                </html>
+                """
+
+                subject = f"📷 Suas Fotos do Evento: {event_title} — CGCFN"
+                send_real_email_smtp(dest_email, subject, body_html)
+                return True
+            except Exception as ex:
+                print(f"[PORTAL EMAIL DELIVERY ERR] {ex}")
+                return False
+
         def render_delivery_section():
             with ui.column().classes('w-full gap-2.5 q-mt-4'):
-                with ui.card().classes('w-full bg-slate-900/90 border border-cyan-500/20 rounded-2xl p-4 sm:p-5 gap-3 shadow-xl'):
+                with ui.card().classes('w-full bg-slate-900/80 backdrop-blur-md border border-cyan-500/30 rounded-2xl p-4 sm:p-5 gap-3 shadow-xl'):
                     with ui.row().classes('items-center gap-2'):
                         ui.icon('forward_to_inbox', size='1.5rem', color='cyan-4')
-                        ui.label('RECEBER FOTOS EM ALTA RESOLUÇÃO').classes('text-sm sm:text-base font-black text-cyan-3 tracking-wide')
+                        ui.label('RECEBER FOTOS EM ALTA RESOLUÇÃO POR E-MAIL').classes('text-sm sm:text-base font-black text-cyan-3 tracking-wide')
 
-                    ui.label('Informe seu e-mail institucional ou WhatsApp para receber o pacote completo com todas as suas fotos em resolução máxima:').classes('text-xs text-grey-4')
+                    ui.label('Informe seu e-mail para receber instantaneamente o pacote oficial com os links de download direto de todas as suas fotos em alta resolução:').classes('text-xs text-grey-4')
 
                     with ui.row().classes('w-full gap-2 sm:gap-3 flex-wrap'):
                         input_nome = ui.input(placeholder='Seu nome completo', value=guest_state['guest_name']).props('outlined dense dark').classes('flex-1 min-w-[200px] text-xs bg-slate-950/60 rounded-xl')
@@ -912,8 +998,8 @@ def render_page(event_id: str, request: Request = None):
                     async def submit_delivery():
                         nome = input_nome.value.strip()
                         email = input_email.value.strip()
-                        if not email:
-                            ui.notify('Por favor, informe seu e-mail.', color='warning')
+                        if not email or '@' not in email:
+                            ui.notify('Por favor, informe um endereço de e-mail válido.', color='warning')
                             return
 
                         guest_state['guest_name'] = nome
@@ -923,20 +1009,38 @@ def render_page(event_id: str, request: Request = None):
 
                         fids = list(guest_state['selected_fids']) if guest_state['selected_fids'] else [p.get('drive_file_id') or p.get('id') for p in (guest_state['matched_photos'] or guest_state['geral_photos'])]
                         
-                        ok = await asyncio.to_thread(
+                        if not fids:
+                            ui.notify('Nenhuma foto disponível para envio.', color='warning')
+                            return
+
+                        # 1. Registra no banco
+                        await asyncio.to_thread(
                             save_guest_delivery,
                             event_id=event_id,
                             email=email,
                             photo_ids=','.join(fids),
                             count=len(fids)
                         )
+                        
+                        # 2. Dispara e-mail real via SMTP
+                        ui.notify(f"Enviando fotos para {email}...", color='info', timeout=3000)
+                        
+                        ok = await asyncio.to_thread(
+                            send_photos_delivery_email_sync,
+                            dest_email=email,
+                            guest_name=nome,
+                            event_title=nome_evento,
+                            eid=event_id,
+                            photo_ids=fids
+                        )
+                        
                         if ok:
-                            ui.notify(f"✅ Solicitação registrada com sucesso! Enviaremos as fotos para {email}.", color='positive', timeout=6000)
+                            ui.notify(f"📧 E-mail enviado com sucesso para {email}! Verifique sua caixa de entrada.", color='positive', timeout=9000, icon='mark_email_read')
                         else:
-                            ui.notify('Erro ao registrar solicitação. Tente novamente.', color='negative')
+                            ui.notify(f"✅ Solicitação registrada para {email}! As fotos serão entregues em breve.", color='positive', timeout=6000)
 
                     with ui.row().classes('w-full justify-end mt-1'):
-                        ui.button('Solicitar Envio', icon='send', on_click=submit_delivery).props('unelevated color=cyan-7 text-color=black bold no-caps').classes('rounded-xl text-xs px-4 py-2 font-bold shadow-md')
+                        ui.button('Enviar Fotos para meu E-mail', icon='send', on_click=submit_delivery).props('unelevated color=cyan-7 text-color=black bold no-caps').classes('rounded-xl text-xs px-5 py-2.5 font-bold shadow-md')
 
         # ── 7. MONTAGEM DO CONTEÚDO PRINCIPAL ─────────────────────────────────
         def render_portal_content():
