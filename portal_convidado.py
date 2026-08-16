@@ -180,27 +180,83 @@ def _get_event_matrix(event_id: str) -> tuple[np.ndarray, list[dict]]:
         empty_mat = np.empty((0, 512), dtype=np.float32)
         return empty_mat, []
 
-def _get_geral_photos(folder_id: str) -> list[dict]:
-    """Lista fotos da pasta geral do Google Drive com cache em RAM."""
+def _get_geral_photos(root_folder_id: str, geral_folder_id: str = None) -> list[dict]:
+    """
+    Lista fotos da galeria oficial do evento com ordenação inteligente e cache:
+    1. Fotos dentro da subpasta GERAL ou SELEÇÃO (prioridade máxima)
+    2. Fotos avulsas soltas diretamente na raiz da pasta do evento
+    Pastas de bastidores (ex: STAFF, EQUIPE, BRUTAS) são totalmente excluídas.
+    """
+    if not root_folder_id and not geral_folder_id:
+        return []
+    primary_id = root_folder_id or geral_folder_id
+    secondary_id = geral_folder_id if (geral_folder_id and geral_folder_id != primary_id) else None
+
+    cache_key = f"{primary_id}_{secondary_id or ''}"
     now = time.time()
-    if folder_id in _EVENT_GERAL_PHOTOS_CACHE:
-        cache = _EVENT_GERAL_PHOTOS_CACHE[folder_id]
+    if cache_key in _EVENT_GERAL_PHOTOS_CACHE:
+        cache = _EVENT_GERAL_PHOTOS_CACHE[cache_key]
         if now - cache['timestamp'] < 1800:
             return cache['photos']
 
     try:
         t0 = time.time()
-        photos = drive_service.list_files(folder_id)
-        if photos:
-            photos.sort(key=lambda x: x.get('name', ''), reverse=True)
-            _EVENT_GERAL_PHOTOS_CACHE[folder_id] = {
-                'photos': photos,
-                'timestamp': now
-            }
-            print(f"[PORTAL_DRIVE] ☁️ {len(photos)} fotos listadas do Drive em {time.time()-t0:.2f}s (cache criado)")
-        return photos or []
+        service = drive_service.get_drive_service()
+        if not service:
+            return []
+
+        curated_photos = []
+        seen_ids = set()
+
+        # 1. Identifica a subpasta GERAL ou SELEÇÃO
+        target_subfolder_id = secondary_id
+        if not target_subfolder_id and primary_id:
+            try:
+                q_sub = f"'{primary_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+                res_sub = service.files().list(q=q_sub, fields='files(id, name)', supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
+                subfolders = res_sub.get('files', [])
+                for sf in subfolders:
+                    s_name = sf.get('name', '').upper()
+                    if 'GERAL' in s_name or 'SELEÇÃO' in s_name or 'SELECAO' in s_name:
+                        target_subfolder_id = sf.get('id')
+                        break
+            except Exception as ex_sub:
+                print(f"[PORTAL_DRIVE] Erro ao buscar subpasta GERAL/SELEÇÃO: {ex_sub}")
+
+        # 2. Carrega fotos prioritárias da subpasta GERAL/SELEÇÃO
+        if target_subfolder_id:
+            sub_photos = drive_service.list_files(target_subfolder_id, mime_filter='image/')
+            if sub_photos:
+                sub_photos.sort(key=lambda x: x.get('name', ''), reverse=True)
+                for p in sub_photos:
+                    fid = p.get('id')
+                    if fid and fid not in seen_ids:
+                        seen_ids.add(fid)
+                        curated_photos.append(p)
+
+        # 3. Carrega fotos avulsas da raiz do evento (ignora pastas STAFF, EQUIPE, BRUTAS, etc.)
+        if primary_id and primary_id != target_subfolder_id:
+            root_items = drive_service.list_files(primary_id)
+            if root_items:
+                root_items.sort(key=lambda x: x.get('name', ''), reverse=True)
+                for item in root_items:
+                    mime = item.get('mimeType', '')
+                    if mime == 'application/vnd.google-apps.folder':
+                        continue
+                    fid = item.get('id')
+                    if fid and fid not in seen_ids:
+                        seen_ids.add(fid)
+                        curated_photos.append(item)
+
+        _EVENT_GERAL_PHOTOS_CACHE[cache_key] = {
+            'photos': curated_photos,
+            'timestamp': now
+        }
+        print(f"[PORTAL_DRIVE] ☁️ {len(curated_photos)} fotos curadas do Drive em {time.time()-t0:.2f}s (GERAL/SELEÇÃO + avulsas)")
+        return curated_photos
+
     except Exception as e:
-        print(f"[PORTAL_DRIVE] ⚠️ Erro ao listar fotos da pasta geral {folder_id}: {e}")
+        print(f"[PORTAL_DRIVE] ⚠️ Erro ao listar fotos curadas do evento: {e}")
         return []
 
 def _extract_selfie_embedding(image_bytes: bytes) -> tuple[bool, str, np.ndarray | None]:
@@ -412,13 +468,14 @@ def render_page(event_id: str, request: Request = None):
         data_formatada = ''
 
     threshold_match = float(event.get('threshold_match') or 0.40)
-    drive_geral_id = event.get('drive_geral_folder_id') or event.get('drive_folder_id')
+    drive_folder_id = event.get('drive_folder_id')
+    drive_geral_id = event.get('drive_geral_folder_id')
 
     # Pré-aquece SIMULTANEAMENTE: IA Selfie + matriz de embeddings + fotos do Drive
     asyncio.create_task(asyncio.to_thread(_get_selfie_app))
     asyncio.create_task(asyncio.to_thread(_get_event_matrix, event_id))
-    if drive_geral_id:
-        asyncio.create_task(asyncio.to_thread(_get_geral_photos, drive_geral_id))
+    if drive_folder_id or drive_geral_id:
+        asyncio.create_task(asyncio.to_thread(_get_geral_photos, drive_folder_id, drive_geral_id))
 
     # Injeta CSS e Script Turbo Client-Side no Header
     ui.add_head_html(f'''
@@ -783,13 +840,13 @@ def render_page(event_id: str, request: Request = None):
                         ui.button('Baixar ZIP', icon='archive', on_click=download_selected_zip).props('unelevated color=cyan-7 text-color=black bold dense size=sm no-caps').classes('text-[11px] rounded-lg px-2.5 shadow')
 
         # ── 5. GALERIA OFICIAL DO EVENTO COM PAGINAÇÃO NO RODAPÉ ──────────────
-        def render_official_gallery(folder_id: str):
-            if not folder_id:
+        def render_official_gallery(root_folder_id: str, geral_folder_id: str = None):
+            if not root_folder_id and not geral_folder_id:
                 with ui.card().classes('w-full bg-slate-900/60 p-4 text-center rounded-xl'):
                     ui.label('Fotos da galeria oficial serão disponibilizadas em breve.').classes('text-xs text-grey-5')
                 return
 
-            photos = _get_geral_photos(folder_id)
+            photos = _get_geral_photos(root_folder_id, geral_folder_id)
             guest_state['geral_photos'] = photos
 
             if not photos:
@@ -977,7 +1034,7 @@ def render_page(event_id: str, request: Request = None):
                         ui.label('GALERIA OFICIAL DO EVENTO').classes('text-sm sm:text-lg font-black text-cyan-3 tracking-wide')
                     ui.label('Fotos institucionais').classes('text-[11px] text-grey-4')
 
-                render_official_gallery(drive_geral_id)
+                render_official_gallery(drive_folder_id, drive_geral_id)
 
             # 5. SEÇÃO DE ENTREGA (E-MAIL INSTITUCIONAL & WHATSAPP)
             render_delivery_section()
