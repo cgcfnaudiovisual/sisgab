@@ -23,6 +23,24 @@ from database import (
     send_real_email_smtp
 )
 
+# ── BRASÃO OFICIAL CGCFN (Cache Base64) ───────────────────────────────────────
+_BRASAO_CGCFN_B64_CACHE = None
+
+def _get_brasao_cgcfn_src():
+    global _BRASAO_CGCFN_B64_CACHE
+    if _BRASAO_CGCFN_B64_CACHE:
+        return _BRASAO_CGCFN_B64_CACHE
+    try:
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'brasao_cgcfn.png')
+        if os.path.exists(p) and os.path.getsize(p) > 500:
+            with open(p, 'rb') as f:
+                b64 = base64.b64encode(f.read()).decode('utf-8')
+                _BRASAO_CGCFN_B64_CACHE = f"data:image/png;base64,{b64}"
+                return _BRASAO_CGCFN_B64_CACHE
+    except Exception:
+        pass
+    return '/assets/brasao_cgcfn.png'
+
 # ── MOTOR INSIGHTFACE DEDICADO A SELFIES (Sub-200ms com det_size=224x224) ────
 _SELFIE_APP_SINGLETON = None
 _SELFIE_APP_LOCK = threading.Lock()
@@ -653,7 +671,8 @@ def render_page(event_id: str, request: Request = None):
         # ── CARD PRINCIPAL DO EVENTO COM BRASÃO OFICIAL AO LADO DO NOME ───────
         with ui.card().classes('w-full max-w-5xl bg-slate-900/80 backdrop-blur-md border border-amber-500/30 rounded-2xl shadow-2xl overflow-hidden p-4 sm:p-6 text-center items-center justify-center gap-2'):
             with ui.row().classes('w-full items-center justify-center sm:justify-start gap-4 sm:gap-6 flex-wrap sm:flex-nowrap'):
-                ui.image('/assets/brasao_cgcfn.png').classes('w-16 h-16 sm:w-20 sm:h-20 shrink-0 drop-shadow-[0_4px_12px_rgba(255,183,3,0.4)] transition-transform hover:scale-105').style('object-fit: contain;')
+                brasao_img_src = _get_brasao_cgcfn_src()
+                ui.image(brasao_img_src).classes('w-16 h-16 sm:w-20 sm:h-20 shrink-0 drop-shadow-[0_4px_12px_rgba(255,183,3,0.4)] transition-transform hover:scale-105').style('object-fit: contain;')
                 with ui.column().classes('gap-1 items-center sm:items-start text-center sm:text-left flex-grow'):
                     ui.label(nome_evento.upper()).classes('text-base sm:text-2xl font-black text-white tracking-wide leading-tight')
                     with ui.row().classes('items-center justify-center sm:justify-start gap-3 sm:gap-5 text-xs text-grey-4 flex-wrap mt-0.5'):
