@@ -2283,7 +2283,6 @@ def register_common_handlers(bot):
             elif step == 'input_nome':
                 state['data']['nome'] = text.strip().upper()
                 state['step'] = 'select_acomp'
-                from telebot import types
                 markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
                 markup.row(types.KeyboardButton("0 (Sem Acompanhantes)"), types.KeyboardButton("1 Acompanhante"))
                 markup.row(types.KeyboardButton("2 Acompanhantes"), types.KeyboardButton("3 Acompanhantes"))
@@ -2638,7 +2637,6 @@ def register_common_handlers(bot):
                     await bot.reply_to(message, confirm_msg, reply_markup=markup, parse_mode='Markdown')
                 except Exception as e:
                     await bot.reply_to(message, f"❌ Erro ao digerir questionário: {e}\nPor favor, tente enviar novamente ou criar manualmente.", reply_markup=get_main_menu_keyboard(is_operator))
-                finally:
                     clear_state(chat_id)
             return
 
