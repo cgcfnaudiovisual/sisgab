@@ -1059,31 +1059,44 @@ def register_common_handlers(bot):
             clear_state(chat_id)
             return
 
-        if data.startswith('confirm_ia_demanda:'):
-            action_code = data.split(':')[1]
+    @bot.callback_query_handler(func=lambda call: call.data and call.data.startswith('confirm_ia_demanda:'))
+    async def handle_confirm_ia_demanda_callback(call):
+        chat_id = call.message.chat.id if call.message else call.from_user.id
+        action_code = call.data.split(':')[1]
+        try:
             await bot.answer_callback_query(call.id)
-            if chat_id in chat_states and 'parsed_registro' in chat_states[chat_id]:
-                registro = chat_states[chat_id]['parsed_registro']
-                if action_code == 'yes':
-                    db = get_db_connection()
-                    if db:
-                        try:
-                            db.table('demandas_comunicacao').insert(registro).execute()
-                            confirm_msg = (
-                                "✅ **Pauta confirmada e salva com sucesso via IA!**\n\n"
-                                f"📌 **Evento:** {registro['titulo_evento']}\n"
-                                f"📅 **Data:** {registro['data_evento']} às {registro['hora_evento']}\n"
-                                f"📍 **Local:** {registro['local_evento']}\n"
-                                f"👤 **Solicitante:** {registro['solicitante_nome']}\n\n"
-                                "A pauta foi incluída na lista de pendentes e aguarda homologação do supervisor."
-                            )
-                            await bot.edit_message_text(confirm_msg, chat_id, call.message.message_id, parse_mode='Markdown')
-                        except Exception as e_save:
-                            await bot.send_message(chat_id, f"❌ Erro ao salvar pauta: {e_save}")
-                else:
-                    await bot.edit_message_text("❌ *Inclusão da pauta cancelada.*", chat_id, call.message.message_id, parse_mode='Markdown')
-                clear_state(chat_id)
-            return
+        except Exception:
+            pass
+
+        if chat_id in chat_states and 'parsed_registro' in chat_states[chat_id]:
+            registro = chat_states[chat_id]['parsed_registro']
+            if action_code == 'yes':
+                db = get_db_connection()
+                if db:
+                    try:
+                        res = db.table('demandas_comunicacao').insert(registro).execute()
+                        dem_id = res.data[0]['id'] if res and res.data else ''
+                        id_txt = f" (ID #{dem_id})" if dem_id else ""
+                        fotografo_txt = f"\n📸 **Equipe/Fotógrafo:** {registro.get('notificar_militar_ids')}" if registro.get('notificar_militar_ids') else ""
+                        periodo_txt = f" a {registro['data_fim']}" if registro.get('data_fim') and registro['data_fim'] != registro['data_evento'] else ""
+                        
+                        confirm_msg = (
+                            f"✅ **Pauta confirmada e salva com sucesso via IA!**{id_txt}\n\n"
+                            f"📌 **Evento:** {registro['titulo_evento']}\n"
+                            f"📅 **Data:** {registro['data_evento']}{periodo_txt} às {registro['hora_evento']}\n"
+                            f"📍 **Local:** {registro['local_evento']}\n"
+                            f"👤 **Solicitante:** {registro['solicitante_nome']}"
+                            f"{fotografo_txt}\n\n"
+                            "A pauta foi incluída na lista de demandas da COMSOC!"
+                        )
+                        await bot.edit_message_text(confirm_msg, chat_id, call.message.message_id, parse_mode='Markdown')
+                    except Exception as e_save:
+                        await bot.send_message(chat_id, f"❌ Erro ao salvar pauta: {e_save}")
+            else:
+                await bot.edit_message_text("❌ *Inclusão da pauta cancelada.*", chat_id, call.message.message_id, parse_mode='Markdown')
+            clear_state(chat_id)
+        else:
+            await bot.send_message(chat_id, "⚠️ A sessão expirou ou os dados já foram salvos. Envie novamente o texto da pauta se necessário.")
 
     @bot.message_handler(func=lambda msg: True)
     async def handle_all_messages(message):
@@ -2603,18 +2616,28 @@ def register_common_handlers(bot):
                     response_json = ai_helper.digest_demand_questionnaire(text)
                     dados = json.loads(response_json)
                     
+                    equipe_val = dados.get('equipe_escalada') or dados.get('fotografo') or ''
+                    data_fim_val = dados.get('data_fim') or None
+                    tipos_cob = dados.get('tipo_cobertura')
+                    if isinstance(tipos_cob, list):
+                        tipos_cob_json = json.dumps(tipos_cob)
+                    else:
+                        tipos_cob_json = '["foto"]'
+
                     registro = {
                         'solicitante_nome': dados.get('solicitante_nome', 'N/I').upper(),
                         'setor': dados.get('setor', 'Gabinete').upper(),
                         'contato': dados.get('contato', 'N/I'),
                         'titulo_evento': dados.get('titulo_evento', 'Evento Sem Título').upper(),
                         'data_evento': dados.get('data_evento', datetime.now().strftime('%Y-%m-%d')),
+                        'data_fim': data_fim_val,
                         'hora_evento': dados.get('hora_evento', '09:00'),
                         'local_evento': dados.get('local_evento', 'Gabinete').upper(),
-                        'tipo_cobertura': '["foto", "video"]',
+                        'tipo_cobertura': tipos_cob_json,
                         'autoridades': dados.get('autoridades', ''),
                         'score_esforco': 2.0,
-                        'status': 'pendente'
+                        'status': 'pendente',
+                        'notificar_militar_ids': equipe_val.upper() if equipe_val else None
                     }
                     
                     state['parsed_registro'] = registro
@@ -2626,12 +2649,18 @@ def register_common_handlers(bot):
                         types.InlineKeyboardButton("❌ Cancelar", callback_data="confirm_ia_demanda:cancel")
                     )
 
+                    periodo_txt = f" a {data_fim_val}" if data_fim_val and data_fim_val != registro['data_evento'] else ""
+                    equipe_txt = f"📸 **Equipe/Fotógrafo:** {equipe_val.upper()}\n" if equipe_val else ""
+                    aut_txt = f"🎖️ **Autoridades:** {registro['autoridades']}\n" if registro['autoridades'] and registro['autoridades'] != 'Nenhuma' else ""
+
                     confirm_msg = (
                         "🤖 **PRÉ-VISUALIZAÇÃO DA PAUTA EXTRAÍDA PELA IA**\n\n"
                         f"📌 **Evento:** {registro['titulo_evento']}\n"
-                        f"📅 **Data:** {registro['data_evento']} às {registro['hora_evento']}\n"
+                        f"📅 **Data:** {registro['data_evento']}{periodo_txt} às {registro['hora_evento']}\n"
                         f"📍 **Local:** {registro['local_evento']}\n"
-                        f"👤 **Solicitante:** {registro['solicitante_nome']}\n\n"
+                        f"👤 **Solicitante:** {registro['solicitante_nome']}\n"
+                        f"{aut_txt}"
+                        f"{equipe_txt}\n"
                         "⚠️ *Confirma os dados acima para salvar e incluir na agenda?*"
                     )
                     await bot.reply_to(message, confirm_msg, reply_markup=markup, parse_mode='Markdown')

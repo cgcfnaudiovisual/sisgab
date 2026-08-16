@@ -128,16 +128,22 @@ def digest_demand_questionnaire(raw_text: str) -> str:
 
     if _get_google_api_key():
         try:
-            system_prompt = """Você é uma IA encarregada de extrair informações de questionários brutos respondidos por militares e estruturá-las em um objeto JSON válido.
-Extraia as seguintes chaves do texto:
-- solicitante_nome: Nome do solicitante militar (ex: TEN COSTA, SG SILVA)
-- setor: Setor ou divisão solicitante (ex: GABINETE, COMSOC, SECAD)
-- contato: Ramal ou telefone informado
-- titulo_evento: Um título conciso e profissional para o evento/demanda
-- data_evento: Data do evento no formato AAAA-MM-DD.
-- hora_evento: Hora no formato HH:MM (ex: 09:30, 14:00)
-- local_evento: Local do evento
-- autoridades: Autoridades presentes
+            current_year = str(datetime.now().year)
+            system_prompt = f"""Você é uma IA de alta precisão encarregada de extrair e estruturar informações de questionários brutos e solicitações de pauta/cobertura enviadas por militares.
+O ano corrente de referência é {current_year}.
+
+Extraia as seguintes chaves do texto em um objeto JSON:
+- solicitante_nome: Nome do solicitante militar ou autoridade solicitante (ex: "CF CALDAS", "TEN COSTA", "GABINETE").
+- setor: Setor ou divisão solicitante (ex: "GABINETE", "COMSOC", "SECAD").
+- contato: Ramal ou telefone informado (ou "Interno").
+- titulo_evento: Um título claro, conciso e profissional em letras maiúsculas para a pauta/evento (ex: "ACOMPANHAMENTO DO CF CALDAS - SÃO PAULO").
+- data_evento: Data de início do evento no formato AAAA-MM-DD (considere o ano {current_year}).
+- data_fim: Data de término do evento no formato AAAA-MM-DD se houver período (ex: se for 17/08 a 19/08, data_fim é {current_year}-08-19). Se for 1 único dia, deixe null.
+- hora_evento: Hora no formato HH:MM (ex: 09:00, 14:30).
+- local_evento: Local do evento completo (ex: "8º DISTRITO NAVAL, SÃO PAULO").
+- equipe_escalada: Nome do fotógrafo, cinegrafista ou militar escalado para a cobertura (ex: "SG BORGES", "CB SILVA"). Se não houver, deixe null.
+- tipo_cobertura: Lista com serviços necessários (ex: ["foto"], ["video"], ["foto", "video"]). Se mencionar fotógrafo/foto, inclua "foto".
+- autoridades: Autoridades presentes ou acompanhadas (ex: "CF CALDAS").
 
 Retorne APENAS um objeto JSON válido, sem cercas de markdown (```json), sem explicações."""
             model = genai.GenerativeModel(_get_gemini_model_name(), system_instruction=system_prompt)
@@ -152,7 +158,7 @@ Retorne APENAS um objeto JSON válido, sem cercas de markdown (```json), sem exp
             if isinstance(ai_data, dict):
                 for k, v in ai_data.items():
                     if v and str(v).strip() and str(v).strip().lower() != 'null':
-                        extracted[k] = str(v).strip()
+                        extracted[k] = v if isinstance(v, list) else str(v).strip()
         except Exception as e:
             print(f"[DIGEST IA ERR] {e}")
 
