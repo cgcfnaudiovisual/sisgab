@@ -183,32 +183,32 @@ body {
     if (!canvas) {
       canvas = document.createElement('canvas');
       canvas.id = 'antigravity-canvas';
-      canvas.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 0; opacity: 0.9;';
+      canvas.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 0; opacity: 0.85;';
       document.body.prepend(canvas);
     }
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: true });
     let width = canvas.width = window.innerWidth;
     let height = canvas.height = window.innerHeight;
 
     window.addEventListener('resize', function() {
       width = canvas.width = window.innerWidth;
       height = canvas.height = window.innerHeight;
-    });
+    }, { passive: true });
 
     const isMobile = window.innerWidth < 768;
-    const particleCount = isMobile ? 22 : 65;
+    const particleCount = isMobile ? 14 : 32;
     const particles = [];
-    const mouse = { x: -1000, y: -1000, radius: 160 };
+    const mouse = { x: -1000, y: -1000, radius: 140 };
 
     window.addEventListener('mousemove', function(e) {
       mouse.x = e.clientX;
       mouse.y = e.clientY;
-    });
+    }, { passive: true });
 
     window.addEventListener('mouseleave', function() {
       mouse.x = -1000;
       mouse.y = -1000;
-    });
+    }, { passive: true });
 
     class Particle {
       constructor() {
@@ -216,13 +216,13 @@ body {
       }
       reset() {
         this.x = Math.random() * width;
-        this.y = height + Math.random() * 100;
-        this.size = Math.random() * 2.5 + 1.5;
-        this.speedY = Math.random() * 0.8 + 0.4;
-        this.speedX = (Math.random() - 0.5) * 0.5;
-        this.alpha = Math.random() * 0.7 + 0.35;
+        this.y = height + Math.random() * 80;
+        this.size = Math.random() * 2 + 1.2;
+        this.speedY = Math.random() * 0.7 + 0.35;
+        this.speedX = (Math.random() - 0.5) * 0.4;
+        this.alpha = Math.random() * 0.6 + 0.35;
         this.color = Math.random() > 0.3 ? '212, 175, 55' : '255, 193, 7';
-        this.isBadge = Math.random() < 0.35; // 35% de emblemas dourados dos Fuzileiros Navais
+        this.isBadge = Math.random() < 0.30;
       }
       update() {
         this.y -= this.speedY;
@@ -230,13 +230,14 @@ body {
 
         const dx = mouse.x - this.x;
         const dy = mouse.y - this.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        const distSq = dx * dx + dy * dy;
 
-        if (dist < mouse.radius) {
-          const force = (mouse.radius - dist) / mouse.radius;
+        if (distSq < 19600) { // 140^2
+          const dist = Math.sqrt(distSq);
+          const force = (140 - dist) / 140;
           const angle = Math.atan2(dy, dx);
-          this.x -= Math.cos(angle) * force * 4;
-          this.y -= Math.sin(angle) * force * 4;
+          this.x -= Math.cos(angle) * force * 3;
+          this.y -= Math.sin(angle) * force * 3;
         }
 
         if (this.y < -20 || this.x < -20 || this.x > width + 20) {
@@ -247,57 +248,75 @@ body {
         if (this.isBadge && fnBadgeImg.complete && fnBadgeImg.naturalWidth !== 0) {
           ctx.save();
           ctx.globalAlpha = this.alpha;
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = 'rgba(212, 175, 55, 0.9)';
-          const bSize = this.size * 6.5 + 12;
+          const bSize = this.size * 5.5 + 10;
           ctx.drawImage(fnBadgeImg, this.x - bSize/2, this.y - bSize/2, bSize, bSize);
           ctx.restore();
         } else {
-          ctx.beginPath();
-          ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+          // Núcleo nítido e halo leve sem o custo pesado de shadowBlur
           ctx.fillStyle = `rgba(${this.color}, ${this.alpha})`;
-          ctx.shadowBlur = 12;
-          ctx.shadowColor = `rgba(${this.color}, 0.95)`;
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.size, 0, 6.28318);
+          ctx.fill();
+
+          ctx.fillStyle = `rgba(${this.color}, ${this.alpha * 0.25})`;
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.size * 2.2, 0, 6.28318);
           ctx.fill();
         }
       }
     }
 
-
     for (let i = 0; i < particleCount; i++) {
       particles.push(new Particle());
     }
 
+    let isRunning = true;
+    document.addEventListener('visibilitychange', function() {
+      if (document.hidden) {
+        isRunning = false;
+      } else if (!isRunning) {
+        isRunning = true;
+        requestAnimationFrame(animate);
+      }
+    });
+
+    const maxDistSq = 95 * 95; // 9025
+
     function animate() {
+      if (!isRunning) return;
+
       ctx.clearRect(0, 0, width, height);
 
+      // 1. Atualiza e desenha partículas
       for (let i = 0; i < particles.length; i++) {
         particles[i].update();
         particles[i].draw();
+      }
 
+      // 2. Desenha conexões em lote (Único stroke call por frame)
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(197, 160, 89, 0.12)';
+      ctx.lineWidth = 0.55;
+      let hasLines = false;
+
+      for (let i = 0; i < particles.length; i++) {
+        const pi = particles[i];
         for (let j = i + 1; j < particles.length; j++) {
-          const dx = particles[i].x - particles[j].x;
-          const dy = particles[i].y - particles[j].y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
+          const pj = particles[j];
+          const dx = pi.x - pj.x;
+          const dy = pi.y - pj.y;
+          const distSq = dx * dx + dy * dy;
 
-          if (dist < 110) {
-            ctx.beginPath();
-            ctx.moveTo(particles[i].x, particles[i].y);
-            ctx.lineTo(particles[j].x, particles[j].y);
-            ctx.strokeStyle = `rgba(197, 160, 89, ${0.15 * (1 - dist / 110)})`;
-            ctx.lineWidth = 0.6;
-            ctx.stroke();
+          if (distSq < maxDistSq) {
+            ctx.moveTo(pi.x, pi.y);
+            ctx.lineTo(pj.x, pj.y);
+            hasLines = true;
           }
         }
       }
 
-      if (mouse.x > 0 && mouse.y > 0) {
-        const gradient = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 160);
-        gradient.addColorStop(0, 'rgba(197, 160, 89, 0.08)');
-        gradient.addColorStop(0.5, 'rgba(197, 160, 89, 0.02)');
-        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, width, height);
+      if (hasLines) {
+        ctx.stroke();
       }
 
       requestAnimationFrame(animate);
