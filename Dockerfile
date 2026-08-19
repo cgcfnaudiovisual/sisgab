@@ -1,7 +1,21 @@
-# Usa uma imagem oficial leve do Python
+# ==========================================
+# Estágio 1: Build do Frontend React (Vite)
+# ==========================================
+FROM node:20-alpine AS frontend-builder
+WORKDIR /app/frontend-react
+
+COPY frontend-react/package*.json ./
+RUN npm ci
+
+COPY frontend-react/ ./
+RUN npm run build
+
+# ==========================================
+# Estágio 2: Runtime Python & Servidor SisGAB 2.0
+# ==========================================
 FROM python:3.10-slim
 
-# Instala dependências de compilação e bibliotecas de sistema necessárias para InsightFace e OpenCV
+# Instala dependências de sistema para InsightFace e OpenCV
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libgl1 \
@@ -9,30 +23,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Cria usuário não-root com UID 1000
-RUN useradd -m -u 1000 appuser
-
-# Define o diretório de trabalho
 WORKDIR /app
 
-# Copia o arquivo de dependências primeiro (otimiza cache do docker)
+# Instala dependências do Python
 COPY requirements.txt .
-
-# Instala as dependências do seu SisGAB (incluindo insightface e onnxruntime)
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia todo o resto do código para dentro do container
-COPY --chown=appuser:appuser . .
+# Copia código do backend e utilitários
+COPY . .
 
-# Ajusta permissões extras da pasta
-RUN chown -R appuser:appuser /app
-
-# Muda para o usuário não-root
-USER appuser
+# Copia a pasta de distribuição do React compilada no Estágio 1
+COPY --from=frontend-builder /app/frontend-react/dist /app/frontend-react/dist
 
 EXPOSE 8080
 ENV PORT=8080
 ENV UVICORN_FORWARDED_ALLOW_IPS=*
 ENV UVICORN_PROXY_HEADERS=true
+ENV PYTHONUNBUFFERED=1
 
-CMD ["python", "main.py"]
+CMD ["python", "server.py"]

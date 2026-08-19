@@ -34,5 +34,10 @@ backups/
 *.backup
 *.bak
 
+# Node / React
+node_modules/
+dist/
+.vite/
+
 # Docker
 .docker/
