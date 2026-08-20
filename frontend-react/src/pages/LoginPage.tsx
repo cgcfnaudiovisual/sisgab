@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Shield,
@@ -12,19 +12,31 @@ import {
   HelpCircle,
   X,
   CheckCircle2,
+  Palette,
+  Upload,
+  RotateCcw,
+  Image as ImageIcon,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../api/supabase';
 import { useAuth } from '../context/AuthContext';
 import { AntigravityBackground } from '../components/common/AntigravityBackground';
+import defaultBrasao from '../assets/brasaocgcfn.png';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { login, isLoading } = useAuth();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
-  const [realUsers, setRealUsers] = useState<any[]>([]);
+
+  // Logo Customizado
+  const [logoSrc, setLogoSrc] = useState<string>(() => {
+    return localStorage.getItem('sisgab_custom_logo') || defaultBrasao;
+  });
+  const [logoModalOpen, setLogoModalOpen] = useState(false);
+  const [customLogoUrl, setCustomLogoUrl] = useState('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Modais de Recuperação e Novo Cadastro
   const [recuperarModal, setRecuperarModal] = useState(false);
@@ -41,29 +53,6 @@ export const LoginPage: React.FC = () => {
     email: '',
     senha: '',
   });
-
-  useEffect(() => {
-    loadRealMilitaryPersonnel();
-  }, []);
-
-  const loadRealMilitaryPersonnel = async () => {
-    try {
-      const { data } = await supabase
-        .from('efetivo')
-        .select('*')
-        .order('antiguidade_num', { ascending: true })
-        .limit(6);
-
-      if (data && data.length > 0) {
-        setRealUsers(data);
-        if (!identifier) {
-          setIdentifier(data[0].nome_guerra);
-        }
-      }
-    } catch {
-      // Ignore
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,19 +75,42 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleQuickLogin = (militar: any) => {
-    setIdentifier(militar.nome_guerra);
-    // Para operadores com senha padrão conhecida
-    const testPwd = militar.nome_guerra === 'ADMIN' ? 'admin' : 'militar123';
-    login(militar.nome_guerra, testPwd).then((res) => {
-      if (res.success) {
-        toast.success(`Autenticado com sucesso como ${militar.nome_guerra}!`);
-        navigate('/');
-      } else {
-        setPassword('');
-        toast.info(`Digite a senha do militar ${militar.nome_guerra} para entrar.`);
+  // Upload de Logo Customizado
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Selecione um arquivo de imagem válido (PNG, JPG ou SVG).');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      if (base64) {
+        localStorage.setItem('sisgab_custom_logo', base64);
+        setLogoSrc(base64);
+        toast.success('Logo inicial personalizado com sucesso!');
+        setLogoModalOpen(false);
       }
-    });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleApplyLogoUrl = () => {
+    if (!customLogoUrl.trim()) return;
+    localStorage.setItem('sisgab_custom_logo', customLogoUrl.trim());
+    setLogoSrc(customLogoUrl.trim());
+    toast.success('Logo atualizado via URL!');
+    setLogoModalOpen(false);
+  };
+
+  const handleResetDefaultLogo = () => {
+    localStorage.removeItem('sisgab_custom_logo');
+    setLogoSrc(defaultBrasao);
+    toast.info('Brasão oficial padrão do CGCFN restaurado.');
+    setLogoModalOpen(false);
   };
 
   // Solicitar PIN de Recuperação
@@ -107,8 +119,6 @@ export const LoginPage: React.FC = () => {
       toast.error('Informe um e-mail válido cadastrado.');
       return;
     }
-
-    const generatedPin = Math.floor(100000 + Math.random() * 900000).toString();
     setRecStep(2);
     toast.success(`Código PIN gerado! Solicitação de segurança registrada.`);
   };
@@ -137,12 +147,11 @@ export const LoginPage: React.FC = () => {
     }
 
     try {
-      // Cria na tabela efetivo do Supabase
       await supabase.from('efetivo').insert({
         nome_guerra: novoCadastro.nome_guerra.toUpperCase(),
         posto_grad: novoCadastro.posto_grad,
         email: novoCadastro.email.toLowerCase(),
-        senha_hash: novoCadastro.senha, // bcrypt/plaintext
+        senha_hash: novoCadastro.senha,
         role: 'militar',
         categoria: 'militar',
         antiguidade_num: 99,
@@ -177,13 +186,30 @@ export const LoginPage: React.FC = () => {
         {/* Glow Superior */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-1 bg-[#c5a059] shadow-lg shadow-[#c5a059]"></div>
 
-        {/* ⚓ Brasão Imponente Oficial do CGCFN */}
-        <div className="text-center space-y-2">
-          <img
-            src="/brasaocgcfn.png"
-            alt="Brasão Oficial CGCFN"
-            className="w-32 h-32 mx-auto object-contain drop-shadow-[0_0_20px_rgba(197,160,89,0.7)] hover:scale-105 transition-transform duration-300"
-          />
+        {/* ⚓ Brasão / Logo Oficial Personalizável */}
+        <div className="text-center space-y-2 relative group">
+          <div className="relative inline-block">
+            <img
+              src={logoSrc}
+              alt="Brasão Oficial CGCFN"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src = defaultBrasao;
+              }}
+              className="w-32 h-32 mx-auto object-contain drop-shadow-[0_0_20px_rgba(197,160,89,0.7)] hover:scale-105 transition-transform duration-300 cursor-pointer"
+              onClick={() => setLogoModalOpen(true)}
+              title="Clique para personalizar o Logo do SisGAB"
+            />
+            {/* Botão sutil de personalização */}
+            <button
+              type="button"
+              onClick={() => setLogoModalOpen(true)}
+              className="absolute bottom-0 right-0 p-1.5 rounded-full bg-slate-900/90 border border-[#c5a059] text-[#e5c07b] hover:scale-110 transition-all opacity-0 group-hover:opacity-100 shadow-md"
+              title="Personalizar Logo Inicial"
+            >
+              <Palette className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           <div>
             <h1 className="text-3xl font-black text-[#c5a059] tracking-wider cyber-title leading-none mt-1">
               SisGAB
@@ -247,36 +273,16 @@ export const LoginPage: React.FC = () => {
         </form>
 
         {/* Botão de Solicitação de Novo Cadastro */}
-        <div className="pt-2 text-center">
+        <div className="pt-1 text-center">
           <button
             type="button"
             onClick={() => setCadastroModal(true)}
-            className="text-xs text-slate-400 hover:text-white font-bold flex items-center justify-center gap-1.5 mx-auto"
+            className="text-xs text-slate-400 hover:text-white font-bold flex items-center justify-center gap-1.5 mx-auto transition-colors"
           >
             <UserPlus className="w-3.5 h-3.5 text-[#00e5ff]" />
             <span>Não tem conta? Solicitar Acesso</span>
           </button>
         </div>
-
-        {/* Acesso Rápido para Militares Reais do Banco */}
-        {realUsers.length > 0 && (
-          <div className="pt-3 border-t border-slate-800 space-y-2">
-            <p className="text-[10px] text-slate-400 text-center font-semibold uppercase tracking-wider">
-              Operadores Cadastrados no Banco:
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {realUsers.map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => handleQuickLogin(m)}
-                  className="p-2 rounded-lg bg-slate-900/90 border border-slate-800 hover:border-[#c5a059] text-[11px] text-slate-300 hover:text-white text-left transition-colors truncate"
-                >
-                  ⚓ {m.nome_guerra} ({m.posto_grad || m.role})
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Rodapé de Créditos Institucionais */}
         <div className="text-center pt-3 border-t border-slate-800/60">
@@ -288,6 +294,93 @@ export const LoginPage: React.FC = () => {
           </p>
         </div>
       </div>
+
+      {/* ── MODAL DE PERSONALIZAÇÃO DE LOGO ── */}
+      {logoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md p-6 rounded-3xl bg-[#0b1222] border-2 border-[#c5a059]/60 space-y-4 shadow-2xl text-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Palette className="w-5 h-5 text-[#c5a059]" />
+                <h3 className="text-sm font-black text-white uppercase">Personalizar Logo de Acesso</h3>
+              </div>
+              <button onClick={() => setLogoModalOpen(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-slate-300">
+              Escolha uma imagem do seu computador ou informe a URL para ser exibida como brasão/logo principal do SisGAB:
+            </p>
+
+            {/* Prévia Atual */}
+            <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 text-center space-y-2">
+              <img
+                src={logoSrc}
+                alt="Prévia do Logo"
+                className="w-24 h-24 mx-auto object-contain drop-shadow-md"
+              />
+              <span className="text-[10px] text-slate-400 block font-semibold">Prévia Atual</span>
+            </div>
+
+            {/* Upload do Arquivo */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/png, image/jpeg, image/svg+xml, image/webp"
+              onChange={handleLogoUpload}
+              className="hidden"
+            />
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full py-2.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-[#c5a059] text-white font-bold flex items-center justify-center gap-2"
+              >
+                <Upload className="w-4 h-4 text-[#c5a059]" />
+                <span>Escolher Imagem do Computador</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Ou cole a URL da imagem (https://...)"
+                  value={customLogoUrl}
+                  onChange={(e) => setCustomLogoUrl(e.target.value)}
+                  className="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-[#c5a059]"
+                />
+                <button
+                  type="button"
+                  onClick={handleApplyLogoUrl}
+                  className="px-3.5 py-2 rounded-xl bg-[#c5a059] text-slate-950 font-bold hover:bg-[#d6b26b]"
+                >
+                  Salvar
+                </button>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={handleResetDefaultLogo}
+                className="text-xs text-rose-400 hover:text-rose-300 font-bold flex items-center gap-1"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Restaurar Brasão Padrão CGCFN</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setLogoModalOpen(false)}
+                className="px-4 py-1.5 rounded-xl bg-slate-800 text-slate-200 font-bold hover:bg-slate-700"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── MODAL DE RECUPERAÇÃO DE SENHA (PIN 6 DÍGITOS) ── */}
       {recuperarModal && (
@@ -318,32 +411,21 @@ export const LoginPage: React.FC = () => {
                   placeholder="seu.email@marinha.mil.br"
                   value={recEmail}
                   onChange={(e) => setRecEmail(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-[#c5a059]"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-[#c5a059]"
                 />
 
-                <div className="flex items-center justify-end gap-2 pt-2">
-                  <button
-                    onClick={() => setRecuperarModal(false)}
-                    className="px-3.5 py-1.5 rounded-xl bg-slate-800 text-slate-300 font-semibold"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={handleRequestPin}
-                    className="px-4 py-1.5 rounded-xl bg-[#c5a059] text-slate-950 font-bold"
-                  >
-                    Enviar Código PIN
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleRequestPin}
+                  className="w-full py-2.5 rounded-xl bg-[#c5a059] text-slate-950 font-bold hover:bg-[#d6b26b]"
+                >
+                  Enviar Código PIN
+                </button>
               </div>
             ) : (
               <form onSubmit={handleResetPassword} className="space-y-3 text-xs">
-                <p className="text-slate-400">
-                  Insira o código PIN de 6 dígitos recebido e defina sua nova senha:
-                </p>
-
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Código PIN (6 Dígitos)</label>
+                  <label className="block text-slate-400 font-bold mb-1">Código PIN (6 dígitos):</label>
                   <input
                     type="text"
                     required
@@ -351,47 +433,38 @@ export const LoginPage: React.FC = () => {
                     placeholder="123456"
                     value={recPin}
                     onChange={(e) => setRecPin(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-center font-mono font-black text-sm focus:outline-none focus:border-[#c5a059]"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-center tracking-widest font-mono text-sm focus:outline-none focus:border-[#c5a059]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Nova Senha</label>
+                  <label className="block text-slate-400 font-bold mb-1">Nova Senha:</label>
                   <input
                     type="password"
                     required
                     placeholder="••••••••"
                     value={recNovaSenha}
                     onChange={(e) => setRecNovaSenha(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-[#c5a059]"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-[#c5a059]"
                   />
                 </div>
 
-                <div className="flex items-center justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setRecStep(1)}
-                    className="px-3.5 py-1.5 rounded-xl bg-slate-800 text-slate-300 font-semibold"
-                  >
-                    Voltar
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-1.5 rounded-xl bg-[#c5a059] text-slate-950 font-bold"
-                  >
-                    Redefinir Senha
-                  </button>
-                </div>
+                <button
+                  type="submit"
+                  className="w-full py-2.5 rounded-xl bg-[#c5a059] text-slate-950 font-bold hover:bg-[#d6b26b]"
+                >
+                  Salvar Nova Senha
+                </button>
               </form>
             )}
           </div>
         </div>
       )}
 
-      {/* ── MODAL DE SOLICITAÇÃO DE NOVO ACESSO / CADASTRO ── */}
+      {/* ── MODAL DE SOLICITAÇÃO DE NOVO ACESSO ── */}
       {cadastroModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-md p-6 rounded-3xl bg-[#0b1222] border-2 border-[#00e5ff]/40 space-y-4 shadow-2xl">
+          <div className="w-full max-w-md p-6 rounded-3xl bg-[#0b1222] border-2 border-[#00e5ff]/50 space-y-4 shadow-2xl text-xs">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-black text-white flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-[#00e5ff]" />
@@ -405,87 +478,88 @@ export const LoginPage: React.FC = () => {
               </button>
             </div>
 
-            <p className="text-xs text-slate-400">
-              Preencha seus dados militares para que o Chefe de Gabinete homologue suas permissões.
-            </p>
-
-            <form onSubmit={handleSolicitarCadastro} className="space-y-3 text-xs">
+            <form onSubmit={handleSolicitarCadastro} className="space-y-3">
               <div>
-                <label className="block text-slate-300 font-medium mb-1">Nome Completo *</label>
+                <label className="block text-slate-400 font-bold mb-1">Nome Completo:</label>
                 <input
                   type="text"
                   required
-                  placeholder="Ex: João da Silva Santos"
+                  placeholder="Ex: Carlos Eduardo de Souza"
                   value={novoCadastro.nome_completo}
                   onChange={(e) => setNovoCadastro({ ...novoCadastro, nome_completo: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-[#00e5ff]"
+                  className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-[#00e5ff]"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Nome de Guerra *</label>
+                  <label className="block text-slate-400 font-bold mb-1">Nome de Guerra:</label>
                   <input
                     type="text"
                     required
-                    placeholder="Ex: SILVA"
+                    placeholder="Ex: SOUZA"
                     value={novoCadastro.nome_guerra}
                     onChange={(e) => setNovoCadastro({ ...novoCadastro, nome_guerra: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-[#00e5ff]"
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-[#00e5ff]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Posto / Graduação</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: 1ºSG (FN)"
+                  <label className="block text-slate-400 font-bold mb-1">Posto / Graduação:</label>
+                  <select
                     value={novoCadastro.posto_grad}
                     onChange={(e) => setNovoCadastro({ ...novoCadastro, posto_grad: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none"
-                  />
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-[#00e5ff]"
+                  >
+                    <option value="AE (FN)">AE (FN)</option>
+                    <option value="VA (FN)">VA (FN)</option>
+                    <option value="CA (FN)">CA (FN)</option>
+                    <option value="CMG (FN)">CMG (FN)</option>
+                    <option value="CF (FN)">CF (FN)</option>
+                    <option value="CC (FN)">CC (FN)</option>
+                    <option value="CT (FN)">CT (FN)</option>
+                    <option value="1ºTen (FN)">1ºTen (FN)</option>
+                    <option value="2ºTen (FN)">2ºTen (FN)</option>
+                    <option value="SO (FN)">SO (FN)</option>
+                    <option value="1ºSG (FN)">1ºSG (FN)</option>
+                    <option value="2ºSG (FN)">2ºSG (FN)</option>
+                    <option value="3ºSG (FN)">3ºSG (FN)</option>
+                    <option value="CB (FN)">CB (FN)</option>
+                    <option value="Civil">Civil / Prestador</option>
+                  </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-300 font-medium mb-1">E-mail Institucional *</label>
+                <label className="block text-slate-400 font-bold mb-1">E-mail Militar / Institucional:</label>
                 <input
                   type="email"
                   required
-                  placeholder="silva@marinha.mil.br"
+                  placeholder="souza@marinha.mil.br"
                   value={novoCadastro.email}
                   onChange={(e) => setNovoCadastro({ ...novoCadastro, email: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-[#00e5ff]"
+                  className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-[#00e5ff]"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 font-medium mb-1">Senha Desejada *</label>
+                <label className="block text-slate-400 font-bold mb-1">Senha Desejada:</label>
                 <input
                   type="password"
                   required
-                  placeholder="Mínimo 6 caracteres"
+                  placeholder="••••••••"
                   value={novoCadastro.senha}
                   onChange={(e) => setNovoCadastro({ ...novoCadastro, senha: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-[#00e5ff]"
+                  className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-[#00e5ff]"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setCadastroModal(false)}
-                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 text-slate-300 font-semibold"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 rounded-xl bg-[#00e5ff] text-slate-950 font-bold"
-                >
-                  Enviar Solicitação
-                </button>
-              </div>
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-xl bg-[#00e5ff] text-slate-950 font-black hover:bg-cyan-300 transition-all shadow-md shadow-[#00e5ff]/20"
+              >
+                Enviar Solicitação
+              </button>
             </form>
           </div>
         </div>

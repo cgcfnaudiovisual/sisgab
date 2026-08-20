@@ -25,6 +25,7 @@ import {
   SlidersHorizontal,
   Cpu,
   Globe,
+  Upload,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
@@ -1280,6 +1281,69 @@ export const SystemSettings: React.FC = () => {
                     onChange={(e) => setConfigData({ ...configData, codigo_desbloqueio_tv: e.target.value })}
                     className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono focus:outline-none"
                   />
+                </div>
+              </div>
+
+              {/* ── IDENTIDADE VISUAL & LOGO DO SISTEMA ── */}
+              <div className="pt-4 border-t border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-black text-[#c5a059] flex items-center gap-2">
+                    <Sparkles className="w-4 h-4" />
+                    <span>Identidade Visual & Brasão / Logo Principal</span>
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      localStorage.removeItem('sisgab_custom_logo');
+                      toast.info('Brasão oficial padrão do CGCFN restaurado.');
+                    }}
+                    className="text-xs text-rose-400 hover:text-rose-300 font-bold"
+                  >
+                    Restaurar Brasão Padrão
+                  </button>
+                </div>
+                <p className="text-slate-400 text-xs">
+                  Personalize o brasão/logo exibido na tela de login, barra lateral e cabeçalho do SisGAB.
+                </p>
+
+                <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                  <img
+                    src={localStorage.getItem('sisgab_custom_logo') || '/brasaocgcfn.png'}
+                    alt="Logo do SisGAB"
+                    className="w-20 h-20 object-contain drop-shadow-md rounded-xl bg-slate-900/60 p-1 border border-slate-700"
+                  />
+                  <div className="flex-1 space-y-2">
+                    <input
+                      type="file"
+                      id="system-logo-upload"
+                      accept="image/png, image/jpeg, image/svg+xml, image/webp"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const b64 = event.target?.result as string;
+                            if (b64) {
+                              localStorage.setItem('sisgab_custom_logo', b64);
+                              toast.success('Logo do sistema atualizado com sucesso!');
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="system-logo-upload"
+                      className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 hover:border-[#c5a059] text-white font-bold text-xs inline-flex items-center gap-2 cursor-pointer transition-colors"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-[#c5a059]" />
+                      <span>Fazer Upload de Novo Logo (PNG / SVG / JPG)</span>
+                    </label>
+                    <span className="block text-[10px] text-slate-500">
+                      Recomendado: imagem transparente PNG ou SVG quadrada de 512x512px.
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>

@@ -262,8 +262,11 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ isOpen, onClose }) => {
         <div className="h-16 px-4 flex items-center justify-between border-b border-[#c5a059]/15 bg-[#0b1222]">
           <div className="flex items-center gap-3">
             <img
-              src="/brasaocgcfn.png"
+              src={localStorage.getItem('sisgab_custom_logo') || '/brasaocgcfn.png'}
               alt="Brasão CGCFN"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src = '/brasaocgcfn.png';
+              }}
               className="w-10 h-10 object-contain drop-shadow-[0_0_8px_rgba(197,160,89,0.5)] shrink-0"
             />
             <div>
