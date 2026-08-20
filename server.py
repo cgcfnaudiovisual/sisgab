@@ -1,27 +1,86 @@
 import os
-import sys
-if hasattr(sys.stdout, 'reconfigure'):
-    try:
-        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-    except Exception:
-        pass
 import io
 import time
 import json
 import re
 import asyncio
+import threading
 import numpy as np
 from pathlib import Path
+from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI, Request, UploadFile, File, Form
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 load_dotenv()
 
-app = FastAPI(title="SisGAB 2.0 - Servidor de Produção & Motor Híbrido")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+REACT_DIST_DIR = os.path.join(BASE_DIR, "frontend-react", "dist")
+ASSETS_DIR = os.path.join(REACT_DIST_DIR, "assets")
+
+# ── Endpoints de Reconhecimento Facial Sob Demanda ──
+try:
+    from portal_convidado import _extract_selfie_embedding, _get_event_matrix, _get_selfie_app, _get_geral_photos
+except Exception as e_import:
+    print(f"[WARN] Erro ao importar portal_convidado: {e_import}")
+    _extract_selfie_embedding = None
+    _get_event_matrix = None
+    _get_selfie_app = None
+    _get_geral_photos = None
+
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    # ── STARTUP (TOTALMENTE ASSÍNCRONO EM SEGUNDO PLANO) ──
+    def _bg_worker():
+        print("⚓ [SisGAB 2.0] Pré-aquecendo motor de IA facial e matrizes em RAM...", flush=True)
+        try:
+            if _get_selfie_app:
+                _get_selfie_app()
+            if _get_event_matrix:
+                _get_event_matrix("50")
+        except Exception as e:
+            print(f"[SisGAB] ⚠️ Aviso na inicialização da IA: {e}", flush=True)
+
+        try:
+            import telegram_bot
+            print("🤖 [SisGAB 2.0] Inicializando Bot do Telegram em thread dedicada...", flush=True)
+            bot_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(bot_loop)
+            bot_loop.run_until_complete(telegram_bot.init_bot())
+            bot_loop.run_forever()
+        except Exception as e:
+            print(f"[SisGAB] ⚠️ Erro no Bot do Telegram: {e}", flush=True)
+
+    t_bg = threading.Thread(target=_bg_worker, daemon=True, name="SisGAB-BackgroundEngine")
+    t_bg.start()
+
+    try:
+        from alerts_manager import AlertsManager
+        from notifications_manager import start_19h_briefing_scheduler, start_15h_demand_scheduler
+        AlertsManager.start_alerts_scheduler()
+        start_19h_briefing_scheduler()
+        start_15h_demand_scheduler()
+        print("⏰ [SisGAB 2.0] Agendadores de notificações (15h / 19h / Alertas) ativos.", flush=True)
+    except Exception as e:
+        print(f"[SisGAB] ⚠️ Erro ao iniciar agendadores: {e}", flush=True)
+
+    yield
+
+    # ── SHUTDOWN ──
+    try:
+        import telegram_bot
+        await telegram_bot.stop_bot()
+        print("🤖 [SisGAB 2.0] Bot do Telegram encerrado.", flush=True)
+    except Exception as e:
+        print(f"[SisGAB] Erro ao encerrar bot: {e}", flush=True)
+
+app = FastAPI(
+    title="SisGAB 2.0 - Servidor de Produção & Motor Híbrido",
+    lifespan=lifespan
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,10 +89,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-REACT_DIST_DIR = os.path.join(BASE_DIR, "frontend-react", "dist")
-ASSETS_DIR = os.path.join(REACT_DIST_DIR, "assets")
 
 # Monta assets do React (JS/CSS/Imagens)
 if os.path.exists(ASSETS_DIR):
@@ -53,52 +108,6 @@ async def health_check():
         "version": "2.0.0",
         "react_ready": os.path.exists(os.path.join(REACT_DIST_DIR, "index.html"))
     }
-
-# ── Endpoints de Reconhecimento Facial Sob Demanda ──
-try:
-    from portal_convidado import _extract_selfie_embedding, _get_event_matrix, _get_selfie_app, _get_geral_photos
-except Exception as e_import:
-    print(f"[WARN] Erro ao importar portal_convidado: {e_import}")
-    _extract_selfie_embedding = None
-    _get_event_matrix = None
-    _get_selfie_app = None
-    _get_geral_photos = None
-
-@app.on_event("startup")
-async def startup_event():
-    print("⚓ [SisGAB 2.0] Pré-aquecendo motor de IA facial e matrizes em RAM...")
-    try:
-        if _get_selfie_app:
-            asyncio.create_task(asyncio.to_thread(_get_selfie_app))
-        if _get_event_matrix:
-            asyncio.create_task(asyncio.to_thread(_get_event_matrix, "50"))
-    except Exception as e:
-        print(f"[SisGAB] ⚠️ Aviso na inicialização da IA: {e}")
-
-    try:
-        import telegram_bot
-        print("🤖 [SisGAB 2.0] Inicializando Bot do Telegram...", flush=True)
-        asyncio.create_task(telegram_bot.init_bot())
-    except Exception as e:
-        print(f"[SisGAB] ⚠️ Erro ao inicializar Telegram Bot: {e}", flush=True)
-
-    try:
-        from notifications_manager import AlertsManager, start_19h_briefing_scheduler, start_15h_demand_scheduler
-        AlertsManager.start_alerts_scheduler()
-        start_19h_briefing_scheduler()
-        start_15h_demand_scheduler()
-        print("⏰ [SisGAB 2.0] Agendadores de notificações (15h / 19h) ativos.", flush=True)
-    except Exception as e:
-        print(f"[SisGAB] ⚠️ Erro ao iniciar agendadores: {e}", flush=True)
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    try:
-        import telegram_bot
-        await telegram_bot.stop_bot()
-        print("🤖 [SisGAB 2.0] Bot do Telegram encerrado.", flush=True)
-    except Exception as e:
-        print(f"[SisGAB] Erro ao encerrar bot: {e}", flush=True)
 
 def get_event_drive_photos(event_id: str):
     """
@@ -125,33 +134,22 @@ def get_event_drive_photos(event_id: str):
         
         if not dem:
             return None
-
-        # Extrai folder_id e drive_url de todos os campos possíveis da demanda
-        raw_candidates = [
-            str(dem.get('drive_url') or ''),
-            str(dem.get('drive_link') or ''),
-            str(dem.get('drive_folder_id') or ''),
-            str(dem.get('autoridades') or ''),
-            str(dem.get('arquivo_url') or '')
-        ]
-        combined_text = ' '.join(raw_candidates)
-
-        drive_folder_id = ''
+            
         drive_url = dem.get('drive_url') or dem.get('drive_link') or ''
-
-        m = re.search(r'folders/([a-zA-Z0-9_-]+)', combined_text)
-        if m:
-            drive_folder_id = m.group(1)
-        elif '/d/' in combined_text:
-            m2 = re.search(r'/d/([a-zA-Z0-9_-]+)', combined_text)
-            if m2:
-                drive_folder_id = m2.group(1)
-        elif dem.get('drive_folder_id'):
-            drive_folder_id = str(dem.get('drive_folder_id')).strip()
-
-        if drive_folder_id and not drive_url:
-            drive_url = f"https://drive.google.com/drive/folders/{drive_folder_id}"
-
+        drive_folder_id = dem.get('drive_folder_id') or ''
+        
+        # Extrai folder_id se for URL
+        if not drive_folder_id and drive_url:
+            m = re.search(r'folders/([a-zA-Z0-9_-]+)', drive_url)
+            if m:
+                drive_folder_id = m.group(1)
+            elif '/d/' in drive_url:
+                m2 = re.search(r'/d/([a-zA-Z0-9_-]+)', drive_url)
+                if m2:
+                    drive_folder_id = m2.group(1)
+            elif len(drive_url.strip()) in (28, 33, 34, 44) and '/' not in drive_url:
+                drive_folder_id = drive_url.strip()
+                
         # Se for o evento 50 (Veteranos) e tiver o json local, carrega rápido
         local_json_path = os.path.join(REACT_DIST_DIR, f"event_{event_id}_photos.json")
         if not drive_folder_id and str(event_id) == "50" and os.path.exists(local_json_path):
@@ -163,7 +161,7 @@ def get_event_drive_photos(event_id: str):
                         'title': dem.get('titulo_evento'),
                         'date': dem.get('data_evento'),
                         'location': dem.get('local_evento'),
-                        'drive_url': drive_url or 'https://drive.google.com/drive/folders/1cqK3F24QQCj5tgkXy-zJZoP1al-dF3Yv'
+                        'drive_url': drive_url
                     },
                     'photos': json.load(f)
                 }
@@ -184,17 +182,10 @@ def get_event_drive_photos(event_id: str):
             
         import drive_service
         raw_photos = []
-        try:
-            if _get_geral_photos:
-                raw_photos = _get_geral_photos(drive_folder_id)
-        except Exception as ex_g:
-            print(f"[WARN _get_geral_photos]: {ex_g}")
-
+        if _get_geral_photos:
+            raw_photos = _get_geral_photos(drive_folder_id)
         if not raw_photos:
-            try:
-                raw_photos = drive_service.list_files(drive_folder_id, mime_filter='image/', page_size=5000) or []
-            except Exception as ex_l:
-                print(f"[WARN list_files]: {ex_l}")
+            raw_photos = drive_service.list_files(drive_folder_id, mime_filter='image/', page_size=5000) or []
             
         formatted_photos = []
         for p in raw_photos:
@@ -289,69 +280,6 @@ async def api_portal_match(
         print(f"[API_PORTAL_MATCH_ERR] {e}")
         return JSONResponse({'ok': False, 'message': str(e)}, status_code=500)
 
-@app.get("/api/proxy/image")
-async def proxy_image(url: str = "", drive_id: str = ""):
-    """Proxy CORS para download e conversão de fotos do Google Drive para uso em IA / Vision."""
-    try:
-        # Se drive_id não foi passado, tenta extrair de url
-        if not drive_id and url:
-            import re
-            m = re.search(r'/d/([a-zA-Z0-9_-]+)', url) or re.search(r'[?&]id=([a-zA-Z0-9_-]+)', url)
-            if m:
-                drive_id = m.group(1)
-
-        target_url = f"https://drive.google.com/thumbnail?id={drive_id}&sz=w1200" if drive_id else url
-
-        if not target_url:
-            return JSONResponse({'error': 'URL ou drive_id não informado'}, status_code=400)
-
-        import httpx
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-        try:
-            async with httpx.AsyncClient(follow_redirects=True, timeout=20.0, headers=headers) as client:
-                resp = await client.get(target_url)
-                media_type = resp.headers.get("content-type", "")
-                # Aceita apenas se for imagem real e não HTML
-                if resp.status_code == 200 and resp.content and ("image" in media_type or resp.content.startswith(b'\xff\xd8') or resp.content.startswith(b'\x89PNG')):
-                    return Response(
-                        content=resp.content,
-                        media_type="image/jpeg" if not media_type or "html" in media_type else media_type,
-                        headers={
-                            "Access-Control-Allow-Origin": "*",
-                            "Access-Control-Allow-Methods": "GET, OPTIONS",
-                            "Access-Control-Allow-Headers": "*",
-                            "Cache-Control": "public, max-age=86400"
-                        }
-                    )
-        except Exception as ex_http:
-            print(f"[PROXY_THUMB_ERR] {ex_http}")
-
-        # Se thumbnail falhou e temos drive_id, tenta baixar direto pelo drive_service
-        if drive_id:
-            try:
-                import drive_service
-                file_bytes = await asyncio.to_thread(drive_service.download_file, drive_id)
-                if file_bytes:
-                    return Response(
-                        content=file_bytes,
-                        media_type="image/jpeg",
-                        headers={
-                            "Access-Control-Allow-Origin": "*",
-                            "Access-Control-Allow-Methods": "GET, OPTIONS",
-                            "Access-Control-Allow-Headers": "*",
-                            "Cache-Control": "public, max-age=86400"
-                        }
-                    )
-            except Exception as ex_drive:
-                print(f"[PROXY_DRIVE_ERR] {ex_drive}")
-
-        return JSONResponse({'error': 'Falha ao obter imagem do Google Drive'}, status_code=502)
-    except Exception as e:
-        print(f"[PROXY_IMAGE_ERR] {e}")
-        return JSONResponse({'error': str(e)}, status_code=500)
-
 @app.post("/api/workers/face-index")
 async def trigger_face_indexing():
     """Dispara a indexação facial sob demanda."""
@@ -362,54 +290,68 @@ async def trigger_telegram_alert(payload: dict):
     """Envia alertas do Telegram sob demanda."""
     return {"status": "success", "message": "Alerta despachado."}
 
+# ── Endpoints de Integração com Google Drive ──
+try:
+    from drive_service import criar_pasta_evento, get_pastas_mae_list
+except Exception as e_drive_import:
+    print(f"[WARN] Erro ao importar drive_service: {e_drive_import}")
+    criar_pasta_evento = None
+    get_pastas_mae_list = None
+
 @app.get("/api/drive/pastas_mae")
-async def get_drive_pastas_mae():
-    """Retorna as pastas mãe configuradas no Google Drive."""
+async def api_drive_pastas_mae():
+    """Retorna a lista de pastas mãe configuradas no Google Drive."""
     try:
-        import drive_service
-        pastas = await asyncio.to_thread(drive_service.get_pastas_mae_list)
+        if not get_pastas_mae_list:
+            return JSONResponse({'ok': False, 'error': 'drive_service não disponível'}, status_code=500)
+        pastas = await asyncio.to_thread(get_pastas_mae_list)
         return JSONResponse({'ok': True, 'pastas': pastas})
     except Exception as e:
-        return JSONResponse({'ok': False, 'error': str(e), 'pastas': []}, status_code=500)
+        print(f"[API_DRIVE_PASTAS_MAE_ERR] {e}")
+        return JSONResponse({'ok': False, 'error': str(e)}, status_code=500)
 
 @app.post("/api/drive/create_event_folder")
-async def api_create_event_folder(payload: dict):
-    """Cria a estrutura de pastas no Google Drive para uma pauta/demanda."""
+async def api_drive_create_event_folder(request: Request):
+    """Cria estrutura de pastas no Google Drive para um evento/pauta."""
     try:
-        titulo_evento = payload.get('titulo_evento', '').strip()
-        data_evento = payload.get('data_evento', '').strip()
-        pasta_mae_id = payload.get('pasta_mae_id')
-        demanda_id = payload.get('demanda_id')
+        if not criar_pasta_evento:
+            return JSONResponse({'ok': False, 'error': 'drive_service não disponível'}, status_code=500)
 
-        if not titulo_evento:
-            return JSONResponse({'ok': False, 'error': 'Título do evento é obrigatório'}, status_code=400)
+        body = await request.json()
+        titulo = body.get('titulo_evento', '').strip()
+        data_evento = body.get('data_evento', '')
+        demanda_id = body.get('demanda_id')
 
-        import drive_service
-        drive_service.reset_drive_service()
-        res = await asyncio.to_thread(drive_service.criar_pasta_evento, titulo_evento, data_evento, pasta_mae_id)
-        if not res or not res.get('evento_link'):
-            return JSONResponse({'ok': False, 'error': 'Falha ao criar pasta no Google Drive'}, status_code=500)
+        if not titulo:
+            return JSONResponse({'ok': False, 'error': 'titulo_evento é obrigatório'}, status_code=400)
 
-        # Se passou demanda_id, vincula no banco de dados
+        result = await asyncio.to_thread(criar_pasta_evento, titulo, data_evento)
+
+        if not result:
+            return JSONResponse({'ok': False, 'error': 'Falha ao criar pasta no Google Drive. Verifique as credenciais e a pasta mãe.'}, status_code=500)
+
+        # Se demanda_id foi informado, atualiza o drive_url na demanda automaticamente
         if demanda_id:
-            from database import salvar_demanda_drive_link
-            await asyncio.to_thread(
-                salvar_demanda_drive_link,
-                int(demanda_id),
-                titulo_evento,
-                res['evento_link'],
-                res.get('evento_folder_id')
-            )
+            try:
+                from database import get_service_db_connection, get_db_connection
+                db = get_service_db_connection() or get_db_connection()
+                if db:
+                    db.table('demandas_comunicacao').update({
+                        'drive_url': result.get('evento_link', '')
+                    }).eq('id', int(demanda_id)).execute()
+                    print(f"[DRIVE_API] drive_url atualizado na demanda #{demanda_id}")
+            except Exception as e_db:
+                print(f"[DRIVE_API] Erro ao atualizar drive_url na demanda: {e_db}")
 
         return JSONResponse({
             'ok': True,
-            'evento_link': res.get('evento_link'),
-            'evento_folder_id': res.get('evento_folder_id'),
-            'selecao_folder_id': res.get('selecao_folder_id'),
-            'geral_folder_id': res.get('geral_folder_id'),
+            'evento_folder_id': result.get('evento_folder_id'),
+            'selecao_folder_id': result.get('selecao_folder_id'),
+            'geral_folder_id': result.get('geral_folder_id'),
+            'evento_link': result.get('evento_link'),
         })
     except Exception as e:
-        print(f"[CREATE_EVENT_FOLDER_ERR] {e}")
+        print(f"[API_DRIVE_CREATE_ERR] {e}")
         return JSONResponse({'ok': False, 'error': str(e)}, status_code=500)
 
 # ── SPA Catch-All: Entrega o React Router para todas as rotas ──
@@ -432,5 +374,5 @@ async def serve_react_spa(full_path: str):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
-    print(f"⚓ [SisGAB 2.0] Servidor de produção ativo na porta {port}...")
-    uvicorn.run("server:app", host="0.0.0.0", port=port, reload=False, proxy_headers=True, forwarded_allow_ips="*")
+    print(f"⚓ [SisGAB 2.0] Servidor de produção ativo na porta {port}...", flush=True)
+    uvicorn.run(app, host="0.0.0.0", port=port, proxy_headers=True, forwarded_allow_ips="*")
