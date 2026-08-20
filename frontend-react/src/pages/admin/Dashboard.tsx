@@ -27,7 +27,7 @@ import {
 import { supabase } from '../../api/supabase';
 import type { DemandaComunicacao } from '../../types/database';
 import { useAuth } from '../../context/AuthContext';
-import { parseCobertura } from '../../utils/formatters';
+import { parseCobertura, getBrasiliaDateStr, addDaysBrasilia } from '../../utils/formatters';
 
 const DIAS_SEMANA = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
 const MESES = [
@@ -97,10 +97,8 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const hojeStr = hoje.toISOString().split('T')[0];
-  const amanha = new Date(hoje);
-  amanha.setDate(amanha.getDate() + 1);
-  const amanhaStr = amanha.toISOString().split('T')[0];
+  const hojeStr = getBrasiliaDateStr();
+  const amanhaStr = addDaysBrasilia(hojeStr, 1);
 
   // Cálculo dos 9 KPIs Reais da Barra de Comando de Forma Resiliente
   const kpiHoje = demandas.filter((d) => d.data_evento === hojeStr).length;
@@ -169,7 +167,7 @@ export const Dashboard: React.FC = () => {
         let curr = new Date(d.data_evento + 'T00:00:00');
         const end = new Date(d.data_fim + 'T00:00:00');
         while (curr <= end) {
-          const ds = curr.toISOString().split('T')[0];
+          const ds = getBrasiliaDateStr(curr);
           const arr = eventosPorDiaMap.get(ds) || [];
           arr.push(st);
           eventosPorDiaMap.set(ds, arr);
@@ -510,7 +508,7 @@ export const Dashboard: React.FC = () => {
             {Array.from({ length: 7 }).map((_, i) => {
               const d = new Date(currentWeekStart);
               d.setDate(d.getDate() + i);
-              const dayStr = d.toISOString().split('T')[0];
+              const dayStr = getBrasiliaDateStr(d);
               const dayEvents = demandas.filter((dem) => isEventOnDate(dem, dayStr));
               const isToday = dayStr === hojeStr;
               const isSelected = dayStr === selectedDate;

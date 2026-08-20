@@ -21,6 +21,7 @@ import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import type { StatusPresenca, RegistroPresenca } from '../../types/database';
 import { useAuth } from '../../context/AuthContext';
+import { getBrasiliaDateStr, addDaysBrasilia, formatBrasiliaExtenso } from '../../utils/formatters';
 
 const STATUS_CONFIG: Record<
   StatusPresenca,
@@ -137,7 +138,7 @@ const isPraca = (postoGrad?: string) => {
 export const DailyAttendance: React.FC = () => {
   const { user } = useAuth();
   const [dataRef, setDataRef] = useState<string>(() => {
-    return new Date().toISOString().split('T')[0];
+    return getBrasiliaDateStr();
   });
   const [registros, setRegistros] = useState<RegistroPresenca[]>([]);
   const [loading, setLoading] = useState(false);
@@ -203,21 +204,17 @@ export const DailyAttendance: React.FC = () => {
     }
   };
 
-  // Navegação de Datas
+  // Navegação de Datas no Horário de Brasília (GMT-3)
   const handlePrevDay = () => {
-    const d = new Date(dataRef + 'T00:00:00');
-    d.setDate(d.getDate() - 1);
-    setDataRef(d.toISOString().split('T')[0]);
+    setDataRef(addDaysBrasilia(dataRef, -1));
   };
 
   const handleNextDay = () => {
-    const d = new Date(dataRef + 'T00:00:00');
-    d.setDate(d.getDate() + 1);
-    setDataRef(d.toISOString().split('T')[0]);
+    setDataRef(addDaysBrasilia(dataRef, 1));
   };
 
   const handleToday = () => {
-    setDataRef(new Date().toISOString().split('T')[0]);
+    setDataRef(getBrasiliaDateStr());
   };
 
   // Alterar Status Individual
@@ -291,12 +288,7 @@ export const DailyAttendance: React.FC = () => {
 
   // Gerar e Copiar Mensagem Formatada para WhatsApp
   const generateProntoWhatsApp = () => {
-    const dataFormatada = new Date(dataRef + 'T00:00:00').toLocaleDateString('pt-BR', {
-      weekday: 'long',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
+    const dataFormatada = formatBrasiliaExtenso(dataRef);
 
     const presentes = registros.filter((r) => r.status === 'P');
     const servico = registros.filter((r) => r.status === 'SV');

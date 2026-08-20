@@ -557,8 +557,22 @@ def get_user_by_id(user_id: int) -> Optional[dict]:
 # --- FUNÇÕES DE COMPATIBILIDADE E FALLBACK (MIGRAÇÃO SISGAB) ---
 
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict
+
+TZ_BRASILIA = timezone(timedelta(hours=-3))
+
+def get_brasilia_now() -> datetime:
+    """Retorna datetime atual no Horário Oficial de Brasília (GMT-3)."""
+    return datetime.now(TZ_BRASILIA)
+
+def get_brasilia_date_str() -> str:
+    """Retorna data atual 'YYYY-MM-DD' no Horário de Brasília (GMT-3)."""
+    return get_brasilia_now().strftime('%Y-%m-%d')
+
+def get_brasilia_time_str() -> str:
+    """Retorna hora atual 'HH:MM:SS' no Horário de Brasília (GMT-3)."""
+    return get_brasilia_now().strftime('%H:%M:%S')
 
 def salvar_presenca_supabase(numero_interno: Any, nome_guerra: str, turma: str, 
                              presente: bool, motivo_ausencia: Optional[str] = None) -> bool:
@@ -568,8 +582,8 @@ def salvar_presenca_supabase(numero_interno: Any, nome_guerra: str, turma: str,
         print("[OFFLINE] Salvar presença simulada")
         return True
     try:
-        data_hoje = datetime.now().strftime('%Y-%m-%d')
-        hora = datetime.now().strftime('%H:%M:%S')
+        data_hoje = get_brasilia_date_str()
+        hora = get_brasilia_time_str()
         
         response = db.table('presenca_ausencia').select('*').eq(
             'numero_interno', numero_interno
@@ -583,7 +597,7 @@ def salvar_presenca_supabase(numero_interno: Any, nome_guerra: str, turma: str,
             'motivo_ausencia': motivo_ausencia or '',
             'data': data_hoje,
             'hora': hora,
-            'criado_em': datetime.now().isoformat()
+            'criado_em': get_brasilia_now().isoformat()
         }
         
         if response.data:
@@ -605,7 +619,7 @@ def deletar_presenca_supabase(numero_interno: Any) -> bool:
         print("[OFFLINE] Deletar presença simulada")
         return True
     try:
-        data_hoje = datetime.now().strftime('%Y-%m-%d')
+        data_hoje = get_brasilia_date_str()
         db.table('presenca_ausencia').delete().eq(
             'numero_interno', numero_interno
         ).eq('data', data_hoje).execute()
@@ -619,12 +633,13 @@ def carregar_presenca_hoje(turma: Optional[str] = None) -> pd.DataFrame:
     """Carrega presença de hoje com fallback offline (dados fictícios)"""
     db = get_db_connection()
     if not db:
+        data_hoje = get_brasilia_date_str()
         mock_data = [
-            {'id': 1, 'numero_interno': 101, 'nome_guerra': 'Silva', 'turma': 'Alfa', 'presente': True, 'motivo_ausencia': '', 'data': datetime.now().strftime('%Y-%m-%d'), 'hora': '07:30:00'},
-            {'id': 2, 'numero_interno': 102, 'nome_guerra': 'Santos', 'turma': 'Alfa', 'presente': True, 'motivo_ausencia': '', 'data': datetime.now().strftime('%Y-%m-%d'), 'hora': '07:31:00'},
-            {'id': 3, 'numero_interno': 201, 'nome_guerra': 'Oliveira', 'turma': 'Bravo', 'presente': False, 'motivo_ausencia': 'Serviço externo', 'data': datetime.now().strftime('%Y-%m-%d'), 'hora': '07:32:00'},
-            {'id': 4, 'numero_interno': 202, 'nome_guerra': 'Costa', 'turma': 'Bravo', 'presente': True, 'motivo_ausencia': '', 'data': datetime.now().strftime('%Y-%m-%d'), 'hora': '07:33:00'},
-            {'id': 5, 'numero_interno': 301, 'nome_guerra': 'Pereira', 'turma': 'Charlie', 'presente': True, 'motivo_ausencia': '', 'data': datetime.now().strftime('%Y-%m-%d'), 'hora': '07:34:00'},
+            {'id': 1, 'numero_interno': 101, 'nome_guerra': 'Silva', 'turma': 'Alfa', 'presente': True, 'motivo_ausencia': '', 'data': data_hoje, 'hora': '07:30:00'},
+            {'id': 2, 'numero_interno': 102, 'nome_guerra': 'Santos', 'turma': 'Alfa', 'presente': True, 'motivo_ausencia': '', 'data': data_hoje, 'hora': '07:31:00'},
+            {'id': 3, 'numero_interno': 201, 'nome_guerra': 'Oliveira', 'turma': 'Bravo', 'presente': False, 'motivo_ausencia': 'Serviço externo', 'data': data_hoje, 'hora': '07:32:00'},
+            {'id': 4, 'numero_interno': 202, 'nome_guerra': 'Costa', 'turma': 'Bravo', 'presente': True, 'motivo_ausencia': '', 'data': data_hoje, 'hora': '07:33:00'},
+            {'id': 5, 'numero_interno': 301, 'nome_guerra': 'Pereira', 'turma': 'Charlie', 'presente': True, 'motivo_ausencia': '', 'data': data_hoje, 'hora': '07:34:00'},
         ]
         df = pd.DataFrame(mock_data)
         if turma:
@@ -632,7 +647,7 @@ def carregar_presenca_hoje(turma: Optional[str] = None) -> pd.DataFrame:
         return df
         
     try:
-        data_hoje = datetime.now().strftime('%Y-%m-%d')
+        data_hoje = get_brasilia_date_str()
         query = db.table('presenca_ausencia').select('*').eq('data', data_hoje)
         if turma:
             query = query.eq('turma', turma)

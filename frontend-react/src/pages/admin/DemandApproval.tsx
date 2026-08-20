@@ -33,7 +33,7 @@ import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import type { DemandaComunicacao } from '../../types/database';
 import { useAuth } from '../../context/AuthContext';
-import { parseCobertura } from '../../utils/formatters';
+import { parseCobertura, getBrasiliaDateStr, addDaysBrasilia } from '../../utils/formatters';
 
 export const DemandApproval: React.FC = () => {
   const { user } = useAuth();
@@ -314,8 +314,8 @@ export const DemandApproval: React.FC = () => {
   const kpiAprovadas = demandas.filter((d) => d.status === 'aprovado').length;
   const kpiAjustes = demandas.filter((d) => d.status === 'ajustes').length;
 
-  const hojeStr = new Date().toISOString().split('T')[0];
-  const seteDiasStr = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const hojeStr = getBrasiliaDateStr();
+  const seteDiasStr = addDaysBrasilia(hojeStr, 7);
   const kpiProximos7Dias = demandas.filter(
     (d) => d.data_evento && d.data_evento >= hojeStr && d.data_evento <= seteDiasStr
   ).length;

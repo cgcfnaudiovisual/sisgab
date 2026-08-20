@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import type { BrindeEstoque, BrindeDistribuicao } from '../../types/database';
 import { useAuth } from '../../context/AuthContext';
+import { getBrasiliaDateStr } from '../../utils/formatters';
 
 const MOCK_ESTOQUE: BrindeEstoque[] = [
   { id: 1, nome_item: 'Moeda Comemorativa CGCFN (Challenge Coin)', quantidade_total: 100, quantidade_disponivel: 42, descricao: 'Moeda em metal nobre com acabamento dourado e esmaltado.', criado_em: new Date().toISOString() },
@@ -109,7 +110,7 @@ export const GiftsStock: React.FC = () => {
       brinde_nome: item.nome_item,
       quantidade,
       destinatario_nome: destinatario,
-      data_entrega: new Date().toISOString().split('T')[0],
+      data_entrega: getBrasiliaDateStr(),
       entregue_por: user?.nome_guerra || 'Operador',
       criado_em: new Date().toISOString(),
     };

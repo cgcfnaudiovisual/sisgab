@@ -30,6 +30,7 @@ import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
+import { getBrasiliaDateStr } from '../../utils/formatters';
 
 // Categorias e Serviços Completos do SisGAB
 export const CATEGORIAS_SERVICOS = [
@@ -127,7 +128,7 @@ export const NewDemandForm: React.FC = () => {
     setor: user?.setor || 'Comunicação Social / Gabinete',
     contato: '',
     titulo_evento: '',
-    data_evento: new Date().toISOString().split('T')[0],
+    data_evento: getBrasiliaDateStr(),
     data_fim: '',
     hora_evento: '09:00',
     local_evento: '',

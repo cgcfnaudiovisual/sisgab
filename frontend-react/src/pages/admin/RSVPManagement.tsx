@@ -32,6 +32,7 @@ import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import type { JadeConvidado, JadeEvento } from '../../types/database';
+import { getBrasiliaDateStr } from '../../utils/formatters';
 
 export const RSVPManagement: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'rsvp' | 'portaria' | 'parecer'>('portaria');
@@ -54,7 +55,7 @@ export const RSVPManagement: React.FC = () => {
   const [novoEventoModal, setNovoEventoModal] = useState(false);
   const [novoEvento, setNovoEvento] = useState({
     nome: '',
-    data_evento: new Date().toISOString().split('T')[0],
+    data_evento: getBrasiliaDateStr(),
     local_evento: 'Salão Nobre do CGCFN',
     tipo_evento: 'cerimonia',
   });
@@ -226,7 +227,7 @@ export const RSVPManagement: React.FC = () => {
       setNovoEventoModal(false);
       setNovoEvento({
         nome: '',
-        data_evento: new Date().toISOString().split('T')[0],
+        data_evento: getBrasiliaDateStr(),
         local_evento: 'Salão Nobre do CGCFN',
         tipo_evento: 'cerimonia',
       });

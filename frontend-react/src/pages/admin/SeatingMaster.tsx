@@ -40,6 +40,7 @@ import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import type { JadeEvento, JadeConvidado } from '../../types/database';
+import { getBrasiliaDateStr } from '../../utils/formatters';
 
 const ROWS = ['A', 'B', 'C', 'D', 'E'];
 const COLS = [1, 2, 3, 4, 5, 6, 7, 8];
@@ -204,7 +205,7 @@ export const SeatingMaster: React.FC = () => {
   const [novoEventoModal, setNovoEventoModal] = useState(false);
   const [novoEvento, setNovoEvento] = useState({
     nome: '',
-    data_evento: new Date().toISOString().split('T')[0],
+    data_evento: getBrasiliaDateStr(),
     local_evento: 'Salão Nobre do CGCFN',
     tipo_evento: 'cerimonia',
   });
@@ -588,7 +589,7 @@ export const SeatingMaster: React.FC = () => {
     const newTpl: JadeSavedTemplate = {
       id: `tpl_${Date.now()}`,
       name: newTemplateName.trim(),
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: getBrasiliaDateStr(),
       config: { ...printConfig },
     };
 
@@ -745,7 +746,7 @@ export const SeatingMaster: React.FC = () => {
       setNovoEventoModal(false);
       setNovoEvento({
         nome: '',
-        data_evento: new Date().toISOString().split('T')[0],
+        data_evento: getBrasiliaDateStr(),
         local_evento: 'Salão Nobre do CGCFN',
         tipo_evento: 'cerimonia',
       });

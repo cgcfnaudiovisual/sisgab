@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import type { EquipamentoCOMSOC, CautelaItem } from '../../types/database';
 import { useAuth } from '../../context/AuthContext';
+import { getBrasiliaDateStr } from '../../utils/formatters';
 
 const MOCK_EQUIPAMENTOS: EquipamentoCOMSOC[] = [
   { id: 1, nome: 'Câmera Sony A7 IV (Corpo Principal)', e_pessoal: false, categoria: 'camera', status: 'cautelado', cautelado_por: '1ºSG-FN-IF Barbosa', descricao: 'Sensor Full Frame 33MP, gravação 4K 60p.' },
@@ -56,7 +57,7 @@ export const EquipmentCautela: React.FC = () => {
     isOpen: false,
     equipamento: null,
     retirado_por: user?.nome_guerra ? user.nome_guerra : '1ºSG-FN-IF Barbosa',
-    data_prevista: new Date().toISOString().split('T')[0],
+    data_prevista: getBrasiliaDateStr(),
   });
 
   useEffect(() => {
@@ -326,7 +327,7 @@ export const EquipmentCautela: React.FC = () => {
                         isOpen: true,
                         equipamento: eq,
                         retirado_por: user?.nome_guerra ? user.nome_guerra : '',
-                        data_prevista: new Date().toISOString().split('T')[0],
+                        data_prevista: getBrasiliaDateStr(),
                       })
                     }
                     className="w-full py-2 rounded-xl bg-[#c5a059] hover:bg-[#d6b26b] text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-transform active:scale-95"

@@ -43,6 +43,7 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import type { DemandaComunicacao } from '../../types/database';
+import { getBrasiliaDateStr, addDaysBrasilia, BRASILIA_TIMEZONE } from '../../utils/formatters';
 import { parseCobertura } from '../../utils/formatters';
 
 const DIAS_SEMANA_MAP: Record<number, string> = {
@@ -91,7 +92,7 @@ export const SisgabTVPlayer: React.FC = () => {
     titulo_evento: '',
     local_evento: 'Gabinete CGCFN',
     hora_evento: '10:00',
-    data_evento: new Date().toISOString().split('T')[0],
+    data_evento: getBrasiliaDateStr(),
     solicitante_nome: 'MONITOR TV',
     setor: 'Gabinete / CGCFN',
     tipo_cobertura: ['Fotografia'],
@@ -288,7 +289,7 @@ export const SisgabTVPlayer: React.FC = () => {
         titulo_evento: '',
         local_evento: 'Gabinete CGCFN',
         hora_evento: '10:00',
-        data_evento: new Date().toISOString().split('T')[0],
+        data_evento: getBrasiliaDateStr(),
         solicitante_nome: 'MONITOR TV',
         setor: 'Gabinete / CGCFN',
         tipo_cobertura: ['Fotografia'],
@@ -300,10 +301,8 @@ export const SisgabTVPlayer: React.FC = () => {
     }
   };
 
-  const hojeStr = currentTime.toISOString().split('T')[0];
-  const amanhaDate = new Date(currentTime);
-  amanhaDate.setDate(amanhaDate.getDate() + 1);
-  const amanhaStr = amanhaDate.toISOString().split('T')[0];
+  const hojeStr = getBrasiliaDateStr(currentTime);
+  const amanhaStr = addDaysBrasilia(hojeStr, 1);
 
   // 1. Pautas Hoje & Amanhã
   const pautasHojeEAmanha = demandas.filter(
@@ -331,8 +330,9 @@ export const SisgabTVPlayer: React.FC = () => {
     ['ajuste', 'ajustes', 'em_andamento', 'andamento'].includes((d.status || '').toLowerCase())
   ).length;
 
-  const formattedTime = currentTime.toLocaleTimeString('pt-BR');
+  const formattedTime = currentTime.toLocaleTimeString('pt-BR', { timeZone: BRASILIA_TIMEZONE });
   const formattedDate = currentTime.toLocaleDateString('pt-BR', {
+    timeZone: BRASILIA_TIMEZONE,
     weekday: 'long',
     day: '2-digit',
     month: 'long',

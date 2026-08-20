@@ -26,6 +26,7 @@ import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { playNeuralSpeech, stopNeuralSpeech, NeuralVoiceOption } from '../../utils/neuralTTS';
 import { generateGeminiContent } from '../../utils/geminiClient';
+import { getBrasiliaDateStr, addDaysBrasilia } from '../../utils/formatters';
 
 interface ChatMessage {
   id: string;
@@ -244,8 +245,8 @@ export const JarvisVoice: React.FC = () => {
   // Coleta dados reais do SisGAB para alimentar a inteligência do Jarvis
   const fetchLiveGabineteContext = async () => {
     try {
-      const hoje = new Date().toISOString().split('T')[0];
-      const seteDiasDepois = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const hoje = getBrasiliaDateStr();
+      const seteDiasDepois = addDaysBrasilia(hoje, 7);
 
       // 1. Demandas da semana
       const { data: demandas } = await supabase
@@ -293,7 +294,7 @@ export const JarvisVoice: React.FC = () => {
           setor: draft.setor || 'Gabinete CGCFN',
           contato: 'Gabinete CGCFN',
           titulo_evento: draft.titulo_evento.toUpperCase(),
-          data_evento: draft.data_evento || new Date().toISOString().split('T')[0],
+          data_evento: draft.data_evento || getBrasiliaDateStr(),
           hora_evento: draft.hora_evento || '10:00',
           local_evento: draft.local_evento || 'Fortaleza de São José - Ilha das Cobras',
           tipo_cobertura: draft.tipo_cobertura.length > 0 ? draft.tipo_cobertura : ['Fotografia'],
@@ -432,19 +433,17 @@ export const JarvisVoice: React.FC = () => {
           extractedHour = `${h < 10 ? '0' : ''}${h}:00`;
         }
 
-        const hojeDate = new Date();
-        let targetDateStr = hojeDate.toISOString().split('T')[0];
+        let targetDateStr = getBrasiliaDateStr();
         if (cleanPrompt.includes('amanhã')) {
-          const am = new Date(Date.now() + 24 * 60 * 60 * 1000);
-          targetDateStr = am.toISOString().split('T')[0];
+          targetDateStr = addDaysBrasilia(targetDateStr, 1);
         } else if (cleanPrompt.includes('sexta')) {
+          const hojeDate = new Date();
           const dist = (5 - hojeDate.getDay() + 7) % 7 || 7;
-          const sx = new Date(Date.now() + dist * 24 * 60 * 60 * 1000);
-          targetDateStr = sx.toISOString().split('T')[0];
+          targetDateStr = addDaysBrasilia(targetDateStr, dist);
         } else if (cleanPrompt.includes('segunda')) {
+          const hojeDate = new Date();
           const dist = (1 - hojeDate.getDay() + 7) % 7 || 7;
-          const sg = new Date(Date.now() + dist * 24 * 60 * 60 * 1000);
-          targetDateStr = sg.toISOString().split('T')[0];
+          targetDateStr = addDaysBrasilia(targetDateStr, dist);
         }
 
         let extractedLocal = 'Salão Nobre do CGCFN';
@@ -476,7 +475,7 @@ export const JarvisVoice: React.FC = () => {
 
         const finalDraft: DemandDraft = {
           titulo_evento: wizardDraft.titulo_evento || 'COBERTURA DE EVENTO',
-          data_evento: wizardDraft.data_evento || new Date().toISOString().split('T')[0],
+          data_evento: wizardDraft.data_evento || getBrasiliaDateStr(),
           hora_evento: wizardDraft.hora_evento || '10:00',
           local_evento: wizardDraft.local_evento || 'Salão Nobre do CGCFN',
           tipo_cobertura: servicos,
@@ -546,15 +545,13 @@ export const JarvisVoice: React.FC = () => {
           extractedHour = `${h < 10 ? '0' : ''}${h}:00`;
         }
 
-        const hojeDate = new Date();
-        let targetDateStr = hojeDate.toISOString().split('T')[0];
+        let targetDateStr = getBrasiliaDateStr();
         if (cleanPrompt.includes('amanhã')) {
-          const am = new Date(Date.now() + 24 * 60 * 60 * 1000);
-          targetDateStr = am.toISOString().split('T')[0];
+          targetDateStr = addDaysBrasilia(targetDateStr, 1);
         } else if (cleanPrompt.includes('sexta')) {
+          const hojeDate = new Date();
           const dist = (5 - hojeDate.getDay() + 7) % 7 || 7;
-          const sx = new Date(Date.now() + dist * 24 * 60 * 60 * 1000);
-          targetDateStr = sx.toISOString().split('T')[0];
+          targetDateStr = addDaysBrasilia(targetDateStr, dist);
         }
 
         let extractedLocal = 'Salão Nobre do CGCFN';
@@ -636,7 +633,7 @@ Contexto atual: Eventos na semana: ${ctx.demandasSemana.length}. Pronto hoje: ${
             cleanPrompt.includes('temos hoje') ||
             cleanPrompt.includes('hoje no gabinete')
           ) {
-            const hojeStr = new Date().toISOString().split('T')[0];
+            const hojeStr = getBrasiliaDateStr();
             const demandasHoje = ctx.demandasSemana.filter((d: any) => d.data_evento === hojeStr);
             const placasCount = ctx.placasPendentes.length;
 
