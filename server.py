@@ -331,6 +331,56 @@ async def trigger_telegram_alert(payload: dict):
     """Envia alertas do Telegram sob demanda."""
     return {"status": "success", "message": "Alerta despachado."}
 
+@app.get("/api/drive/pastas_mae")
+async def get_drive_pastas_mae():
+    """Retorna as pastas mãe configuradas no Google Drive."""
+    try:
+        import drive_service
+        pastas = await asyncio.to_thread(drive_service.get_pastas_mae_list)
+        return JSONResponse({'ok': True, 'pastas': pastas})
+    except Exception as e:
+        return JSONResponse({'ok': False, 'error': str(e), 'pastas': []}, status_code=500)
+
+@app.post("/api/drive/create_event_folder")
+async def api_create_event_folder(payload: dict):
+    """Cria a estrutura de pastas no Google Drive para uma pauta/demanda."""
+    try:
+        titulo_evento = payload.get('titulo_evento', '').strip()
+        data_evento = payload.get('data_evento', '').strip()
+        pasta_mae_id = payload.get('pasta_mae_id')
+        demanda_id = payload.get('demanda_id')
+
+        if not titulo_evento:
+            return JSONResponse({'ok': False, 'error': 'Título do evento é obrigatório'}, status_code=400)
+
+        import drive_service
+        drive_service.reset_drive_service()
+        res = await asyncio.to_thread(drive_service.criar_pasta_evento, titulo_evento, data_evento, pasta_mae_id)
+        if not res or not res.get('evento_link'):
+            return JSONResponse({'ok': False, 'error': 'Falha ao criar pasta no Google Drive'}, status_code=500)
+
+        # Se passou demanda_id, vincula no banco de dados
+        if demanda_id:
+            from database import salvar_demanda_drive_link
+            await asyncio.to_thread(
+                salvar_demanda_drive_link,
+                int(demanda_id),
+                titulo_evento,
+                res['evento_link'],
+                res.get('evento_folder_id')
+            )
+
+        return JSONResponse({
+            'ok': True,
+            'evento_link': res.get('evento_link'),
+            'evento_folder_id': res.get('evento_folder_id'),
+            'selecao_folder_id': res.get('selecao_folder_id'),
+            'geral_folder_id': res.get('geral_folder_id'),
+        })
+    except Exception as e:
+        print(f"[CREATE_EVENT_FOLDER_ERR] {e}")
+        return JSONResponse({'ok': False, 'error': str(e)}, status_code=500)
+
 # ── SPA Catch-All: Entrega o React Router para todas as rotas ──
 @app.api_route("/{full_path:path}", methods=["GET", "HEAD"])
 async def serve_react_spa(full_path: str):

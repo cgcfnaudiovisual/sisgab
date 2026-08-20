@@ -19,6 +19,7 @@ import {
   CheckSquare,
   Square,
   FolderOpen,
+  FolderPlus,
   Eye,
   RotateCcw,
   User,
@@ -28,6 +29,10 @@ import {
   FileText,
   Edit3,
   Save,
+  Palette,
+  Printer,
+  Gift,
+  Music,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
@@ -63,11 +68,83 @@ export const DemandApproval: React.FC = () => {
   const [isEditingFicha, setIsEditingFicha] = useState(false);
   const [editForm, setEditForm] = useState<Partial<DemandaComunicacao>>({});
   const [savingEdit, setSavingEdit] = useState(false);
+  const [creatingDriveId, setCreatingDriveId] = useState<number | null>(null);
 
   const handleOpenDetailModal = (demanda: DemandaComunicacao, editMode = false) => {
     setDetailModal(demanda);
     setIsEditingFicha(editMode);
     setEditForm({ ...demanda });
+  };
+
+  // Criação Automática de Pasta no Google Drive
+  const handleCriarPastaDrive = async (demanda: DemandaComunicacao, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+
+    try {
+      setCreatingDriveId(demanda.id);
+      toast.loading(`Criando pasta no Google Drive para "${demanda.titulo_evento}"...`, { id: `drive_${demanda.id}` });
+
+      const res = await fetch('/api/drive/create_event_folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          titulo_evento: demanda.titulo_evento,
+          data_evento: demanda.data_evento || getBrasiliaDateStr(),
+          demanda_id: demanda.id,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.ok && json.evento_link) {
+        militaryAudio.playTacticalBeep();
+        toast.success(`Pasta criada com sucesso no Google Drive!`, {
+          id: `drive_${demanda.id}`,
+          action: {
+            label: 'Abrir Pasta',
+            onClick: () => window.open(json.evento_link, '_blank'),
+          },
+        });
+
+        const newAut = `${demanda.autoridades || ''} [DRIVE: ${json.evento_link}]`.trim();
+
+        setDemandas((prev) =>
+          prev.map((d) =>
+            d.id === demanda.id
+              ? {
+                  ...d,
+                  drive_url: json.evento_link,
+                  autoridades: newAut,
+                }
+              : d
+          )
+        );
+
+        if (detailModal && detailModal.id === demanda.id) {
+          setDetailModal((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  drive_url: json.evento_link,
+                  autoridades: newAut,
+                }
+              : null
+          );
+        }
+
+        if (editForm && editForm.id === demanda.id) {
+          setEditForm((prev) => ({
+            ...prev,
+            drive_url: json.evento_link,
+          }));
+        }
+      } else {
+        toast.error(`Falha ao criar pasta: ${json.error || 'Erro desconhecido'}`, { id: `drive_${demanda.id}` });
+      }
+    } catch (err: any) {
+      toast.error(`Erro de conexão com o servidor: ${err.message}`, { id: `drive_${demanda.id}` });
+    } finally {
+      setCreatingDriveId(null);
+    }
   };
 
   const handleSaveEditFicha = async () => {
@@ -88,6 +165,9 @@ export const DemandApproval: React.FC = () => {
         solicitante_nome: editForm.solicitante_nome || detailModal.solicitante_nome,
         setor: editForm.setor || detailModal.setor,
         contato: editForm.contato || detailModal.contato,
+        categoria_demanda: editForm.categoria_demanda || detailModal.categoria_demanda,
+        produto_especifico: editForm.produto_especifico || detailModal.produto_especifico,
+        drive_url: editForm.drive_url || detailModal.drive_url,
         tipo_cobertura: Array.isArray(editForm.tipo_cobertura)
           ? editForm.tipo_cobertura
           : typeof editForm.tipo_cobertura === 'string'
@@ -113,6 +193,9 @@ export const DemandApproval: React.FC = () => {
           autoridades: updatedItem.autoridades,
           observacoes: updatedItem.observacoes,
           score_esforco: updatedItem.score_esforco,
+          drive_url: updatedItem.drive_url,
+          categoria_demanda: updatedItem.categoria_demanda,
+          produto_especifico: updatedItem.produto_especifico,
         })
         .eq('id', detailModal.id);
 
@@ -303,10 +386,22 @@ export const DemandApproval: React.FC = () => {
       // Filtro por Aba de Status
       if (activeTab !== 'todas' && d.status !== activeTab) return false;
 
-      // Filtro por Serviço
+      // Filtro por Categoria / Serviço / Drive
       if (serviceFilter !== 'todos') {
-        const cobs = parseCobertura(d.tipo_cobertura).map((c) => c.toLowerCase());
-        if (!cobs.some((c) => c.includes(serviceFilter.toLowerCase()))) return false;
+        if (serviceFilter === 'com_drive') {
+          if (!extractDriveUrl(d)) return false;
+        } else if (serviceFilter === 'sem_drive') {
+          if (extractDriveUrl(d)) return false;
+        } else {
+          const cobs = parseCobertura(d.tipo_cobertura).map((c) => c.toLowerCase());
+          const cat = (d.categoria_demanda || '').toLowerCase();
+          const prod = (d.produto_especifico || '').toLowerCase();
+          const qFilter = serviceFilter.toLowerCase();
+          const matchCob = cobs.some((c) => c.includes(qFilter));
+          const matchCat = cat.includes(qFilter);
+          const matchProd = prod.includes(qFilter);
+          if (!matchCob && !matchCat && !matchProd) return false;
+        }
       }
 
       // Filtro por Busca de Texto
@@ -530,19 +625,31 @@ export const DemandApproval: React.FC = () => {
             />
           </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto">
-            {['todos', 'foto', 'vídeo', 'drone', 'cerimonial'].map((srv) => (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            {[
+              { id: 'todos', label: '🌟 Todas' },
+              { id: 'foto', label: '📸 Fotografia' },
+              { id: 'vídeo', label: '🎥 Vídeo' },
+              { id: 'drone', label: '🛸 Drone' },
+              { id: 'design', label: '🎨 Design & Artes' },
+              { id: 'impressos', label: '🖨️ Impressos' },
+              { id: 'brindes', label: '🪙 Brindes' },
+              { id: 'redação', label: '✍️ Redação' },
+              { id: 'cerimonial', label: '🎤 Cerimonial' },
+              { id: 'com_drive', label: '📁 Com Drive' },
+              { id: 'sem_drive', label: '⚠️ Sem Drive' },
+            ].map((srv) => (
               <button
-                key={srv}
+                key={srv.id}
                 type="button"
-                onClick={() => setServiceFilter(srv)}
-                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold capitalize transition-all shrink-0 ${
-                  serviceFilter === srv
-                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                onClick={() => setServiceFilter(srv.id)}
+                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all shrink-0 ${
+                  serviceFilter === srv.id
+                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-xs'
                     : 'bg-slate-900/60 text-slate-400 hover:text-slate-200 border border-slate-800'
                 }`}
               >
-                {srv}
+                {srv.label}
               </button>
             ))}
           </div>
@@ -697,7 +804,7 @@ export const DemandApproval: React.FC = () => {
                         <span className="hidden sm:inline">Editar</span>
                       </button>
 
-                      {driveUrl && (
+                      {driveUrl ? (
                         <a
                           href={driveUrl}
                           target="_blank"
@@ -708,6 +815,17 @@ export const DemandApproval: React.FC = () => {
                           <FolderOpen className="w-3.5 h-3.5" />
                           <span>Drive</span>
                         </a>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={creatingDriveId === demanda.id}
+                          onClick={(e) => handleCriarPastaDrive(demanda, e)}
+                          className="px-2.5 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/40 text-xs font-bold flex items-center gap-1 transition-all disabled:opacity-50"
+                          title="Criar Pasta Oficial no Google Drive com subpastas GERAL e SELEÇÃO"
+                        >
+                          <FolderPlus className="w-3.5 h-3.5" />
+                          <span>{creatingDriveId === demanda.id ? 'Criando...' : '+ Drive'}</span>
+                        </button>
                       )}
                     </div>
 
@@ -910,7 +1028,7 @@ export const DemandApproval: React.FC = () => {
                               <Edit3 className="w-3.5 h-3.5" />
                             </button>
 
-                            {driveUrl && (
+                            {driveUrl ? (
                               <a
                                 href={driveUrl}
                                 target="_blank"
@@ -920,6 +1038,16 @@ export const DemandApproval: React.FC = () => {
                               >
                                 <FolderOpen className="w-3.5 h-3.5" />
                               </a>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={creatingDriveId === demanda.id}
+                                onClick={(e) => handleCriarPastaDrive(demanda, e)}
+                                className="p-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/40 disabled:opacity-50"
+                                title="Criar Pasta no Google Drive"
+                              >
+                                <FolderPlus className="w-3.5 h-3.5" />
+                              </button>
                             )}
 
                             {demanda.status === 'pendente' ? (
@@ -1129,6 +1257,37 @@ export const DemandApproval: React.FC = () => {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-400 font-bold mb-1">Categoria da Demanda</label>
+                    <select
+                      value={editForm.categoria_demanda || 'audiovisual'}
+                      onChange={(e) => setEditForm({ ...editForm, categoria_demanda: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-[#c5a059]"
+                    >
+                      <option value="audiovisual">📸 Audiovisual & Cobertura</option>
+                      <option value="design">🎨 Design & Criação Gráfica</option>
+                      <option value="impressos">🖨️ Gráfica & Impressos Físicos</option>
+                      <option value="brindes">🪙 Brindes & Relações Públicas</option>
+                      <option value="redacao">✍️ Redação & Discursos</option>
+                      <option value="cerimonial">🎤 Cerimonial & Suporte</option>
+                      <option value="outra_tarefa">⚡ Outra Tarefa Especial</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 font-bold mb-1">Produto / Peça Específica</label>
+                    <input
+                      type="text"
+                      value={editForm.produto_especifico || ''}
+                      onChange={(e) => setEditForm({ ...editForm, produto_especifico: e.target.value })}
+                      placeholder="Ex: Banner 2x1m, Cardápio A4, Moeda..."
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-[#c5a059]"
+                    >
+                    </input>
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-slate-400 font-bold mb-1">Serviços Solicitados (Ex: foto, video, drone)</label>
                   <input
@@ -1137,6 +1296,31 @@ export const DemandApproval: React.FC = () => {
                     onChange={(e) => setEditForm({ ...editForm, tipo_cobertura: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
                     placeholder="Ex: foto, video, drone"
                     className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-[#c5a059]"
+                  />
+                </div>
+
+                {/* Campo Google Drive com Criação Automática */}
+                <div className="space-y-1.5 p-3 rounded-2xl bg-blue-950/20 border border-blue-500/30">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-blue-300">
+                      Pasta Oficial no Google Drive
+                    </label>
+                    <button
+                      type="button"
+                      disabled={creatingDriveId === detailModal.id}
+                      onClick={() => handleCriarPastaDrive(detailModal)}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-[10px] font-black transition-all disabled:opacity-50"
+                    >
+                      <FolderPlus className="w-3.5 h-3.5" />
+                      <span>{creatingDriveId === detailModal.id ? 'Criando no Drive...' : '⚡ Criar Pasta Oficial no Drive'}</span>
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={editForm.drive_url || ''}
+                    onChange={(e) => setEditForm({ ...editForm, drive_url: e.target.value })}
+                    placeholder="https://drive.google.com/drive/folders/..."
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-[#c5a059]"
                   />
                 </div>
 

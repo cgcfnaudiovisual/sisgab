@@ -45,8 +45,10 @@ export interface DemandaComunicacao {
   arquivo_url?: string | null;
   arquivo_nome?: string | null;
   captacao_entrega?: string;
-  criado_em: string;
+  criado_em?: string;
   drive_url?: string | null;
+  categoria_demanda?: string | null;
+  produto_especifico?: string | null;
   observacoes?: string | null;
 }
 

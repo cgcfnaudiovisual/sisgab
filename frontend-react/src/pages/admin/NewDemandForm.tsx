@@ -251,18 +251,44 @@ export const NewDemandForm: React.FC = () => {
     });
   };
 
-  // Gerador Inteligente de Pasta do Drive
-  const handleGerarPastaDrive = () => {
-    const nomeLimpo = (formData.titulo_evento || 'PAUTA_COMSOC')
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, '_')
-      .substring(0, 30);
-    const dataRef = tipoData === 'sem_data' ? 'SEM_DATA' : formData.data_evento.replace(/-/g, '');
-    const folderName = `COMSOC_${dataRef}_${nomeLimpo}`;
-    const generatedUrl = `https://drive.google.com/drive/folders/auto_${folderName.toLowerCase()}`;
+  const [creatingDrive, setCreatingDrive] = useState(false);
 
-    setFormData((prev) => ({ ...prev, drive_url: generatedUrl }));
-    toast.success(`Pasta vinculada: ${folderName}`);
+  // Gerador Inteligente de Pasta do Drive (Criação Real no Google Drive)
+  const handleGerarPastaDrive = async () => {
+    if (!formData.titulo_evento.trim()) {
+      toast.error('Informe o Título do Evento / Pauta primeiro.');
+      return;
+    }
+
+    try {
+      setCreatingDrive(true);
+      toast.loading('Criando pasta oficial no Google Drive...', { id: 'create_drive' });
+
+      const res = await fetch('/api/drive/create_event_folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          titulo_evento: formData.titulo_evento,
+          data_evento: tipoData === 'sem_data' ? getBrasiliaDateStr() : formData.data_evento,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.ok && json.evento_link) {
+        militaryAudio.playTacticalBeep();
+        setFormData((prev) => ({ ...prev, drive_url: json.evento_link }));
+        toast.success(`Pasta criada com sucesso no Google Drive!`, {
+          id: 'create_drive',
+          description: 'Subpastas GERAL e SELEÇÃO estruturadas.',
+        });
+      } else {
+        toast.error(`Falha ao criar pasta: ${json.error || 'Erro desconhecido'}`, { id: 'create_drive' });
+      }
+    } catch (err: any) {
+      toast.error(`Erro de comunicação com o servidor: ${err.message}`, { id: 'create_drive' });
+    } finally {
+      setCreatingDrive(false);
+    }
   };
 
   // Cálculo Dinâmico de Score de Esforço
@@ -737,14 +763,29 @@ export const NewDemandForm: React.FC = () => {
                 Link da Pasta no Google Drive / Nuvem
               </label>
 
-              <button
-                type="button"
-                onClick={handleGerarPastaDrive}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-[11px] font-bold transition-all"
-              >
-                <FolderPlus className="w-3.5 h-3.5" />
-                <span>⚡ Gerar / Vincular Pasta no Drive</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {formData.drive_url && (
+                  <a
+                    href={formData.drive_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-300 text-[11px] font-bold transition-all"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    <span>Abrir Pasta</span>
+                  </a>
+                )}
+
+                <button
+                  type="button"
+                  disabled={creatingDrive}
+                  onClick={handleGerarPastaDrive}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-[11px] font-bold transition-all disabled:opacity-50"
+                >
+                  <FolderPlus className="w-3.5 h-3.5" />
+                  <span>{creatingDrive ? 'Criando no Drive...' : '⚡ Criar Pasta Oficial no Drive'}</span>
+                </button>
+              </div>
             </div>
 
             <div className="relative">
