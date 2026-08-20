@@ -96,6 +96,9 @@ Analise os logs recentes do sistema e responda em JSON com a estrutura:
   "recommendations": ["Recomendação técnica 1", "Recomendação técnica 2", "Recomendação técnica 3"]
 }
 
+Logs para análise:
+${JSON.stringify(recentErrors.length > 0 ? recentErrors : logs.slice(0, 10), null, 2)}`;
+
       // Busca chave de API do Gemini
       let apiKey = localStorage.getItem('sisgab_gemini_key') || '';
       if (!apiKey) {
