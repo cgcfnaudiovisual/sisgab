@@ -32,6 +32,7 @@ import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { getBrasiliaDateStr } from '../../utils/formatters';
+import { addSystemLog } from '../../utils/systemLogger';
 
 // Categorias e Serviços Completos do SisGAB
 export const CATEGORIAS_SERVICOS = [
@@ -393,14 +394,24 @@ export const NewDemandForm: React.FC = () => {
       if (json.ok && json.evento_link) {
         militaryAudio.playTacticalBeep();
         setFormData((prev) => ({ ...prev, drive_url: json.evento_link }));
+        addSystemLog(
+          'DRIVE',
+          'Pasta Criada no Google Drive',
+          `Pasta criada para "${formData.titulo_evento}": ${json.evento_link}`,
+          'success',
+          { titulo: formData.titulo_evento, link: json.evento_link, response: json }
+        );
         toast.success(`Pasta criada com sucesso no Google Drive!`, {
           id: 'create_drive',
           description: 'Subpastas GERAL e SELEÇÃO estruturadas.',
         });
       } else {
-        toast.error(`Falha ao criar pasta: ${json.error || 'Erro desconhecido'}`, { id: 'create_drive' });
+        const errorMsg = json.error || 'Erro desconhecido';
+        addSystemLog('ERRO', 'Falha ao Criar Pasta no Drive', errorMsg, 'error', { response: json });
+        toast.error(`Falha ao criar pasta: ${errorMsg}`, { id: 'create_drive' });
       }
     } catch (err: any) {
+      addSystemLog('ERRO', 'Exceção na Criação de Pasta no Drive', err.message, 'error', { error: err });
       toast.error(`Erro de comunicação com o servidor: ${err.message}`, { id: 'create_drive' });
     } finally {
       setCreatingDrive(false);
@@ -470,32 +481,51 @@ export const NewDemandForm: React.FC = () => {
       const finalMilitares = selectedMilitares.length > 0 ? JSON.stringify(selectedMilitares) : null;
       const finalEncarregado = selectedMilitares.length > 0 ? String(selectedMilitares[0]) : null;
 
+      addSystemLog(
+        'DEMANDAS',
+        editId ? `Salvando Alterações na Demanda #${editId}` : 'Criando Nova Demanda',
+        `Título: "${formData.titulo_evento.trim()}" | Data: ${dataFinal} | Hora: ${horaFinal} | Drive: ${driveUrlTrimmed || 'Nenhum'}`,
+        'info',
+        { editId, formData, finalAutoridades, horaFinal, dataFinal, score }
+      );
+
       if (editId) {
+        const updatePayload = {
+          solicitante_nome: formData.solicitante_nome?.trim() || 'COMSOC / GABINETE',
+          setor: formData.setor?.trim() || 'Gabinete',
+          contato: formData.contato?.trim() || 'Gabinete CGCFN',
+          titulo_evento: formData.titulo_evento.trim(),
+          data_evento: dataFinal,
+          data_fim: dataFimFinal,
+          hora_evento: horaFinal,
+          local_evento: formData.local_evento?.trim() || 'A Definir',
+          tipo_cobertura: coveragesArray,
+          autoridades: finalAutoridades,
+          arquivo_url: driveUrlTrimmed || null,
+          score_esforco: score,
+          sigiloso: !!formData.sigiloso,
+          captacao_entrega: formData.captacao_entrega || 'apenas_captacao_bruto',
+          produto_especifico: formData.observacoes || '',
+          notificar_militar_ids: finalMilitares,
+          encarregado_id: finalEncarregado,
+        };
+
         const { error } = await supabase
           .from('demandas_comunicacao')
-          .update({
-            solicitante_nome: formData.solicitante_nome?.trim() || 'COMSOC / GABINETE',
-            setor: formData.setor?.trim() || 'Gabinete',
-            contato: formData.contato?.trim() || 'Gabinete CGCFN',
-            titulo_evento: formData.titulo_evento.trim(),
-            data_evento: dataFinal,
-            data_fim: dataFimFinal,
-            hora_evento: horaFinal,
-            local_evento: formData.local_evento?.trim() || 'A Definir',
-            tipo_cobertura: coveragesArray,
-            autoridades: finalAutoridades,
-            score_esforco: score,
-            sigiloso: !!formData.sigiloso,
-            captacao_entrega: formData.captacao_entrega || 'apenas_captacao_bruto',
-            produto_especifico: formData.observacoes || '',
-            notificar_militar_ids: finalMilitares,
-            encarregado_id: finalEncarregado,
-          })
+          .update(updatePayload)
           .eq('id', Number(editId));
 
         if (error) throw error;
 
-        // Salvar link do Drive via API resiliente (usa campo autoridades como fallback)
+        addSystemLog(
+          'BD',
+          `Demanda #${editId} Atualizada no Postgres`,
+          `Alterações gravadas com sucesso. Link do Drive sincronizado em arquivo_url e autoridades.`,
+          'success',
+          { editId, updatePayload }
+        );
+
+        // Salvar link do Drive via API resiliente (sincronização redundante de 3 camadas)
         if (driveUrlTrimmed) {
           try {
             await fetch('/api/drive/save_drive_link', {
@@ -507,7 +537,10 @@ export const NewDemandForm: React.FC = () => {
                 drive_url: driveUrlTrimmed,
               }),
             });
-          } catch (_) { /* silencioso */ }
+            addSystemLog('DRIVE', `Link do Drive Sincronizado para #${editId}`, driveUrlTrimmed, 'success');
+          } catch (dErr: any) {
+            addSystemLog('DRIVE', `Alerta na Sincronização Secundária do Drive`, dErr?.message || 'Aviso silencioso', 'warn');
+          }
         }
 
         militaryAudio.playTacticalBeep();
@@ -521,31 +554,43 @@ export const NewDemandForm: React.FC = () => {
         return;
       }
 
+      const insertPayload = {
+        solicitante_nome: formData.solicitante_nome?.trim() || 'COMSOC / GABINETE',
+        setor: formData.setor?.trim() || 'Gabinete',
+        contato: formData.contato?.trim() || 'Gabinete CGCFN',
+        titulo_evento: formData.titulo_evento.trim(),
+        data_evento: dataFinal,
+        data_fim: dataFimFinal,
+        hora_evento: horaFinal,
+        local_evento: formData.local_evento?.trim() || 'A Definir',
+        tipo_cobertura: coveragesArray,
+        autoridades: finalAutoridades,
+        arquivo_url: driveUrlTrimmed || null,
+        score_esforco: score,
+        sigiloso: !!formData.sigiloso,
+        status: 'pendente',
+        captacao_entrega: formData.captacao_entrega || 'apenas_captacao_bruto',
+        categoria_demanda: 'audiovisual',
+        produto_especifico: formData.observacoes || '',
+        notificar_militar_ids: finalMilitares,
+        encarregado_id: finalEncarregado,
+      };
+
       const { data, error } = await supabase
         .from('demandas_comunicacao')
-        .insert({
-          solicitante_nome: formData.solicitante_nome?.trim() || 'COMSOC / GABINETE',
-          setor: formData.setor?.trim() || 'Gabinete',
-          contato: formData.contato?.trim() || 'Gabinete CGCFN',
-          titulo_evento: formData.titulo_evento.trim(),
-          data_evento: dataFinal,
-          data_fim: dataFimFinal,
-          hora_evento: horaFinal,
-          local_evento: formData.local_evento?.trim() || 'A Definir',
-          tipo_cobertura: coveragesArray,
-          autoridades: finalAutoridades,
-          score_esforco: score,
-          sigiloso: !!formData.sigiloso,
-          status: 'pendente',
-          captacao_entrega: formData.captacao_entrega || 'apenas_captacao_bruto',
-          categoria_demanda: 'audiovisual',
-          produto_especifico: formData.observacoes || '',
-          notificar_militar_ids: finalMilitares,
-          encarregado_id: finalEncarregado,
-        })
+        .insert(insertPayload)
         .select();
 
       if (error) throw error;
+
+      const newId = data && data[0]?.id ? data[0].id : 'N/A';
+      addSystemLog(
+        'BD',
+        `Nova Demanda #${newId} Gravada no Postgres`,
+        `Demanda cadastrada com sucesso. Status: pendente de homologação.`,
+        'success',
+        { newId, insertPayload }
+      );
 
       // Salvar link do Drive resilientemente após criação
       if (driveUrlTrimmed && data && data[0]?.id) {
@@ -559,6 +604,7 @@ export const NewDemandForm: React.FC = () => {
               drive_url: driveUrlTrimmed,
             }),
           });
+          addSystemLog('DRIVE', `Link do Drive Vinculado à Nova Demanda #${newId}`, driveUrlTrimmed, 'success');
         } catch (_) { /* silencioso */ }
       }
 
@@ -578,6 +624,18 @@ export const NewDemandForm: React.FC = () => {
     } catch (err: any) {
       console.error('Erro ao submeter:', err);
       const errMsg = err?.message || err?.details || err?.hint || (typeof err === 'string' ? err : 'Falha no banco de dados.');
+      addSystemLog(
+        'ERRO',
+        editId ? `Erro ao Salvar Alterações na Demanda #${editId}` : 'Erro ao Cadastrar Demanda',
+        `Falha ao comunicar com PostgreSQL: ${errMsg}`,
+        'error',
+        {
+          errorObject: err,
+          editId,
+          formData,
+          dataFinal: (formData.data_evento && formData.data_evento !== 'SEM_DATA') ? formData.data_evento : getBrasiliaDateStr(),
+        }
+      );
       toast.error(`Erro ao processar demanda: ${errMsg}`);
     } finally {
       setSubmitting(false);

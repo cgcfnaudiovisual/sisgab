@@ -31,6 +31,7 @@ import { PublicEventGallery } from './pages/public/PublicEventGallery';
 import { PublicSurveyView } from './pages/public/PublicSurveyView';
 import { SatisfactionSurvey } from './pages/admin/SatisfactionSurvey';
 import { AuthorityAlmanac } from './pages/admin/AuthorityAlmanac';
+import { SystemLogsPage } from './pages/admin/SystemLogsPage';
 
 export const App: React.FC = () => {
   return (
@@ -93,6 +94,8 @@ export const App: React.FC = () => {
           <Route path="telegram_metrics" element={<TelegramMetrics />} />
           <Route path="config" element={<SystemSettings />} />
           <Route path="admin_panel" element={<UserManagement />} />
+          <Route path="logs_sistema" element={<SystemLogsPage />} />
+          <Route path="logs" element={<SystemLogsPage />} />
           <Route path="ajuda_sobre" element={<HelpAbout />} />
 
           {/* Fallback inteligente */}

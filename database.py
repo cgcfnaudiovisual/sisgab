@@ -31,12 +31,14 @@ def get_demanda_drive_url(demanda: dict) -> str:
     """Extrai com resiliência o link da pasta do Google Drive/Nuvem de uma pauta."""
     if not demanda or not isinstance(demanda, dict):
         return ""
+    if demanda.get('arquivo_url') and str(demanda['arquivo_url']).strip() and 'http' in str(demanda['arquivo_url']):
+        return str(demanda['arquivo_url']).strip()
     if demanda.get('drive_url') and str(demanda['drive_url']).strip():
         return str(demanda['drive_url']).strip()
     if demanda.get('link_drive') and str(demanda['link_drive']).strip():
         return str(demanda['link_drive']).strip()
     
-    obs = str(demanda.get('autoridades') or demanda.get('observacoes') or '')
+    obs = str(demanda.get('autoridades') or demanda.get('produto_especifico') or demanda.get('observacoes') or '')
     if '[DRIVE:' in obs:
         try:
             url_part = obs.split('[DRIVE:')[1].split(']')[0].strip()
@@ -79,29 +81,22 @@ def salvar_demanda_drive_link(demanda_id: int, titulo_evento: str, drive_url: st
 
     success = False
 
-    # 1. Salvar tag resiliente [DRIVE: url] no campo autoridades de demandas_comunicacao
+    # 1. Salvar na coluna arquivo_url e tag resiliente [DRIVE: url] no campo autoridades de demandas_comunicacao
     if demanda_id:
         try:
-            res = db.table('demandas_comunicacao').select('autoridades').eq('id', demanda_id).execute()
+            res = db.table('demandas_comunicacao').select('autoridades, arquivo_url').eq('id', demanda_id).execute()
             if res.data:
                 current_obs = str(res.data[0].get('autoridades') or '')
                 import re
                 clean_obs = re.sub(r'\[DRIVE:.*?\]', '', current_obs).strip()
-                new_obs = f"{clean_obs} [DRIVE: {url}]".strip()
-                db.table('demandas_comunicacao').update({'autoridades': new_obs}).eq('id', demanda_id).execute()
+                new_obs = f"{clean_obs} [DRIVE: {url}]".strip() if clean_obs else f"[DRIVE: {url}]"
+                db.table('demandas_comunicacao').update({
+                    'autoridades': new_obs,
+                    'arquivo_url': url
+                }).eq('id', demanda_id).execute()
                 success = True
         except Exception as e_d:
-            print(f"[DB] Erro salvando link no campo autoridades: {e_d}")
-
-    # 2. Tentar atualizar colunas se existirem
-    if demanda_id:
-        try:
-            db.table('demandas_comunicacao').update({
-                'drive_url': url,
-                'drive_folder_id': fid
-            }).eq('id', demanda_id).execute()
-        except Exception:
-            pass
+            print(f"[DB] Erro salvando link no campo autoridades/arquivo_url: {e_d}")
 
     return success
 

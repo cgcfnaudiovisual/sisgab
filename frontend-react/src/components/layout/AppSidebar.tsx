@@ -30,6 +30,7 @@ import {
   Star,
   Award,
   Send,
+  Terminal,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -222,6 +223,13 @@ export const MENU_CATEGORIES: MenuCategory[] = [
         path: '/admin_panel',
         icon: UserCheck,
         subtitle: 'Quadro de lógica RBAC e efetivo',
+        highlight: true,
+      },
+      {
+        name: 'Logs & Auditoria do Sistema',
+        path: '/logs_sistema',
+        icon: Terminal,
+        subtitle: 'Auditoria de transações, Drive, erros e IA',
         highlight: true,
       },
       {
