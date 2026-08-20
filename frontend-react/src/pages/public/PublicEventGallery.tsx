@@ -188,7 +188,43 @@ export const PublicEventGallery: React.FC = () => {
     toast.success(`Compactando e baixando todas as ${displayedPhotos.length} fotos em Alta Resolução (ZIP)...`);
   };
 
-  // Funções da Câmera Facial
+  // Helper para redimensionar imagens no cliente (máx 480px) para upload instantâneo e ultra-leve (< 50KB)
+  const resizeImageToBlob = (fileOrDataUrl: File | string): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width;
+        let h = img.height;
+        const maxDim = 480;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, w, h);
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('Erro ao converter imagem'));
+        }, 'image/jpeg', 0.85);
+      };
+      img.onerror = reject;
+      if (typeof fileOrDataUrl === 'string') {
+        img.src = fileOrDataUrl;
+      } else {
+        img.src = URL.createObjectURL(fileOrDataUrl);
+      }
+    });
+  };
+
+  // Funções da Câmera Facial & Upload
   const startCamera = async () => {
     try {
       setShowFacialFinder(true);
@@ -204,24 +240,31 @@ export const PublicEventGallery: React.FC = () => {
       }
     } catch (err) {
       console.warn('Erro ao acessar webcam:', err);
-      toast.error('Câmera indisponível ou permissão não concedida. Você pode escolher uma foto da galeria abaixo!');
+      toast.error('Câmera indisponível ou sem permissão. Selecione uma foto da galeria!');
       setCameraActive(false);
       setShowFacialFinder(true);
     }
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploadedFileBlob(file);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      setSelectedPhotoFile(dataUrl);
-      stopCamera();
-      toast.success('Foto carregada! Clique em Localizar Minhas Fotos.');
-    };
-    reader.readAsDataURL(file);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const dataUrl = event.target?.result as string;
+        setSelectedPhotoFile(dataUrl);
+        stopCamera();
+        toast.info('Foto selecionada! Iniciando reconhecimento com IA...');
+        const compressedBlob = await resizeImageToBlob(file);
+        setUploadedFileBlob(compressedBlob);
+        await executeRealFacialMatch(compressedBlob);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Erro ao ler foto:', err);
+      toast.error('Não foi possível ler a imagem selecionada.');
+    }
   };
 
   const executeRealFacialMatch = async (blob: Blob) => {
@@ -270,7 +313,7 @@ export const PublicEventGallery: React.FC = () => {
         setShowFacialFinder(false);
         setCurrentPage(1);
         militaryAudio.playTacticalBeep();
-        toast.success(`Identificamos ${matched.length || data.matched_photos.length} fotos onde você aparece!`);
+        toast.success(`🎯 Identificamos ${matched.length || data.matched_photos.length} fotos onde você aparece!`);
       } else {
         const errMsg = data.message || 'Nenhuma foto sua foi localizada neste evento. Tente outra selfie com boa iluminação e de frente.';
         toast.error(errMsg, { duration: 5000 });
@@ -288,8 +331,7 @@ export const PublicEventGallery: React.FC = () => {
       await executeRealFacialMatch(uploadedFileBlob);
     } else if (selectedPhotoFile) {
       try {
-        const res = await fetch(selectedPhotoFile);
-        const blob = await res.blob();
+        const blob = await resizeImageToBlob(selectedPhotoFile);
         await executeRealFacialMatch(blob);
       } catch (e) {
         toast.error('Erro ao processar a imagem.');
@@ -307,11 +349,12 @@ export const PublicEventGallery: React.FC = () => {
     canvas.height = video.videoHeight || 480;
     const ctx = canvas.getContext('2d');
     ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob(async (blob) => {
-      if (!blob) return;
+    canvas.toBlob(async (rawBlob) => {
+      if (!rawBlob) return;
       stopCamera();
-      await executeRealFacialMatch(blob);
-    }, 'image/jpeg', 0.92);
+      const compressedBlob = await resizeImageToBlob(rawBlob as File);
+      await executeRealFacialMatch(compressedBlob);
+    }, 'image/jpeg', 0.85);
   };
 
   const stopCamera = () => {
@@ -376,12 +419,12 @@ export const PublicEventGallery: React.FC = () => {
 
         {/* ── PAINEL DE RECONHECIMENTO FACIAL (EXPANSÍVEL POR BOTÃO OU URL) ── */}
         {showFacialFinder && !selfieTaken && (
-          <div className="p-6 rounded-3xl bg-gradient-to-b from-[#131d33] to-[#0a1020] border-2 border-purple-500/40 text-center space-y-4 shadow-2xl shadow-black/80 animate-in fade-in">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-purple-300">
-                <Bot className="w-5 h-5" />
+          <div className="p-6 rounded-3xl bg-gradient-to-b from-[#0e172a] via-[#09101f] to-[#040810] border-2 border-[#c5a059]/50 text-center space-y-4 shadow-2xl shadow-black/80 animate-in fade-in">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+              <div className="flex items-center gap-2 text-[#e5c07b]">
+                <Bot className="w-5 h-5 text-[#c5a059]" />
                 <span className="text-xs font-black uppercase tracking-wider">
-                  Localizador Facial Inteligente
+                  Localizador Facial Inteligente • Biometria CGCFN
                 </span>
               </div>
               <button
@@ -390,46 +433,60 @@ export const PublicEventGallery: React.FC = () => {
                   setSelectedPhotoFile(null);
                   setShowFacialFinder(false);
                 }}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {selectedPhotoFile ? (
-              /* Prévia da Foto Escolhida pelo Convidado */
+              /* Prévia da Foto Escolhida pelo Convidado + Scanner */
               <div className="space-y-4 max-w-xs mx-auto">
-                <div className="w-52 h-52 mx-auto rounded-full overflow-hidden border-4 border-[#c5a059] shadow-2xl relative bg-black">
+                <div className="w-48 h-48 mx-auto rounded-full overflow-hidden border-4 border-[#c5a059] shadow-2xl relative bg-black">
                   <img
                     src={selectedPhotoFile}
                     alt="Foto de Referência"
                     className="w-full h-full object-cover"
                   />
+                  {isMatching && (
+                    <div className="absolute inset-0 bg-[#00e5ff]/15 backdrop-blur-[1px] flex items-center justify-center">
+                      <div className="w-full h-1 bg-[#00e5ff] shadow-[0_0_12px_#00e5ff] animate-pulse"></div>
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedPhotoFile(null)}
-                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs"
-                  >
-                    Voltar
-                  </button>
-                  <label className="cursor-pointer px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs">
-                    <span>Trocar Foto</span>
-                    <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-                  </label>
-                  <button
-                    onClick={handleMatchUploadedPhoto}
-                    className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30"
-                  >
-                    Localizar Minhas Fotos
-                  </button>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-bold text-[#e5c07b]">
+                    {isMatching ? '🔍 Analisando biometria facial no acervo...' : 'Foto carregada'}
+                  </p>
+
+                  <div className="flex items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      disabled={isMatching}
+                      onClick={() => setSelectedPhotoFile(null)}
+                      className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs disabled:opacity-50"
+                    >
+                      Voltar
+                    </button>
+                    <label className="cursor-pointer px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-bold text-xs">
+                      <span>Trocar Foto</span>
+                      <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                    </label>
+                    <button
+                      disabled={isMatching}
+                      onClick={handleMatchUploadedPhoto}
+                      className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d6b26b] hover:brightness-110 text-slate-950 font-black text-xs shadow-lg shadow-[#c5a059]/25 disabled:opacity-50"
+                    >
+                      {isMatching ? 'Processando...' : 'Localizar Fotos'}
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : cameraActive ? (
               /* Câmera / Webcam Ativa */
               <div className="space-y-4 max-w-xs mx-auto">
-                <div className="w-52 h-52 mx-auto rounded-full overflow-hidden border-4 border-[#c5a059] shadow-2xl relative bg-black">
+                <div className="w-48 h-48 mx-auto rounded-full overflow-hidden border-4 border-[#c5a059] shadow-2xl relative bg-black">
                   <video
                     ref={videoRef}
                     autoPlay
@@ -447,7 +504,7 @@ export const PublicEventGallery: React.FC = () => {
                   </button>
                   <button
                     onClick={captureSelfie}
-                    className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30"
+                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d6b26b] hover:brightness-110 text-slate-950 font-black text-xs shadow-lg shadow-[#c5a059]/25"
                   >
                     Capturar e Localizar
                   </button>
@@ -455,30 +512,30 @@ export const PublicEventGallery: React.FC = () => {
 
                 {/* Opção Alternativa Rápida para Carregar Arquivo se a Câmera falhar ou preferir galeria */}
                 <div className="pt-2 border-t border-slate-800/80">
-                  <label className="cursor-pointer px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-purple-500 text-slate-300 hover:text-white font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all shadow-md">
-                    <Upload className="w-3.5 h-3.5 text-purple-400" />
+                  <label className="cursor-pointer px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-[#c5a059] text-slate-300 hover:text-white font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all shadow-md">
+                    <Upload className="w-3.5 h-3.5 text-[#c5a059]" />
                     <span>Câmera não funcionou? Escolher Foto do Celular / Arquivo</span>
                     <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
                   </label>
                 </div>
               </div>
             ) : (
-              /* Escolha entre Câmera Selfie ou Upload da Galeria */
-              <div className="space-y-4">
-                <p className="text-xs text-slate-300 max-w-md mx-auto">
-                  Tire uma selfie ou selecione uma foto sua para que a inteligência artificial analise o acervo e entregue instantaneamente apenas as fotos onde você aparece.
+              /* Escolha entre Câmera Selfie ou Upload da Galeria (Design Sóbrio & Militar) */
+              <div className="space-y-4 py-2">
+                <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
+                  Tire uma selfie ou selecione uma foto do rosto para que a IA analise o acervo e entregue instantaneamente apenas as fotos em que você aparece.
                 </p>
-                <div className="flex items-center justify-center gap-3 flex-wrap">
+                <div className="flex items-center justify-center gap-3 flex-wrap pt-1">
                   <button
                     onClick={startCamera}
-                    className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all inline-flex items-center gap-2"
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d6b26b] hover:brightness-110 text-slate-950 font-black text-xs shadow-lg shadow-[#c5a059]/20 transition-all inline-flex items-center gap-2"
                   >
                     <Camera className="w-4 h-4" />
                     <span>Tirar Selfie com Câmera</span>
                   </button>
-                  <label className="cursor-pointer px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-purple-500 text-slate-200 hover:text-white font-bold text-xs shadow-lg transition-all inline-flex items-center gap-2">
-                    <Upload className="w-4 h-4 text-purple-400" />
-                    <span>Escolher Foto do Celular / Arquivo</span>
+                  <label className="cursor-pointer px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-[#c5a059]/60 hover:border-[#00e5ff] text-[#e5c07b] hover:text-white font-bold text-xs shadow-lg transition-all inline-flex items-center gap-2">
+                    <Upload className="w-4 h-4 text-[#c5a059]" />
+                    <span>Escolher Foto do Celular / PC</span>
                     <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
                   </label>
                 </div>
@@ -521,7 +578,7 @@ export const PublicEventGallery: React.FC = () => {
                   setShowFacialFinder(true);
                   setSelectedPhotoFile(null);
                 }}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all hover:scale-105 active:scale-95"
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d6b26b] hover:brightness-110 text-slate-950 font-black text-xs shadow-lg shadow-[#c5a059]/25 transition-all hover:scale-105 active:scale-95"
               >
                 <Bot className="w-4 h-4" />
                 <span>Localizar Minhas Fotos (Foto / Selfie)</span>
@@ -539,9 +596,9 @@ export const PublicEventGallery: React.FC = () => {
             {/* BOTÃO 2: BAIXAR PACOTE COMPLETO */}
             <button
               onClick={handleDownloadAll}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#d6b26b] text-slate-950 font-black text-xs shadow-lg shadow-[#c5a059]/25 transition-all hover:scale-105 active:scale-95"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-[#c5a059] text-white font-bold text-xs shadow-md transition-all hover:scale-105 active:scale-95"
             >
-              <Download className="w-4 h-4" />
+              <Download className="w-4 h-4 text-[#c5a059]" />
               <span>Baixar Pacote ({displayedPhotos.length} Fotos)</span>
             </button>
 

@@ -90,12 +90,13 @@ _EVENT_GERAL_PHOTOS_CACHE = {}
 def _get_event_matrix(event_id: str) -> tuple[np.ndarray, list[dict]]:
     """Carrega matriz NxD de embeddings do evento com cache em RAM e arquivo binário em disco (.npz)."""
     now = time.time()
-    if event_id in _EVENT_EMBEDDINGS_CACHE:
-        cache = _EVENT_EMBEDDINGS_CACHE[event_id]
+    if str(event_id) in _EVENT_EMBEDDINGS_CACHE:
+        cache = _EVENT_EMBEDDINGS_CACHE[str(event_id)]
         if now - cache['timestamp'] < 86400:
             return cache['matrix'], cache['records']
 
-    cache_dir = Path('data')
+    base_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+    cache_dir = base_dir / 'data'
     cache_dir.mkdir(exist_ok=True)
     npz_path = cache_dir / f"event_embeddings_{event_id}.npz"
     json_path = cache_dir / f"event_records_{event_id}.json"
@@ -107,21 +108,21 @@ def _get_event_matrix(event_id: str) -> tuple[np.ndarray, list[dict]]:
             matrix = data['matrix']
             with open(json_path, 'r', encoding='utf-8') as f:
                 records = json.load(f)
-            _EVENT_EMBEDDINGS_CACHE[event_id] = {
+            _EVENT_EMBEDDINGS_CACHE[str(event_id)] = {
                 'matrix': matrix,
                 'records': records,
                 'timestamp': now
             }
-            print(f"[PORTAL_IA] ⚡ Matriz ({matrix.shape[0]} faces) carregada do disco em {time.time()-t0:.3f}s!")
+            print(f"[PORTAL_IA] Matriz ({matrix.shape[0]} faces) carregada do disco em {time.time()-t0:.3f}s!")
             return matrix, records
         except Exception as e_disk:
-            print(f"[PORTAL_IA] ⚠️ Erro ao ler cache em disco do evento {event_id}: {e_disk}")
+            print(f"[PORTAL_IA] Erro ao ler cache em disco do evento {event_id}: {e_disk}")
 
     try:
-        from database import get_supabase_client
-        sb = get_supabase_client()
+        from database import get_service_db_connection, get_db_connection
+        sb = get_service_db_connection() or get_db_connection()
         t0 = time.time()
-        print(f"[PORTAL_IA] 🔄 Baixando embeddings do Supabase para o evento {event_id}...")
+        print(f"[PORTAL_IA] Baixando embeddings do banco para o evento {event_id}...")
 
         all_records = []
         offset = 0

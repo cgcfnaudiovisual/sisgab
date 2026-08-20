@@ -774,23 +774,29 @@ def render_page(autofill: str = None):
                                 
                                 render_lote_review_dem()
 
-            # 📝 CARD 2: Formulário Unificado com 2 colunas horizontais no Desktop
-            with ui.card().classes('w-full q-pa-md no-shadow rounded-xl').style(
-                f'background: {THEME["bg_panel"]}; border: 1px solid {THEME["border"]};'
+            # 📝 CARD 2: Formulário Unificado com 2 colunas horizontais simétricas e responsivas
+            with ui.card().classes('w-full q-pa-md sm:q-pa-lg no-shadow rounded-2xl border border-cyan-500/20').style(
+                f'background: {THEME["bg_panel"]}; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);'
             ):
-                ui.label('📝 Formulário da Demanda / Pauta COMSOC').classes('text-md font-bold text-cyan q-mb-md')
+                with ui.row().classes('w-full items-center justify-between q-mb-md'):
+                    with ui.row().classes('items-center gap-2'):
+                        ui.icon('assignment', size='1.5rem').classes('text-cyan')
+                        ui.label('Formulário da Demanda / Pauta COMSOC').classes('text-md font-bold text-white tracking-wide')
+                    ui.badge('Fluxo Operacional', color='cyan-9').props('outline text-color=cyan')
                 
-                with ui.row().classes('w-full gap-6 items-start wrap-mobile'):
+                with ui.grid().classes('w-full grid-cols-1 lg:grid-cols-2 gap-6 items-start'):
                     
                     # COLUNA DA ESQUERDA (Dados Principais)
-                    with ui.column().classes('col-12 col-md gap-3').style('flex: 1; min-width: 320px;'):
+                    with ui.column().classes('w-full gap-4 p-4 rounded-xl border border-white/10 bg-black/25'):
                         nonlocal sol_nome, sol_setor, sol_contato, ev_titulo, ev_data, ev_data_fim, ev_hora, ev_local, ev_aut, ev_entrega_tipo, militar_select, uploaded_file_url, uploaded_file_name, upload_status_lbl, chk_sigilo
                         nonlocal chk_staff, chk_equip, chk_drone, chk_transp, chk_cred, chk_anteced, chk_briefing, chk_foto, chk_video, chk_redes, score_label
                         
-                        ui.label('🎯 Detalhes do Serviço').classes('text-xs font-bold text-amber')
+                        with ui.row().classes('items-center gap-2'):
+                            ui.icon('brush', size='1.2rem').classes('text-amber')
+                            ui.label('Detalhes do Serviço & Solicitante').classes('text-xs font-bold text-amber tracking-wide uppercase')
                         
-                        # Categoria Múltipla e Produto Específico
-                        with ui.row().classes('w-full gap-2 wrap sm:no-wrap'):
+                        # Categoria Múltipla e Produto Específico (Grid 2 colunas)
+                        with ui.grid(columns=2).classes('w-full gap-3'):
                             categoria_demanda = ui.select(
                                 {
                                     'audiovisual': '📸 Cobertura Audiovisual',
@@ -805,21 +811,21 @@ def render_page(autofill: str = None):
                                 label='Categoria(s) da Demanda',
                                 multiple=True,
                                 clearable=True
-                            ).props('dark outlined dense option-dark use-chips').classes('w-full sm:w-1/2 font-bold text-cyan')
+                            ).props('dark outlined dense option-dark use-chips').classes('w-full font-bold text-cyan')
 
-                            produto_especifico = ui.input('Especificação da Peça / Produto', placeholder='Ex: Cardápio Almoço, Paspatur A4, Vídeo Reels').props('dark outlined dense').classes('w-full sm:w-1/2')
+                            produto_especifico = ui.input('Especificação da Peça / Produto', placeholder='Ex: Cardápio Almoço, Paspatur A4, Vídeo Reels').props('dark outlined dense').classes('w-full')
 
-                        # Título da demanda
-                        ev_titulo = ui.input('Título Geral da Tarefa / Solenidade').props('dark outlined dense w-full')
+                        # Título da demanda (100% largura)
+                        ev_titulo = ui.input('Título Geral da Tarefa / Solenidade / Pauta').props('dark outlined dense').classes('w-full')
 
-                        # Solicitante + Setor + Contato
-                        with ui.row().classes('w-full gap-2 wrap sm:no-wrap'):
-                            sol_nome = ui.input('Solicitante', value='CGCFN / GABINETE').props('dark outlined dense').classes('w-full sm:w-1/3')
-                            sol_setor = ui.input('Setor / OM', value='CGCFN').props('dark outlined dense').classes('w-full sm:w-1/3')
-                            sol_contato = ui.input('Contato / Ramal', value='Interno').props('dark outlined dense').classes('w-full sm:w-1/3')
+                        # Solicitante + Setor + Contato (Grid 3 colunas)
+                        with ui.grid(columns=3).classes('w-full gap-3'):
+                            sol_nome = ui.input('Solicitante', value='CGCFN / GABINETE').props('dark outlined dense').classes('w-full')
+                            sol_setor = ui.input('Setor / OM', value='CGCFN').props('dark outlined dense').classes('w-full')
+                            sol_contato = ui.input('Contato / Ramal', value='Interno').props('dark outlined dense').classes('w-full')
 
-                        # Prioridade + Deadline + Formato Entrega
-                        with ui.row().classes('w-full gap-2 wrap sm:no-wrap'):
+                        # Prioridade + Deadline + Formato Entrega (Grid 3 colunas)
+                        with ui.grid(columns=3).classes('w-full gap-3'):
                             prioridade_select = ui.select(
                                 {
                                     'normal': '🟢 Normal',
@@ -828,9 +834,9 @@ def render_page(autofill: str = None):
                                 },
                                 value='normal',
                                 label='Prioridade'
-                            ).props('dark outlined dense option-dark').classes('w-full sm:w-1/3')
+                            ).props('dark outlined dense option-dark').classes('w-full')
 
-                            prazo_limite = ui.input('Prazo / Deadline', value=datetime.now().strftime('%Y-%m-%d')).props('type=date dark outlined dense').classes('w-full sm:w-1/3')
+                            prazo_limite = ui.input('Prazo / Deadline', value=datetime.now().strftime('%Y-%m-%d')).props('type=date dark outlined dense').classes('w-full')
 
                             ev_entrega_tipo = ui.select(
                                 {
@@ -840,10 +846,11 @@ def render_page(autofill: str = None):
                                 },
                                 value='captacao_e_edicao',
                                 label='Formato Entrega'
-                            ).props('dark outlined dense option-dark').classes('w-full sm:w-1/3')
+                            ).props('dark outlined dense option-dark').classes('w-full')
 
                         # Sigilo Checkbox
-                        chk_sigilo = ui.checkbox('Pauta Sigilosa / Reservada (Gabinete)').classes('text-xs text-amber-5 q-my-xs')
+                        with ui.row().classes('w-full items-center p-2 rounded-lg bg-amber-500/10 border border-amber-500/20'):
+                            chk_sigilo = ui.checkbox('Pauta Sigilosa / Reservada (Gabinete)').classes('text-xs text-amber font-semibold')
 
                         # 📷 SELETOR DE SERVIÇOS & SUBCATEGORIAS MULTIPLAS
                         def get_service_options_for_categories(cats):
@@ -895,32 +902,32 @@ def render_page(autofill: str = None):
                             label='📷 Serviços & Peças Específicas',
                             multiple=True,
                             clearable=True
-                        ).props('dark outlined dense option-dark use-chips').classes('w-full font-bold text-cyan q-my-xs')
+                        ).props('dark outlined dense option-dark use-chips').classes('w-full font-bold text-cyan')
                         tipo_cobertura.set_visibility(False)
 
                         # ── SEÇÕES DINÂMICAS GRADUAIS POR CATEGORIA ──
                         
                         # 1. Seção Audiovisual
-                        with ui.column().classes('w-full gap-2 p-3 bg-black/30 rounded-lg border border-cyan-500/20 q-my-xs') as campos_audiovisual_container:
+                        with ui.column().classes('w-full gap-3 p-3 bg-black/40 rounded-lg border border-cyan-500/30') as campos_audiovisual_container:
                             campos_audiovisual_container.set_visibility(False)
                             ui.label('📸 Detalhes do Evento (Audiovisual):').classes('text-xs font-bold text-cyan')
                             
-                            with ui.row().classes('w-full gap-2 wrap sm:no-wrap'):
-                                ev_data = ui.input('Data Início').props('type=date dark outlined dense').classes('w-full sm:w-1/3')
-                                ev_data_fim = ui.input('Data Término').props('type=date dark outlined dense').classes('w-full sm:w-1/3')
-                                ev_hora = ui.input('Hora Início').props('type=time dark outlined dense').classes('w-full sm:w-1/3')
+                            with ui.grid(columns=3).classes('w-full gap-3'):
+                                ev_data = ui.input('Data Início').props('type=date dark outlined dense').classes('w-full')
+                                ev_data_fim = ui.input('Data Término').props('type=date dark outlined dense').classes('w-full')
+                                ev_hora = ui.input('Hora Início').props('type=time dark outlined dense').classes('w-full')
                                 
-                            ev_local = ui.input('Local Exato do Evento').props('dark outlined dense w-full')
-                            ev_aut = ui.input('Autoridades Presentes').props('dark outlined dense w-full')
+                            ev_local = ui.input('Local Exato do Evento').props('dark outlined dense').classes('w-full')
+                            ev_aut = ui.input('Autoridades Presentes').props('dark outlined dense').classes('w-full')
 
                         # 2. Seção Design & Impressos
-                        with ui.column().classes('w-full gap-2 p-3 bg-black/30 rounded-lg border border-purple-500/20 q-my-xs') as container_sec_design:
+                        with ui.column().classes('w-full gap-2 p-3 bg-black/40 rounded-lg border border-purple-500/30') as container_sec_design:
                             container_sec_design.set_visibility(False)
                             ui.label('🎨 Especificações de Design & Gráfica:').classes('text-xs font-bold text-purple-4')
                             ui.label('Indique observações sobre dimensões, formato de impressão, cores e padrão visual.').classes('text-[11px] text-grey-4')
 
                         # 3. Seção Redação & Texto
-                        with ui.column().classes('w-full gap-2 p-3 bg-black/30 rounded-lg border border-emerald-500/20 q-my-xs') as container_sec_redacao:
+                        with ui.column().classes('w-full gap-2 p-3 bg-black/40 rounded-lg border border-emerald-500/30') as container_sec_redacao:
                             container_sec_redacao.set_visibility(False)
                             ui.label('✍️ Diretrizes de Redação & Discurso:').classes('text-xs font-bold text-emerald-4')
                             ui.label('Informe a pauta do discurso, ordem do dia, tom do texto e trechos indispensáveis.').classes('text-[11px] text-grey-4')
@@ -947,8 +954,10 @@ def render_page(autofill: str = None):
                         categoria_demanda.on_value_change(ao_mudar_categorias)
 
                     # COLUNA DA DIREITA (Execução, Anexos e Checklist)
-                    with ui.column().classes('col-12 col-md gap-3').style('flex: 1; min-width: 320px;'):
-                        ui.label('⚙️ Operacional & Execução').classes('text-xs font-bold text-cyan')
+                    with ui.column().classes('w-full gap-4 p-4 rounded-xl border border-white/10 bg-black/25'):
+                        with ui.row().classes('items-center gap-2'):
+                            ui.icon('tune', size='1.2rem').classes('text-cyan')
+                            ui.label('Operacional & Execução').classes('text-xs font-bold text-cyan tracking-wide uppercase')
 
                         if is_internal_staff:
                             lbl_militar = '🎯 Designar Militar Responsável' if is_approver else '👤 Sugestão de Encarregado (Opcional)'
@@ -958,16 +967,18 @@ def render_page(autofill: str = None):
                                 label=lbl_militar,
                                 with_input=True,
                                 clearable=True
-                            ).props('dark outlined dense w-full option-dark new-value-mode=add-unique').classes('w-full').tooltip('Selecione do efetivo ou digite o nome do militar')
+                            ).props('dark outlined dense option-dark new-value-mode=add-unique').classes('w-full').tooltip('Selecione do efetivo ou digite o nome do militar')
                         else:
                             militar_select = None
 
-                        in_drive_url = ui.input('📁 Link da Pasta no Google Drive / Acervo (Opcional)', placeholder='https://drive.google.com/drive/folders/...').props('dark outlined dense w-full')
-                        observacoes_exec = ui.textarea('📝 Briefing / Instruções de Execução').props('dark outlined dense w-full rows=2')
+                        in_drive_url = ui.input('📁 Link da Pasta no Google Drive / Acervo (Opcional)', placeholder='https://drive.google.com/drive/folders/...').props('dark outlined dense').classes('w-full')
+                        observacoes_exec = ui.textarea('📝 Briefing / Instruções de Execução').props('dark outlined dense rows=3').classes('w-full')
 
                         # Anexos
-                        with ui.column().classes('w-full gap-1 p-2 bg-black/10 rounded-lg border border-white/5'):
-                            ui.label('📎 Anexo (Briefing, Logotipos, Roteiro)').classes('text-[11px] font-bold text-grey-4')
+                        with ui.column().classes('w-full gap-2 p-3 bg-black/40 rounded-lg border border-white/10'):
+                            with ui.row().classes('items-center gap-2'):
+                                ui.icon('attach_file', size='1rem').classes('text-grey-4')
+                                ui.label('Anexo (Briefing, Logotipos, Roteiro)').classes('text-[11px] font-bold text-grey-3')
                             
                             def handle_upload(e):
                                 try:
@@ -991,31 +1002,33 @@ def render_page(autofill: str = None):
                                 on_upload=handle_upload,
                                 label='Escolher arquivo',
                                 auto_upload=True
-                            ).props('dark flat bordered text-color=white dense').classes('w-full text-xs').style('max-height: 60px;')
+                            ).props('dark flat bordered text-color=cyan dense').classes('w-full text-xs')
                             
                             upload_status_lbl = ui.label('Nenhum arquivo anexado').classes('text-[10px] text-grey-4 w-full text-center')
 
                         # Checklist de Suporte & Viabilidade (Apenas para Audiovisual)
-                        with ui.column().classes('w-full gap-1 p-2 bg-black/25 rounded-lg border border-cyan-500/15') as checklist_card:
+                        with ui.column().classes('w-full gap-2 p-3 bg-black/40 rounded-lg border border-cyan-500/20') as checklist_card:
                             ui.label('🔍 Checklist de Viabilidade (Audiovisual)').classes('text-xs font-bold text-cyan')
                             
-                            chk_staff = ui.checkbox('Pessoal disponível?', on_change=lambda e: (form_state.update({'viabilidade_staff': e.value}), atualizar_score_ui()))
-                            chk_equip = ui.checkbox('Equipamento reservado?', on_change=lambda e: (form_state.update({'viabilidade_equip': e.value}), atualizar_score_ui()))
-                            chk_drone = ui.checkbox('Necessita Drone?', on_change=lambda e: (form_state.update({'viabilidade_drone': e.value}), atualizar_score_ui()))
-                            chk_transp = ui.checkbox('Transporte assegurado?', on_change=lambda e: (form_state.update({'viabilidade_transp': e.value}), atualizar_score_ui()))
-                            chk_cred = ui.checkbox('Credenciamento de Imprensa?', on_change=lambda e: (form_state.update({'viabilidade_credencial': e.value}), atualizar_score_ui()))
-                            chk_anteced = ui.checkbox('Antecedência suficiente?', on_change=lambda e: (form_state.update({'viabilidade_anteced': e.value}), atualizar_score_ui()))
-                            chk_briefing = ui.checkbox('Briefing aprovado?', on_change=lambda e: (form_state.update({'viabilidade_briefing': e.value}), atualizar_score_ui()))
+                            with ui.row().classes('w-full gap-x-4 gap-y-1 wrap items-center'):
+                                chk_staff = ui.checkbox('Pessoal disponível?', on_change=lambda e: (form_state.update({'viabilidade_staff': e.value}), atualizar_score_ui())).classes('text-xs')
+                                chk_equip = ui.checkbox('Equipamento reservado?', on_change=lambda e: (form_state.update({'viabilidade_equip': e.value}), atualizar_score_ui())).classes('text-xs')
+                                chk_drone = ui.checkbox('Necessita Drone?', on_change=lambda e: (form_state.update({'viabilidade_drone': e.value}), atualizar_score_ui())).classes('text-xs')
+                                chk_transp = ui.checkbox('Transporte assegurado?', on_change=lambda e: (form_state.update({'viabilidade_transp': e.value}), atualizar_score_ui())).classes('text-xs')
+                                chk_cred = ui.checkbox('Credenciamento?', on_change=lambda e: (form_state.update({'viabilidade_credencial': e.value}), atualizar_score_ui())).classes('text-xs')
+                                chk_anteced = ui.checkbox('Antecedência OK?', on_change=lambda e: (form_state.update({'viabilidade_anteced': e.value}), atualizar_score_ui())).classes('text-xs')
+                                chk_briefing = ui.checkbox('Briefing aprovado?', on_change=lambda e: (form_state.update({'viabilidade_briefing': e.value}), atualizar_score_ui())).classes('text-xs')
                             
-                            ui.separator().style('background-color: rgba(255, 255, 255, 0.05); margin: 4px 0;')
+                            ui.separator().style('background-color: rgba(255, 255, 255, 0.05);')
                             
-                            ui.label('📸 Escopo Adicional').classes('text-[10px] font-bold text-white')
-                            with ui.row().classes('w-full gap-2'):
-                                chk_foto = ui.checkbox('Foto', on_change=lambda e: (form_state.update({'cobertura_foto': e.value}), atualizar_score_ui()))
-                                chk_video = ui.checkbox('Vídeo', on_change=lambda e: (form_state.update({'cobertura_video': e.value}), atualizar_score_ui()))
-                                chk_redes = ui.checkbox('Redes', on_change=lambda e: (form_state.update({'cobertura_redes': e.value}), atualizar_score_ui()))
-                            
-                            score_label = ui.label('🟢 Score: 1.0 (Baixo Esforço)').classes('text-xs font-bold text-center w-full q-py-xs bg-black/30 rounded-md q-mt-xs')
+                            with ui.row().classes('w-full items-center justify-between'):
+                                with ui.row().classes('gap-3 items-center'):
+                                    ui.label('Escopo:').classes('text-[10px] font-bold text-grey-4')
+                                    chk_foto = ui.checkbox('Foto', on_change=lambda e: (form_state.update({'cobertura_foto': e.value}), atualizar_score_ui())).classes('text-xs')
+                                    chk_video = ui.checkbox('Vídeo', on_change=lambda e: (form_state.update({'cobertura_video': e.value}), atualizar_score_ui())).classes('text-xs')
+                                    chk_redes = ui.checkbox('Redes', on_change=lambda e: (form_state.update({'cobertura_redes': e.value}), atualizar_score_ui())).classes('text-xs')
+                                
+                                score_label = ui.label('🟢 Score: 1.0 (Baixo Esforço)').classes('text-xs font-bold text-center px-3 py-1 bg-black/60 rounded-md border border-white/10')
                             atualizar_score_ui()
 
                         def checar_vis_checklist(v):
@@ -1176,18 +1189,20 @@ def render_page(autofill: str = None):
                                 except Exception as ex:
                                     ui.notify(f'Erro ao salvar: {ex}', color='red')
 
-                        with ui.row().classes('w-full gap-2 q-mt-sm justify-between no-wrap'):
-                            ui.button(
-                                '🎖️ Salvar & Aprovar Direto (Quartel)', 
-                                icon='stars', 
-                                on_click=lambda: salvar_demanda(status_inicial='aprovado', eh_evento_interno=True)
-                            ).props('unelevated color=amber text-color=black bold').classes('col text-xs')
-                            
-                            ui.button(
-                                '📝 Enviar Solicitação para Avaliação', 
-                                icon='send', 
-                                on_click=lambda: salvar_demanda(status_inicial='pendente', eh_evento_interno=False)
-                            ).props('unelevated color=cyan text-color=black bold').classes('col text-xs')
+                # ── RODAPÉ DE AÇÕES SIMÉTRICO E FULL-WIDTH ──
+                ui.separator().classes('q-my-md').style('background-color: rgba(0, 229, 255, 0.15);')
+                with ui.row().classes('w-full gap-4 items-center justify-between wrap sm:no-wrap'):
+                    ui.button(
+                        '⭐ SALVAR & APROVAR DIRETO (QUARTEL)', 
+                        icon='stars', 
+                        on_click=lambda: salvar_demanda(status_inicial='aprovado', eh_evento_interno=True)
+                    ).props('unelevated color=amber-9 text-color=black bold').classes('w-full sm:w-1/2 py-2 text-xs font-bold shadow-lg')
+                    
+                    ui.button(
+                        '🚀 ENVIAR SOLICITAÇÃO PARA AVALIAÇÃO', 
+                        icon='send', 
+                        on_click=lambda: salvar_demanda(status_inicial='pendente', eh_evento_interno=False)
+                    ).props('unelevated color=cyan-7 text-color=black bold').classes('w-full sm:w-1/2 py-2 text-xs font-bold shadow-lg')
 
     render_content()
     

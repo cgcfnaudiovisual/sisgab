@@ -56,7 +56,7 @@ def render_page():
 
     @ui.refreshable
     def render_content():
-        db = get_db_connection()
+        db = get_service_db_connection() or get_db_connection()
         efetivo = []
         datas_comemorativas = []
         if db:
@@ -84,7 +84,7 @@ def render_page():
             
             # Filtro de busca textual (nome, posto, setor, origem)
             nome_val = (e.get('nome_guerra') or '').lower()
-            posto_val = (e.get('posto') or '').lower()
+            posto_val = (e.get('posto_grad') or e.get('posto') or '').lower()
             setor_val = (e.get('setor') or '').lower()
             origem_val = (e.get('origem') or '').lower()
             
@@ -92,25 +92,46 @@ def render_page():
                 continue
                 
             # Filtro por Categoria (militar, visitante_civil, autoridade)
-            e_cat = e.get('categoria', 'militar')
-            if cat_filtro != 'todos' and e_cat != cat_filtro:
-                continue
+            e_cat = str(e.get('categoria') or 'militar').strip().lower()
+            if cat_filtro != 'todos':
+                if cat_filtro == 'militar' and e_cat not in ('militar', 'efetivo', ''):
+                    continue
+                elif cat_filtro != 'militar' and e_cat != cat_filtro:
+                    continue
                 
-            try:
-                b_dt = datetime.strptime(birth, '%Y-%m-%d')
-                if b_dt.month == mes_atual:
-                    aniversariantes_filtrados.append({
-                        'id': e['id'],
-                        'nome': (e.get('nome_guerra') or 'Sem Nome').upper(),
-                        'posto': (e.get('posto') or 'Militar').upper(),
-                        'dia': b_dt.day,
-                        'email': e.get('email', ''),
-                        'setor': (e.get('setor') or 'Gabinete').upper(),
-                        'origem': (e.get('origem') or 'Interno').upper(),
-                        'categoria': e_cat
-                    })
-            except:
-                pass
+            # Extração robusta de Mês e Dia
+            b_month = None
+            b_day = None
+            b_str = str(birth).strip().split('T')[0].split(' ')[0]
+            if '-' in b_str:
+                parts = b_str.split('-')
+                if len(parts) >= 3:
+                    try:
+                        b_month = int(parts[1])
+                        b_day = int(parts[2])
+                    except Exception:
+                        pass
+            elif '/' in b_str:
+                parts = b_str.split('/')
+                if len(parts) >= 2:
+                    try:
+                        b_day = int(parts[0])
+                        b_month = int(parts[1])
+                    except Exception:
+                        pass
+
+            if b_month == mes_atual and b_day is not None:
+                aniversariantes_filtrados.append({
+                    'id': e.get('id'),
+                    'nome': (e.get('nome_guerra') or 'Sem Nome').upper(),
+                    'posto': (e.get('posto_grad') or e.get('posto') or 'Militar').upper(),
+                    'dia': b_day,
+                    'email': e.get('email', ''),
+                    'telefone': e.get('telefone', ''),
+                    'setor': (e.get('setor') or 'Gabinete').upper(),
+                    'origem': (e.get('origem') or 'Interno').upper(),
+                    'categoria': e_cat
+                })
                 
         aniversariantes_filtrados.sort(key=lambda x: x['dia'])
 
@@ -1020,6 +1041,10 @@ def render_page():
                 state['search'] = txt_busca.value or ''
                 render_content.refresh()
                 
+            sel_mes.on_value_change(lambda e: (state.update({'mes_filtro': e.value}), render_content.refresh()))
+            sel_cat.on_value_change(lambda e: (state.update({'categoria_filtro': e.value}), render_content.refresh()))
+            txt_busca.on_value_change(lambda e: (state.update({'search': e.value or ''}), render_content.refresh()))
+            
             ui.button('Filtrar', icon='search', on_click=atualizar_filtros).props('unelevated color=primary text-color=black bold').classes('q-px-lg cyber-glow')
 
     render_content()

@@ -1,6 +1,12 @@
 import os
+import io
+import time
+import json
+import asyncio
+import numpy as np
+from pathlib import Path
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile, File, Form
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,7 +47,82 @@ async def health_check():
         "react_ready": os.path.exists(os.path.join(REACT_DIST_DIR, "index.html"))
     }
 
-# ── Endpoints de Rotinas Sob Demanda em Python ──
+# ── Endpoints de Reconhecimento Facial Sob Demanda ──
+try:
+    from portal_convidado import _extract_selfie_embedding, _get_event_matrix, _get_selfie_app
+except Exception as e_import:
+    print(f"[WARN] Erro ao importar portal_convidado: {e_import}")
+    _extract_selfie_embedding = None
+    _get_event_matrix = None
+    _get_selfie_app = None
+
+@app.on_event("startup")
+async def startup_event():
+    print("⚓ [SisGAB 2.0] Pré-aquecendo motor de IA facial e matrizes em RAM...")
+    try:
+        if _get_selfie_app:
+            asyncio.create_task(asyncio.to_thread(_get_selfie_app))
+        if _get_event_matrix:
+            asyncio.create_task(asyncio.to_thread(_get_event_matrix, "50"))
+    except Exception as e:
+        print(f"[SisGAB] ⚠️ Aviso na inicialização: {e}")
+
+@app.post("/api/portal/match")
+async def api_portal_match(
+    event_id: str = Form(...),
+    session_id: str = Form(''),
+    file: UploadFile = File(...)
+):
+    """Endpoint REST ultra-rápido para recepção direta da selfie e cruzamento com a matriz de embeddings do evento."""
+    try:
+        content = await file.read()
+        if not content:
+            return JSONResponse({'ok': False, 'message': 'Foto vazia.'}, status_code=400)
+        
+        if _extract_selfie_embedding is None:
+            return JSONResponse({'ok': False, 'message': 'Motor de IA não inicializado no servidor.'}, status_code=500)
+
+        ok, msg, embedding = await asyncio.to_thread(_extract_selfie_embedding, content)
+        if not ok or embedding is None:
+            return JSONResponse({'ok': False, 'message': msg})
+        
+        matrix, records = await asyncio.to_thread(_get_event_matrix, str(event_id))
+        threshold_match = 0.38
+        
+        matched_items = []
+        if matrix is not None and len(matrix.shape) == 2 and matrix.shape[0] > 0:
+            s_vec = np.array(embedding, dtype=np.float32)
+            norm = np.linalg.norm(s_vec)
+            if norm > 0:
+                s_vec = s_vec / norm
+            scores = matrix @ s_vec
+            
+            seen_fids = set()
+            for idx in np.argsort(-scores):
+                score = float(scores[idx])
+                if score < threshold_match:
+                    break
+                if idx < len(records):
+                    rec = records[idx]
+                    fid = rec.get('drive_file_id')
+                    if fid and fid not in seen_fids:
+                        seen_fids.add(fid)
+                        matched_items.append({
+                            'drive_file_id': fid,
+                            'drive_link': rec.get('drive_link') or f"https://drive.google.com/file/d/{fid}/view",
+                            'filename': rec.get('photo_filename', 'foto.jpg'),
+                            'similarity': round(score, 3)
+                        })
+        
+        return JSONResponse({
+            'ok': True,
+            'count': len(matched_items),
+            'matched_photos': matched_items
+        })
+    except Exception as e:
+        print(f"[API_PORTAL_MATCH_ERR] {e}")
+        return JSONResponse({'ok': False, 'message': str(e)}, status_code=500)
+
 @app.post("/api/workers/face-index")
 async def trigger_face_indexing():
     """Dispara a indexação facial sob demanda."""
