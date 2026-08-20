@@ -180,6 +180,13 @@ export const DemandApproval: React.FC = () => {
         score_esforco: editForm.score_esforco || detailModal.score_esforco || 1,
       };
 
+      // Constrói autoridades com tag de Drive resiliente se houver drive_url
+      const driveUrlTrimmed = updatedItem.drive_url?.trim();
+      const autLimpa = cleanAutoridades(updatedItem.autoridades);
+      const finalAutoridades = driveUrlTrimmed
+        ? (autLimpa ? `${autLimpa} [DRIVE: ${driveUrlTrimmed}]` : `[DRIVE: ${driveUrlTrimmed}]`)
+        : autLimpa;
+
       const { error } = await supabase
         .from('demandas_comunicacao')
         .update({
@@ -192,16 +199,28 @@ export const DemandApproval: React.FC = () => {
           setor: updatedItem.setor,
           contato: updatedItem.contato,
           tipo_cobertura: updatedItem.tipo_cobertura,
-          autoridades: updatedItem.autoridades,
-          observacoes: updatedItem.observacoes,
+          autoridades: finalAutoridades,
           score_esforco: updatedItem.score_esforco,
-          drive_url: updatedItem.drive_url,
           categoria_demanda: updatedItem.categoria_demanda,
-          produto_especifico: updatedItem.produto_especifico,
+          produto_especifico: updatedItem.observacoes || updatedItem.produto_especifico || '',
         })
         .eq('id', detailModal.id);
 
       if (error) throw error;
+
+      if (driveUrlTrimmed) {
+        try {
+          await fetch('/api/drive/save_drive_link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              demanda_id: detailModal.id,
+              titulo_evento: updatedItem.titulo_evento,
+              drive_url: driveUrlTrimmed,
+            }),
+          });
+        } catch (_) {}
+      }
 
       setDemandas((prev) =>
         prev.map((d) => (d.id === detailModal.id ? updatedItem : d))
@@ -375,7 +394,7 @@ export const DemandApproval: React.FC = () => {
     try {
       await supabase
         .from('demandas_comunicacao')
-        .update({ status: action, observacoes: motivo })
+        .update({ status: action, produto_especifico: motivo })
         .eq('id', demanda.id);
     } catch (e) {
       console.warn('Erro ao salvar parecer:', e);

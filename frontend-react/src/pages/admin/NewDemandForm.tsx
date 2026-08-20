@@ -152,6 +152,25 @@ export const NewDemandForm: React.FC = () => {
     }
   }, [editId]);
 
+  // Helper para extrair URL do Drive de dados da demanda
+  const extractDriveUrlFromDemand = (data: any) => {
+    if (data.drive_url && String(data.drive_url).startsWith('http')) return String(data.drive_url).trim();
+    if (data.arquivo_url && String(data.arquivo_url).startsWith('http')) return String(data.arquivo_url).trim();
+    const combined = `${data.autoridades || ''} ${data.produto_especifico || ''} ${data.observacoes || ''}`;
+    const match = combined.match(/https:\/\/drive\.google\.com[^\s\]]+/);
+    return match ? match[0] : '';
+  };
+
+  // Helper para limpar tags do campo autoridades
+  const cleanAutoridadesText = (raw?: string | null) => {
+    if (!raw) return '';
+    return raw
+      .replace(/\[DRIVE:[^\]]+\]/gi, '')
+      .replace(/https:\/\/drive\.google\.com[^\s\]]+/gi, '')
+      .replace(/Obs:?\s*Horário[^\.]+/gi, '')
+      .trim();
+  };
+
   const loadDemandaForEdit = async (id: number) => {
     try {
       setLoadingEdit(true);
@@ -162,6 +181,33 @@ export const NewDemandForm: React.FC = () => {
         .single();
 
       if (!error && data) {
+        const rawDriveUrl = extractDriveUrlFromDemand(data);
+        const cleanedAut = cleanAutoridadesText(data.autoridades);
+        const obs = data.produto_especifico || data.observacoes || '';
+        const rawHora = data.hora_evento && data.hora_evento !== 'A DEFINIR' ? data.hora_evento.slice(0, 5) : '09:00';
+
+        // Normalização de coberturas
+        let parsedCoverages: string[] = [];
+        if (Array.isArray(data.tipo_cobertura)) {
+          parsedCoverages = data.tipo_cobertura;
+        } else if (typeof data.tipo_cobertura === 'string') {
+          try {
+            const jsonParsed = JSON.parse(data.tipo_cobertura);
+            if (Array.isArray(jsonParsed)) parsedCoverages = jsonParsed;
+          } catch {
+            parsedCoverages = data.tipo_cobertura.split(',').map((s: string) => s.trim()).filter(Boolean);
+          }
+        }
+        const normalizedCoverages = parsedCoverages.map((c) => {
+          const lower = c.toLowerCase();
+          if (lower === 'foto' || lower === 'fotografia') return 'Fotografia';
+          if (lower === 'video') return 'Video';
+          if (lower === 'drone') return 'Drone';
+          if (lower === 'reels') return 'Reels';
+          if (lower === 'transmissao') return 'Transmissao';
+          return c;
+        });
+
         setFormData({
           solicitante_nome: data.solicitante_nome || '',
           setor: data.setor || '',
@@ -169,19 +215,15 @@ export const NewDemandForm: React.FC = () => {
           titulo_evento: data.titulo_evento || '',
           data_evento: data.data_evento && data.data_evento !== 'SEM_DATA' ? data.data_evento : getBrasiliaDateStr(),
           data_fim: data.data_fim || '',
-          hora_evento: data.hora_evento && data.hora_evento !== 'A DEFINIR' ? data.hora_evento : '09:00',
+          hora_evento: rawHora,
           local_evento: data.local_evento || '',
-          tipo_cobertura: Array.isArray(data.tipo_cobertura)
-            ? data.tipo_cobertura
-            : typeof data.tipo_cobertura === 'string'
-            ? (data.tipo_cobertura as string).split(',').map((s: string) => s.trim()).filter(Boolean)
-            : ['Fotografia'],
-          autoridades: data.autoridades || '',
-          drive_url: data.drive_url || '',
+          tipo_cobertura: normalizedCoverages.length > 0 ? normalizedCoverages : ['Fotografia'],
+          autoridades: cleanedAut,
+          drive_url: rawDriveUrl,
           sigiloso: !!data.sigiloso,
           captacao_entrega: data.captacao_entrega || 'apenas_captacao_bruto',
-          observacoes: data.observacoes || '',
-          gerar_pasta_drive: false,
+          observacoes: obs,
+          gerar_pasta_drive: !rawDriveUrl,
         });
 
         if (data.data_fim && data.data_fim > data.data_evento) {
@@ -392,6 +434,12 @@ export const NewDemandForm: React.FC = () => {
       const finalDataEvento = tipoData === 'sem_data' ? null : formData.data_evento;
       const finalDataFim = tipoData === 'periodo' && formData.data_fim ? formData.data_fim : null;
 
+      const cleanedAut = cleanAutoridadesText(formData.autoridades);
+      const driveUrlTrimmed = formData.drive_url?.trim();
+      const finalAutoridades = driveUrlTrimmed
+        ? (cleanedAut ? `${cleanedAut} [DRIVE: ${driveUrlTrimmed}]` : `[DRIVE: ${driveUrlTrimmed}]`)
+        : cleanedAut;
+
       if (editId) {
         const { error } = await supabase
           .from('demandas_comunicacao')
@@ -402,10 +450,10 @@ export const NewDemandForm: React.FC = () => {
             titulo_evento: formData.titulo_evento,
             data_evento: finalDataEvento,
             data_fim: finalDataFim,
-            hora_evento: tipoData === 'sem_data' ? 'A DEFINIR' : formData.hora_evento,
+            hora_evento: tipoData === 'sem_data' ? 'A DEFINIR' : (formData.hora_evento || '09:00'),
             local_evento: formData.local_evento || 'A Definir',
             tipo_cobertura: formData.tipo_cobertura,
-            autoridades: formData.autoridades,
+            autoridades: finalAutoridades,
             score_esforco: score,
             sigiloso: formData.sigiloso,
             captacao_entrega: formData.captacao_entrega,
@@ -418,7 +466,7 @@ export const NewDemandForm: React.FC = () => {
         if (error) throw error;
 
         // Salvar link do Drive via API resiliente (usa campo autoridades como fallback)
-        if (formData.drive_url?.trim()) {
+        if (driveUrlTrimmed) {
           try {
             await fetch('/api/drive/save_drive_link', {
               method: 'POST',
@@ -426,10 +474,10 @@ export const NewDemandForm: React.FC = () => {
               body: JSON.stringify({
                 demanda_id: Number(editId),
                 titulo_evento: formData.titulo_evento,
-                drive_url: formData.drive_url.trim(),
+                drive_url: driveUrlTrimmed,
               }),
             });
-          } catch (_) { /* silencioso — dado não se perde, só não salva o link */ }
+          } catch (_) { /* silencioso */ }
         }
 
         militaryAudio.playTacticalBeep();
@@ -452,14 +500,15 @@ export const NewDemandForm: React.FC = () => {
           titulo_evento: formData.titulo_evento,
           data_evento: finalDataEvento,
           data_fim: finalDataFim,
-          hora_evento: tipoData === 'sem_data' ? 'A DEFINIR' : formData.hora_evento,
+          hora_evento: tipoData === 'sem_data' ? 'A DEFINIR' : (formData.hora_evento || '09:00'),
           local_evento: formData.local_evento || 'A Definir',
           tipo_cobertura: formData.tipo_cobertura,
-          autoridades: formData.autoridades,
+          autoridades: finalAutoridades,
           score_esforco: score,
           sigiloso: formData.sigiloso,
           status: 'pendente',
           captacao_entrega: formData.captacao_entrega,
+          categoria_demanda: 'audiovisual',
           produto_especifico: formData.observacoes || '',
           notificar_militar_ids: selectedMilitares,
           encarregado_id: selectedMilitares.length > 0 ? selectedMilitares[0] : null,
@@ -467,7 +516,7 @@ export const NewDemandForm: React.FC = () => {
         .select();
 
       // Salvar link do Drive resilientemente após criação
-      if (formData.drive_url?.trim() && data && data[0]?.id) {
+      if (driveUrlTrimmed && data && data[0]?.id) {
         try {
           await fetch('/api/drive/save_drive_link', {
             method: 'POST',
@@ -475,7 +524,7 @@ export const NewDemandForm: React.FC = () => {
             body: JSON.stringify({
               demanda_id: data[0].id,
               titulo_evento: formData.titulo_evento,
-              drive_url: formData.drive_url.trim(),
+              drive_url: driveUrlTrimmed,
             }),
           });
         } catch (_) { /* silencioso */ }
