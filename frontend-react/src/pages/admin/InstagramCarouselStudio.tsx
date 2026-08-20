@@ -36,6 +36,13 @@ import {
   Radio,
   Sliders as SlidersIcon,
   Wand2,
+  ZoomIn,
+  ZoomOut,
+  Move,
+  RotateCw,
+  RotateCcw,
+  FlipHorizontal,
+  FlipVertical,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
@@ -172,6 +179,13 @@ export interface CarouselSlide {
   imageSrc?: string;
   imageOpacity: number;
   overlayStrength: number;
+  imageZoom?: number;
+  imageOffsetX?: number;
+  imageOffsetY?: number;
+  imageRotation?: number;
+  imageFlipH?: boolean;
+  imageFlipV?: boolean;
+  imageFilter?: 'none' | 'grayscale' | 'sepia' | 'contrast' | 'vivid' | 'cool' | 'warm';
   fontFamily: 'Playfair Display' | 'DM Sans' | 'Space Grotesk' | 'Georgia';
 }
 
@@ -403,34 +417,64 @@ export const InstagramCarouselStudio: React.FC = () => {
     // ── 2. RENDERIZAR TEXTURAS DINÂMICAS ──
     drawTexture(ctx, slide.texture, w, h, scale, brandColor);
 
-    // ── 3. RENDERIZAR IMAGEM COM MISTURA & OVERLAY ──
+    // ── 3. RENDERIZAR IMAGEM COM TRANSFORMAÇÕES (ZOOM, OFFSET, GIRO, FLIP, FILTROS) ──
     if (slide.imageSrc) {
       const img = new Image();
       img.src = slide.imageSrc;
       if (img.complete && img.naturalWidth > 0) {
         ctx.save();
-        ctx.globalAlpha = slide.imageOpacity / 100;
+        ctx.globalAlpha = (slide.imageOpacity ?? 80) / 100;
+
+        // Aplicar filtros visuais
+        if (slide.imageFilter === 'grayscale') {
+          ctx.filter = 'grayscale(100%) contrast(115%)';
+        } else if (slide.imageFilter === 'sepia') {
+          ctx.filter = 'sepia(85%) contrast(110%)';
+        } else if (slide.imageFilter === 'contrast') {
+          ctx.filter = 'contrast(140%) brightness(95%)';
+        } else if (slide.imageFilter === 'vivid') {
+          ctx.filter = 'saturate(160%) contrast(115%)';
+        } else if (slide.imageFilter === 'cool') {
+          ctx.filter = 'hue-rotate(180deg) saturate(110%)';
+        } else if (slide.imageFilter === 'warm') {
+          ctx.filter = 'sepia(30%) saturate(140%)';
+        }
 
         const imgRatio = img.width / img.height;
         const canvasRatio = w / h;
-        let renderW = w;
-        let renderH = h;
-        let renderX = 0;
-        let renderY = 0;
+        let baseW = w;
+        let baseH = h;
 
         if (imgRatio > canvasRatio) {
-          renderW = h * imgRatio;
-          renderX = (w - renderW) / 2;
+          baseW = h * imgRatio;
         } else {
-          renderH = w / imgRatio;
-          renderY = (h - renderH) / 2;
+          baseH = w / imgRatio;
         }
 
-        ctx.drawImage(img, renderX, renderY, renderW, renderH);
+        const zoom = (slide.imageZoom ?? 100) / 100;
+        const renderW = baseW * zoom;
+        const renderH = baseH * zoom;
+
+        const offsetX = ((slide.imageOffsetX ?? 0) / 100) * (w / 2);
+        const offsetY = ((slide.imageOffsetY ?? 0) / 100) * (h / 2);
+        const centerX = w / 2 + offsetX;
+        const centerY = h / 2 + offsetY;
+
+        ctx.translate(centerX, centerY);
+
+        if (slide.imageRotation) {
+          ctx.rotate((slide.imageRotation * Math.PI) / 180);
+        }
+
+        const scaleX = slide.imageFlipH ? -1 : 1;
+        const scaleY = slide.imageFlipV ? -1 : 1;
+        ctx.scale(scaleX, scaleY);
+
+        ctx.drawImage(img, -renderW / 2, -renderH / 2, renderW, renderH);
         ctx.restore();
 
         // Overlay de Gradiente Escurecedor para Legibilidade
-        const overlayStrength = slide.overlayStrength / 100;
+        const overlayStrength = (slide.overlayStrength ?? 75) / 100;
         const overlay = ctx.createLinearGradient(0, 0, 0, h);
         overlay.addColorStop(0, `rgba(8, 17, 29, ${0.15 * overlayStrength})`);
         overlay.addColorStop(0.5, `rgba(8, 17, 29, ${0.65 * overlayStrength})`);
@@ -1717,32 +1761,323 @@ Retorne ESTRITAMENTE um array JSON contendo objetos no seguinte formato:
             )}
 
             {activeSlide.imageSrc && (
-              <div className="space-y-2 pt-1 border-t border-slate-900">
-                <div className="flex justify-between text-[10px] text-slate-400">
-                  <span>Opacidade da Foto</span>
-                  <span className="font-mono">{activeSlide.imageOpacity}%</span>
+              <div className="space-y-3 pt-3 border-t border-slate-900">
+                {/* 1. Zoom / Escala da Foto */}
+                <div className="space-y-1.5 p-3 rounded-xl bg-slate-900/70 border border-slate-800">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-slate-300 flex items-center gap-1.5">
+                      <ZoomIn className="w-3.5 h-3.5 text-[#c5a059]" />
+                      <span>Zoom / Escala da Foto</span>
+                    </span>
+                    <span className="font-mono text-[#c5a059] font-bold">
+                      {activeSlide.imageZoom ?? 100}%
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateActiveSlide('imageZoom', Math.max(50, (activeSlide.imageZoom ?? 100) - 10))
+                      }
+                      className="px-2 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 hover:text-white text-xs font-bold"
+                      title="Diminuir Zoom"
+                    >
+                      <ZoomOut className="w-3 h-3" />
+                    </button>
+                    <input
+                      type="range"
+                      min="50"
+                      max="300"
+                      value={activeSlide.imageZoom ?? 100}
+                      onChange={(e) => updateActiveSlide('imageZoom', Number(e.target.value))}
+                      className="w-full accent-[#c5a059]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateActiveSlide('imageZoom', Math.min(300, (activeSlide.imageZoom ?? 100) + 10))
+                      }
+                      className="px-2 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 hover:text-white text-xs font-bold"
+                      title="Aumentar Zoom"
+                    >
+                      <ZoomIn className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateActiveSlide('imageZoom', 100)}
+                      className="px-2 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[10px] text-slate-400 hover:text-[#c5a059] font-bold shrink-0"
+                      title="Resetar Zoom para 100%"
+                    >
+                      100%
+                    </button>
+                  </div>
                 </div>
-                <input
-                  type="range"
-                  min="10"
-                  max="100"
-                  value={activeSlide.imageOpacity}
-                  onChange={(e) => updateActiveSlide('imageOpacity', Number(e.target.value))}
-                  className="w-full accent-[#c5a059]"
-                />
 
-                <div className="flex justify-between text-[10px] text-slate-400">
-                  <span>Intensidade do Overlay Escuro</span>
-                  <span className="font-mono">{activeSlide.overlayStrength}%</span>
+                {/* 2. Posição / Enquadramento X e Y */}
+                <div className="space-y-2 p-3 rounded-xl bg-slate-900/70 border border-slate-800">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-slate-300 flex items-center gap-1.5">
+                      <Move className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Posição / Enquadramento (X & Y)</span>
+                    </span>
+                    <span className="font-mono text-cyan-300 text-[10px]">
+                      X: {activeSlide.imageOffsetX ?? 0}% | Y: {activeSlide.imageOffsetY ?? 0}%
+                    </span>
+                  </div>
+
+                  {/* Presets Rápidos de Enquadramento */}
+                  <div className="grid grid-cols-5 gap-1 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateActiveSlide('imageOffsetX', 0);
+                        updateActiveSlide('imageOffsetY', -50);
+                      }}
+                      className="py-1 rounded-lg bg-slate-950 hover:bg-slate-900 border border-slate-800 text-[10px] font-bold text-slate-300 hover:text-cyan-300 text-center"
+                      title="Alinhar ao Topo"
+                    >
+                      ⬆️ Topo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateActiveSlide('imageOffsetX', -40);
+                      }}
+                      className="py-1 rounded-lg bg-slate-950 hover:bg-slate-900 border border-slate-800 text-[10px] font-bold text-slate-300 hover:text-cyan-300 text-center"
+                      title="Alinhar à Esquerda"
+                    >
+                      ⬅️ Esq.
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateActiveSlide('imageOffsetX', 0);
+                        updateActiveSlide('imageOffsetY', 0);
+                      }}
+                      className="py-1 rounded-lg bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-500/40 text-[10px] font-black text-cyan-300 text-center"
+                      title="Centralizar"
+                    >
+                      🎯 Centro
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateActiveSlide('imageOffsetX', 40);
+                      }}
+                      className="py-1 rounded-lg bg-slate-950 hover:bg-slate-900 border border-slate-800 text-[10px] font-bold text-slate-300 hover:text-cyan-300 text-center"
+                      title="Alinhar à Direita"
+                    >
+                      ➡️ Dir.
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateActiveSlide('imageOffsetX', 0);
+                        updateActiveSlide('imageOffsetY', 50);
+                      }}
+                      className="py-1 rounded-lg bg-slate-950 hover:bg-slate-900 border border-slate-800 text-[10px] font-bold text-slate-300 hover:text-cyan-300 text-center"
+                      title="Alinhar à Base"
+                    >
+                      ⬇️ Base
+                    </button>
+                  </div>
+
+                  {/* Sliders X e Y */}
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <div>
+                      <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                        <span>Horizontal (X)</span>
+                        <span className="font-mono">{activeSlide.imageOffsetX ?? 0}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="-100"
+                        max="100"
+                        value={activeSlide.imageOffsetX ?? 0}
+                        onChange={(e) => updateActiveSlide('imageOffsetX', Number(e.target.value))}
+                        className="w-full accent-cyan-400"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                        <span>Vertical (Y)</span>
+                        <span className="font-mono">{activeSlide.imageOffsetY ?? 0}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="-100"
+                        max="100"
+                        value={activeSlide.imageOffsetY ?? 0}
+                        onChange={(e) => updateActiveSlide('imageOffsetY', Number(e.target.value))}
+                        className="w-full accent-cyan-400"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={activeSlide.overlayStrength}
-                  onChange={(e) => updateActiveSlide('overlayStrength', Number(e.target.value))}
-                  className="w-full accent-[#c5a059]"
-                />
+
+                {/* 3. Transformação: Rotação & Espelhamento (Flip) */}
+                <div className="space-y-2 p-3 rounded-xl bg-slate-900/70 border border-slate-800">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-slate-300 flex items-center gap-1.5">
+                      <RotateCw className="w-3.5 h-3.5 text-purple-400" />
+                      <span>Giro & Espelhamento</span>
+                    </span>
+                    <span className="font-mono text-purple-300 text-[10px]">
+                      {activeSlide.imageRotation ?? 0}°
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateActiveSlide(
+                          'imageRotation',
+                          ((activeSlide.imageRotation ?? 0) - 90 + 360) % 360
+                        )
+                      }
+                      className="py-1.5 px-2 rounded-lg bg-slate-950 hover:bg-slate-900 border border-slate-800 text-[10px] font-bold text-slate-300 flex items-center justify-center gap-1"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>-90°</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateActiveSlide('imageRotation', ((activeSlide.imageRotation ?? 0) + 90) % 360)
+                      }
+                      className="py-1.5 px-2 rounded-lg bg-slate-950 hover:bg-slate-900 border border-slate-800 text-[10px] font-bold text-slate-300 flex items-center justify-center gap-1"
+                    >
+                      <RotateCw className="w-3 h-3" />
+                      <span>+90°</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateActiveSlide('imageFlipH', !activeSlide.imageFlipH)}
+                      className={`py-1.5 px-2 rounded-lg border text-[10px] font-bold flex items-center justify-center gap-1 transition-all ${
+                        activeSlide.imageFlipH
+                          ? 'bg-purple-600/30 border-purple-500 text-purple-200 font-black'
+                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      <FlipHorizontal className="w-3 h-3" />
+                      <span>Flip H</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateActiveSlide('imageFlipV', !activeSlide.imageFlipV)}
+                      className={`py-1.5 px-2 rounded-lg border text-[10px] font-bold flex items-center justify-center gap-1 transition-all ${
+                        activeSlide.imageFlipV
+                          ? 'bg-purple-600/30 border-purple-500 text-purple-200 font-black'
+                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      <FlipVertical className="w-3 h-3" />
+                      <span>Flip V</span>
+                    </button>
+                  </div>
+
+                  {/* Rotação Fina Slider */}
+                  <div className="pt-1">
+                    <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                      <span>Rotação Fina</span>
+                      <span className="font-mono">{activeSlide.imageRotation ?? 0}°</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="-180"
+                      max="180"
+                      value={activeSlide.imageRotation ?? 0}
+                      onChange={(e) => updateActiveSlide('imageRotation', Number(e.target.value))}
+                      className="w-full accent-purple-400"
+                    />
+                  </div>
+                </div>
+
+                {/* 4. Filtros Artísticos de Fotografia */}
+                <div className="space-y-1.5 p-3 rounded-xl bg-slate-900/70 border border-slate-800">
+                  <span className="font-bold text-slate-300 text-[11px] flex items-center gap-1.5 mb-1">
+                    <Palette className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Filtro Visual da Foto</span>
+                  </span>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[
+                      { id: 'none', label: 'Original' },
+                      { id: 'grayscale', label: '🖤 P&B' },
+                      { id: 'sepia', label: '📜 Sépia' },
+                      { id: 'contrast', label: '⚡ Contraste' },
+                      { id: 'vivid', label: '🌈 Vívido' },
+                      { id: 'cool', label: '❄️ Frio' },
+                      { id: 'warm', label: '☀️ Quente' },
+                    ].map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => updateActiveSlide('imageFilter', f.id)}
+                        className={`py-1 px-1.5 rounded-lg text-[10px] font-bold border transition-all text-center truncate ${
+                          (activeSlide.imageFilter || 'none') === f.id
+                            ? 'bg-amber-500/20 border-amber-400 text-amber-200'
+                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 5. Opacidade & Overlay */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                      <span>Opacidade</span>
+                      <span className="font-mono">{activeSlide.imageOpacity}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="10"
+                      max="100"
+                      value={activeSlide.imageOpacity}
+                      onChange={(e) => updateActiveSlide('imageOpacity', Number(e.target.value))}
+                      className="w-full accent-[#c5a059]"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                      <span>Overlay Escuro</span>
+                      <span className="font-mono">{activeSlide.overlayStrength}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={activeSlide.overlayStrength}
+                      onChange={(e) => updateActiveSlide('overlayStrength', Number(e.target.value))}
+                      className="w-full accent-[#c5a059]"
+                    />
+                  </div>
+                </div>
+
+                {/* 6. Botão Redefinir Enquadramento (Reset) */}
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateActiveSlide('imageZoom', 100);
+                      updateActiveSlide('imageOffsetX', 0);
+                      updateActiveSlide('imageOffsetY', 0);
+                      updateActiveSlide('imageRotation', 0);
+                      updateActiveSlide('imageFlipH', false);
+                      updateActiveSlide('imageFlipV', false);
+                      updateActiveSlide('imageFilter', 'none');
+                      toast.success('Enquadramento redefinido para o padrão!');
+                    }}
+                    className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-400 transition-all"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Redefinir Enquadramento</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
