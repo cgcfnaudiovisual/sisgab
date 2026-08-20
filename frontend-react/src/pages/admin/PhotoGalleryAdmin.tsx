@@ -235,17 +235,21 @@ export const PhotoGalleryAdmin: React.FC = () => {
 
       if (!error && data && data.length > 0) {
         const parsed: PautaEvent[] = data.map((d: any) => {
-          let dfid = '';
-          if (d.autoridades && d.autoridades.includes('drive.google.com')) {
-            const m = d.autoridades.match(/folders\/([a-zA-Z0-9_-]+)/);
+          let dfid = d.drive_folder_id || '';
+          const rawUrl = d.drive_url || d.drive_link || d.autoridades || '';
+          if (!dfid && rawUrl && rawUrl.includes('drive.google.com')) {
+            const m = rawUrl.match(/folders\/([a-zA-Z0-9_-]+)/) || rawUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
             if (m) dfid = m[1];
+          } else if (!dfid && rawUrl && rawUrl.length in [28, 33, 34, 44] && !rawUrl.includes('/')) {
+            dfid = rawUrl.trim();
           }
+
           return {
             id: d.id,
             titulo_evento: d.titulo_evento || 'Sem título',
             data_evento: d.data_evento || '2026-02-15',
             local_evento: d.local_evento || 'Gabinete CGCFN',
-            drive_url: dfid ? `https://drive.google.com/drive/folders/${dfid}` : undefined,
+            drive_url: dfid ? `https://drive.google.com/drive/folders/${dfid}` : (rawUrl.startsWith('http') ? rawUrl : undefined),
             drive_folder_id: dfid || undefined,
             local_photos_count: d.id === 50 ? 697 : 0,
             status: d.status,
@@ -287,32 +291,47 @@ export const PhotoGalleryAdmin: React.FC = () => {
 
       let rawData: any[] = [];
 
-      // 1. Tenta buscar fotos no Supabase na tabela 'processed_photos'
+      // 1. Tenta buscar fotos dinamicamente da API do Google Drive do evento
       try {
-        const { data: dbPhotos, error } = await supabase
-          .from('processed_photos')
-          .select('*')
-          .or(`demanda_id.eq.${eventId},event_name.eq."${currentPauta?.titulo_evento || ''}"`);
-
-        if (!error && dbPhotos && dbPhotos.length > 0) {
-          rawData = dbPhotos.map((p: any) => ({
-            id: p.id,
-            filename: p.filename || `foto_${p.id}.jpg`,
-            drive_file_id: p.drive_file_id || p.file_id,
-            url: p.drive_link || p.url || p.thumbnail_url || (p.filename ? `/assets/galeria_hot/${eventId}/${p.filename}` : ''),
-            thumbnail_url: p.thumbnail_url || p.drive_link || p.url || (p.filename ? `/assets/galeria_hot/${eventId}/${p.filename}` : ''),
-            drive_link: p.drive_link,
-            is_destaque_top20: p.is_destaque || p.destaque || false,
-            ai_description: p.descricao_ia || p.ai_description,
-            tags: p.tags || [],
-            elements: p.elements || [],
-          }));
+        const apiRes = await fetch(`/api/portal/photos?event_id=${eventId}`);
+        if (apiRes.ok) {
+          const apiData = await apiRes.json();
+          if (apiData.ok && Array.isArray(apiData.photos) && apiData.photos.length > 0) {
+            rawData = apiData.photos;
+          }
         }
       } catch (err) {
-        console.warn('Erro ao consultar Supabase processed_photos:', err);
+        console.warn('Erro ao consultar /api/portal/photos:', err);
       }
 
-      // 2. Tenta buscar arquivo específico do evento /event_<id>_photos.json
+      // 2. Tenta buscar fotos no Supabase na tabela 'processed_photos'
+      if (!rawData || rawData.length === 0) {
+        try {
+          const { data: dbPhotos, error } = await supabase
+            .from('processed_photos')
+            .select('*')
+            .or(`demanda_id.eq.${eventId},event_name.eq."${currentPauta?.titulo_evento || ''}"`);
+
+          if (!error && dbPhotos && dbPhotos.length > 0) {
+            rawData = dbPhotos.map((p: any) => ({
+              id: p.id,
+              filename: p.filename || `foto_${p.id}.jpg`,
+              drive_file_id: p.drive_file_id || p.file_id,
+              url: p.drive_link || p.url || p.thumbnail_url || (p.filename ? `/assets/galeria_hot/${eventId}/${p.filename}` : ''),
+              thumbnail_url: p.thumbnail_url || p.drive_link || p.url || (p.filename ? `/assets/galeria_hot/${eventId}/${p.filename}` : ''),
+              drive_link: p.drive_link,
+              is_destaque_top20: p.is_destaque || p.destaque || false,
+              ai_description: p.descricao_ia || p.ai_description,
+              tags: p.tags || [],
+              elements: p.elements || [],
+            }));
+          }
+        } catch (err) {
+          console.warn('Erro ao consultar Supabase processed_photos:', err);
+        }
+      }
+
+      // 3. Fallback para arquivo estático /event_<id>_photos.json
       if (!rawData || rawData.length === 0) {
         try {
           const resEvent = await fetch(`/event_${eventId}_photos.json`);
@@ -322,7 +341,7 @@ export const PhotoGalleryAdmin: React.FC = () => {
         } catch {}
       }
 
-      // 3. Fallback apenas se for o evento 50 (demonstração oficial)
+      // 4. Fallback apenas se for o evento 50 (demonstração oficial)
       if ((!rawData || rawData.length === 0) && eventId === 50) {
         try {
           const resFallback = await fetch('/event_50_photos.json');
