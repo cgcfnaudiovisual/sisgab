@@ -1011,7 +1011,7 @@ def render_page():
                     ui.separator().style('background: rgba(255,255,255,0.08); margin: 6px 0;')
                     with ui.row().classes('w-full justify-between items-center gap-1 flex-wrap'):
                         with ui.row().classes('items-center gap-1'):
-                            ui.button('✏️', on_click=lambda cur_d=d: open_editar_pauta_dialog(cur_d, render_content.refresh)).props('flat round dense color=cyan size=sm').tooltip('Editar Pauta')
+                            ui.button('✏️ Editar Ficha', on_click=lambda cur_d=d: open_editar_pauta_dialog(cur_d, render_content.refresh)).props('outline color=amber text-color=amber-2 dense').classes('text-[11px] q-px-xs font-bold').tooltip('Editar Ficha Técnica da Demanda')
                             ui.button('📅', on_click=lambda: ui.navigate.to('/agenda_geral')).props('flat round dense color=cyan size=sm').tooltip('Ver na Agenda Geral')
                             cur_d_url = get_demanda_drive_url(d)
                             if cur_d_url:

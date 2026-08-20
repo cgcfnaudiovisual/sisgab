@@ -24,6 +24,8 @@ import {
   Hourglass,
   Layers,
 } from 'lucide-react';
+import confetti from 'canvas-confetti';
+import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import type { DemandaComunicacao } from '../../types/database';
 import { useAuth } from '../../context/AuthContext';
@@ -94,6 +96,25 @@ export const Dashboard: React.FC = () => {
       console.warn('Erro ao carregar demandas do painel:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Conclusão Rápida de Demanda em 1 Clique direto no Painel
+  const handleQuickConclude = async (dem: DemandaComunicacao) => {
+    setDemandas((prev) =>
+      prev.map((d) => (d.id === dem.id ? { ...d, status: 'concluida' } : d))
+    );
+
+    confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
+    toast.success(`🎯 Missão "${dem.titulo_evento}" marcada como CONCLUÍDA!`);
+
+    try {
+      await supabase
+        .from('demandas_comunicacao')
+        .update({ status: 'concluida' })
+        .eq('id', dem.id);
+    } catch (e) {
+      console.warn('Erro ao concluir no Supabase:', e);
     }
   };
 
@@ -690,23 +711,37 @@ export const Dashboard: React.FC = () => {
                   )}
                 </div>
 
-                {/* Botões de Ação */}
-                <div className="flex items-center gap-2 shrink-0">
+                {/* Botões de Ação Rápida */}
+                <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                  {['aprovado', 'em_andamento'].includes(dem.status || '') && (
+                    <button
+                      type="button"
+                      onClick={() => handleQuickConclude(dem)}
+                      className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all flex items-center gap-1 hover:scale-105"
+                      title="Concluir Demanda Imediatamente"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Concluir</span>
+                    </button>
+                  )}
+
                   <a
                     href={makeGCalUrl(dem)}
                     target="_blank"
                     rel="noreferrer"
-                    className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-[#00e5ff] text-xs font-bold text-[#00e5ff] hover:text-white transition-colors flex items-center gap-1"
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-[#00e5ff] text-xs font-bold text-[#00e5ff] hover:text-white transition-colors flex items-center gap-1"
+                    title="Exportar para Google Calendar"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
-                    <span>Google Cal</span>
+                    <span className="hidden sm:inline">GCal</span>
                   </a>
 
                   <button
                     onClick={() => navigate('/comsoc_homologar')}
-                    className="px-3 py-1.5 rounded-xl bg-[#c5a059] text-slate-950 font-bold text-xs"
+                    className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#c5a059] to-amber-500 hover:from-amber-500 hover:to-[#c5a059] text-slate-950 font-bold text-xs shadow-md shadow-[#c5a059]/20 transition-all hover:scale-105 flex items-center gap-1"
+                    title="Abrir Ficha Técnica / Homologação"
                   >
-                    Abrir Pauta
+                    <span>📋 Ficha / Homologar</span>
                   </button>
                 </div>
               </div>

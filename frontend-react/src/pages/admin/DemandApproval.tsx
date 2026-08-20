@@ -232,6 +232,25 @@ export const DemandApproval: React.FC = () => {
     }
   };
 
+  // 2.1 Concluir / Finalizar Missão (1 Clique)
+  const handleConclude = async (demanda: DemandaComunicacao) => {
+    setDemandas((prev) =>
+      prev.map((d) => (d.id === demanda.id ? { ...d, status: 'concluida' } : d))
+    );
+
+    confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
+    toast.success(`🎯 Missão "${demanda.titulo_evento}" concluída com sucesso!`);
+
+    try {
+      await supabase
+        .from('demandas_comunicacao')
+        .update({ status: 'concluida' })
+        .eq('id', demanda.id);
+    } catch (e) {
+      console.warn('Erro ao concluir no Supabase:', e);
+    }
+  };
+
   // 3. Aprovação em Lote (Batch)
   const handleBatchApprove = async () => {
     if (selectedIds.length === 0) return;
@@ -733,6 +752,24 @@ export const DemandApproval: React.FC = () => {
                           <span>Aprovar</span>
                         </button>
                       </div>
+                    ) : ['aprovado', 'em_andamento'].includes(demanda.status || '') ? (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleConclude(demanda)}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/50 text-xs font-bold flex items-center gap-1 transition-all shadow-sm"
+                          title="Marcar Missão como Concluída"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Concluir</span>
+                        </button>
+                        <button
+                          onClick={() => handleReopen(demanda, 'pendente')}
+                          className="px-2 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-300 border border-slate-800 text-xs font-bold flex items-center gap-1 transition-all"
+                          title="Reabrir Pauta para Avaliação"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                        </button>
+                      </div>
                     ) : (
                       <button
                         onClick={() => handleReopen(demanda, 'pendente')}
@@ -909,6 +946,22 @@ export const DemandApproval: React.FC = () => {
                                   className="px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 text-xs font-black hover:bg-emerald-400 shadow-sm"
                                 >
                                   Aprovar
+                                </button>
+                              </>
+                            ) : ['aprovado', 'em_andamento'].includes(demanda.status || '') ? (
+                              <>
+                                <button
+                                  onClick={() => handleConclude(demanda)}
+                                  className="px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold hover:bg-emerald-500/30"
+                                  title="Concluir Demanda"
+                                >
+                                  Concluir
+                                </button>
+                                <button
+                                  onClick={() => handleReopen(demanda, 'pendente')}
+                                  className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-300 border border-slate-800 text-xs font-bold"
+                                >
+                                  Reabrir
                                 </button>
                               </>
                             ) : (
@@ -1184,27 +1237,29 @@ export const DemandApproval: React.FC = () => {
                   </div>
                 )}
 
-                <div className="flex items-center justify-between pt-3 border-t border-slate-800">
-                  {extractDriveUrl(detailModal) ? (
-                    <a
-                      href={extractDriveUrl(detailModal)!}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-3.5 py-2 rounded-xl bg-blue-950/80 hover:bg-blue-900 text-blue-300 border border-blue-500/30 text-xs font-bold flex items-center gap-1.5"
-                    >
-                      <FolderOpen className="w-4 h-4" />
-                      <span>Abrir Google Drive</span>
-                    </a>
-                  ) : (
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setIsEditingFicha(true)}
-                      className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-[#e5c07b] border border-amber-500/40 text-xs font-bold flex items-center gap-1.5"
+                      className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-[#e5c07b] border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition-all hover:scale-105"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
-                      <span>Editar Pauta</span>
+                      <span>✏️ Editar Ficha Técnica</span>
                     </button>
-                  )}
+
+                    {extractDriveUrl(detailModal) && (
+                      <a
+                        href={extractDriveUrl(detailModal)!}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3.5 py-2 rounded-xl bg-blue-950/80 hover:bg-blue-900 text-blue-300 border border-blue-500/30 text-xs font-bold flex items-center gap-1.5"
+                      >
+                        <FolderOpen className="w-4 h-4" />
+                        <span>Abrir Google Drive</span>
+                      </a>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-2">
                     <button
@@ -1213,6 +1268,7 @@ export const DemandApproval: React.FC = () => {
                     >
                       Fechar
                     </button>
+
                     {detailModal.status === 'pendente' && (
                       <button
                         onClick={() => {
@@ -1222,6 +1278,19 @@ export const DemandApproval: React.FC = () => {
                         className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 text-xs font-black hover:bg-emerald-400 shadow-md"
                       >
                         Aprovar Pauta
+                      </button>
+                    )}
+
+                    {['aprovado', 'em_andamento'].includes(detailModal.status || '') && (
+                      <button
+                        onClick={() => {
+                          handleConclude(detailModal);
+                          setDetailModal(null);
+                        }}
+                        className="px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/50 text-xs font-bold flex items-center gap-1.5"
+                      >
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>Concluir Missão</span>
                       </button>
                     )}
                   </div>

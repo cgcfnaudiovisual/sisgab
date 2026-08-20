@@ -549,12 +549,12 @@ export const SisgabTVPlayer: React.FC = () => {
         </div>
       </div>
 
-      {/* ── 3. ÁREA PRINCIPAL: 3 COLUNAS TÁTICAS SEMPRE PRESENTES ── */}
-      <main className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 flex-1 min-h-0 overflow-hidden">
+      {/* ── 3. ÁREA PRINCIPAL: 3 COLUNAS TÁTICAS (ADAPTÁVEIS PARA TV HORIZONTAL E VERTICAL/TOTEM) ── */}
+      <main className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 flex-1 min-h-0 overflow-y-auto lg:overflow-hidden pr-0.5">
         {/* ========================================================================= */}
         {/* COLUNA 1 (ESQUERDA - 4 COLS): PAUTAS HOJE & AMANHÃ */}
         {/* ========================================================================= */}
-        <section className="lg:col-span-4 p-3 rounded-2xl bg-[#091326]/60 border border-cyan-500/25 flex flex-col justify-between overflow-hidden shadow-2xl backdrop-blur-md">
+        <section className="lg:col-span-4 min-h-[240px] lg:min-h-0 p-3 rounded-2xl bg-[#091326]/60 border border-cyan-500/25 flex flex-col justify-between overflow-hidden shadow-2xl backdrop-blur-md">
           <div className="flex items-center justify-between pb-2 border-b border-cyan-500/30 shrink-0 mb-2">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-amber-400" />
@@ -654,7 +654,7 @@ export const SisgabTVPlayer: React.FC = () => {
         {/* ========================================================================= */}
         {/* COLUNA 2 (CENTRO - 5 COLS): CRONOGRAMA & RESUMO DA SEMANA */}
         {/* ========================================================================= */}
-        <section className="lg:col-span-5 p-3 rounded-2xl bg-[#091326]/60 border border-cyan-500/25 flex flex-col justify-between overflow-hidden shadow-2xl backdrop-blur-md">
+        <section className="lg:col-span-5 min-h-[240px] lg:min-h-0 p-3 rounded-2xl bg-[#091326]/60 border border-cyan-500/25 flex flex-col justify-between overflow-hidden shadow-2xl backdrop-blur-md">
           <div className="flex items-center justify-between pb-2 border-b border-cyan-500/30 shrink-0 mb-2">
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4 text-cyan-400" />
@@ -745,7 +745,7 @@ export const SisgabTVPlayer: React.FC = () => {
         {/* ========================================================================= */}
         {/* COLUNA 3 (DIREITA - 3 COLS): INFORMATIVOS, ANIVERSARIANTES & PLACAS JADE */}
         {/* ========================================================================= */}
-        <section className="lg:col-span-3 p-3 rounded-2xl bg-[#091326]/60 border border-cyan-500/25 flex flex-col justify-between overflow-hidden shadow-2xl backdrop-blur-md">
+        <section className="lg:col-span-3 min-h-[240px] lg:min-h-0 p-3 rounded-2xl bg-[#091326]/60 border border-cyan-500/25 flex flex-col justify-between overflow-hidden shadow-2xl backdrop-blur-md">
           <div className="flex items-center justify-between pb-2 border-b border-cyan-500/30 shrink-0 mb-2">
             <div className="flex items-center gap-2">
               <Cake className="w-4 h-4 text-pink-400" />
