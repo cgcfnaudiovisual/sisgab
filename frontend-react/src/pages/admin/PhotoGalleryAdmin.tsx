@@ -267,14 +267,33 @@ export const PhotoGalleryAdmin: React.FC = () => {
   const loadEventPhotos = async (eventId: number) => {
     try {
       setLoading(true);
+      const currentPauta = pautas.find((p) => p.id === eventId);
       const cachedTagsRaw = localStorage.getItem(`sisgab_vision_tags_${eventId}`);
       const cachedTagsMap: Record<string, PhotoAiMetadata> = cachedTagsRaw ? JSON.parse(cachedTagsRaw) : {};
       const cachedDestaquesRaw = localStorage.getItem(`sisgab_destaques_${eventId}`);
       const cachedDestaques: string[] = cachedDestaquesRaw ? JSON.parse(cachedDestaquesRaw) : [];
 
-      const res = await fetch('/event_50_photos.json');
-      if (res.ok) {
-        const rawData: any[] = await res.json();
+      let rawData: any[] = [];
+
+      // 1. Tenta buscar fotos específicas do evento selecionado
+      try {
+        const resEvent = await fetch(`/event_${eventId}_photos.json`);
+        if (resEvent.ok) {
+          rawData = await resEvent.json();
+        }
+      } catch {}
+
+      // 2. Se não encontrou e for o evento padrão/demonstração, usa o acervo base
+      if (!rawData || rawData.length === 0) {
+        try {
+          const resFallback = await fetch('/event_50_photos.json');
+          if (resFallback.ok) {
+            rawData = await resFallback.json();
+          }
+        } catch {}
+      }
+
+      if (rawData && rawData.length > 0) {
         const mapped: PhotoItem[] = rawData.map((d, idx) => {
           const photoId = d.id || `f_${idx + 1}`;
           const aiMeta = cachedTagsMap[photoId];
@@ -282,13 +301,13 @@ export const PhotoGalleryAdmin: React.FC = () => {
 
           return {
             id: photoId,
-            filename: d.filename,
+            filename: d.filename || `FOTO_${idx + 1}.JPG`,
             drive_file_id: d.drive_file_id,
-            url: d.url,
+            url: d.url || d.thumbnail_url,
             thumbnail_url: d.thumbnail_url || d.url,
             drive_link: d.drive_link,
             event_id: eventId,
-            event_name: 'ENCONTRO DE VETERANOS (OFICIAIS SUPERIORES)',
+            event_name: currentPauta?.titulo_evento || 'Evento Selecionado',
             folder_type: isDestaque ? 'selecao' : 'local',
             is_selected_curation: isDestaque,
             is_destaque_top20: isDestaque,
@@ -306,9 +325,14 @@ export const PhotoGalleryAdmin: React.FC = () => {
 
         setPhotos(mapped);
         setFilteredPhotos(mapped);
+      } else {
+        setPhotos([]);
+        setFilteredPhotos([]);
       }
     } catch (err) {
       console.warn('Erro ao ler acervo de fotos:', err);
+      setPhotos([]);
+      setFilteredPhotos([]);
     } finally {
       setLoading(false);
     }

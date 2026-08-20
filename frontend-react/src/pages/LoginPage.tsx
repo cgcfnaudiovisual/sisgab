@@ -17,8 +17,8 @@ import {
   RotateCcw,
   Image as ImageIcon,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
+import { militaryAudio } from '../utils/militaryAudio';
 import { supabase } from '../api/supabase';
 import { useAuth } from '../context/AuthContext';
 import { AntigravityBackground } from '../components/common/AntigravityBackground';
@@ -29,6 +29,7 @@ export const LoginPage: React.FC = () => {
   const { login, isLoading } = useAuth();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [authenticatingSuccess, setAuthenticatingSuccess] = useState(false);
 
   // Logo Customizado
   const [logoSrc, setLogoSrc] = useState<string>(() => {
@@ -63,14 +64,14 @@ export const LoginPage: React.FC = () => {
 
     const res = await login(identifier, password);
     if (res.success) {
-      confetti({
-        particleCount: 70,
-        spread: 60,
-        origin: { y: 0.6 },
-      });
-      toast.success('Acesso autorizado! Bem-vindo ao SisGAB.');
-      navigate('/');
+      militaryAudio.playLoginSound();
+      setAuthenticatingSuccess(true);
+      toast.success('Acesso militar autorizado! Bem-vindo ao SisGAB.');
+      setTimeout(() => {
+        navigate('/');
+      }, 700);
     } else {
+      militaryAudio.playAccessDeniedSound();
       toast.error(res.message || 'Falha na autenticação.');
     }
   };
@@ -160,12 +161,7 @@ export const LoginPage: React.FC = () => {
         antiguidade_num: 99,
       });
 
-      confetti({
-        particleCount: 50,
-        spread: 50,
-        origin: { y: 0.7 },
-      });
-
+      militaryAudio.playTacticalBeep();
       toast.success('Solicitação de acesso enviada com sucesso! Aguarde a liberação do Chefe de Gabinete.');
       setCadastroModal(false);
       setNovoCadastro({
@@ -185,9 +181,44 @@ export const LoginPage: React.FC = () => {
       {/* 🌌 Fundo Animado Antigravidade com Partículas Douradas e Ciano */}
       <AntigravityBackground />
 
-      <div className="relative z-10 w-full max-w-md rounded-3xl bg-[#0b1222]/90 backdrop-blur-xl border border-[#c5a059]/40 p-6 sm:p-8 space-y-5 shadow-2xl shadow-black/90">
+      <div className="relative z-10 w-full max-w-md rounded-3xl bg-[#0b1222]/90 backdrop-blur-xl border border-[#c5a059]/40 p-6 sm:p-8 space-y-5 shadow-2xl shadow-black/90 overflow-hidden">
         {/* Glow Superior */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-1 bg-[#c5a059] shadow-lg shadow-[#c5a059]"></div>
+
+        {/* HUD Tático de Autenticação Militar (Exibido ao autenticar) */}
+        {authenticatingSuccess && (
+          <div className="absolute inset-0 z-30 rounded-3xl bg-[#0b1222]/95 border-2 border-[#c5a059] flex flex-col items-center justify-center p-6 text-center space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="relative">
+              <div className="w-28 h-28 rounded-full border-4 border-[#c5a059] border-t-transparent animate-spin absolute -inset-2"></div>
+              <img
+                src={logoSrc}
+                alt="Brasão CGCFN"
+                onError={(e) => {
+                  const target = e.currentTarget as HTMLImageElement;
+                  if (target.src.includes('/brasaocgcfn.png')) return;
+                  target.onerror = null;
+                  target.src = '/brasaocgcfn.png';
+                }}
+                className="w-24 h-24 object-contain drop-shadow-[0_0_25px_rgba(197,160,89,0.9)]"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-center gap-1.5 text-[#00e5ff] text-[11px] font-black tracking-widest uppercase">
+                <Shield className="w-4 h-4 text-[#c5a059]" />
+                <span>COMANDO & CONTROLE • AUTENTICADO</span>
+              </div>
+              <h3 className="text-base sm:text-lg font-black text-white uppercase tracking-wider">
+                ACESSO MILITAR AUTORIZADO
+              </h3>
+              <p className="text-[11px] text-[#e5c07b] font-bold">
+                Carregando Estação de Trabalho C2...
+              </p>
+            </div>
+            <div className="w-48 h-1.5 rounded-full bg-slate-900 overflow-hidden border border-[#c5a059]/40">
+              <div className="h-full bg-gradient-to-r from-[#c5a059] via-[#00e5ff] to-[#c5a059] animate-pulse w-full"></div>
+            </div>
+          </div>
+        )}
 
         {/* ⚓ Brasão / Logo Oficial Personalizável */}
         <div className="text-center space-y-2 relative group">
@@ -197,8 +228,9 @@ export const LoginPage: React.FC = () => {
               alt="Brasão Oficial CGCFN"
               onError={(e) => {
                 const target = e.currentTarget as HTMLImageElement;
+                if (target.src.includes('/brasaocgcfn.png')) return;
                 target.onerror = null;
-                target.src = defaultBrasao;
+                target.src = defaultBrasao || '/brasaocgcfn.png';
               }}
               className="w-32 h-32 mx-auto object-contain drop-shadow-[0_0_20px_rgba(197,160,89,0.7)] hover:scale-105 transition-transform duration-300 cursor-pointer"
               onClick={() => setLogoModalOpen(true)}
