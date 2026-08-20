@@ -15,10 +15,24 @@ export interface PhotoAiMetadata {
 let lastWorkingVisionModel = 'gemini-3.7-flash';
 
 /**
- * Converte uma URL de imagem ou Blob para base64 puro
+ * Converte uma URL de imagem ou Blob para base64 puro (com suporte a proxy para Google Drive)
  */
-export async function imageToBase64(imageUrl: string): Promise<{ base64: string; mimeType: string }> {
-  const response = await fetch(imageUrl, { mode: 'cors' });
+export async function imageToBase64(imageUrl: string, driveFileId?: string): Promise<{ base64: string; mimeType: string }> {
+  let fetchUrl = imageUrl;
+
+  // Se for imagem externa do Drive ou tiver driveFileId, usa o proxy do backend para contornar CORS
+  if (driveFileId) {
+    fetchUrl = `/api/proxy/image?drive_id=${driveFileId}`;
+  } else if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+    if (imageUrl.includes('drive.google.com') || imageUrl.includes('googleusercontent.com')) {
+      fetchUrl = `/api/proxy/image?url=${encodeURIComponent(imageUrl)}`;
+    }
+  }
+
+  const response = await fetch(fetchUrl);
+  if (!response.ok) {
+    throw new Error(`Falha ao obter imagem (HTTP ${response.status})`);
+  }
   const blob = await response.blob();
   const mimeType = blob.type || 'image/jpeg';
 
