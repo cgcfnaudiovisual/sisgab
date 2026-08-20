@@ -41,7 +41,6 @@ import {
   Lock,
   Flame,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { militaryAudio } from '../../utils/militaryAudio';
 import { supabase } from '../../api/supabase';
@@ -515,7 +514,7 @@ export const PhotoGalleryAdmin: React.FC = () => {
     }
 
     setIsBatchTagging(false);
-    confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
+    militaryAudio.playTacticalBeep();
     toast.success(`Tagueamento concluído! ${successes} fotos indexadas com sucesso.`);
   };
 

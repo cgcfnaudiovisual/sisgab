@@ -1,3 +1,4 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Palette,
@@ -42,7 +43,6 @@ import {
   Star,
   Compass,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 
@@ -777,7 +777,7 @@ export const GraphicStudio: React.FC = () => {
         color: '#94a3b8',
       },
     ]);
-    confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+    militaryAudio.playTacticalBeep();
     toast.success('Layout Nobre composto pela IA com sucesso!');
   };
 

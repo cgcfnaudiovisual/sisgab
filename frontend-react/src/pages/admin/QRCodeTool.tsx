@@ -1,6 +1,6 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useEffect, useRef } from 'react';
 import { QrCode, Download, Link, Copy, Sparkles, Check } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 
 export const QRCodeTool: React.FC = () => {
@@ -105,11 +105,7 @@ export const QRCodeTool: React.FC = () => {
     link.href = canvas.toDataURL('image/png');
     link.click();
 
-    confetti({
-      particleCount: 50,
-      spread: 50,
-      origin: { y: 0.7 },
-    });
+    militaryAudio.playTacticalBeep();
     toast.success('QR Code baixado com sucesso em alta resolução!');
   };
 

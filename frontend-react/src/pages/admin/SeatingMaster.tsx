@@ -1,3 +1,4 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Armchair,
@@ -36,7 +37,6 @@ import {
   Copy,
   Star,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import type { JadeEvento, JadeConvidado } from '../../types/database';
@@ -597,7 +597,7 @@ export const SeatingMaster: React.FC = () => {
     setSavedTemplates(updated);
     localStorage.setItem('sisgab_jade_templates', JSON.stringify(updated));
 
-    confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+    militaryAudio.playTacticalBeep();
     toast.success(`Modelo "${newTemplateName}" salvo no catálogo!`);
     setNewTemplateName('');
     setShowSaveTemplateModal(false);
@@ -654,7 +654,7 @@ export const SeatingMaster: React.FC = () => {
         await supabase.from('jade_convidados').insert(acompList);
       }
 
-      confetti({ particleCount: 50, spread: 50, origin: { y: 0.7 } });
+      militaryAudio.playTacticalBeep();
       toast.success('Autoridade cadastrada com sucesso!');
       setNovoConvidadoModal(false);
       setNovoConvidado({
@@ -741,7 +741,7 @@ export const SeatingMaster: React.FC = () => {
 
       if (error) throw error;
 
-      confetti({ particleCount: 60, spread: 60, origin: { y: 0.6 } });
+      militaryAudio.playTacticalBeep();
       toast.success(`Evento "${novoEvento.nome}" criado com sucesso!`);
       setNovoEventoModal(false);
       setNovoEvento({

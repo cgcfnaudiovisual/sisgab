@@ -1,3 +1,4 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useEffect } from 'react';
 import {
   Cake,
@@ -15,7 +16,6 @@ import {
   User,
   Clock,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 
@@ -239,11 +239,7 @@ export const Birthdays: React.FC = () => {
     const url = canvas.toDataURL('image/png');
     setGeneratedCardUrl(url);
 
-    confetti({
-      particleCount: 50,
-      spread: 60,
-      origin: { y: 0.6 },
-    });
+    militaryAudio.playTacticalBeep();
   };
 
   const handleSendWhatsApp = (militar: Aniversariante) => {

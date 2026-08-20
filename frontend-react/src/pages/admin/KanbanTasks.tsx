@@ -1,3 +1,4 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useEffect } from 'react';
 import {
   Kanban as KanbanIcon,
@@ -15,7 +16,6 @@ import {
   ArrowLeft,
   Trash2,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import type { TarefaCOMSOC, TarefaStatus, TarefaPrioridade } from '../../types/database';
@@ -154,11 +154,7 @@ export const KanbanTasks: React.FC = () => {
     );
 
     if (newStatus === 'concluido') {
-      confetti({
-        particleCount: 50,
-        spread: 50,
-        origin: { y: 0.8 },
-      });
+      militaryAudio.playTacticalBeep();
       toast.success('Tarefa concluída com sucesso!');
     }
 

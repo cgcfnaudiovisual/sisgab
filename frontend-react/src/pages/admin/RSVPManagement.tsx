@@ -1,3 +1,4 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useEffect } from 'react';
 import {
   MailCheck,
@@ -28,7 +29,6 @@ import {
   Sliders,
   ArrowUpDown,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import type { JadeConvidado, JadeEvento } from '../../types/database';
@@ -222,7 +222,7 @@ export const RSVPManagement: React.FC = () => {
 
       if (error) throw error;
 
-      confetti({ particleCount: 50, spread: 50 });
+      militaryAudio.playTacticalBeep();
       toast.success(`Evento "${novoEvento.nome}" criado com sucesso!`);
       setNovoEventoModal(false);
       setNovoEvento({

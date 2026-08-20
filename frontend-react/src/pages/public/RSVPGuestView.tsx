@@ -1,7 +1,7 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle2, XCircle, Calendar, Clock, MapPin, Sparkles, User, Shield } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 
 export const RSVPGuestView: React.FC = () => {
@@ -20,11 +20,7 @@ export const RSVPGuestView: React.FC = () => {
       setSubmitting(false);
 
       if (confirmed) {
-        confetti({
-          particleCount: 100,
-          spread: 70,
-          origin: { y: 0.6 },
-        });
+        militaryAudio.playTacticalBeep();
       }
       toast.success(confirmed ? 'Presença confirmada com sucesso!' : 'Presença recusada com sucesso.');
     }, 600);

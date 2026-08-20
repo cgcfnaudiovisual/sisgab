@@ -1,3 +1,4 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -22,7 +23,6 @@ import {
   RefreshCw,
   Upload,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import defaultBrasao from '../../assets/brasaocgcfn.png';
@@ -69,6 +69,7 @@ export const PublicEventGallery: React.FC = () => {
   const [isMatching, setIsMatching] = useState(false);
   const [selfieTaken, setSelfieTaken] = useState(false);
   const [selectedPhotoFile, setSelectedPhotoFile] = useState<string | null>(null);
+  const [uploadedFileBlob, setUploadedFileBlob] = useState<Blob | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -177,13 +178,13 @@ export const PublicEventGallery: React.FC = () => {
   const handleDownloadSelected = () => {
     const count = selectedIds.size;
     if (count === 0) return;
-    confetti({ particleCount: 50, spread: 50, origin: { y: 0.5 } });
+    militaryAudio.playTacticalBeep();
     toast.success(`Compactando e baixando ${count} fotos selecionadas em Alta Resolução (ZIP)...`);
   };
 
   // Download de Todas as Fotos
   const handleDownloadAll = () => {
-    confetti({ particleCount: 50, spread: 50, origin: { y: 0.5 } });
+    militaryAudio.playTacticalBeep();
     toast.success(`Compactando e baixando todas as ${displayedPhotos.length} fotos em Alta Resolução (ZIP)...`);
   };
 
@@ -212,6 +213,7 @@ export const PublicEventGallery: React.FC = () => {
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setUploadedFileBlob(file);
     const reader = new FileReader();
     reader.onload = (event) => {
       const dataUrl = event.target?.result as string;
@@ -222,47 +224,94 @@ export const PublicEventGallery: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  const handleMatchUploadedPhoto = () => {
-    if (!selectedPhotoFile) return;
+  const executeRealFacialMatch = async (blob: Blob) => {
     setIsMatching(true);
-    setTimeout(() => {
+    try {
+      const targetId = Number(eventId) === 1 ? 50 : (Number(eventId) || 50);
+      const formData = new FormData();
+      formData.append('event_id', String(targetId));
+      formData.append('file', blob, 'selfie.jpg');
+
+      const res = await fetch('/api/portal/match', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data.ok && Array.isArray(data.matched_photos) && data.matched_photos.length > 0) {
+        const matchMap = new Map<string, number>();
+        data.matched_photos.forEach((m: { drive_file_id?: string; filename?: string; similarity?: number }) => {
+          if (m.drive_file_id) matchMap.set(m.drive_file_id, m.similarity || 0.85);
+          if (m.filename) matchMap.set(m.filename, m.similarity || 0.85);
+        });
+
+        const matched = photos
+          .filter((p) => matchMap.has(p.drive_file_id || '') || matchMap.has(p.filename))
+          .map((p) => ({
+            ...p,
+            similarity: matchMap.get(p.drive_file_id || '') || matchMap.get(p.filename) || 0.85,
+          }))
+          .sort((a, b) => (b.similarity || 0) - (a.similarity || 0));
+
+        if (matched.length > 0) {
+          setFilteredPhotos(matched);
+        } else {
+          const apiMapped: PhotoItem[] = data.matched_photos.map((m: any, idx: number) => ({
+            id: m.drive_file_id || String(idx),
+            filename: m.filename || `foto_${idx}.jpg`,
+            drive_file_id: m.drive_file_id,
+            url: m.drive_link || `https://drive.google.com/uc?export=view&id=${m.drive_file_id}`,
+            thumbnail_url: `https://drive.google.com/thumbnail?id=${m.drive_file_id}&sz=w600`,
+            similarity: m.similarity,
+          }));
+          setFilteredPhotos(apiMapped);
+        }
+        setSelfieTaken(true);
+        setShowFacialFinder(false);
+        setCurrentPage(1);
+        militaryAudio.playTacticalBeep();
+        toast.success(`Identificamos ${matched.length || data.matched_photos.length} fotos onde você aparece!`);
+      } else {
+        const errMsg = data.message || 'Nenhuma foto sua foi localizada neste evento. Tente outra selfie com boa iluminação e de frente.';
+        toast.error(errMsg, { duration: 5000 });
+      }
+    } catch (err) {
+      console.error('[FACIAL MATCH ERR]', err);
+      toast.error('Erro ao comunicar com o servidor de IA. Tente novamente.');
+    } finally {
       setIsMatching(false);
-      setSelfieTaken(true);
-      setShowFacialFinder(false);
-      setCurrentPage(1);
+    }
+  };
 
-      const matched = photos.slice(0, 24).map((p, idx) => ({
-        ...p,
-        similarity: parseFloat((0.88 + (idx % 10) * 0.01).toFixed(2)),
-      }));
-      setFilteredPhotos(matched);
-
-      confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
-      toast.success(`Identificamos ${matched.length} fotos onde você aparece!`);
-    }, 400);
+  const handleMatchUploadedPhoto = async () => {
+    if (uploadedFileBlob) {
+      await executeRealFacialMatch(uploadedFileBlob);
+    } else if (selectedPhotoFile) {
+      try {
+        const res = await fetch(selectedPhotoFile);
+        const blob = await res.blob();
+        await executeRealFacialMatch(blob);
+      } catch (e) {
+        toast.error('Erro ao processar a imagem.');
+      }
+    } else {
+      toast.warning('Selecione uma foto primeiro.');
+    }
   };
 
   const captureSelfie = () => {
-    if (!videoRef.current) return;
-    stopCamera();
-    setIsMatching(true);
-
-    setTimeout(() => {
-      setIsMatching(false);
-      setSelfieTaken(true);
-      setShowFacialFinder(false);
-      setCurrentPage(1);
-
-      // Seleciona as fotos onde a pessoa aparece
-      const matched = photos.slice(0, 24).map((p, idx) => ({
-        ...p,
-        similarity: parseFloat((0.88 + (idx % 10) * 0.01).toFixed(2)),
-      }));
-      setFilteredPhotos(matched);
-
-      confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
-      toast.success(`Identificamos ${matched.length} fotos onde você aparece!`);
-    }, 200);
+    const video = videoRef.current;
+    if (!video) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      stopCamera();
+      await executeRealFacialMatch(blob);
+    }, 'image/jpeg', 0.92);
   };
 
   const stopCamera = () => {
@@ -276,6 +325,7 @@ export const PublicEventGallery: React.FC = () => {
   const resetToAllPhotos = () => {
     setSelfieTaken(false);
     setSelectedPhotoFile(null);
+    setUploadedFileBlob(null);
     setFilteredPhotos(photos);
     setCurrentPage(1);
     toast.info('Exibindo todo o acervo do evento.');

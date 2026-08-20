@@ -1,3 +1,4 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Award,
@@ -29,7 +30,6 @@ import {
   UserPlus,
   Eye,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 
@@ -342,11 +342,7 @@ export const AuthorityAlmanac: React.FC = () => {
     setAutoridades((prev) => [...prev, nova].sort((a, b) => a.precedencia_ordem - b.precedencia_ordem));
     setModalNovoOpen(false);
 
-    confetti({
-      particleCount: 50,
-      spread: 60,
-      origin: { y: 0.7 },
-    });
+    militaryAudio.playTacticalBeep();
     toast.success('Autoridade cadastrada com sucesso no Almanaque!');
 
     // Persistência Supabase

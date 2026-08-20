@@ -1,3 +1,4 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -26,7 +27,6 @@ import {
   UserCheck,
   Music,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -321,11 +321,7 @@ export const NewDemandForm: React.FC = () => {
         .select();
 
       // Confetes comemorativos
-      confetti({
-        particleCount: 80,
-        spread: 60,
-        origin: { y: 0.7 },
-      });
+      militaryAudio.playTacticalBeep();
 
       toast.success('Demanda cadastrada com sucesso!', {
         description:

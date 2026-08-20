@@ -1,3 +1,4 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Mic,
@@ -20,7 +21,6 @@ import {
   Sliders,
   Check,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
@@ -307,7 +307,7 @@ export const JarvisVoice: React.FC = () => {
 
       if (error) throw error;
 
-      confetti({ particleCount: 70, spread: 60, origin: { y: 0.7 } });
+      militaryAudio.playTacticalBeep();
       toast.success(`Demanda "${draft.titulo_evento}" cadastrada com sucesso!`);
 
       const confirmText = `Perfeito! Cadastrei a demanda "${draft.titulo_evento}" no SisGAB. Ela já está aguardando homologação da Chefia.`;

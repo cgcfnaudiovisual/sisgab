@@ -1,3 +1,4 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
@@ -11,7 +12,6 @@ import {
   Shield,
   ThumbsUp,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import defaultBrasao from '../../assets/brasaocgcfn.png';
@@ -69,11 +69,7 @@ export const PublicSurveyView: React.FC = () => {
     setTimeout(() => {
       setLoading(false);
       setSubmitted(true);
-      confetti({
-        particleCount: 70,
-        spread: 60,
-        origin: { y: 0.6 },
-      });
+      militaryAudio.playTacticalBeep();
       toast.success('Pesquisa de satisfação enviada com sucesso! Obrigado pela sua contribuição.');
     }, 400);
   };

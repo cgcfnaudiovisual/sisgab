@@ -1,3 +1,4 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useEffect } from 'react';
 import {
   ShieldAlert,
@@ -15,7 +16,6 @@ import {
   Layers,
   Sparkles,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import type { EquipamentoCOMSOC, CautelaItem } from '../../types/database';
@@ -109,11 +109,7 @@ export const EquipmentCautela: React.FC = () => {
     setCautelas([novaCautela, ...cautelas]);
     setCautelaModal({ isOpen: false, equipamento: null, retirado_por: '', data_prevista: '' });
 
-    confetti({
-      particleCount: 50,
-      spread: 50,
-      origin: { y: 0.7 },
-    });
+    militaryAudio.playTacticalBeep();
 
     toast.success(`Cautela de "${equipamento.nome}" registrada para ${retirado_por}!`);
 

@@ -1,3 +1,4 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Gavel,
@@ -28,7 +29,6 @@ import {
   Edit3,
   Save,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import type { DemandaComunicacao } from '../../types/database';
@@ -124,7 +124,7 @@ export const DemandApproval: React.FC = () => {
       setDetailModal(updatedItem);
       setIsEditingFicha(false);
 
-      confetti({ particleCount: 60, spread: 60, origin: { y: 0.6 } });
+      militaryAudio.playTacticalBeep();
       toast.success('Ficha técnica da pauta atualizada com sucesso!');
     } catch (err: any) {
       toast.error(`Erro ao salvar edição: ${err.message || 'Falha de conexão.'}`);
@@ -194,11 +194,7 @@ export const DemandApproval: React.FC = () => {
       prev.map((d) => (d.id === demanda.id ? { ...d, status: 'aprovado' } : d))
     );
 
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { y: 0.6 },
-    });
+    militaryAudio.playTacticalBeep();
 
     toast.success(`Pauta "${demanda.titulo_evento}" homologada com sucesso!`, {
       description: 'Status atualizado para APROVADO.',
@@ -238,7 +234,7 @@ export const DemandApproval: React.FC = () => {
       prev.map((d) => (d.id === demanda.id ? { ...d, status: 'concluida' } : d))
     );
 
-    confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
+    militaryAudio.playTacticalBeep();
     toast.success(`🎯 Missão "${demanda.titulo_evento}" concluída com sucesso!`);
 
     try {
@@ -259,7 +255,7 @@ export const DemandApproval: React.FC = () => {
       prev.map((d) => (selectedIds.includes(d.id) ? { ...d, status: 'aprovado' } : d))
     );
 
-    confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 } });
+    militaryAudio.playTacticalBeep();
     toast.success(`🎉 ${selectedIds.length} pautas homologadas em lote com sucesso!`);
 
     const idsToUpdate = [...selectedIds];

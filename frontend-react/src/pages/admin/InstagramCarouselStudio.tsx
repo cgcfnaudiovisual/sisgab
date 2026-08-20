@@ -1,3 +1,4 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Sparkles,
@@ -44,7 +45,6 @@ import {
   FlipHorizontal,
   FlipVertical,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { generateGeminiContent } from '../../utils/geminiClient';
 import { removeBackgroundAi } from '../../utils/backgroundRemover';
@@ -1380,7 +1380,7 @@ Retorne ESTRITAMENTE um array JSON contendo objetos no seguinte formato:
           setCurrentSlideIndex(0);
           setIsGeneratingAi(false);
           setIsAiModalOpen(false);
-          confetti({ particleCount: 70, spread: 80, origin: { y: 0.6 } });
+          militaryAudio.playTacticalBeep();
           toast.success('Carrossel gerado pelo Gemini 3.7 Flash com sucesso!');
           return;
         }
@@ -1489,7 +1489,7 @@ Retorne ESTRITAMENTE um array JSON contendo objetos no seguinte formato:
     setCurrentSlideIndex(0);
     setIsGeneratingAi(false);
     setIsAiModalOpen(false);
-    confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+    militaryAudio.playTacticalBeep();
     toast.success('Carrossel gerado pelo Diretor de Arte IA!');
   };
 
@@ -1515,7 +1515,7 @@ Retorne ESTRITAMENTE um array JSON contendo objetos no seguinte formato:
         exportSlideToPng(slide, idx, slides.length);
       }, idx * 250);
     });
-    confetti({ particleCount: 100, spread: 90, origin: { y: 0.5 } });
+    militaryAudio.playTacticalBeep();
     toast.success(`Exportando todos os ${slides.length} slides em alta resolução!`);
   };
 

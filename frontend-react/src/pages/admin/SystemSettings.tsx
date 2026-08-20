@@ -1,3 +1,4 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useEffect } from 'react';
 import {
   Settings,
@@ -30,7 +31,6 @@ import {
   Image as ImageIcon,
   Link as LinkIcon,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import defaultBrasao from '../../assets/brasaocgcfn.png';
@@ -318,7 +318,7 @@ export const SystemSettings: React.FC = () => {
       }
       window.dispatchEvent(new Event('sisgab_logo_updated'));
 
-      confetti({ particleCount: 50, spread: 50, origin: { y: 0.7 } });
+      militaryAudio.playTacticalBeep();
       toast.success('Configurações salvas com sucesso!');
     } catch (err: any) {
       toast.error(`Erro ao salvar configurações: ${err.message}`);

@@ -1,3 +1,4 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -24,7 +25,6 @@ import {
   Hourglass,
   Layers,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import type { DemandaComunicacao } from '../../types/database';
@@ -105,7 +105,7 @@ export const Dashboard: React.FC = () => {
       prev.map((d) => (d.id === dem.id ? { ...d, status: 'concluida' } : d))
     );
 
-    confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
+    militaryAudio.playTacticalBeep();
     toast.success(`🎯 Missão "${dem.titulo_evento}" marcada como CONCLUÍDA!`);
 
     try {

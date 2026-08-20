@@ -1,3 +1,4 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useEffect } from 'react';
 import {
   UserCheck,
@@ -25,7 +26,6 @@ import {
   AlertTriangle,
   Users,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import type { UserProfile, UserRole } from '../../types/database';
@@ -201,7 +201,7 @@ export const UserManagement: React.FC = () => {
 
       if (error) throw error;
 
-      confetti({ particleCount: 50, spread: 50, origin: { y: 0.7 } });
+      militaryAudio.playTacticalBeep();
       toast.success('Quadro de Lógica e Permissões salvo com sucesso no Supabase!');
     } catch (err: any) {
       toast.error(`Erro ao salvar permissões: ${err.message}`);

@@ -1,3 +1,4 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useEffect } from 'react';
 import {
   BarChart3,
@@ -31,7 +32,6 @@ import {
   Check,
   X,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -273,11 +273,7 @@ export const TelegramMetrics: React.FC = () => {
       // Simulação de disparo para os chats ativos com feedback em tempo real
       await new Promise((res) => setTimeout(res, 1200));
 
-      confetti({
-        particleCount: 70,
-        spread: 60,
-        origin: { y: 0.7 },
-      });
+      militaryAudio.playTacticalBeep();
 
       toast.success(`Comunicado enviado via Telegram para os militares selecionados!`);
       setBroadcastMsg('');

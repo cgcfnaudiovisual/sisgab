@@ -1,3 +1,4 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useEffect } from 'react';
 import {
   Calendar,
@@ -16,7 +17,6 @@ import {
   Send,
   Filter,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import type { StatusPresenca, RegistroPresenca } from '../../types/database';
@@ -277,7 +277,7 @@ export const DailyAttendance: React.FC = () => {
         console.warn('Sync presenca_diaria warning:', pErr);
       }
 
-      confetti({ particleCount: 60, spread: 60, origin: { y: 0.6 } });
+      militaryAudio.playTacticalBeep();
       toast.success('Pronto das praças salvo com sucesso no banco de dados!');
     } catch (err: any) {
       toast.error(`Erro ao salvar: ${err.message || 'Falha de conexão.'}`);

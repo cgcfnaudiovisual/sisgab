@@ -1,3 +1,4 @@
+import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useEffect } from 'react';
 import {
   Gift,
@@ -13,7 +14,6 @@ import {
   Package,
   TrendingDown,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
 import type { BrindeEstoque, BrindeDistribuicao } from '../../types/database';
@@ -118,11 +118,7 @@ export const GiftsStock: React.FC = () => {
     setHistorico([novoHist, ...historico]);
     setDistribuirModal({ isOpen: false, item: null, quantidade: 1, destinatario: '' });
 
-    confetti({
-      particleCount: 50,
-      spread: 50,
-      origin: { y: 0.7 },
-    });
+    militaryAudio.playTacticalBeep();
 
     toast.success(`Entrega de ${quantidade}x ${item.nome_item} registrada!`);
 
