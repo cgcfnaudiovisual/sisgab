@@ -1,4 +1,10 @@
 import os
+import sys
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 import io
 import time
 import json
@@ -8,7 +14,7 @@ import numpy as np
 from pathlib import Path
 import uvicorn
 from fastapi import FastAPI, Request, UploadFile, File, Form
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -264,27 +270,55 @@ async def proxy_image(url: str = "", drive_id: str = ""):
     try:
         target_url = url
         if drive_id and not target_url:
-            target_url = f"https://drive.google.com/thumbnail?id={drive_id}&sz=w800"
-            
+            target_url = f"https://drive.google.com/thumbnail?id={drive_id}&sz=w1000"
+
         if not target_url:
-            return JSONResponse({'error': 'URL não informada'}, status_code=400)
-            
+            return JSONResponse({'error': 'URL ou drive_id não informado'}, status_code=400)
+
         import httpx
-        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
-            resp = await client.get(target_url)
-            if resp.status_code == 200:
-                media_type = resp.headers.get("content-type", "image/jpeg")
-                return Response(
-                    content=resp.content,
-                    media_type=media_type,
-                    headers={
-                        "Access-Control-Allow-Origin": "*",
-                        "Cache-Control": "public, max-age=86400"
-                    }
-                )
-            else:
-                return JSONResponse({'error': f'Falha ao carregar imagem: status {resp.status_code}'}, status_code=resp.status_code)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=20.0, headers=headers) as client:
+                resp = await client.get(target_url)
+                if resp.status_code == 200 and resp.content:
+                    media_type = resp.headers.get("content-type", "image/jpeg")
+                    return Response(
+                        content=resp.content,
+                        media_type=media_type,
+                        headers={
+                            "Access-Control-Allow-Origin": "*",
+                            "Access-Control-Allow-Methods": "GET, OPTIONS",
+                            "Access-Control-Allow-Headers": "*",
+                            "Cache-Control": "public, max-age=86400"
+                        }
+                    )
+        except Exception as ex_http:
+            print(f"[PROXY_THUMB_ERR] {ex_http}")
+
+        # Se thumbnail falhou e temos drive_id, tenta baixar direto pelo drive_service
+        if drive_id:
+            try:
+                import drive_service
+                file_bytes = await asyncio.to_thread(drive_service.download_file, drive_id)
+                if file_bytes:
+                    return Response(
+                        content=file_bytes,
+                        media_type="image/jpeg",
+                        headers={
+                            "Access-Control-Allow-Origin": "*",
+                            "Access-Control-Allow-Methods": "GET, OPTIONS",
+                            "Access-Control-Allow-Headers": "*",
+                            "Cache-Control": "public, max-age=86400"
+                        }
+                    )
+            except Exception as ex_drive:
+                print(f"[PROXY_DRIVE_ERR] {ex_drive}")
+
+        return JSONResponse({'error': 'Falha ao obter imagem do Google Drive'}, status_code=502)
     except Exception as e:
+        print(f"[PROXY_IMAGE_ERR] {e}")
         return JSONResponse({'error': str(e)}, status_code=500)
 
 @app.post("/api/workers/face-index")
