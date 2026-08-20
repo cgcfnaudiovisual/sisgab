@@ -108,6 +108,7 @@ interface MilitarOpcao {
   role: string;
   setor?: string;
   isComsoc: boolean;
+  antiguidade_num?: number;
 }
 
 export const NewDemandForm: React.FC = () => {
@@ -259,7 +260,11 @@ export const NewDemandForm: React.FC = () => {
 
   const loadMilitares = async () => {
     try {
-      const { data, error } = await supabase.from('efetivo').select('id, nome_guerra, posto_grad, role, setor');
+      const { data, error } = await supabase
+        .from('efetivo')
+        .select('id, nome_guerra, posto_grad, role, setor, antiguidade_num')
+        .order('antiguidade_num', { ascending: true });
+
       if (!error && data && data.length > 0) {
         const formatados: MilitarOpcao[] = data.map((m: any) => {
           const roleStr = (m.role || '').toLowerCase();
@@ -267,10 +272,7 @@ export const NewDemandForm: React.FC = () => {
           const isComsoc =
             roleStr.includes('comsoc') ||
             roleStr.includes('admin') ||
-            roleStr.includes('supervisor') ||
-            roleStr.includes('oficial_gab') ||
-            setorStr.includes('comsoc') ||
-            setorStr.includes('gabinete');
+            setorStr.includes('comsoc');
 
           return {
             id: m.id,
@@ -279,13 +281,15 @@ export const NewDemandForm: React.FC = () => {
             role: m.role || 'operador',
             setor: m.setor || 'CGCFN',
             isComsoc,
+            antiguidade_num: m.antiguidade_num || 99,
           };
         });
 
-        // Ordenação inteligente: COMSOC / Admin / Supervisor primeiro
+        // Ordenação inteligente: Por Antiguidade Real (Oficiais -> Suboficiais -> Sargentos -> Cabos) e Alfabética
         formatados.sort((a, b) => {
-          if (a.isComsoc && !b.isComsoc) return -1;
-          if (!a.isComsoc && b.isComsoc) return 1;
+          const antA = a.antiguidade_num || 99;
+          const antB = b.antiguidade_num || 99;
+          if (antA !== antB) return antA - antB;
           return a.nome_guerra.localeCompare(b.nome_guerra);
         });
 
