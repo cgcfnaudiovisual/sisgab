@@ -28,9 +28,19 @@ import {
   Hash,
   SlidersHorizontal,
   Flame,
+  Bookmark,
+  MessageSquare,
+  Heart,
+  HelpCircle,
+  Clock,
+  Radio,
+  Sliders as SlidersIcon,
+  Wand2,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
+import { generateGeminiContent } from '../../utils/geminiClient';
+import { supabase } from '../../api/supabase';
 
 // Formatos de Publicação
 export type PostFormat = '4_5' | '9_16' | '1_1' | '16_9';
@@ -102,13 +112,33 @@ export type SlideLayoutType =
   | 'big_number'
   | 'quote_nobel'
   | 'headline_banner'
+  | 'breaking_news'
+  | 'before_after_split'
+  | 'quiz_poll'
+  | 'info_list'
+  | 'tech_spec'
   | 'cta_final';
 
 // Tipos de Textura de Fundo
-export type TextureType = 'none' | 'tactical_grid' | 'dots' | 'diagonal_stripes' | 'glow_spot' | 'naval_corners';
+export type TextureType =
+  | 'none'
+  | 'tactical_grid'
+  | 'dots'
+  | 'diagonal_stripes'
+  | 'glow_spot'
+  | 'naval_corners'
+  | 'film_grain'
+  | 'halftone_dots'
+  | 'vignette_shadow'
+  | 'camo_tactical';
 
 // Estilos / Temas Visuais
-export type DesignThemePreset = 'editorial_nobre' | 'tatico_operacional' | 'manchete_impacto' | 'clean_institucional' | 'custom';
+export type DesignThemePreset =
+  | 'editorial_nobre'
+  | 'tatico_operacional'
+  | 'manchete_impacto'
+  | 'clean_institucional'
+  | 'custom';
 
 export interface CarouselSlide {
   id: string;
@@ -123,15 +153,25 @@ export interface CarouselSlide {
   authorName?: string;
   authorRole?: string;
   ctaText?: string;
+  ctaTriggerType?: 'salvar' | 'comentar' | 'marcar' | 'compartilhar' | 'toqueduplo';
+  breakingBadge?: string;
+  breakingDate?: string;
+  pollQuestion?: string;
+  pollOptionA?: string;
+  pollOptionB?: string;
+  beforeLabel?: string;
+  afterLabel?: string;
+  listItems?: string[];
+  techSpecs?: { label: string; value: string }[];
   bgType: 'gradient' | 'dark' | 'light';
   gradColorStart: string;
   gradColorMid: string;
   gradColorEnd: string;
-  gradAngle: number; // 0 a 360
+  gradAngle: number;
   texture: TextureType;
   imageSrc?: string;
-  imageOpacity: number; // 0 a 100
-  overlayStrength: number; // 0 a 100
+  imageOpacity: number;
+  overlayStrength: number;
   fontFamily: 'Playfair Display' | 'DM Sans' | 'Space Grotesk' | 'Georgia';
 }
 
@@ -154,6 +194,24 @@ const DEFAULT_SLIDES: CarouselSlide[] = [
   },
   {
     id: '2',
+    layoutType: 'breaking_news',
+    tag: 'COMUNICADO OFICIAL',
+    breakingBadge: '🚨 PLANTÃO CGCFN',
+    breakingDate: 'HOJE • BRASÍLIA - DF',
+    title: 'Marinha do Brasil inaugura novas instalações operacionais',
+    body: 'Modernização da infraestrutura amplia a capacidade de pronta resposta e comando do Corpo de Fuzileiros Navais.',
+    bgType: 'dark',
+    gradColorStart: '#08111d',
+    gradColorMid: '#161e2e',
+    gradColorEnd: '#08111d',
+    gradAngle: 180,
+    texture: 'tactical_grid',
+    imageOpacity: 50,
+    overlayStrength: 85,
+    fontFamily: 'DM Sans',
+  },
+  {
+    id: '3',
     layoutType: 'big_number',
     tag: 'TRADIÇÃO & ALCANCE',
     bigNumber: '18',
@@ -171,63 +229,75 @@ const DEFAULT_SLIDES: CarouselSlide[] = [
     fontFamily: 'Playfair Display',
   },
   {
-    id: '3',
-    layoutType: 'glass_card',
-    tag: '🏆 1º LUGAR OFICIAL',
-    title: 'David de Melo da Silva',
-    subtitle: 'Centro Educacional Monteiro Lobato',
-    body: 'Vencedor com a aclamada crônica "Cartas de quem fica", entregue em cerimônia solene no Petit Trianon da ABL.',
+    id: '4',
+    layoutType: 'info_list',
+    tag: 'PILARES DE EXCELÊNCIA',
+    title: 'Os 4 Compromissos da Força de Prontidão',
+    listItems: [
+      'Prontidão Permanente e Ação Rápida em Todo Território',
+      'Treinamento e Formação Militar de Alto Nível Técnico',
+      'Modernização Contínua de Meios Blindados e Embarcações',
+      'Compromisso com a Sociedade e Apoio Humanitário',
+    ],
     bgType: 'gradient',
     gradColorStart: '#08111d',
-    gradColorMid: '#12253f',
-    gradColorEnd: '#060c14',
-    gradAngle: 135,
-    texture: 'naval_corners',
-    imageOpacity: 85,
-    overlayStrength: 65,
-    fontFamily: 'Playfair Display',
-  },
-  {
-    id: '4',
-    layoutType: 'quote_nobel',
-    tag: 'PALAVRAS DE HONRA',
-    title: 'Uma crônica que tocou o coração de todos',
-    quote: 'É a primeira vez que colocamos a crônica para ser efetivamente lida pelo seu autor e eu confesso que fiquei bastante emocionado. Foi um momento especial.',
-    authorName: 'Almirante de Esquadra Carlos Chagas',
-    authorRole: 'Comandante-Geral do Corpo de Fuzileiros Navais',
-    bgType: 'gradient',
-    gradColorStart: '#0a1628',
-    gradColorMid: '#1b3459',
-    gradColorEnd: '#0c1a2e',
+    gradColorMid: '#112239',
+    gradColorEnd: '#08111d',
     gradAngle: 145,
-    texture: 'dots',
-    imageOpacity: 50,
+    texture: 'halftone_dots',
+    imageOpacity: 45,
     overlayStrength: 80,
-    fontFamily: 'Playfair Display',
+    fontFamily: 'Space Grotesk',
   },
   {
     id: '5',
-    layoutType: 'split_photo',
-    tag: 'RECONHECIMENTO',
-    title: 'Incentivando o protagonismo juvenil',
-    body: 'Estudantes subiram ao palco para receber diplomas, notebooks e o aplauso caloroso de autoridades, mestres e familiares.',
-    bgType: 'dark',
+    layoutType: 'quiz_poll',
+    tag: 'DESAFIO INTERATIVO',
+    title: 'Qual dessas missões é a mais desafiadora?',
+    pollQuestion: 'Qual dessas missões é considerada a mais desafiadora pelos Fuzileiros Navais?',
+    pollOptionA: 'Operação Anfíbia Noturna em Alto-Mar',
+    pollOptionB: 'Incursão Ribeirinha na Selva Amazônica',
+    body: 'Deixe sua resposta nos comentários: Vote [ A ] ou [ B ]!',
+    bgType: 'gradient',
     gradColorStart: '#08111d',
-    gradColorMid: '#08111d',
-    gradColorEnd: '#08111d',
-    gradAngle: 0,
-    texture: 'diagonal_stripes',
-    imageOpacity: 90,
-    overlayStrength: 60,
+    gradColorMid: '#1b3459',
+    gradColorEnd: '#0c1a2e',
+    gradAngle: 155,
+    texture: 'camo_tactical',
+    imageOpacity: 40,
+    overlayStrength: 80,
     fontFamily: 'DM Sans',
   },
   {
     id: '6',
+    layoutType: 'tech_spec',
+    tag: 'MEIOS OPERACIONAIS',
+    title: 'CLANF — Carro Lagarta Anfíbio',
+    body: 'Veículo blindado de assalto anfíbio projetado para desembarque de tropas sob condições táticas extremas.',
+    techSpecs: [
+      { label: 'Velocidade na Água', value: '13 km/h (7 nós)' },
+      { label: 'Capacidade de Tropa', value: '21 Fuzileiros' },
+      { label: 'Armamento', value: 'Metr. .50 + MK19 40mm' },
+      { label: 'Autonomia', value: '480 km em Terra' },
+    ],
+    bgType: 'gradient',
+    gradColorStart: '#050c17',
+    gradColorMid: '#0f2747',
+    gradColorEnd: '#050c17',
+    gradAngle: 135,
+    texture: 'tactical_grid',
+    imageOpacity: 60,
+    overlayStrength: 75,
+    fontFamily: 'Space Grotesk',
+  },
+  {
+    id: '7',
     layoutType: 'cta_final',
-    tag: 'VALORIZANDO A EDUCAÇÃO',
-    title: 'A escrita transforma o futuro da juventude.',
-    body: 'Parabéns a todos os alunos, professores e escolas participantes do XII Concurso de Crônicas ABL / CFN!',
+    tag: 'HONRA & ENGAJAMENTO',
+    title: 'A escrita e o dever transformam o futuro do Brasil.',
+    body: 'Salve este post para consultar depois e compartilhe com quem tem orgulho da nossa Marinha!',
     ctaText: 'Salve e compartilhe essa conquista ↗',
+    ctaTriggerType: 'salvar',
     bgType: 'gradient',
     gradColorStart: '#060e18',
     gradColorMid: '#163663',
@@ -247,13 +317,15 @@ export const InstagramCarouselStudio: React.FC = () => {
   const [brandColor, setBrandColor] = useState<string>('#c5a059');
   const [brandLight, setBrandLight] = useState<string>('#e0c287');
   const [accountHandle, setAccountHandle] = useState<string>('fuzileirosnavais_oficial');
-  const [locationTag, setLocationTag] = useState<string>('Academia Brasileira de Letras');
+  const [locationTag, setLocationTag] = useState<string>('Comando-Geral do CFN');
 
   // Modo IA Diretor de Arte
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
   const [aiPromptInput, setAiPromptInput] = useState('');
   const [aiMode, setAiMode] = useState<'institutional' | 'creative'>('creative');
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
+  const [isOptimizingHeadline, setIsOptimizingHeadline] = useState(false);
+  const [geminiApiKey, setGeminiApiKey] = useState<string>('');
 
   // Galeria de imagens
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
@@ -262,6 +334,31 @@ export const InstagramCarouselStudio: React.FC = () => {
 
   const activeSlide = slides[currentSlideIndex] || slides[0];
   const currentFormat = FORMAT_CONFIGS[format];
+
+  // Carregar chave do Gemini na inicialização
+  useEffect(() => {
+    async function loadKey() {
+      const localKey = localStorage.getItem('sisgab_gemini_key') || localStorage.getItem('gemini_api_key');
+      if (localKey && localKey.trim()) {
+        setGeminiApiKey(localKey.trim());
+        return;
+      }
+      try {
+        const { data } = await supabase
+          .from('config')
+          .select('valor')
+          .in('chave', ['gemini_api_key', 'google_api_key'])
+          .limit(1);
+        if (data && data.length > 0 && data[0].valor) {
+          setGeminiApiKey(data[0].valor);
+          localStorage.setItem('sisgab_gemini_key', data[0].valor);
+        }
+      } catch (e) {
+        console.warn('Erro ao carregar chave do Gemini:', e);
+      }
+    }
+    loadKey();
+  }, []);
 
   // Renderização Reativa do Canvas
   useEffect(() => {
@@ -279,7 +376,7 @@ export const InstagramCarouselStudio: React.FC = () => {
   ) => {
     const w = targetWidth;
     const h = targetHeight;
-    const scale = w / 420; // Escala proporcional baseada na largura de 420px de layout
+    const scale = w / 420;
 
     // ── 1. RENDERIZAR FUNDO (GRADIENTE OU COR) ──
     if (slide.bgType === 'gradient') {
@@ -314,7 +411,6 @@ export const InstagramCarouselStudio: React.FC = () => {
         ctx.save();
         ctx.globalAlpha = slide.imageOpacity / 100;
 
-        // Desenhar com object-fit cover
         const imgRatio = img.width / img.height;
         const canvasRatio = w / h;
         let renderW = w;
@@ -349,7 +445,7 @@ export const InstagramCarouselStudio: React.FC = () => {
     const fontName = slide.fontFamily || 'Georgia';
 
     // ── 4. RENDERIZAR TAG / BADGE SUPERIOR ──
-    if (slide.tag) {
+    if (slide.tag && slide.layoutType !== 'breaking_news') {
       const tagY = 56 * scale;
       ctx.font = `bold ${10 * scale}px sans-serif`;
       ctx.fillStyle = isLight ? '#8a6d30' : brandLight;
@@ -361,8 +457,237 @@ export const InstagramCarouselStudio: React.FC = () => {
 
     // ── 5. RENDERIZAR LAYOUT ESPECÍFICO DO SLIDE ──
     switch (slide.layoutType) {
+      case 'breaking_news': {
+        const barH = 34 * scale;
+        ctx.fillStyle = '#dc2626';
+        ctx.fillRect(0, 0, w, barH);
+
+        ctx.font = `900 ${11 * scale}px sans-serif`;
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.fillText(slide.breakingBadge || '🚨 COMUNICADO OFICIAL • CORPO DE FUZILEIROS NAVAIS', w / 2, 22 * scale);
+
+        ctx.textAlign = 'left';
+        ctx.font = `bold ${9 * scale}px sans-serif`;
+        ctx.fillStyle = brandLight;
+        ctx.fillText(slide.breakingDate || 'HOJE • BRASÍLIA - DF', paddingX, 60 * scale);
+
+        ctx.font = `900 ${26 * scale}px ${fontName}, sans-serif`;
+        ctx.fillStyle = '#ffffff';
+        wrapText(ctx, slide.title.toUpperCase(), paddingX, 100 * scale, w - paddingX * 2, 32 * scale);
+
+        if (slide.body) {
+          const bodyY = 220 * scale;
+          ctx.fillStyle = 'rgba(220, 38, 38, 0.12)';
+          ctx.strokeStyle = 'rgba(220, 38, 38, 0.4)';
+          ctx.lineWidth = 1.5 * scale;
+          ctx.beginPath();
+          ctx.roundRect(paddingX, bodyY, w - paddingX * 2, 110 * scale, 12 * scale);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.font = `${13 * scale}px sans-serif`;
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+          wrapText(ctx, slide.body, paddingX + 16 * scale, bodyY + 32 * scale, w - paddingX * 2 - 32 * scale, 20 * scale);
+        }
+        break;
+      }
+
+      case 'before_after_split': {
+        const topY = 70 * scale;
+        ctx.font = `bold ${21 * scale}px ${fontName}, serif`;
+        ctx.fillStyle = '#ffffff';
+        wrapText(ctx, slide.title, paddingX, topY, w - paddingX * 2, 26 * scale);
+
+        const cardW = (w - paddingX * 2 - 14 * scale) / 2;
+        const cardY = topY + 70 * scale;
+        const cardH = h - cardY - 60 * scale;
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+        ctx.lineWidth = 1.5 * scale;
+        ctx.beginPath();
+        ctx.roundRect(paddingX, cardY, cardW, cardH, 14 * scale);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.font = `900 ${11 * scale}px sans-serif`;
+        ctx.fillStyle = brandLight;
+        ctx.fillText(slide.beforeLabel || '1808 • TRADIÇÃO', paddingX + 14 * scale, cardY + 28 * scale);
+
+        ctx.font = `${11.5 * scale}px sans-serif`;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        wrapText(ctx, slide.body || 'Fundamentos históricos que moldaram o Corpo de Fuzileiros Navais.', paddingX + 14 * scale, cardY + 58 * scale, cardW - 28 * scale, 17 * scale);
+
+        const c2X = paddingX + cardW + 14 * scale;
+        ctx.fillStyle = 'rgba(0, 229, 255, 0.06)';
+        ctx.strokeStyle = 'rgba(0, 229, 255, 0.3)';
+        ctx.beginPath();
+        ctx.roundRect(c2X, cardY, cardW, cardH, 14 * scale);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.font = `900 ${11 * scale}px sans-serif`;
+        ctx.fillStyle = '#00e5ff';
+        ctx.fillText(slide.afterLabel || '2026 • MODERNIDADE', c2X + 14 * scale, cardY + 28 * scale);
+
+        ctx.font = `${11.5 * scale}px sans-serif`;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        wrapText(ctx, slide.subtitle || 'Tecnologia de ponta, sistemas C4I e doutrina expedicionária moderna.', c2X + 14 * scale, cardY + 58 * scale, cardW - 28 * scale, 17 * scale);
+        break;
+      }
+
+      case 'quiz_poll': {
+        const qY = 80 * scale;
+        ctx.font = `bold ${22 * scale}px ${fontName}, serif`;
+        ctx.fillStyle = '#ffffff';
+        wrapText(ctx, slide.pollQuestion || slide.title, paddingX, qY, w - paddingX * 2, 28 * scale);
+
+        const btnH = 65 * scale;
+        const btnW = w - paddingX * 2;
+        const b1Y = qY + 95 * scale;
+        const b2Y = b1Y + btnH + 16 * scale;
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.07)';
+        ctx.strokeStyle = `${brandColor}88`;
+        ctx.lineWidth = 1.5 * scale;
+        ctx.beginPath();
+        ctx.roundRect(paddingX, b1Y, btnW, btnH, 14 * scale);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = brandColor;
+        ctx.beginPath();
+        ctx.arc(paddingX + 28 * scale, b1Y + btnH / 2, 14 * scale, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.font = `900 ${11 * scale}px sans-serif`;
+        ctx.fillStyle = '#08111d';
+        ctx.textAlign = 'center';
+        ctx.fillText('A', paddingX + 28 * scale, b1Y + btnH / 2 + 4 * scale);
+
+        ctx.textAlign = 'left';
+        ctx.font = `bold ${13 * scale}px sans-serif`;
+        ctx.fillStyle = '#ffffff';
+        wrapText(ctx, slide.pollOptionA || 'Opção A: Operação Anfíbia Noturna', paddingX + 54 * scale, b1Y + 28 * scale, btnW - 68 * scale, 18 * scale);
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.07)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.beginPath();
+        ctx.roundRect(paddingX, b2Y, btnW, btnH, 14 * scale);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.arc(paddingX + 28 * scale, b2Y + btnH / 2, 14 * scale, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.font = `900 ${11 * scale}px sans-serif`;
+        ctx.fillStyle = '#08111d';
+        ctx.textAlign = 'center';
+        ctx.fillText('B', paddingX + 28 * scale, b2Y + btnH / 2 + 4 * scale);
+
+        ctx.textAlign = 'left';
+        ctx.font = `bold ${13 * scale}px sans-serif`;
+        ctx.fillStyle = '#ffffff';
+        wrapText(ctx, slide.pollOptionB || 'Opção B: Ação Rápida com Lanchas Blindadas', paddingX + 54 * scale, b2Y + 28 * scale, btnW - 68 * scale, 18 * scale);
+
+        if (slide.body) {
+          ctx.font = `italic ${12 * scale}px sans-serif`;
+          ctx.fillStyle = brandLight;
+          ctx.textAlign = 'center';
+          ctx.fillText(slide.body, w / 2, b2Y + btnH + 35 * scale);
+          ctx.textAlign = 'left';
+        }
+        break;
+      }
+
+      case 'info_list': {
+        const headY = 80 * scale;
+        ctx.font = `bold ${23 * scale}px ${fontName}, serif`;
+        ctx.fillStyle = '#ffffff';
+        wrapText(ctx, slide.title, paddingX, headY, w - paddingX * 2, 28 * scale);
+
+        const items = slide.listItems && slide.listItems.length > 0 ? slide.listItems : [
+          'Prontidão Operacional Permanente',
+          'Modernização de Meios Blindados e Embarcações',
+          'Tradição e Disciplina Militar de Excelência',
+          'Apoio Humanitário e Presença nas Águas Brasileiras',
+        ];
+
+        const startY = headY + 75 * scale;
+        const itemH = 46 * scale;
+        items.slice(0, 4).forEach((it, idx) => {
+          const iy = startY + idx * (itemH + 10 * scale);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+          ctx.lineWidth = 1 * scale;
+          ctx.beginPath();
+          ctx.roundRect(paddingX, iy, w - paddingX * 2, itemH, 10 * scale);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = brandColor;
+          ctx.font = `900 ${12 * scale}px sans-serif`;
+          ctx.fillText(`0${idx + 1}`, paddingX + 14 * scale, iy + 28 * scale);
+
+          ctx.font = `bold ${12 * scale}px sans-serif`;
+          ctx.fillStyle = '#ffffff';
+          wrapText(ctx, it, paddingX + 44 * scale, iy + 24 * scale, w - paddingX * 2 - 58 * scale, 16 * scale);
+        });
+        break;
+      }
+
+      case 'tech_spec': {
+        const tY = 80 * scale;
+        ctx.font = `bold ${23 * scale}px ${fontName}, serif`;
+        ctx.fillStyle = '#ffffff';
+        wrapText(ctx, slide.title, paddingX, tY, w - paddingX * 2, 28 * scale);
+
+        if (slide.body) {
+          ctx.font = `${12.5 * scale}px sans-serif`;
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+          wrapText(ctx, slide.body, paddingX, tY + 60 * scale, w - paddingX * 2, 18 * scale);
+        }
+
+        const specs = slide.techSpecs && slide.techSpecs.length > 0 ? slide.techSpecs : [
+          { label: 'Velocidade Máxima', value: '45 nós' },
+          { label: 'Capacidade de Tropa', value: '22 Fuzileiros' },
+          { label: 'Blindagem', value: 'Nível III-A' },
+          { label: 'Armamento', value: '.50 BMG + MAG 7.62' },
+        ];
+
+        const gridY = tY + 130 * scale;
+        const cellW = (w - paddingX * 2 - 12 * scale) / 2;
+        const cellH = 55 * scale;
+
+        specs.slice(0, 4).forEach((sp, idx) => {
+          const col = idx % 2;
+          const row = Math.floor(idx / 2);
+          const cx = paddingX + col * (cellW + 12 * scale);
+          const cy = gridY + row * (cellH + 12 * scale);
+
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+          ctx.strokeStyle = `${brandColor}55`;
+          ctx.lineWidth = 1 * scale;
+          ctx.beginPath();
+          ctx.roundRect(cx, cy, cellW, cellH, 10 * scale);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.font = `bold ${9.5 * scale}px sans-serif`;
+          ctx.fillStyle = brandLight;
+          ctx.fillText(sp.label.toUpperCase(), cx + 12 * scale, cy + 20 * scale);
+
+          ctx.font = `900 ${13 * scale}px sans-serif`;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(sp.value, cx + 12 * scale, cy + 40 * scale);
+        });
+        break;
+      }
+
       case 'big_number': {
-        // Número Gigante em Destaque
         const numY = 160 * scale;
         ctx.font = `900 ${72 * scale}px sans-serif`;
         ctx.fillStyle = brandColor;
@@ -374,7 +699,6 @@ export const InstagramCarouselStudio: React.FC = () => {
           ctx.fillText(slide.bigNumberLabel.toUpperCase(), paddingX, numY + 28 * scale);
         }
 
-        // Título e Corpo abaixo
         ctx.font = `bold ${22 * scale}px ${fontName}, serif`;
         ctx.fillStyle = isLight ? '#08111d' : '#ffffff';
         wrapText(ctx, slide.title, paddingX, numY + 75 * scale, w - paddingX * 2, 28 * scale);
@@ -388,7 +712,6 @@ export const InstagramCarouselStudio: React.FC = () => {
       }
 
       case 'glass_card': {
-        // Card Estilo Vidro Fosco (Glassmorphism)
         const cardY = 90 * scale;
         const cardH = h - cardY - 65 * scale;
         const cardW = w - paddingX * 2;
@@ -401,7 +724,6 @@ export const InstagramCarouselStudio: React.FC = () => {
         ctx.fill();
         ctx.stroke();
 
-        // Título dentro do card
         ctx.font = `bold ${23 * scale}px ${fontName}, serif`;
         ctx.fillStyle = '#ffffff';
         wrapText(ctx, slide.title, paddingX + 20 * scale, cardY + 45 * scale, cardW - 40 * scale, 28 * scale);
@@ -421,7 +743,6 @@ export const InstagramCarouselStudio: React.FC = () => {
       }
 
       case 'quote_nobel': {
-        // Card de Citação
         const boxY = 85 * scale;
         const boxH = h - boxY - 65 * scale;
         const boxW = w - paddingX * 2;
@@ -456,13 +777,18 @@ export const InstagramCarouselStudio: React.FC = () => {
       }
 
       case 'cta_final': {
-        // Encerramento & CTA
         const centerY = h / 2 - 20 * scale;
 
-        // Brasão ou Âncora Central
-        ctx.font = `${30 * scale}px sans-serif`;
+        let icon = '⚓';
+        if (slide.ctaTriggerType === 'salvar') icon = '📌';
+        else if (slide.ctaTriggerType === 'comentar') icon = '💬';
+        else if (slide.ctaTriggerType === 'marcar') icon = '👥';
+        else if (slide.ctaTriggerType === 'toqueduplo') icon = '❤️';
+        else if (slide.ctaTriggerType === 'compartilhar') icon = '📲';
+
+        ctx.font = `${32 * scale}px sans-serif`;
         ctx.textAlign = 'center';
-        ctx.fillText('⚓', w / 2, centerY - 80 * scale);
+        ctx.fillText(icon, w / 2, centerY - 80 * scale);
 
         ctx.font = `bold ${24 * scale}px ${fontName}, serif`;
         ctx.fillStyle = '#ffffff';
@@ -470,11 +796,10 @@ export const InstagramCarouselStudio: React.FC = () => {
 
         if (slide.body) {
           ctx.font = `${13 * scale}px sans-serif`;
-          ctx.fillStyle = 'rgba(255,255,255,0.8)';
+          ctx.fillStyle = 'rgba(255,255,255,0.85)';
           wrapText(ctx, slide.body, paddingX, centerY + 50 * scale, w - paddingX * 2, 19 * scale, true);
         }
 
-        // Botão de Chamada
         if (slide.ctaText) {
           const btnY = centerY + 115 * scale;
           const btnW = w - paddingX * 2;
@@ -492,7 +817,6 @@ export const InstagramCarouselStudio: React.FC = () => {
       }
 
       default: {
-        // hero_full & split_photo
         const titleY = slide.imageSrc ? h - 190 * scale : 125 * scale;
         ctx.font = `bold ${24 * scale}px ${fontName}, serif`;
         ctx.fillStyle = isLight ? '#08111d' : '#ffffff';
@@ -582,7 +906,6 @@ export const InstagramCarouselStudio: React.FC = () => {
         ctx.lineWidth = 2 * scale;
         const pad = 18 * scale;
         const len = 20 * scale;
-        // 4 cantos estilizados
         ctx.strokeRect(pad, pad, w - pad * 2, h - pad * 2);
         ctx.fillStyle = accentColor;
         ctx.fillRect(pad, pad, len, 3 * scale);
@@ -602,6 +925,41 @@ export const InstagramCarouselStudio: React.FC = () => {
           ctx.beginPath();
           ctx.moveTo(i, 0);
           ctx.lineTo(i + h, h);
+          ctx.stroke();
+        }
+        break;
+      }
+      case 'halftone_dots': {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.045)';
+        const step = 18 * scale;
+        for (let x = 0; x < w; x += step) {
+          for (let y = 0; y < h; y += step) {
+            const rad = (1 + Math.sin((x + y) * 0.025)) * 1.5 * scale;
+            ctx.beginPath();
+            ctx.arc(x, y, rad, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        break;
+      }
+      case 'vignette_shadow': {
+        const vigGrad = ctx.createRadialGradient(w / 2, h / 2, w * 0.25, w / 2, h / 2, w * 0.75);
+        vigGrad.addColorStop(0, 'transparent');
+        vigGrad.addColorStop(1, 'rgba(0, 0, 0, 0.75)');
+        ctx.fillStyle = vigGrad;
+        ctx.fillRect(0, 0, w, h);
+        break;
+      }
+      case 'camo_tactical': {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.035)';
+        ctx.lineWidth = 1.5 * scale;
+        for (let y = 0; y < h; y += 32 * scale) {
+          ctx.beginPath();
+          for (let x = 0; x < w; x += 10 * scale) {
+            const waveY = y + Math.sin((x + y) * 0.03) * 12 * scale;
+            if (x === 0) ctx.moveTo(x, waveY);
+            else ctx.lineTo(x, waveY);
+          }
           ctx.stroke();
         }
         break;
@@ -778,114 +1136,265 @@ export const InstagramCarouselStudio: React.FC = () => {
     toast.success('Slide removido!');
   };
 
-  // Executar Geração com IA (Diretor de Arte Autônomo)
-  const handleRunAiDirector = () => {
+  // Otimizar Título com IA (Gemini 3.7 Flash)
+  const handleOptimizeHeadline = async () => {
+    if (!geminiApiKey) {
+      toast.error('Chave de API do Gemini não encontrada.');
+      return;
+    }
+    setIsOptimizingHeadline(true);
+    try {
+      const prompt = `Reescreva o seguinte título para um post militar do Instagram (Corpo de Fuzileiros Navais) para que seja altamente atraente, dinâmico e retenha a atenção nos primeiros 3 segundos. Retorne APENAS o novo título, sem aspas nem explicações:
+
+Título original: "${activeSlide.title}"`;
+      const res = await generateGeminiContent(prompt, 'Você é um redator sênior de comunicação social militar especializado em mídias sociais.', geminiApiKey);
+      if (res && res.trim()) {
+        updateActiveSlide('title', res.trim());
+        toast.success('Título otimizado com Gemini 3.7 Flash!');
+      }
+    } catch (e: any) {
+      toast.error(`Falha ao otimizar: ${e.message}`);
+    } finally {
+      setIsOptimizingHeadline(false);
+    }
+  };
+
+  // Executar Geração com IA (Diretor de Arte Autônomo com Gemini 3.7 Flash)
+  const handleRunAiDirector = async () => {
     if (!aiPromptInput.trim()) {
       toast.error('Descreva o tema, matéria ou a ideia visual para a IA!');
       return;
     }
     setIsGeneratingAi(true);
 
-    setTimeout(() => {
-      // Criação dinâmica da IA baseada na intenção
-      const generated: CarouselSlide[] = [
-        {
-          id: '1',
-          layoutType: 'hero_full',
-          tag: 'COBERTURA ESPECIAL',
-          title: aiPromptInput.slice(0, 50) + '...',
-          subtitle: 'Acompanhe os principais momentos e destaques em formato exclusivo.',
-          bgType: 'gradient',
-          gradColorStart: '#060e18',
-          gradColorMid: '#0d223f',
-          gradColorEnd: '#1b3f73',
-          gradAngle: 145,
-          texture: 'glow_spot',
-          imageSrc: uploadedImages[0],
-          imageOpacity: 90,
-          overlayStrength: 75,
-          fontFamily: aiMode === 'creative' ? 'Space Grotesk' : 'Playfair Display',
-        },
-        {
-          id: '2',
-          layoutType: 'big_number',
-          tag: 'NÚMEROS EXPRESSIVOS',
-          bigNumber: '100%',
-          bigNumberLabel: 'Compromisso e Dedicação',
-          title: 'Resultados alcançados com disciplina e honra',
-          body: 'Uma mobilização histórica que reforça a excelência em cada etapa do evento.',
-          bgType: 'dark',
-          gradColorStart: '#08111d',
-          gradColorMid: '#0b1626',
-          gradColorEnd: '#08111d',
-          gradAngle: 180,
-          texture: 'tactical_grid',
-          imageOpacity: 50,
-          overlayStrength: 85,
-          fontFamily: 'DM Sans',
-        },
-        {
-          id: '3',
-          layoutType: 'quote_nobel',
-          tag: 'PALAVRAS DO COMANDO',
-          title: 'Uma mensagem de liderança e futuro',
-          quote: 'A dedicação e o trabalho em equipe transformam desafios em conquistas inesquecíveis para todos nós.',
-          authorName: 'Comando-Geral do CFN',
-          authorRole: 'Marinha do Brasil',
-          bgType: 'gradient',
-          gradColorStart: '#091524',
-          gradColorMid: '#162e4d',
-          gradColorEnd: '#091524',
-          gradAngle: 135,
-          texture: 'naval_corners',
-          imageOpacity: 50,
-          overlayStrength: 80,
-          fontFamily: 'Playfair Display',
-        },
-        {
-          id: '4',
-          layoutType: 'glass_card',
-          tag: 'DESTAQUES & HOMENAGENS',
-          title: 'Reconhecimento a todos os participantes',
-          subtitle: 'Solenidade Oficial',
-          body: 'Momentos marcantes registrados para a história institucional.',
-          bgType: 'gradient',
-          gradColorStart: '#060e18',
-          gradColorMid: '#132845',
-          gradColorEnd: '#060e18',
-          gradAngle: 165,
-          texture: 'dots',
-          imageSrc: uploadedImages[1],
-          imageOpacity: 80,
-          overlayStrength: 70,
-          fontFamily: 'DM Sans',
-        },
-        {
-          id: '5',
-          layoutType: 'cta_final',
-          tag: 'COMPARTILHE A HISTÓRIA',
-          title: 'Juntos construindo o futuro da nossa Força.',
-          body: 'Curta, salve e envie para os companheiros e familiares!',
-          ctaText: 'Compartilhe esta publicação ↗',
-          bgType: 'gradient',
-          gradColorStart: '#060e18',
-          gradColorMid: '#1b3b6b',
-          gradColorEnd: '#c5a059',
-          gradAngle: 155,
-          texture: 'glow_spot',
-          imageOpacity: 40,
-          overlayStrength: 80,
-          fontFamily: 'Playfair Display',
-        },
-      ];
+    try {
+      if (geminiApiKey) {
+        const sysPrompt = `Você é o Diretor de Arte e Redator de Mídias Sociais do Comando-Geral do Corpo de Fuzileiros Navais.
+Crie um carrossel de 5 a 6 slides com roteiro completo em formato JSON.
+Retorne ESTRITAMENTE um array JSON contendo objetos no seguinte formato:
+[
+  {
+    "layoutType": "hero_full",
+    "tag": "XII CONCURSO DE CRÔNICAS",
+    "title": "Título impactante",
+    "subtitle": "Subtítulo explicativo",
+    "bgType": "gradient",
+    "gradColorStart": "#060e18",
+    "gradColorMid": "#0b1c34",
+    "gradColorEnd": "#13315c",
+    "texture": "glow_spot",
+    "fontFamily": "Playfair Display"
+  },
+  {
+    "layoutType": "big_number",
+    "tag": "MÉTRICA",
+    "bigNumber": "100%",
+    "bigNumberLabel": "Prontidão",
+    "title": "Título",
+    "body": "Texto de apoio",
+    "bgType": "dark",
+    "gradColorStart": "#08111d",
+    "gradColorMid": "#0b1626",
+    "gradColorEnd": "#08111d",
+    "texture": "tactical_grid",
+    "fontFamily": "DM Sans"
+  },
+  {
+    "layoutType": "info_list",
+    "tag": "PONTOS-CHAVE",
+    "title": "Destaques Principais",
+    "listItems": ["Item 1", "Item 2", "Item 3", "Item 4"],
+    "bgType": "gradient",
+    "gradColorStart": "#08111d",
+    "gradColorMid": "#112239",
+    "gradColorEnd": "#08111d",
+    "texture": "halftone_dots",
+    "fontFamily": "Space Grotesk"
+  },
+  {
+    "layoutType": "quote_nobel",
+    "tag": "PALAVRAS DE HONRA",
+    "title": "Mensagem Oficial",
+    "quote": "Frase solene",
+    "authorName": "Comandante-Geral do CFN",
+    "authorRole": "Marinha do Brasil",
+    "bgType": "gradient",
+    "gradColorStart": "#091524",
+    "gradColorMid": "#162e4d",
+    "gradColorEnd": "#091524",
+    "texture": "naval_corners",
+    "fontFamily": "Playfair Display"
+  },
+  {
+    "layoutType": "cta_final",
+    "tag": "HONRA & ENGAJAMENTO",
+    "title": "Fechamento de impacto",
+    "body": "Curta e salve este post",
+    "ctaText": "Salve e compartilhe essa conquista ↗",
+    "ctaTriggerType": "salvar",
+    "bgType": "gradient",
+    "gradColorStart": "#060e18",
+    "gradColorMid": "#163663",
+    "gradColorEnd": "#c5a059",
+    "texture": "glow_spot",
+    "fontFamily": "Playfair Display"
+  }
+]`;
 
-      setSlides(generated);
-      setCurrentSlideIndex(0);
-      setIsGeneratingAi(false);
-      setIsAiModalOpen(false);
-      confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
-      toast.success('Carrossel gerado pelo Diretor de Arte IA com sucesso!');
-    }, 1200);
+        const userPrompt = `Gere os slides para o seguinte tema: "${aiPromptInput}". Modo: ${aiMode}.`;
+        const resText = await generateGeminiContent(userPrompt, sysPrompt, geminiApiKey);
+        const cleanJson = resText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleanJson);
+
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const formatted: CarouselSlide[] = parsed.map((item: any, i: number) => ({
+            id: String(Date.now() + i),
+            layoutType: item.layoutType || 'hero_full',
+            tag: item.tag || 'DESTAQUE',
+            title: item.title || 'Título',
+            subtitle: item.subtitle,
+            body: item.body,
+            bigNumber: item.bigNumber,
+            bigNumberLabel: item.bigNumberLabel,
+            quote: item.quote,
+            authorName: item.authorName,
+            authorRole: item.authorRole,
+            ctaText: item.ctaText,
+            ctaTriggerType: item.ctaTriggerType || 'salvar',
+            breakingBadge: item.breakingBadge,
+            breakingDate: item.breakingDate,
+            pollQuestion: item.pollQuestion,
+            pollOptionA: item.pollOptionA,
+            pollOptionB: item.pollOptionB,
+            listItems: item.listItems,
+            techSpecs: item.techSpecs,
+            bgType: item.bgType || 'gradient',
+            gradColorStart: item.gradColorStart || '#060e18',
+            gradColorMid: item.gradColorMid || '#0b1c34',
+            gradColorEnd: item.gradColorEnd || '#13315c',
+            gradAngle: item.gradAngle || 165,
+            texture: item.texture || 'glow_spot',
+            imageSrc: uploadedImages[i] || undefined,
+            imageOpacity: 85,
+            overlayStrength: 75,
+            fontFamily: item.fontFamily || (aiMode === 'creative' ? 'Space Grotesk' : 'Playfair Display'),
+          }));
+
+          setSlides(formatted);
+          setCurrentSlideIndex(0);
+          setIsGeneratingAi(false);
+          setIsAiModalOpen(false);
+          confetti({ particleCount: 70, spread: 80, origin: { y: 0.6 } });
+          toast.success('Carrossel gerado pelo Gemini 3.7 Flash com sucesso!');
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('Fallback para gerador interno:', err);
+    }
+
+    // Fallback Inteligente caso a API não responda
+    const generated: CarouselSlide[] = [
+      {
+        id: '1',
+        layoutType: 'hero_full',
+        tag: 'COBERTURA ESPECIAL',
+        title: aiPromptInput.slice(0, 55) + '...',
+        subtitle: 'Acompanhe os principais momentos e destaques em formato exclusivo.',
+        bgType: 'gradient',
+        gradColorStart: '#060e18',
+        gradColorMid: '#0d223f',
+        gradColorEnd: '#1b3f73',
+        gradAngle: 145,
+        texture: 'glow_spot',
+        imageSrc: uploadedImages[0],
+        imageOpacity: 90,
+        overlayStrength: 75,
+        fontFamily: aiMode === 'creative' ? 'Space Grotesk' : 'Playfair Display',
+      },
+      {
+        id: '2',
+        layoutType: 'breaking_news',
+        tag: 'MANCHETE TÁTICA',
+        breakingBadge: '🚨 COMUNICADO OFICIAL • CGCFN',
+        breakingDate: 'HOJE • BRASÍLIA - DF',
+        title: 'Prontidão Operacional e Modernização Tecnológica',
+        body: 'A Força de Fuzileiros da Esquadra reafirma o compromisso com a defesa da Pátria.',
+        bgType: 'dark',
+        gradColorStart: '#08111d',
+        gradColorMid: '#161e2e',
+        gradColorEnd: '#08111d',
+        gradAngle: 180,
+        texture: 'tactical_grid',
+        imageOpacity: 50,
+        overlayStrength: 85,
+        fontFamily: 'DM Sans',
+      },
+      {
+        id: '3',
+        layoutType: 'info_list',
+        tag: 'PONTOS-CHAVE',
+        title: 'Destaques Estratégicos da Missão',
+        listItems: [
+          'Emprego de Meios Blindados em Terreno Costeiro',
+          'Comunicações Integradas e Controle de Área',
+          'Mobilização Rápida de Efetivo Especializado',
+          'Excelência na Execução e Segurança Operacional',
+        ],
+        bgType: 'gradient',
+        gradColorStart: '#08111d',
+        gradColorMid: '#112239',
+        gradColorEnd: '#08111d',
+        gradAngle: 145,
+        texture: 'halftone_dots',
+        imageOpacity: 45,
+        overlayStrength: 80,
+        fontFamily: 'Space Grotesk',
+      },
+      {
+        id: '4',
+        layoutType: 'quote_nobel',
+        tag: 'PALAVRAS DO COMANDO',
+        title: 'Uma mensagem de liderança e futuro',
+        quote: 'A dedicação e o trabalho em equipe transformam desafios em conquistas inesquecíveis para todos nós.',
+        authorName: 'Comando-Geral do CFN',
+        authorRole: 'Marinha do Brasil',
+        bgType: 'gradient',
+        gradColorStart: '#091524',
+        gradColorMid: '#162e4d',
+        gradColorEnd: '#091524',
+        gradAngle: 135,
+        texture: 'naval_corners',
+        imageOpacity: 50,
+        overlayStrength: 80,
+        fontFamily: 'Playfair Display',
+      },
+      {
+        id: '5',
+        layoutType: 'cta_final',
+        tag: 'COMPARTILHE A HISTÓRIA',
+        title: 'Juntos construindo o futuro da nossa Força.',
+        body: 'Curta, salve e envie para os companheiros e familiares!',
+        ctaText: 'Salve esta publicação para consultar ↗',
+        ctaTriggerType: 'salvar',
+        bgType: 'gradient',
+        gradColorStart: '#060e18',
+        gradColorMid: '#1b3b6b',
+        gradColorEnd: '#c5a059',
+        gradAngle: 155,
+        texture: 'glow_spot',
+        imageOpacity: 40,
+        overlayStrength: 80,
+        fontFamily: 'Playfair Display',
+      },
+    ];
+
+    setSlides(generated);
+    setCurrentSlideIndex(0);
+    setIsGeneratingAi(false);
+    setIsAiModalOpen(false);
+    confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+    toast.success('Carrossel gerado pelo Diretor de Arte IA!');
   };
 
   // Exportação em Resolução Nativa sem Perdas (Full HD / 4K)
@@ -899,79 +1408,86 @@ export const InstagramCarouselStudio: React.FC = () => {
     drawSlideGraphics(ctx, slide, index, total, exportCanvas.width, exportCanvas.height);
 
     const link = document.createElement('a');
-    link.download = `SISGAB_${currentFormat.id}_slide_${index + 1}_${exportCanvas.width}x${exportCanvas.height}.png`;
-    link.href = exportCanvas.toDataURL('image/png');
+    link.download = `sisgab_${format}_slide_${index + 1}.png`;
+    link.href = exportCanvas.toDataURL('image/png', 1.0);
     link.click();
+  };
+
+  const handleExportAll = () => {
+    slides.forEach((slide, idx) => {
+      setTimeout(() => {
+        exportSlideToPng(slide, idx, slides.length);
+      }, idx * 250);
+    });
+    confetti({ particleCount: 100, spread: 90, origin: { y: 0.5 } });
+    toast.success(`Exportando todos os ${slides.length} slides em alta resolução!`);
   };
 
   const handleExportCurrent = () => {
     exportSlideToPng(activeSlide, currentSlideIndex, slides.length);
-    toast.success(`Slide ${currentSlideIndex + 1} exportado em ${currentFormat.width}×${currentFormat.height}px!`);
-  };
-
-  const handleExportAll = () => {
-    slides.forEach((s, idx) => {
-      setTimeout(() => {
-        exportSlideToPng(s, idx, slides.length);
-      }, idx * 350);
-    });
-    toast.success(`Exportando todos os ${slides.length} slides em ${currentFormat.width}×${currentFormat.height}px!`);
+    toast.success(`Slide ${currentSlideIndex + 1} baixado com sucesso!`);
   };
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* ── HEADER SUPERIOR COM MULTI-FORMATOS & BOTÕES IA ── */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-        <div>
+    <div className="space-y-6 pb-20 max-w-[1600px] mx-auto text-slate-100">
+      {/* ── HEADER PRINCIPAL DO ESTÚDIO ── */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-3xl bg-[#0b1222]/80 border border-slate-800 backdrop-blur-xl shadow-2xl">
+        <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-pink-500/20 to-purple-500/20 text-pink-300 text-xs font-black uppercase tracking-wider border border-pink-500/40">
+            <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-300 border border-cyan-500/30">
               Estúdio Criativo IA • Multi-Formatos
             </span>
-            <span className="text-slate-400 text-xs">• SISGAB Design Suite 2.0</span>
+            <span className="text-slate-500 text-xs">• SISGAB Design Suite 3.0</span>
           </div>
-          <h1 className="text-2xl font-black text-white tracking-tight mt-1">
+          <h1 className="text-2xl lg:text-3xl font-black tracking-tight text-white flex items-center gap-3">
             Diretor de Arte IA & Estúdio Multi-Formatos
           </h1>
-          <p className="text-slate-400 text-xs sm:text-sm">
-            Crie artes dinâmicas em 4:5, 9:16 Stories, 1:1 Feed ou 16:9 com degradês customizáveis, texturas e IA.
+          <p className="text-slate-400 text-xs max-w-2xl">
+            Crie artes dinâmicas em 4:5, 9:16 Stories, 1:1 Feed ou 16:9 com degradês customizáveis, texturas táticas, plantão breaking news e Gemini 3.7 Flash.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Seletor Rápido de Formatos */}
-          <div className="p-1 rounded-2xl bg-slate-950 border border-slate-800 flex items-center gap-1">
-            {(Object.keys(FORMAT_CONFIGS) as PostFormat[]).map((fmt) => {
-              const cfg = FORMAT_CONFIGS[fmt];
-              const Icon = cfg.icon;
+        {/* Formatos e Ações de Topo */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Seletor de Formatos (4:5, 9:16, 1:1, 16:9) */}
+          <div className="flex items-center p-1 rounded-2xl bg-slate-950 border border-slate-800 shadow-inner">
+            {(Object.keys(FORMAT_CONFIGS) as PostFormat[]).map((fmtKey) => {
+              const fmt = FORMAT_CONFIGS[fmtKey];
+              const Icon = fmt.icon;
               return (
                 <button
-                  key={fmt}
-                  onClick={() => setFormat(fmt)}
+                  key={fmtKey}
+                  type="button"
+                  onClick={() => setFormat(fmtKey)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                    format === fmt
-                      ? 'bg-[#c5a059] text-slate-950 font-black shadow-sm'
+                    format === fmtKey
+                      ? 'bg-[#c5a059] text-slate-950 shadow-md font-black'
                       : 'text-slate-400 hover:text-white'
                   }`}
-                  title={cfg.description}
+                  title={fmt.description}
                 >
                   <Icon className="w-3.5 h-3.5" />
-                  <span>{cfg.ratioName}</span>
+                  <span>{fmt.ratioName}</span>
                 </button>
               );
             })}
           </div>
 
+          {/* Botão Diretor de Arte IA */}
           <button
+            type="button"
             onClick={() => setIsAiModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-black text-xs shadow-lg shadow-cyan-500/25 transition-all hover:scale-105"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs shadow-lg shadow-cyan-500/25 transition-all"
           >
             <Sparkles className="w-4 h-4" />
             <span>Diretor de Arte IA ✨</span>
           </button>
 
+          {/* Botão Exportar Todos */}
           <button
+            type="button"
             onClick={handleExportAll}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#c5a059] hover:bg-[#d6b26b] text-slate-950 font-black text-xs shadow-lg shadow-[#c5a059]/25 transition-all hover:scale-105"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#c5a059] hover:bg-[#d6b26b] text-slate-950 font-black text-xs shadow-lg shadow-[#c5a059]/20 transition-all"
           >
             <Download className="w-4 h-4" />
             <span>Exportar ({slides.length} PNGs)</span>
@@ -1060,20 +1576,25 @@ export const InstagramCarouselStudio: React.FC = () => {
             </div>
           </div>
 
-          {/* Seletor de Modelo de Layout do Slide */}
+          {/* Seletor de Modelo de Layout do Slide (11 Modelos) */}
           <div className="space-y-1.5 text-xs">
             <label className="text-slate-300 font-bold flex items-center gap-1.5">
               <Grid className="w-3.5 h-3.5 text-[#c5a059]" />
-              <span>Modelo de Layout do Slide</span>
+              <span>Modelo de Layout ({activeSlide.layoutType})</span>
             </label>
             <div className="grid grid-cols-2 gap-2">
               {[
                 { id: 'hero_full', name: '🖼️ Foto Full + Overlay' },
+                { id: 'breaking_news', name: '🚨 Plantão / Manchete' },
                 { id: 'glass_card', name: '🪟 Card Vidro (Glass)' },
                 { id: 'big_number', name: '🔢 Número Gigante' },
+                { id: 'info_list', name: '💡 Lista Infográfica' },
+                { id: 'tech_spec', name: '🛡️ Ficha Técnica Meio' },
+                { id: 'quiz_poll', name: '📊 Enquete / Quiz A/B' },
+                { id: 'before_after_split', name: '⚖️ Antes/Depois Dual' },
                 { id: 'quote_nobel', name: '💬 Citação / Aspas' },
-                { id: 'cta_final', name: '🎯 Fechamento & CTA' },
                 { id: 'split_photo', name: '🌓 Split Texto/Foto' },
+                { id: 'cta_final', name: '🎯 Fechamento & CTA' },
               ].map((l) => (
                 <button
                   key={l.id}
@@ -1143,9 +1664,9 @@ export const InstagramCarouselStudio: React.FC = () => {
               />
             </div>
 
-            {/* Seletor de Texturas */}
+            {/* Seletor de Texturas (10 Opções) */}
             <div>
-              <label className="text-[10px] text-slate-400 block mb-1">Textura Gráfica</label>
+              <label className="text-[10px] text-slate-400 block mb-1">Textura Gráfica / Camada</label>
               <select
                 value={activeSlide.texture}
                 onChange={(e) => updateActiveSlide('texture', e.target.value as TextureType)}
@@ -1157,6 +1678,10 @@ export const InstagramCarouselStudio: React.FC = () => {
                 <option value="glow_spot">✨ Brilho Radial (Glow)</option>
                 <option value="naval_corners">⚓ Moldura com Cantos Navais</option>
                 <option value="diagonal_stripes">╱ Linhas Diagonais Táticas</option>
+                <option value="film_grain">🎞️ Grão de Filme 35mm (Noise)</option>
+                <option value="halftone_dots">🖨️ Retícula Halftone Militar</option>
+                <option value="vignette_shadow">🌑 Vinheta Radial de Foco</option>
+                <option value="camo_tactical">🗺️ Padrão Topográfico / Camuflado</option>
               </select>
             </div>
           </div>
@@ -1234,6 +1759,82 @@ export const InstagramCarouselStudio: React.FC = () => {
               />
             </div>
 
+            {/* Layout Breaking News */}
+            {activeSlide.layoutType === 'breaking_news' && (
+              <div className="grid grid-cols-2 gap-2 p-3 bg-slate-950 rounded-2xl border border-rose-900/50">
+                <div>
+                  <label className="block text-slate-400 text-[10px]">Faixa de Alerta Superior</label>
+                  <input
+                    type="text"
+                    value={activeSlide.breakingBadge || ''}
+                    placeholder="🚨 PLANTÃO CGCFN"
+                    onChange={(e) => updateActiveSlide('breakingBadge', e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-white text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 text-[10px]">Data & Local</label>
+                  <input
+                    type="text"
+                    value={activeSlide.breakingDate || ''}
+                    placeholder="HOJE • BRASÍLIA - DF"
+                    onChange={(e) => updateActiveSlide('breakingDate', e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-white text-xs"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Layout Quiz Poll */}
+            {activeSlide.layoutType === 'quiz_poll' && (
+              <div className="space-y-2 p-3 bg-slate-950 rounded-2xl border border-cyan-900/50">
+                <label className="block text-slate-400 text-[10px]">Opções da Enquete (A vs B)</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Opção A"
+                    value={activeSlide.pollOptionA || ''}
+                    onChange={(e) => updateActiveSlide('pollOptionA', e.target.value)}
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-white text-xs"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Opção B"
+                    value={activeSlide.pollOptionB || ''}
+                    onChange={(e) => updateActiveSlide('pollOptionB', e.target.value)}
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-white text-xs"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Layout Comparativo Dual */}
+            {activeSlide.layoutType === 'before_after_split' && (
+              <div className="grid grid-cols-2 gap-2 p-3 bg-slate-950 rounded-2xl border border-slate-800">
+                <div>
+                  <label className="block text-slate-400 text-[10px]">Rótulo Coluna 1</label>
+                  <input
+                    type="text"
+                    value={activeSlide.beforeLabel || ''}
+                    placeholder="1808 • TRADIÇÃO"
+                    onChange={(e) => updateActiveSlide('beforeLabel', e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-white text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 text-[10px]">Rótulo Coluna 2</label>
+                  <input
+                    type="text"
+                    value={activeSlide.afterLabel || ''}
+                    placeholder="2026 • MODERNIDADE"
+                    onChange={(e) => updateActiveSlide('afterLabel', e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-white text-xs"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Layout Big Number */}
             {activeSlide.layoutType === 'big_number' && (
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -1257,8 +1858,20 @@ export const InstagramCarouselStudio: React.FC = () => {
               </div>
             )}
 
+            {/* Título com Botão de Otimização IA */}
             <div>
-              <label className="block text-slate-300 font-bold mb-1">Título (Headline de Impacto)</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-slate-300 font-bold">Título (Headline de Impacto)</label>
+                <button
+                  type="button"
+                  onClick={handleOptimizeHeadline}
+                  disabled={isOptimizingHeadline}
+                  className="flex items-center gap-1 text-[10px] font-bold text-cyan-400 hover:text-cyan-300"
+                >
+                  <Wand2 className="w-3 h-3" />
+                  <span>{isOptimizingHeadline ? 'Otimizando...' : '🪄 Otimizar com IA'}</span>
+                </button>
+              </div>
               <textarea
                 rows={2}
                 value={activeSlide.title}
@@ -1267,7 +1880,8 @@ export const InstagramCarouselStudio: React.FC = () => {
               />
             </div>
 
-            {activeSlide.layoutType === 'quote_nobel' ? (
+            {/* Layout Citação */}
+            {activeSlide.layoutType === 'quote_nobel' && (
               <div className="space-y-2 p-3 bg-slate-950 rounded-2xl border border-slate-800">
                 <label className="block text-slate-400 text-[10px]">Texto da Citação / Aspas</label>
                 <textarea
@@ -1293,7 +1907,49 @@ export const InstagramCarouselStudio: React.FC = () => {
                   />
                 </div>
               </div>
-            ) : (
+            )}
+
+            {/* Layout CTA Final (Presets de Gatilhos de Engajamento) */}
+            {activeSlide.layoutType === 'cta_final' && (
+              <div className="space-y-2 p-3 bg-slate-950 rounded-2xl border border-[#c5a059]/40">
+                <label className="block text-[#c5a059] text-[10px] font-bold">🎯 Presets de Gatilhos de Engajamento</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { id: 'salvar', label: '📌 Salvar Post', text: 'Salve este post para consultar sempre ↗' },
+                    { id: 'marcar', label: '👥 Marcar Amigo', text: 'Marque um fuzileiro nos comentários ↗' },
+                    { id: 'comentar', label: '💬 Votar / Opinar', text: 'Deixe sua opinião nos comentários ↗' },
+                    { id: 'toqueduplo', label: '❤️ Toque 2x', text: 'Toque 2x se tem orgulho da Marinha ↗' },
+                    { id: 'compartilhar', label: '📲 Compartilhar', text: 'Envie para quem sonha com a Marinha ↗' },
+                  ].map((g) => (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => {
+                        updateActiveSlide('ctaTriggerType', g.id);
+                        updateActiveSlide('ctaText', g.text);
+                      }}
+                      className={`px-2 py-1.5 rounded-lg text-[10px] font-bold text-center border transition-all ${
+                        activeSlide.ctaTriggerType === g.id
+                          ? 'bg-[#c5a059] text-slate-950 border-[#c5a059]'
+                          : 'bg-slate-900 text-slate-300 border-slate-800 hover:text-white'
+                      }`}
+                    >
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  placeholder="Texto do Botão CTA"
+                  value={activeSlide.ctaText || ''}
+                  onChange={(e) => updateActiveSlide('ctaText', e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-white text-xs mt-2"
+                />
+              </div>
+            )}
+
+            {/* Texto de Apoio / Descrição Padrão */}
+            {activeSlide.layoutType !== 'quote_nobel' && (
               <div>
                 <label className="block text-slate-300 font-bold mb-1">Texto de Apoio / Descrição</label>
                 <textarea
@@ -1382,7 +2038,7 @@ export const InstagramCarouselStudio: React.FC = () => {
         </div>
       </div>
 
-      {/* ── MODAL DIRETOR DE ARTE IA ── */}
+      {/* ── MODAL DIRETOR DE ARTE IA (GEMINI 3.7 FLASH) ── */}
       {isAiModalOpen && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="w-full max-w-2xl bg-[#0b1222] border border-cyan-500/40 rounded-3xl p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200">
@@ -1392,8 +2048,8 @@ export const InstagramCarouselStudio: React.FC = () => {
                   <Sparkles className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-white">Diretor de Arte Autônomo com IA</h3>
-                  <p className="text-[11px] text-slate-400">Gera paletas, degradês, texturas e copy em múltiplos formatos</p>
+                  <h3 className="text-base font-black text-white">Diretor de Arte com Gemini 3.7 Flash</h3>
+                  <p className="text-[11px] text-slate-400">Gera roteiros completos, layouts, copy de retenção e paletas dinâmicas</p>
                 </div>
               </div>
               <button
@@ -1467,12 +2123,12 @@ export const InstagramCarouselStudio: React.FC = () => {
                 {isGeneratingAi ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Criando Arte com IA...</span>
+                    <span>Criando Arte com Gemini 3.7 Flash...</span>
                   </>
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4" />
-                    <span>Gerar Postagem Inovadora</span>
+                    <span>Gerar Carrossel Inovador</span>
                   </>
                 )}
               </button>

@@ -247,22 +247,31 @@ async def mostrar_historico_usuarios_telegram(bot, message):
         await bot.send_message(chat_id, "⚠️ Banco de dados indisponível.")
         return
 
-    raw_users = []
-    for tbl in ['Users', 'users', 'efetivo']:
-        try:
-            res = db.table(tbl).select('*').limit(25).execute()
-            if res and res.data:
-                raw_users.extend(res.data)
-        except Exception as e:
-            print(f"[HIST {tbl} ERR] {e}")
-
-    seen = set()
+    from .utils import sort_efetivo_by_rank, normalize_text
+    
+    seen_nips = set()
+    seen_emails = set()
+    seen_names = set()
     users_list = []
+    
     for u in raw_users:
-        u_key = u.get('id') or u.get('email') or u.get('nome_guerra')
-        if u_key and u_key not in seen:
-            seen.add(u_key)
-            users_list.append(u)
+        nip = str(u.get('nip') or '').strip()
+        email = normalize_text(str(u.get('email') or u.get('username') or ''))
+        nome = normalize_text(str(u.get('nome_guerra') or u.get('nome') or ''))
+        
+        if nip and nip in seen_nips:
+            continue
+        if email and '@' in email and email in seen_emails:
+            continue
+        if nome and nome in seen_names:
+            continue
+            
+        if nip: seen_nips.add(nip)
+        if email and '@' in email: seen_emails.add(email)
+        if nome: seen_names.add(nome)
+        users_list.append(u)
+
+    users_list = sort_efetivo_by_rank(users_list)
 
     if not users_list:
         await bot.send_message(chat_id, "📭 Nenhum usuário cadastrado no histórico.")

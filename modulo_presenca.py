@@ -294,8 +294,27 @@ def fetch_efetivo_and_presencas(dt_str: str):
         pass
         
     try:
-        from telegram_bot.utils import sort_efetivo_by_rank
-        efetivo_lista = sort_efetivo_by_rank(efetivo_lista)
+        from telegram_bot.utils import sort_efetivo_by_rank, normalize_text
+        
+        # Deduplicação estrita de efetivo
+        dedup_ef = []
+        seen_ef_nips = set()
+        seen_ef_names = set()
+        
+        for ef in efetivo_lista:
+            nip = str(ef.get('nip') or '').strip()
+            ng = normalize_text(str(ef.get('nome_guerra') or ef.get('nome') or ''))
+            
+            if nip and nip in seen_ef_nips:
+                continue
+            if ng and ng in seen_ef_names:
+                continue
+                
+            if nip: seen_ef_nips.add(nip)
+            if ng: seen_ef_names.add(ng)
+            dedup_ef.append(ef)
+            
+        efetivo_lista = sort_efetivo_by_rank(dedup_ef)
     except Exception as sort_err:
         print(f"[SORT EFETIVO WARN] {sort_err}")
 
