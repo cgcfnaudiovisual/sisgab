@@ -1,6 +1,6 @@
 import { militaryAudio } from '../../utils/militaryAudio';
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   PlusCircle,
   Calendar,
@@ -26,6 +26,7 @@ import {
   Users,
   UserCheck,
   Music,
+  Edit3,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
@@ -112,7 +113,10 @@ interface MilitarOpcao {
 export const NewDemandForm: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const editId = searchParams.get('edit_id') || searchParams.get('id');
   const [submitting, setSubmitting] = useState(false);
+  const [loadingEdit, setLoadingEdit] = useState(false);
 
   // Lista de Militares para Escalação
   const [militares, setMilitares] = useState<MilitarOpcao[]>([]);
@@ -143,7 +147,73 @@ export const NewDemandForm: React.FC = () => {
 
   useEffect(() => {
     loadMilitares();
-  }, []);
+    if (editId) {
+      loadDemandaForEdit(Number(editId));
+    }
+  }, [editId]);
+
+  const loadDemandaForEdit = async (id: number) => {
+    try {
+      setLoadingEdit(true);
+      const { data, error } = await supabase
+        .from('demandas_comunicacao')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (!error && data) {
+        setFormData({
+          solicitante_nome: data.solicitante_nome || '',
+          setor: data.setor || '',
+          contato: data.contato || '',
+          titulo_evento: data.titulo_evento || '',
+          data_evento: data.data_evento && data.data_evento !== 'SEM_DATA' ? data.data_evento : getBrasiliaDateStr(),
+          data_fim: data.data_fim || '',
+          hora_evento: data.hora_evento && data.hora_evento !== 'A DEFINIR' ? data.hora_evento : '09:00',
+          local_evento: data.local_evento || '',
+          tipo_cobertura: Array.isArray(data.tipo_cobertura)
+            ? data.tipo_cobertura
+            : typeof data.tipo_cobertura === 'string'
+            ? (data.tipo_cobertura as string).split(',').map((s: string) => s.trim()).filter(Boolean)
+            : ['Fotografia'],
+          autoridades: data.autoridades || '',
+          drive_url: data.drive_url || '',
+          sigiloso: !!data.sigiloso,
+          captacao_entrega: data.captacao_entrega || 'apenas_captacao_bruto',
+          observacoes: data.observacoes || '',
+          gerar_pasta_drive: false,
+        });
+
+        if (data.data_fim && data.data_fim > data.data_evento) {
+          setTipoData('periodo');
+        } else if (!data.data_evento || data.data_evento === 'SEM_DATA') {
+          setTipoData('sem_data');
+        } else {
+          setTipoData('unica');
+        }
+
+        if (data.notificar_militar_ids) {
+          if (Array.isArray(data.notificar_militar_ids)) {
+            setSelectedMilitares(data.notificar_militar_ids);
+          } else if (typeof data.notificar_militar_ids === 'string') {
+            try {
+              const parsed = JSON.parse(data.notificar_militar_ids);
+              if (Array.isArray(parsed)) setSelectedMilitares(parsed);
+            } catch {
+              // fallback
+            }
+          }
+        }
+
+        militaryAudio.playTacticalBeep();
+        toast.info(`Pauta #${id} "${data.titulo_evento}" carregada para edição completa!`);
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar demanda para edição:', e);
+    } finally {
+      setLoadingEdit(false);
+    }
+  };
 
   const loadMilitares = async () => {
     try {
@@ -322,6 +392,43 @@ export const NewDemandForm: React.FC = () => {
       const finalDataEvento = tipoData === 'sem_data' ? null : formData.data_evento;
       const finalDataFim = tipoData === 'periodo' && formData.data_fim ? formData.data_fim : null;
 
+      if (editId) {
+        const { error } = await supabase
+          .from('demandas_comunicacao')
+          .update({
+            solicitante_nome: formData.solicitante_nome,
+            setor: formData.setor,
+            contato: formData.contato || 'Gabinete CGCFN',
+            titulo_evento: formData.titulo_evento,
+            data_evento: finalDataEvento,
+            data_fim: finalDataFim,
+            hora_evento: tipoData === 'sem_data' ? 'A DEFINIR' : formData.hora_evento,
+            local_evento: formData.local_evento || 'A Definir',
+            tipo_cobertura: formData.tipo_cobertura,
+            autoridades: formData.autoridades,
+            score_esforco: score,
+            sigiloso: formData.sigiloso,
+            captacao_entrega: formData.captacao_entrega,
+            drive_url: formData.drive_url,
+            observacoes: formData.observacoes,
+            notificar_militar_ids: selectedMilitares,
+            encarregado_id: selectedMilitares.length > 0 ? selectedMilitares[0] : null,
+          })
+          .eq('id', Number(editId));
+
+        if (error) throw error;
+
+        militaryAudio.playTacticalBeep();
+        toast.success(`Demanda #${editId} atualizada com sucesso!`, {
+          description: 'Todas as alterações foram gravadas no banco de dados.',
+        });
+
+        setTimeout(() => {
+          navigate('/comsoc_homologar');
+        }, 1200);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('demandas_comunicacao')
         .insert({
@@ -361,7 +468,7 @@ export const NewDemandForm: React.FC = () => {
       }, 1200);
     } catch (err) {
       console.warn('Erro ao submeter:', err);
-      toast.error('Erro ao cadastrar demanda no banco.');
+      toast.error('Erro ao processar demanda no banco de dados.');
     } finally {
       setSubmitting(false);
     }
@@ -369,21 +476,70 @@ export const NewDemandForm: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12">
-      {/* Header */}
+      {/* Header & Banner de Edição */}
       <div>
         <div className="flex items-center gap-2">
           <span className="px-2.5 py-0.5 rounded bg-[#c5a059]/20 text-[#c5a059] text-xs font-black uppercase tracking-wider border border-[#c5a059]/40">
-            Formulário Oficial
+            {editId ? `Edição de Demanda #${editId}` : 'Formulário Oficial'}
           </span>
           <span className="text-slate-400 text-xs">• Comunicação Social</span>
         </div>
         <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mt-1">
-          Nova Solicitação de Demanda / Cobertura
+          {editId ? `Editar Demanda: ${formData.titulo_evento || `#${editId}`}` : 'Nova Solicitação de Demanda / Cobertura'}
         </h1>
         <p className="text-slate-400 text-xs sm:text-sm">
-          Cadastre uma nova pauta audiovisual, criação gráfica, impressos ou apoio cerimonial para homologação e escalação.
+          {editId
+            ? 'Atualize os dados da pauta, cobertura, militares escalados e link oficial do Google Drive.'
+            : 'Cadastre uma nova pauta audiovisual, criação gráfica, impressos ou apoio cerimonial para homologação e escalação.'}
         </p>
       </div>
+
+      {/* Banner de Edição Ativa com botão de Reset */}
+      {editId && (
+        <div className="p-4 rounded-2xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-3">
+            <span className="p-2 rounded-xl bg-amber-500/20 text-[#e5c07b]">
+              <Edit3 className="w-5 h-5" />
+            </span>
+            <div>
+              <p className="text-xs font-black text-white">
+                Modo de Edição Ativo: Pauta #{editId}
+              </p>
+              <p className="text-[11px] text-amber-300">
+                {loadingEdit ? 'Carregando dados da demanda...' : 'Você está editando todos os dados desta pauta. Salvar aplicará as mudanças imediatamente.'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setSearchParams({});
+              setFormData({
+                solicitante_nome: user?.nome_guerra ? `${user.posto || ''} ${user.nome_guerra}`.trim() : 'SG CALAÇA',
+                setor: user?.setor || 'Comunicação Social / Gabinete',
+                contato: '',
+                titulo_evento: '',
+                data_evento: getBrasiliaDateStr(),
+                data_fim: '',
+                hora_evento: '09:00',
+                local_evento: '',
+                tipo_cobertura: ['Fotografia'],
+                autoridades: '',
+                drive_url: '',
+                sigiloso: false,
+                captacao_entrega: 'apenas_captacao_bruto',
+                observacoes: '',
+                gerar_pasta_drive: true,
+              });
+              setSelectedMilitares([]);
+              toast.info('Modo de edição desativado. Formulário limpo.');
+            }}
+            className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-bold border border-slate-700 transition-all shrink-0"
+          >
+            + Criar Nova Demanda
+          </button>
+        </div>
+      )}
 
       {/* ⚡ BARRA DE PACOTES DE ATALHO RÁPIDO (1 CLIQUE CALIBRADA) */}
       <div className="p-4 rounded-2xl bg-[#0b1222] border border-[#c5a059]/40 shadow-xl space-y-2.5">
@@ -843,7 +999,13 @@ export const NewDemandForm: React.FC = () => {
             className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#d6b26b] text-slate-950 text-xs font-black shadow-lg shadow-[#c5a059]/25 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
           >
             <CheckCircle2 className="w-4 h-4" />
-            <span>{submitting ? 'Cadastrando Demanda...' : 'Cadastrar Demanda'}</span>
+            <span>
+              {submitting
+                ? 'Gravando Alterações...'
+                : editId
+                ? 'Salvar Alterações da Demanda'
+                : 'Cadastrar Demanda'}
+            </span>
           </button>
         </div>
       </form>

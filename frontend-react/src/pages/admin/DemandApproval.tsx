@@ -35,12 +35,14 @@ import {
   Music,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../api/supabase';
 import type { DemandaComunicacao } from '../../types/database';
 import { useAuth } from '../../context/AuthContext';
 import { parseCobertura, getBrasiliaDateStr, addDaysBrasilia } from '../../utils/formatters';
 
 export const DemandApproval: React.FC = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [demandas, setDemandas] = useState<DemandaComunicacao[]>([]);
   const [activeTab, setActiveTab] = useState<'pendente' | 'aprovado' | 'ajustes' | 'rejeitado' | 'todas'>('pendente');
@@ -796,9 +798,9 @@ export const DemandApproval: React.FC = () => {
 
                       <button
                         type="button"
-                        onClick={() => handleOpenDetailModal(demanda, true)}
+                        onClick={() => navigate(`/comsoc_demandas?edit_id=${demanda.id}`)}
                         className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-[#e5c07b] border border-amber-500/30 text-xs font-bold flex items-center gap-1 transition-all"
-                        title="Editar Ficha Técnica"
+                        title="Editar no Formulário Completo de Demandas (comsoc_demandas)"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                         <span className="hidden sm:inline">Editar</span>
@@ -1021,9 +1023,9 @@ export const DemandApproval: React.FC = () => {
 
                             <button
                               type="button"
-                              onClick={() => handleOpenDetailModal(demanda, true)}
+                              onClick={() => navigate(`/comsoc_demandas?edit_id=${demanda.id}`)}
                               className="p-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-[#e5c07b] border border-amber-500/30"
-                              title="Editar Ficha Técnica"
+                              title="Editar no Formulário Completo de Demandas (comsoc_demandas)"
                             >
                               <Edit3 className="w-3.5 h-3.5" />
                             </button>
@@ -1418,14 +1420,27 @@ export const DemandApproval: React.FC = () => {
                 )}
 
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDetailModal(null);
+                        navigate(`/comsoc_demandas?edit_id=${detailModal.id}`);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-[#c5a059] hover:bg-[#d6b26b] text-slate-950 font-black text-xs flex items-center gap-1.5 transition-all shadow-md shadow-[#c5a059]/20 hover:scale-105"
+                      title="Abrir no Formulário Completo de Demandas"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>🚀 Editar no Formulário Completo</span>
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => setIsEditingFicha(true)}
                       className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-[#e5c07b] border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition-all hover:scale-105"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
-                      <span>✏️ Editar Ficha Técnica</span>
+                      <span>✏️ Edição Rápida</span>
                     </button>
 
                     {extractDriveUrl(detailModal) && (
