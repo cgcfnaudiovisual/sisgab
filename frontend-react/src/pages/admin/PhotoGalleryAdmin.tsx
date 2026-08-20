@@ -966,7 +966,7 @@ export const PhotoGalleryAdmin: React.FC = () => {
                 className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-xs focus:outline-none focus:border-purple-500"
               />
               <span className="text-[10px] text-slate-500 block">
-                Cota gratuita: até 1.500 análises por dia com gemini-3.6-flash.
+                Cota gratuita: até 1.500 análises por dia com gemini-3.7-flash / gemini-3.6-flash.
               </span>
             </div>
 

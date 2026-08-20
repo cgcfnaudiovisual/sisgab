@@ -12,7 +12,7 @@ export interface PhotoAiMetadata {
   tags: string[];
 }
 
-let lastWorkingVisionModel = 'gemini-2.5-flash';
+let lastWorkingVisionModel = 'gemini-3.7-flash';
 
 /**
  * Converte uma URL de imagem ou Blob para base64 puro
@@ -59,10 +59,10 @@ Analise esta fotografia institucional e retorne ESTRITAMENTE um objeto JSON vál
 
   const candidateModels = [
     lastWorkingVisionModel,
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
+    'gemini-3.7-flash',
     'gemini-3.6-flash',
+    'gemini-3.5-flash',
+    'gemini-flash-latest',
   ];
   const models = Array.from(new Set(candidateModels));
 

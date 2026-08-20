@@ -480,12 +480,11 @@ def get_available_gemini_models() -> dict[str, str]:
     """Retorna um dicionário de modelos do Gemini disponíveis e funcionais (chave: id, valor: nome/descrição).
     Consulta diretamente a API do Google Generative AI para retornar todos os modelos mais recentes."""
     fallback_models = {
-        "gemini-3.6-flash": "Gemini 3.6 Flash (Mais Recente & Recomendado)",
+        "gemini-3.7-flash": "Gemini 3.7 Flash (Mais Recente & Recomendado)",
+        "gemini-3.6-flash": "Gemini 3.6 Flash",
         "gemini-3.5-flash": "Gemini 3.5 Flash",
         "gemini-3.1-pro-preview": "Gemini 3.1 Pro",
-        "gemini-2.5-flash": "Gemini 2.5 Flash",
-        "gemini-2.5-pro": "Gemini 2.5 Pro",
-        "gemini-2.0-flash": "Gemini 2.0 Flash",
+        "gemini-flash-latest": "Gemini Flash Latest",
     }
     
     api_key = _get_google_api_key()
@@ -509,8 +508,10 @@ def get_available_gemini_models() -> dict[str, str]:
                 
                 display_name = getattr(m, 'display_name', '') or model_id
                 
-                if model_id == DEFAULT_RECOMMENDED_MODEL or "3.6" in model_id:
+                if model_id == "gemini-3.7-flash" or "3.7" in model_id:
                     display_name += " (Mais Recente & Recomendado)"
+                elif "3.6" in model_id:
+                    display_name += " (Alta Performance)"
                 elif "3.5" in model_id:
                     display_name += " (Nova Geração)"
                     
@@ -518,13 +519,11 @@ def get_available_gemini_models() -> dict[str, str]:
                 
         if models_dict:
             def model_sort_key(k):
-                if '3.6' in k: return 0
-                if '3.5' in k: return 1
-                if '3.1' in k: return 2
-                if '2.5-flash' in k: return 3
-                if '2.5-pro' in k: return 4
-                if '2.0-flash' in k: return 5
-                return 6
+                if '3.7' in k: return 0
+                if '3.6' in k: return 1
+                if '3.5' in k: return 2
+                if '3.1' in k: return 3
+                return 4
                 
             sorted_keys = sorted(models_dict.keys(), key=model_sort_key)
             return {k: models_dict[k] for k in sorted_keys}

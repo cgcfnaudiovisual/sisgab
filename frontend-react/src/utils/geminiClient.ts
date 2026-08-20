@@ -4,7 +4,7 @@
  */
 
 // Lembra qual modelo respondeu com sucesso para nunca mais perder tempo testando outros
-let lastWorkingModel: string = 'gemini-2.0-flash';
+let lastWorkingModel: string = 'gemini-3.7-flash';
 
 export async function generateGeminiContent(
   prompt: string,
@@ -19,9 +19,10 @@ export async function generateGeminiContent(
   // Modelos otimizados para velocidade extrema e baixa latência
   const candidateModels = [
     lastWorkingModel,
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
-    'gemini-1.5-flash-latest',
+    'gemini-3.7-flash',
+    'gemini-3.6-flash',
+    'gemini-3.5-flash',
+    'gemini-flash-latest',
   ];
   // Remove duplicados preservando a ordem
   const models = Array.from(new Set(candidateModels));
