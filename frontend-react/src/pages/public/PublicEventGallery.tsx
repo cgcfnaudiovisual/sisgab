@@ -80,9 +80,42 @@ export const PublicEventGallery: React.FC = () => {
   const loadRealEventData = async () => {
     try {
       setLoading(true);
-      const targetId = Number(eventId) === 1 ? 50 : (Number(eventId) || 50);
+      const targetId = Number(eventId) || 50;
 
-      // 1. Carrega dados do evento real no Supabase
+      // 1. Tenta carregar fotos e dados diretamente da API dinâmica do Google Drive do evento
+      try {
+        const apiRes = await fetch(`/api/portal/photos?event_id=${targetId}`);
+        if (apiRes.ok) {
+          const data = await apiRes.json();
+          if (data.event) {
+            setEventName(data.event.title || 'ENCONTRO DE VETERANOS');
+            if (data.event.date) {
+              const parts = String(data.event.date).split('-');
+              if (parts.length === 3) {
+                const dt = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                setEventDate(dt.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }));
+              } else {
+                setEventDate(String(data.event.date));
+              }
+            }
+            if (data.event.location) {
+              setEventLocation(data.event.location);
+            }
+            if (data.event.drive_url) {
+              setDriveUrl(data.event.drive_url);
+            }
+          }
+          if (Array.isArray(data.photos) && data.photos.length > 0) {
+            setPhotos(data.photos);
+            setFilteredPhotos(data.photos);
+            return;
+          }
+        }
+      } catch (errApi) {
+        console.warn('API de fotos do Drive offline, tentando fallback:', errApi);
+      }
+
+      // 2. Fallback: Supabase se a API não retornou
       const { data: demData } = await supabase
         .from('demandas_comunicacao')
         .select('*')
@@ -101,14 +134,19 @@ export const PublicEventGallery: React.FC = () => {
         if (demData.local_evento) {
           setEventLocation(demData.local_evento);
         }
+        if (demData.drive_url) {
+          setDriveUrl(demData.drive_url);
+        }
       }
 
-      // 2. Carrega as fotos reais com cache local
-      const res = await fetch('/event_50_photos.json');
-      if (res.ok) {
-        const jsonPhotos: PhotoItem[] = await res.json();
-        setPhotos(jsonPhotos);
-        setFilteredPhotos(jsonPhotos);
+      // 3. Fallback de fotos locais para o evento 50
+      if (targetId === 50) {
+        const res = await fetch('/event_50_photos.json');
+        if (res.ok) {
+          const jsonPhotos: PhotoItem[] = await res.json();
+          setPhotos(jsonPhotos);
+          setFilteredPhotos(jsonPhotos);
+        }
       }
     } catch (err) {
       console.warn('Erro ao carregar evento:', err);
@@ -188,14 +226,14 @@ export const PublicEventGallery: React.FC = () => {
     toast.success(`Compactando e baixando todas as ${displayedPhotos.length} fotos em Alta Resolução (ZIP)...`);
   };
 
-  // Helper para redimensionar imagens no cliente (máx 480px) para upload instantâneo e ultra-leve (< 50KB)
+  // Helper para redimensionar imagens no cliente (máx 960px) preservando alta fidelidade facial
   const resizeImageToBlob = (fileOrDataUrl: File | string): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
         let w = img.width;
         let h = img.height;
-        const maxDim = 480;
+        const maxDim = 960;
         if (w > maxDim || h > maxDim) {
           if (w > h) {
             h = Math.round((h * maxDim) / w);
@@ -213,7 +251,7 @@ export const PublicEventGallery: React.FC = () => {
         canvas.toBlob((blob) => {
           if (blob) resolve(blob);
           else reject(new Error('Erro ao converter imagem'));
-        }, 'image/jpeg', 0.85);
+        }, 'image/jpeg', 0.88);
       };
       img.onerror = reject;
       if (typeof fileOrDataUrl === 'string') {

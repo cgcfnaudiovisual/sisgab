@@ -46,7 +46,7 @@ _SELFIE_APP_SINGLETON = None
 _SELFIE_APP_LOCK = threading.Lock()
 
 def _get_selfie_app():
-    """Retorna motor InsightFace leve e ultra-rápido otimizado exclusivamente para selfies (sub-200ms)."""
+    """Retorna motor InsightFace de alta precisão (buffalo_l com det_size=640x640)."""
     global _SELFIE_APP_SINGLETON
     if _SELFIE_APP_SINGLETON is not None:
         return _SELFIE_APP_SINGLETON
@@ -59,17 +59,17 @@ def _get_selfie_app():
                 name='buffalo_l',
                 allowed_modules=['detection', 'recognition']
             )
-            app_selfie.prepare(ctx_id=-1, det_size=(224, 224))
+            app_selfie.prepare(ctx_id=-1, det_size=(640, 640))
             
             # Warmup imediato para alocar buffers ONNX
-            dummy = np.zeros((224, 224, 3), dtype=np.uint8)
+            dummy = np.zeros((640, 640, 3), dtype=np.uint8)
             app_selfie.get(dummy)
             
             _SELFIE_APP_SINGLETON = app_selfie
-            print('[PORTAL_IA] 🚀 Motor Selfie Turbo (buffalo_l, det_size=224x224) 100% pronto em RAM!')
+            print('[PORTAL_IA] 🚀 Motor Selfie HD (buffalo_l, det_size=640x640) 100% pronto em RAM!')
             return _SELFIE_APP_SINGLETON
         except Exception as e:
-            print(f'[PORTAL_IA] ❌ Falha ao inicializar Motor Selfie Turbo: {e}')
+            print(f'[PORTAL_IA] ❌ Falha ao inicializar Motor Selfie: {e}')
             return None
 
 # Pré-inicializa o motor no boot da aplicação
@@ -280,7 +280,7 @@ def _get_geral_photos(root_folder_id: str, geral_folder_id: str = None) -> list[
         return []
 
 def _extract_selfie_embedding(image_bytes: bytes) -> tuple[bool, str, np.ndarray | None]:
-    """Extrai o embedding facial 512D da selfie com alta performance (sub-200ms)."""
+    """Extrai o embedding facial 512D da selfie com alta precisão e robustez a ângulos/iluminação."""
     if not image_bytes:
         return False, "❌ Imagem vazia ou inválida.", None
 
@@ -304,9 +304,10 @@ def _extract_selfie_embedding(image_bytes: bytes) -> tuple[bool, str, np.ndarray
     if img_bgr is None:
         return False, "❌ Não foi possível carregar a imagem enviada.", None
 
+    # Redimensiona mantendo resolução suficiente para o detector (máx 1024px)
     h, w = img_bgr.shape[:2]
-    if max(h, w) > 480:
-        scale = 480.0 / max(h, w)
+    if max(h, w) > 1024:
+        scale = 1024.0 / max(h, w)
         import cv2
         img_bgr = cv2.resize(img_bgr, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
@@ -317,15 +318,24 @@ def _extract_selfie_embedding(image_bytes: bytes) -> tuple[bool, str, np.ndarray
 
         t0 = time.time()
         faces = app_face.get(img_bgr)
-        print(f'[PORTAL_IA] ⚡ Detecção facial turbo em {time.time()-t0:.3f}s → {len(faces)} rosto(s)')
+        print(f'[PORTAL_IA] ⚡ Detecção facial HD em {time.time()-t0:.3f}s → {len(faces)} rosto(s)')
+
+        # Se não detectou na primeira tentativa, tenta com escala adaptativa
+        if not faces and max(h, w) > 640:
+            import cv2
+            scale2 = 640.0 / max(h, w)
+            img_smaller = cv2.resize(img_bgr, (int(w * scale2), int(h * scale2)))
+            faces = app_face.get(img_smaller)
+            print(f'[PORTAL_IA] ⚡ Detecção fallback multi-escala → {len(faces)} rosto(s)')
 
         if not faces:
-            return False, "❌ Nenhum rosto detectado. Envie uma foto nítida e bem iluminada de frente.", None
+            return False, "❌ Nenhum rosto detectado. Envie uma foto nítida e bem iluminada do seu rosto.", None
 
-        face = max(faces, key=lambda f: getattr(f, 'det_score', 0))
+        # Prioriza o rosto mais proeminente (maior área da bounding box)
+        face = max(faces, key=lambda f: (f.bbox[2]-f.bbox[0]) * (f.bbox[3]-f.bbox[1]) if hasattr(f, 'bbox') else getattr(f, 'det_score', 0))
 
-        if hasattr(face, 'det_score') and face.det_score < 0.35:
-            return False, "❌ Rosto pouco nítido ou desfocado. Tente em ambiente mais claro.", None
+        if hasattr(face, 'det_score') and face.det_score < 0.20:
+            return False, "❌ Rosto pouco nítido ou muito distante. Tente aproximar mais da câmera.", None
 
         return True, "✅ Rosto identificado com sucesso!", face.normed_embedding
 
