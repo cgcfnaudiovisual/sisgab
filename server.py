@@ -94,22 +94,33 @@ def get_event_drive_photos(event_id: str):
         
         if not dem:
             return None
-            
+
+        # Extrai folder_id e drive_url de todos os campos possíveis da demanda
+        raw_candidates = [
+            str(dem.get('drive_url') or ''),
+            str(dem.get('drive_link') or ''),
+            str(dem.get('drive_folder_id') or ''),
+            str(dem.get('autoridades') or ''),
+            str(dem.get('arquivo_url') or '')
+        ]
+        combined_text = ' '.join(raw_candidates)
+
+        drive_folder_id = ''
         drive_url = dem.get('drive_url') or dem.get('drive_link') or ''
-        drive_folder_id = dem.get('drive_folder_id') or ''
-        
-        # Extrai folder_id se for URL
-        if not drive_folder_id and drive_url:
-            m = re.search(r'folders/([a-zA-Z0-9_-]+)', drive_url)
-            if m:
-                drive_folder_id = m.group(1)
-            elif '/d/' in drive_url:
-                m2 = re.search(r'/d/([a-zA-Z0-9_-]+)', drive_url)
-                if m2:
-                    drive_folder_id = m2.group(1)
-            elif len(drive_url.strip()) in (28, 33, 34, 44) and '/' not in drive_url:
-                drive_folder_id = drive_url.strip()
-                
+
+        m = re.search(r'folders/([a-zA-Z0-9_-]+)', combined_text)
+        if m:
+            drive_folder_id = m.group(1)
+        elif '/d/' in combined_text:
+            m2 = re.search(r'/d/([a-zA-Z0-9_-]+)', combined_text)
+            if m2:
+                drive_folder_id = m2.group(1)
+        elif dem.get('drive_folder_id'):
+            drive_folder_id = str(dem.get('drive_folder_id')).strip()
+
+        if drive_folder_id and not drive_url:
+            drive_url = f"https://drive.google.com/drive/folders/{drive_folder_id}"
+
         # Se for o evento 50 (Veteranos) e tiver o json local, carrega rápido
         local_json_path = os.path.join(REACT_DIST_DIR, f"event_{event_id}_photos.json")
         if not drive_folder_id and str(event_id) == "50" and os.path.exists(local_json_path):
@@ -121,7 +132,7 @@ def get_event_drive_photos(event_id: str):
                         'title': dem.get('titulo_evento'),
                         'date': dem.get('data_evento'),
                         'location': dem.get('local_evento'),
-                        'drive_url': drive_url
+                        'drive_url': drive_url or 'https://drive.google.com/drive/folders/1cqK3F24QQCj5tgkXy-zJZoP1al-dF3Yv'
                     },
                     'photos': json.load(f)
                 }

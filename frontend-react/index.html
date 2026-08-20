@@ -8,6 +8,16 @@
     <meta name="description" content="Sistema de Gestão de Gabinete e Comunicação Social do Comando-Geral do Corpo de Fuzileiros Navais." />
   </head>
   <body class="bg-[#060a12] text-slate-100 antialiased selection:bg-[#c5a059]/30 selection:text-[#e5c07b]">
+    <script>
+      // Força a limpeza de caches legados e desativa service workers anteriores
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for (var reg of registrations) {
+            reg.unregister();
+          }
+        });
+      }
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
