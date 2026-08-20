@@ -53,7 +53,7 @@ async def trigger_telegram_alert(payload: dict):
     return {"status": "success", "message": "Alerta despachado."}
 
 # ── SPA Catch-All: Entrega o React Router para todas as rotas ──
-@app.get("/{full_path:path}")
+@app.api_route("/{full_path:path}", methods=["GET", "HEAD"])
 async def serve_react_spa(full_path: str):
     # Se for um arquivo estático existente no dist (ex: logo, manifest, etc.)
     target_file = os.path.join(REACT_DIST_DIR, full_path)
