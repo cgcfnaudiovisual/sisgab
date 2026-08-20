@@ -237,12 +237,11 @@ export const PhotoGalleryAdmin: React.FC = () => {
       if (!error && data && data.length > 0) {
         const parsed: PautaEvent[] = data.map((d: any) => {
           let dfid = d.drive_folder_id || '';
-          const rawUrl = d.drive_url || d.drive_link || d.autoridades || '';
-          if (!dfid && rawUrl && rawUrl.includes('drive.google.com')) {
+          const rawUrl = [d.drive_url, d.drive_link, d.autoridades, d.arquivo_url].filter(Boolean).join(' ');
+          if (!dfid && rawUrl) {
             const m = rawUrl.match(/folders\/([a-zA-Z0-9_-]+)/) || rawUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
             if (m) dfid = m[1];
-          } else if (!dfid && rawUrl && rawUrl.length in [28, 33, 34, 44] && !rawUrl.includes('/')) {
-            dfid = rawUrl.trim();
+            else if (rawUrl.length in [28, 33, 34, 44] && !rawUrl.includes('/')) dfid = rawUrl.trim();
           }
 
           return {
