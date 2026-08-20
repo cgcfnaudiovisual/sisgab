@@ -59,7 +59,7 @@ export interface HistoricoTramitacao {
   criado_em: string;
 }
 
-export type StatusPresenca = 'P' | 'SV' | 'FE' | 'LE' | 'LTS' | 'DS' | 'MIS' | 'OUT';
+export type StatusPresenca = 'P' | 'SV' | 'FE' | 'LE' | 'LTS' | 'DS' | 'MIS' | 'OUT' | 'PEND';
 
 export interface MilitarEfetivo {
   id: number;

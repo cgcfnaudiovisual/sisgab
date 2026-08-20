@@ -25,6 +25,8 @@ import {
   Layers,
   TrendingUp,
   FileText,
+  Edit3,
+  Save,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
@@ -56,8 +58,80 @@ export const DemandApproval: React.FC = () => {
     motivo: '',
   });
 
-  // Modal Detalhes / Ficha Completa
+  // Modal Detalhes / Ficha Completa & Edição
   const [detailModal, setDetailModal] = useState<DemandaComunicacao | null>(null);
+  const [isEditingFicha, setIsEditingFicha] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<DemandaComunicacao>>({});
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const handleOpenDetailModal = (demanda: DemandaComunicacao, editMode = false) => {
+    setDetailModal(demanda);
+    setIsEditingFicha(editMode);
+    setEditForm({ ...demanda });
+  };
+
+  const handleSaveEditFicha = async () => {
+    if (!detailModal || !editForm.titulo_evento) {
+      toast.error('O título do evento é obrigatório.');
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      const updatedItem: DemandaComunicacao = {
+        ...detailModal,
+        titulo_evento: editForm.titulo_evento || detailModal.titulo_evento,
+        data_evento: editForm.data_evento || detailModal.data_evento,
+        data_fim: editForm.data_fim !== undefined ? editForm.data_fim : detailModal.data_fim,
+        hora_evento: editForm.hora_evento || detailModal.hora_evento,
+        local_evento: editForm.local_evento || detailModal.local_evento,
+        solicitante_nome: editForm.solicitante_nome || detailModal.solicitante_nome,
+        setor: editForm.setor || detailModal.setor,
+        contato: editForm.contato || detailModal.contato,
+        tipo_cobertura: Array.isArray(editForm.tipo_cobertura)
+          ? editForm.tipo_cobertura
+          : typeof editForm.tipo_cobertura === 'string'
+          ? (editForm.tipo_cobertura as string).split(',').map((s) => s.trim()).filter(Boolean)
+          : detailModal.tipo_cobertura,
+        autoridades: editForm.autoridades !== undefined ? editForm.autoridades : detailModal.autoridades,
+        observacoes: editForm.observacoes !== undefined ? editForm.observacoes : detailModal.observacoes,
+        score_esforco: editForm.score_esforco || detailModal.score_esforco || 1,
+      };
+
+      const { error } = await supabase
+        .from('demandas_comunicacao')
+        .update({
+          titulo_evento: updatedItem.titulo_evento,
+          data_evento: updatedItem.data_evento,
+          data_fim: updatedItem.data_fim,
+          hora_evento: updatedItem.hora_evento,
+          local_evento: updatedItem.local_evento,
+          solicitante_nome: updatedItem.solicitante_nome,
+          setor: updatedItem.setor,
+          contato: updatedItem.contato,
+          tipo_cobertura: updatedItem.tipo_cobertura,
+          autoridades: updatedItem.autoridades,
+          observacoes: updatedItem.observacoes,
+          score_esforco: updatedItem.score_esforco,
+        })
+        .eq('id', detailModal.id);
+
+      if (error) throw error;
+
+      setDemandas((prev) =>
+        prev.map((d) => (d.id === detailModal.id ? updatedItem : d))
+      );
+      setDetailModal(updatedItem);
+      setIsEditingFicha(false);
+
+      confetti({ particleCount: 60, spread: 60, origin: { y: 0.6 } });
+      toast.success('Ficha técnica da pauta atualizada com sucesso!');
+    } catch (err: any) {
+      toast.error(`Erro ao salvar edição: ${err.message || 'Falha de conexão.'}`);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   useEffect(() => {
     loadDemandas();
@@ -590,12 +664,22 @@ export const DemandApproval: React.FC = () => {
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={() => setDetailModal(demanda)}
+                        onClick={() => handleOpenDetailModal(demanda, false)}
                         className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold flex items-center gap-1 transition-all"
-                        title="Ver Ficha Completa"
+                        title="Ver Ficha Técnica"
                       >
                         <Eye className="w-3.5 h-3.5" />
                         <span className="hidden sm:inline">Ficha</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDetailModal(demanda, true)}
+                        className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-[#e5c07b] border border-amber-500/30 text-xs font-bold flex items-center gap-1 transition-all"
+                        title="Editar Ficha Técnica"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Editar</span>
                       </button>
 
                       {driveUrl && (
@@ -777,11 +861,20 @@ export const DemandApproval: React.FC = () => {
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               type="button"
-                              onClick={() => setDetailModal(demanda)}
+                              onClick={() => handleOpenDetailModal(demanda, false)}
                               className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 hover:text-white"
-                              title="Ver Ficha"
+                              title="Ver Ficha Técnica"
                             >
                               <Eye className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDetailModal(demanda, true)}
+                              className="p-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-[#e5c07b] border border-amber-500/30"
+                              title="Editar Ficha Técnica"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
                             </button>
 
                             {driveUrl && (
@@ -844,111 +937,297 @@ export const DemandApproval: React.FC = () => {
         </div>
       )}
 
-      {/* ── MODAL: FICHA COMPLETA DA DEMANDA ── */}
+      {/* ── MODAL: FICHA COMPLETA DA DEMANDA & EDIÇÃO ── */}
       {detailModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="w-full max-w-lg p-6 rounded-3xl bg-[#0b1222] border border-[#c5a059]/40 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs animate-in fade-in overflow-y-auto">
+          <div className="w-full max-w-xl p-6 rounded-3xl bg-[#0b1222] border border-[#c5a059]/50 space-y-4 shadow-2xl my-8">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <span className="px-2.5 py-0.5 rounded bg-blue-500/20 text-blue-300 text-[10px] font-black uppercase tracking-wider border border-blue-500/40">
-                  Ficha Técnica da Pauta #{detailModal.id}
-                </span>
-                <h3 className="text-lg font-black text-white mt-1">
-                  {detailModal.titulo_evento}
-                </h3>
-              </div>
-              <button
-                onClick={() => setDetailModal(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-                <span className="text-[10px] text-slate-500 uppercase font-bold">Data & Horário</span>
-                <p className="font-bold text-white">
-                  {detailModal.data_fim && detailModal.data_fim > detailModal.data_evento
-                    ? `${detailModal.data_evento} até ${detailModal.data_fim}`
-                    : detailModal.data_evento || 'Sem data fixa'}
-                </p>
-                <p className="text-slate-400">Às {detailModal.hora_evento || '09:00'}</p>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-                <span className="text-[10px] text-slate-500 uppercase font-bold">Local do Evento</span>
-                <p className="font-bold text-white truncate">{detailModal.local_evento || 'Gabinete CGCFN'}</p>
-                <p className="text-slate-400">Score: {detailModal.score_esforco || 1} pts</p>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-                <span className="text-[10px] text-slate-500 uppercase font-bold">Solicitante</span>
-                <p className="font-bold text-white">{detailModal.solicitante_nome}</p>
-                <p className="text-slate-400">{detailModal.setor} • {detailModal.contato}</p>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-                <span className="text-[10px] text-slate-500 uppercase font-bold">Serviços Solicitados</span>
-                <div className="flex flex-wrap gap-1 pt-0.5">
-                  {parseCobertura(detailModal.tipo_cobertura).map((c, i) => (
-                    <span key={i} className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300 font-bold">
-                      {c}
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded bg-blue-500/20 text-blue-300 text-[10px] font-black uppercase tracking-wider border border-blue-500/40">
+                    Ficha Técnica da Pauta #{detailModal.id}
+                  </span>
+                  {isEditingFicha && (
+                    <span className="px-2 py-0.5 rounded bg-amber-500/20 text-[#e5c07b] text-[10px] font-black uppercase tracking-wider border border-amber-500/40 flex items-center gap-1">
+                      <Edit3 className="w-3 h-3" />
+                      <span>Modo Edição</span>
                     </span>
-                  ))}
+                  )}
                 </div>
-              </div>
-            </div>
-
-            {cleanAutoridades(detailModal.autoridades) && (
-              <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-300 space-y-1">
-                <strong className="text-[#c5a059] block text-[11px] uppercase">Autoridades & VIPs:</strong>
-                <p>{cleanAutoridades(detailModal.autoridades)}</p>
-              </div>
-            )}
-
-            {detailModal.observacoes && (
-              <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-300 space-y-1">
-                <strong className="text-slate-400 block text-[11px] uppercase">Observações / Parecer Técnico:</strong>
-                <p>{detailModal.observacoes}</p>
-              </div>
-            )}
-
-            <div className="flex items-center justify-between pt-3 border-t border-slate-800">
-              {extractDriveUrl(detailModal) ? (
-                <a
-                  href={extractDriveUrl(detailModal)!}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3.5 py-2 rounded-xl bg-blue-950/80 hover:bg-blue-900 text-blue-300 border border-blue-500/30 text-xs font-bold flex items-center gap-1.5"
-                >
-                  <FolderOpen className="w-4 h-4" />
-                  <span>Abrir Google Drive</span>
-                </a>
-              ) : (
-                <span />
-              )}
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setDetailModal(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700"
-                >
-                  Fechar
-                </button>
-                {detailModal.status === 'pendente' && (
-                  <button
-                    onClick={() => {
-                      handleApprove(detailModal);
-                      setDetailModal(null);
-                    }}
-                    className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 text-xs font-black hover:bg-emerald-400 shadow-md"
-                  >
-                    Aprovar Pauta
-                  </button>
+                {!isEditingFicha && (
+                  <h3 className="text-lg font-black text-white mt-1">
+                    {detailModal.titulo_evento}
+                  </h3>
                 )}
               </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingFicha(!isEditingFicha)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                    isEditingFicha
+                      ? 'bg-slate-800 text-slate-300 hover:text-white'
+                      : 'bg-amber-500/20 border border-amber-500/40 text-[#e5c07b] hover:bg-amber-500/30'
+                  }`}
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>{isEditingFicha ? 'Visualizar' : 'Editar Ficha'}</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setDetailModal(null);
+                    setIsEditingFicha(false);
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
+
+            {/* MODO DE EDIÇÃO ATIVO */}
+            {isEditingFicha ? (
+              <div className="space-y-3.5 text-xs">
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">Título do Evento / Pauta *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.titulo_evento || ''}
+                    onChange={(e) => setEditForm({ ...editForm, titulo_evento: e.target.value })}
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-[#c5a059]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-400 font-bold mb-1">Data do Evento</label>
+                    <input
+                      type="date"
+                      value={editForm.data_evento || ''}
+                      onChange={(e) => setEditForm({ ...editForm, data_evento: e.target.value })}
+                      className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-[#c5a059]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 font-bold mb-1">Horário Previsto</label>
+                    <input
+                      type="time"
+                      value={editForm.hora_evento || '09:00'}
+                      onChange={(e) => setEditForm({ ...editForm, hora_evento: e.target.value })}
+                      className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-[#c5a059]"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-400 font-bold mb-1">Local do Evento</label>
+                    <input
+                      type="text"
+                      value={editForm.local_evento || ''}
+                      onChange={(e) => setEditForm({ ...editForm, local_evento: e.target.value })}
+                      placeholder="Ex: Salão Nobre, CIASC..."
+                      className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-[#c5a059]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 font-bold mb-1">Score de Esforço (Pontos)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={editForm.score_esforco || 1}
+                      onChange={(e) => setEditForm({ ...editForm, score_esforco: parseInt(e.target.value, 10) || 1 })}
+                      className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-[#c5a059]"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-slate-400 font-bold mb-1">Solicitante</label>
+                    <input
+                      type="text"
+                      value={editForm.solicitante_nome || ''}
+                      onChange={(e) => setEditForm({ ...editForm, solicitante_nome: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-[#c5a059]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 font-bold mb-1">Setor</label>
+                    <input
+                      type="text"
+                      value={editForm.setor || ''}
+                      onChange={(e) => setEditForm({ ...editForm, setor: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-[#c5a059]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 font-bold mb-1">Contato / Ramal</label>
+                    <input
+                      type="text"
+                      value={editForm.contato || ''}
+                      onChange={(e) => setEditForm({ ...editForm, contato: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-[#c5a059]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">Serviços Solicitados (Ex: foto, video, drone)</label>
+                  <input
+                    type="text"
+                    value={Array.isArray(editForm.tipo_cobertura) ? editForm.tipo_cobertura.join(', ') : ((editForm.tipo_cobertura as any) || '')}
+                    onChange={(e) => setEditForm({ ...editForm, tipo_cobertura: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
+                    placeholder="Ex: foto, video, drone"
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-[#c5a059]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">Autoridades & VIPs</label>
+                  <textarea
+                    rows={2}
+                    value={editForm.autoridades || ''}
+                    onChange={(e) => setEditForm({ ...editForm, autoridades: e.target.value })}
+                    placeholder="Lista de autoridades presentes..."
+                    className="w-full p-3 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-[#c5a059]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">Observações / Parecer</label>
+                  <textarea
+                    rows={2}
+                    value={editForm.observacoes || ''}
+                    onChange={(e) => setEditForm({ ...editForm, observacoes: e.target.value })}
+                    placeholder="Orientações e detalhes operacionais..."
+                    className="w-full p-3 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-[#c5a059]"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingFicha(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold hover:bg-slate-700"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={savingEdit}
+                    onClick={handleSaveEditFicha}
+                    className="px-5 py-2 rounded-xl bg-[#c5a059] hover:bg-[#d6b26b] text-slate-950 font-black flex items-center gap-1.5 shadow-lg shadow-[#c5a059]/25 disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{savingEdit ? 'Gravando...' : 'Salvar Alterações da Ficha'}</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* MODO DE VISUALIZAÇÃO PADRÃO */
+              <>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                    <span className="text-[10px] text-slate-500 uppercase font-bold">Data & Horário</span>
+                    <p className="font-bold text-white">
+                      {detailModal.data_fim && detailModal.data_fim > detailModal.data_evento
+                        ? `${detailModal.data_evento} até ${detailModal.data_fim}`
+                        : detailModal.data_evento || 'Sem data fixa'}
+                    </p>
+                    <p className="text-slate-400">Às {detailModal.hora_evento || '09:00'}</p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                    <span className="text-[10px] text-slate-500 uppercase font-bold">Local do Evento</span>
+                    <p className="font-bold text-white truncate">{detailModal.local_evento || 'Gabinete CGCFN'}</p>
+                    <p className="text-slate-400">Score: {detailModal.score_esforco || 1} pts</p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                    <span className="text-[10px] text-slate-500 uppercase font-bold">Solicitante</span>
+                    <p className="font-bold text-white">{detailModal.solicitante_nome}</p>
+                    <p className="text-slate-400">{detailModal.setor} • {detailModal.contato}</p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                    <span className="text-[10px] text-slate-500 uppercase font-bold">Serviços Solicitados</span>
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      {parseCobertura(detailModal.tipo_cobertura).map((c, i) => (
+                        <span key={i} className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300 font-bold">
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {cleanAutoridades(detailModal.autoridades) && (
+                  <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-300 space-y-1">
+                    <strong className="text-[#c5a059] block text-[11px] uppercase">Autoridades & VIPs:</strong>
+                    <p>{cleanAutoridades(detailModal.autoridades)}</p>
+                  </div>
+                )}
+
+                {detailModal.observacoes && (
+                  <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-300 space-y-1">
+                    <strong className="text-slate-400 block text-[11px] uppercase">Observações / Parecer Técnico:</strong>
+                    <p>{detailModal.observacoes}</p>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-3 border-t border-slate-800">
+                  {extractDriveUrl(detailModal) ? (
+                    <a
+                      href={extractDriveUrl(detailModal)!}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-3.5 py-2 rounded-xl bg-blue-950/80 hover:bg-blue-900 text-blue-300 border border-blue-500/30 text-xs font-bold flex items-center gap-1.5"
+                    >
+                      <FolderOpen className="w-4 h-4" />
+                      <span>Abrir Google Drive</span>
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingFicha(true)}
+                      className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-[#e5c07b] border border-amber-500/40 text-xs font-bold flex items-center gap-1.5"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Editar Pauta</span>
+                    </button>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setDetailModal(null)}
+                      className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700"
+                    >
+                      Fechar
+                    </button>
+                    {detailModal.status === 'pendente' && (
+                      <button
+                        onClick={() => {
+                          handleApprove(detailModal);
+                          setDetailModal(null);
+                        }}
+                        className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 text-xs font-black hover:bg-emerald-400 shadow-md"
+                      >
+                        Aprovar Pauta
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
