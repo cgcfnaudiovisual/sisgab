@@ -24,6 +24,7 @@ import {
 import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
+import defaultBrasao from '../../assets/brasaocgcfn.png';
 
 interface PhotoItem {
   id: string;
@@ -251,8 +252,13 @@ export const PublicEventGallery: React.FC = () => {
         {/* ⚓ Topo Imponente: Brasão Oficial CGCFN e Identificação do Evento Real */}
         <header className="text-center space-y-2 pt-2">
           <img
-            src="/brasaocgcfn.png"
+            src={localStorage.getItem('sisgab_custom_logo') || defaultBrasao}
             alt="Brasão Oficial CGCFN"
+            onError={(e) => {
+              const target = e.currentTarget as HTMLImageElement;
+              target.onerror = null;
+              target.src = defaultBrasao;
+            }}
             className="w-24 h-24 sm:w-28 sm:h-28 mx-auto object-contain drop-shadow-[0_0_20px_rgba(197,160,89,0.75)]"
           />
           <div>

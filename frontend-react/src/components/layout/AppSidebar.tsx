@@ -234,6 +234,8 @@ export const MENU_CATEGORIES: MenuCategory[] = [
   },
 ];
 
+import defaultBrasao from '../../assets/brasaocgcfn.png';
+
 interface AppSidebarProps {
   isOpen: boolean;
   onClose?: () => void;
@@ -242,6 +244,21 @@ interface AppSidebarProps {
 export const AppSidebar: React.FC<AppSidebarProps> = ({ isOpen, onClose }) => {
   const location = useLocation();
   const { user, logout } = useAuth();
+  const [logoSrc, setLogoSrc] = React.useState<string>(() => {
+    return localStorage.getItem('sisgab_custom_logo') || defaultBrasao;
+  });
+
+  React.useEffect(() => {
+    const handleLogoUpdate = () => {
+      setLogoSrc(localStorage.getItem('sisgab_custom_logo') || defaultBrasao);
+    };
+    window.addEventListener('sisgab_logo_updated', handleLogoUpdate);
+    window.addEventListener('storage', handleLogoUpdate);
+    return () => {
+      window.removeEventListener('sisgab_logo_updated', handleLogoUpdate);
+      window.removeEventListener('storage', handleLogoUpdate);
+    };
+  }, []);
 
   return (
     <>
@@ -262,10 +279,12 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ isOpen, onClose }) => {
         <div className="h-16 px-4 flex items-center justify-between border-b border-[#c5a059]/15 bg-[#0b1222]">
           <div className="flex items-center gap-3">
             <img
-              src={localStorage.getItem('sisgab_custom_logo') || '/brasaocgcfn.png'}
+              src={logoSrc}
               alt="Brasão CGCFN"
               onError={(e) => {
-                (e.currentTarget as HTMLImageElement).src = '/brasaocgcfn.png';
+                const target = e.currentTarget as HTMLImageElement;
+                target.onerror = null; // Impede loop infinito de renderização e piscamento
+                target.src = defaultBrasao;
               }}
               className="w-10 h-10 object-contain drop-shadow-[0_0_8px_rgba(197,160,89,0.5)] shrink-0"
             />

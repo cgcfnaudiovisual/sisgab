@@ -26,10 +26,14 @@ import {
   Cpu,
   Globe,
   Upload,
+  Palette,
+  Image as ImageIcon,
+  Link as LinkIcon,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
+import defaultBrasao from '../../assets/brasaocgcfn.png';
 import {
   playNeuralSpeech,
   stopNeuralSpeech,
@@ -74,9 +78,15 @@ const ELEVENLABS_FREE_PRESET_VOICES = [
 ];
 
 export const SystemSettings: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'voz' | 'jarvis' | 'alertas' | 'parametros'>('voz');
+  const [activeTab, setActiveTab] = useState<'voz' | 'jarvis' | 'alertas' | 'parametros' | 'identidade'>('voz');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Logo & Identidade Visual
+  const [logoSrc, setLogoSrc] = useState<string>(() => {
+    return localStorage.getItem('sisgab_custom_logo') || defaultBrasao;
+  });
+  const [customLogoUrl, setCustomLogoUrl] = useState('');
 
   // Configurações Gerais
   const [configData, setConfigData] = useState({
@@ -197,6 +207,12 @@ export const SystemSettings: React.FC = () => {
         setNauticalBellEnabled(findVal('nautical_bell_enabled', 'true') === 'true');
         setSoundEffectsEnabled(findVal('sound_effects_enabled', 'true') === 'true');
         setAlertVocativo(findVal('tv_alert_vocativo', 'Atenção Gabinete'));
+
+        const dbLogo = findVal('sisgab_custom_logo', '');
+        if (dbLogo) {
+          setLogoSrc(dbLogo);
+          localStorage.setItem('sisgab_custom_logo', dbLogo);
+        }
       }
     } catch (err) {
       console.warn('Erro ao carregar configurações:', err);
@@ -264,6 +280,7 @@ export const SystemSettings: React.FC = () => {
 
     try {
       const itemsToUpsert = [
+        { chave: 'sisgab_custom_logo', valor: logoSrc },
         { chave: 'cabecalho_tv_title', valor: configData.cabecalho_tv_title },
         { chave: 'cabecalho_tv_subtitle', valor: configData.cabecalho_tv_subtitle },
         { chave: 'tempo_polling_tv', valor: configData.tempo_polling_tv },
@@ -296,6 +313,10 @@ export const SystemSettings: React.FC = () => {
       if (geminiKey.trim()) {
         localStorage.setItem('sisgab_gemini_key', geminiKey.trim());
       }
+      if (logoSrc) {
+        localStorage.setItem('sisgab_custom_logo', logoSrc);
+      }
+      window.dispatchEvent(new Event('sisgab_logo_updated'));
 
       confetti({ particleCount: 50, spread: 50, origin: { y: 0.7 } });
       toast.success('Configurações salvas com sucesso!');
@@ -571,7 +592,7 @@ export const SystemSettings: React.FC = () => {
       </div>
 
       {/* ── NAVEGAÇÃO POR ABAS ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
         <button
           type="button"
           onClick={() => setActiveTab('voz')}
@@ -582,7 +603,7 @@ export const SystemSettings: React.FC = () => {
           }`}
         >
           <Volume2 className="w-3.5 h-3.5" />
-          <span>🎙️ 1. Voz & Notificações</span>
+          <span>🎙️ 1. Voz & Avisos</span>
         </button>
 
         <button
@@ -608,7 +629,7 @@ export const SystemSettings: React.FC = () => {
           }`}
         >
           <Bell className="w-3.5 h-3.5" />
-          <span>🔔 3. Alertas & Sinos</span>
+          <span>🔔 3. Sinos & Alertas</span>
         </button>
 
         <button
@@ -621,7 +642,20 @@ export const SystemSettings: React.FC = () => {
           }`}
         >
           <Tv className="w-3.5 h-3.5" />
-          <span>📺 4. Telão TV & Parâmetros</span>
+          <span>📺 4. Telão TV</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('identidade')}
+          className={`flex items-center justify-center gap-2 p-3.5 rounded-2xl border text-xs font-black transition-all ${
+            activeTab === 'identidade'
+              ? 'bg-gradient-to-r from-[#c5a059] to-amber-500 text-slate-950 border-[#c5a059] shadow-lg shadow-[#c5a059]/20'
+              : 'bg-[#0b1222] text-slate-400 border-slate-800 hover:border-slate-700 hover:text-white'
+          }`}
+        >
+          <Palette className="w-3.5 h-3.5" />
+          <span>🎨 5. Brasão & Logo</span>
         </button>
       </div>
 
@@ -1283,69 +1317,270 @@ export const SystemSettings: React.FC = () => {
                   />
                 </div>
               </div>
+            </div>
+          </div>
+        )}
 
-              {/* ── IDENTIDADE VISUAL & LOGO DO SISTEMA ── */}
-              <div className="pt-4 border-t border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-black text-[#c5a059] flex items-center gap-2">
-                    <Sparkles className="w-4 h-4" />
-                    <span>Identidade Visual & Brasão / Logo Principal</span>
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      localStorage.removeItem('sisgab_custom_logo');
-                      toast.info('Brasão oficial padrão do CGCFN restaurado.');
-                    }}
-                    className="text-xs text-rose-400 hover:text-rose-300 font-bold"
-                  >
-                    Restaurar Brasão Padrão
-                  </button>
-                </div>
-                <p className="text-slate-400 text-xs">
-                  Personalize o brasão/logo exibido na tela de login, barra lateral e cabeçalho do SisGAB.
+        {/* ── ABA 5: IDENTIDADE VISUAL & BRASÃO DO SISTEMA ── */}
+        {activeTab === 'identidade' && (
+          <div className="p-6 rounded-3xl bg-[#0b1222] border border-slate-800 space-y-8 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+              <div>
+                <h2 className="text-base font-black text-white flex items-center gap-2">
+                  <Palette className="w-5 h-5 text-[#c5a059]" />
+                  <span>Identidade Visual, Brasão Oficial & Branding</span>
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Personalize a logomarca do sistema, brasão militar, cabeçalhos institucionais e identidade visual das telas de login, sidebar e telão TV.
                 </p>
+              </div>
 
-                <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-950 border border-slate-800">
-                  <img
-                    src={localStorage.getItem('sisgab_custom_logo') || '/brasaocgcfn.png'}
-                    alt="Logo do SisGAB"
-                    className="w-20 h-20 object-contain drop-shadow-md rounded-xl bg-slate-900/60 p-1 border border-slate-700"
-                  />
-                  <div className="flex-1 space-y-2">
-                    <input
-                      type="file"
-                      id="system-logo-upload"
-                      accept="image/png, image/jpeg, image/svg+xml, image/webp"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (event) => {
-                            const b64 = event.target?.result as string;
-                            if (b64) {
-                              localStorage.setItem('sisgab_custom_logo', b64);
-                              toast.success('Logo do sistema atualizado com sucesso!');
-                            }
-                          };
-                          reader.readAsDataURL(file);
-                        }
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.removeItem('sisgab_custom_logo');
+                  setLogoSrc(defaultBrasao);
+                  window.dispatchEvent(new Event('sisgab_logo_updated'));
+                  toast.info('Brasão oficial padrão do CGCFN restaurado.');
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 hover:border-rose-500/50 hover:bg-rose-500/10 text-rose-300 hover:text-rose-200 text-xs font-bold transition-all shrink-0"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Restaurar Brasão Padrão CGCFN</span>
+              </button>
+            </div>
+
+            {/* ── GRID DE PREVIEWS EM TEMPO REAL ── */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-[#c5a059] uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Pré-visualização em Tempo Real nos Ambientes</span>
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* 1. Preview Tela de Login */}
+                <div className="p-5 rounded-2xl bg-[#060a12] border border-[#c5a059]/30 flex flex-col items-center justify-center text-center space-y-3 relative overflow-hidden group">
+                  <div className="absolute top-2 left-3 px-2 py-0.5 rounded bg-slate-900/80 border border-slate-800 text-[10px] font-bold text-slate-400">
+                    Tela de Acesso / Login
+                  </div>
+                  <div className="relative pt-4">
+                    <img
+                      src={logoSrc}
+                      alt="Preview Login"
+                      onError={(e) => {
+                        const target = e.currentTarget as HTMLImageElement;
+                        target.onerror = null;
+                        target.src = defaultBrasao;
                       }}
-                      className="hidden"
+                      className="w-24 h-24 object-contain drop-shadow-[0_0_20px_rgba(197,160,89,0.6)]"
                     />
-                    <label
-                      htmlFor="system-logo-upload"
-                      className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 hover:border-[#c5a059] text-white font-bold text-xs inline-flex items-center gap-2 cursor-pointer transition-colors"
-                    >
-                      <Upload className="w-3.5 h-3.5 text-[#c5a059]" />
-                      <span>Fazer Upload de Novo Logo (PNG / SVG / JPG)</span>
-                    </label>
-                    <span className="block text-[10px] text-slate-500">
-                      Recomendado: imagem transparente PNG ou SVG quadrada de 512x512px.
-                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-black text-[#c5a059] text-sm tracking-wider cyber-title">SISGAB 2.0</h4>
+                    <p className="text-[10px] text-slate-400 font-medium">{configData.cabecalho_tv_subtitle || 'Comunicação Social • CGCFN'}</p>
                   </div>
                 </div>
+
+                {/* 2. Preview Barra Lateral (Sidebar) */}
+                <div className="p-5 rounded-2xl bg-[#080d1a] border border-slate-800 flex flex-col justify-between space-y-4">
+                  <div className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] font-bold text-slate-400 w-fit">
+                    Barra Lateral / Sidebar
+                  </div>
+                  <div className="p-3 rounded-xl bg-[#0b1222] border border-[#c5a059]/20 flex items-center gap-3">
+                    <img
+                      src={logoSrc}
+                      alt="Preview Sidebar"
+                      onError={(e) => {
+                        const target = e.currentTarget as HTMLImageElement;
+                        target.onerror = null;
+                        target.src = defaultBrasao;
+                      }}
+                      className="w-10 h-10 object-contain drop-shadow-[0_0_8px_rgba(197,160,89,0.5)] shrink-0"
+                    />
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-black text-[#c5a059] text-xs cyber-title">SISGAB</span>
+                        <span className="px-1 py-0.2 bg-[#00e5ff]/10 text-[#00e5ff] text-[9px] font-bold rounded border border-[#00e5ff]/30">
+                          2.0
+                        </span>
+                      </div>
+                      <p className="text-[9px] text-slate-400 font-medium">Comunicação Social</p>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-500">Exibição compacta presente em todas as páginas do sistema.</p>
+                </div>
+
+                {/* 3. Preview Cabeçalho Telão TV */}
+                <div className="p-5 rounded-2xl bg-[#030712] border border-slate-800 flex flex-col justify-between space-y-4">
+                  <div className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] font-bold text-slate-400 w-fit">
+                    Faixa do Telão TV (SisGAB TV)
+                  </div>
+                  <div className="p-3 rounded-xl bg-[#0b1222] border border-cyan-500/20 flex items-center gap-3">
+                    <img
+                      src={logoSrc}
+                      alt="Preview TV"
+                      onError={(e) => {
+                        const target = e.currentTarget as HTMLImageElement;
+                        target.onerror = null;
+                        target.src = defaultBrasao;
+                      }}
+                      className="w-9 h-9 object-contain shrink-0"
+                    />
+                    <div className="truncate">
+                      <p className="text-[10px] font-black text-amber-300 truncate leading-tight">
+                        {configData.cabecalho_tv_title || 'COMANDO-GERAL DO CORPO DE FUZILEIROS NAVAIS'}
+                      </p>
+                      <p className="text-[9px] text-cyan-300 truncate">
+                        {configData.cabecalho_tv_subtitle || 'PAINEL TÁTICO DE COMUNICAÇÃO SOCIAL'}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-500">Banner transmitido para o SisGAB TV e Telões do Gabinete.</p>
+                </div>
               </div>
+            </div>
+
+            {/* ── OPÇÕES DE UPLOAD & URL DO NOVO LOGO ── */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+              {/* Opção 1: Upload de Arquivo Local */}
+              <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Upload className="w-4 h-4 text-[#c5a059]" />
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider">1. Enviar Arquivo do Computador</h4>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Carregue um arquivo PNG transparente, SVG ou JPG em alta resolução. O arquivo é salvo localmente e replicado em tempo real.
+                </p>
+
+                <div>
+                  <input
+                    type="file"
+                    id="dedicated-logo-upload"
+                    accept="image/png, image/jpeg, image/svg+xml, image/webp"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+
+                      if (!file.type.startsWith('image/')) {
+                        toast.error('Selecione um arquivo de imagem válido (PNG, JPG ou SVG).');
+                        return;
+                      }
+
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        const base64 = event.target?.result as string;
+                        if (base64) {
+                          localStorage.setItem('sisgab_custom_logo', base64);
+                          setLogoSrc(base64);
+                          window.dispatchEvent(new Event('sisgab_logo_updated'));
+                          toast.success('Novo brasão/logo carregado com sucesso!');
+                        }
+                      };
+                      reader.readAsDataURL(file);
+                    }}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="dedicated-logo-upload"
+                    className="w-full py-3.5 px-4 rounded-xl bg-[#0b1222] border-2 border-dashed border-slate-700 hover:border-[#c5a059] text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all hover:bg-slate-900"
+                  >
+                    <Upload className="w-4 h-4 text-[#c5a059]" />
+                    <span>Selecionar Imagem (PNG / SVG / JPG / WEBP)</span>
+                  </label>
+                </div>
+                <p className="text-[10px] text-slate-500 text-center">
+                  Tamanho recomendado: 512x512px com fundo transparente.
+                </p>
+              </div>
+
+              {/* Opção 2: Inserção via Link / URL Web */}
+              <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
+                <div className="flex items-center gap-2">
+                  <LinkIcon className="w-4 h-4 text-[#00e5ff]" />
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider">2. Inserir Link Direto (URL)</h4>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Caso o brasão esteja hospedado em um servidor web, insira o link direto da imagem abaixo:
+                </p>
+
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      placeholder="https://exemplo.marinha.mil.br/brasao.png"
+                      value={customLogoUrl}
+                      onChange={(e) => setCustomLogoUrl(e.target.value)}
+                      className="flex-1 px-3.5 py-2 rounded-xl bg-[#0b1222] border border-slate-800 text-white text-xs focus:outline-none focus:border-[#00e5ff]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!customLogoUrl.trim()) {
+                          toast.error('Informe a URL da imagem.');
+                          return;
+                        }
+                        localStorage.setItem('sisgab_custom_logo', customLogoUrl.trim());
+                        setLogoSrc(customLogoUrl.trim());
+                        window.dispatchEvent(new Event('sisgab_logo_updated'));
+                        toast.success('Logo atualizado a partir da URL!');
+                      }}
+                      className="px-4 py-2 rounded-xl bg-[#00e5ff] text-slate-950 text-xs font-black hover:bg-[#00c4dc] transition-colors"
+                    >
+                      Aplicar
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  O link deve apontar diretamente para um arquivo de imagem público acessível.
+                </p>
+              </div>
+            </div>
+
+            {/* ── CONFIGURAÇÃO DOS NOMES INSTITUCIONAIS ── */}
+            <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
+              <h4 className="text-xs font-bold text-[#c5a059] uppercase tracking-wider flex items-center gap-2">
+                <Tv className="w-4 h-4" />
+                <span>Cabeçalho Institucional & Textos de Apresentação</span>
+              </h4>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-300 font-bold text-xs mb-1">
+                    Nome da Organização Militar / Comando
+                  </label>
+                  <input
+                    type="text"
+                    value={configData.cabecalho_tv_title}
+                    onChange={(e) => setConfigData({ ...configData, cabecalho_tv_title: e.target.value })}
+                    className="w-full px-3.5 py-2 rounded-xl bg-[#0b1222] border border-slate-800 text-white text-xs focus:outline-none focus:border-[#c5a059]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-bold text-xs mb-1">
+                    Subtítulo / Seção Operacional
+                  </label>
+                  <input
+                    type="text"
+                    value={configData.cabecalho_tv_subtitle}
+                    onChange={(e) => setConfigData({ ...configData, cabecalho_tv_subtitle: e.target.value })}
+                    className="w-full px-3.5 py-2 rounded-xl bg-[#0b1222] border border-slate-800 text-white text-xs focus:outline-none focus:border-[#c5a059]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* ── BOTÃO DE SALVAMENTO DEDICADO ── */}
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={handleSaveAll}
+                disabled={saving}
+                className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-[#c5a059] to-amber-500 hover:from-amber-500 hover:to-[#c5a059] text-slate-950 font-black text-xs shadow-xl shadow-[#c5a059]/20 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{saving ? 'Gravando Identidade...' : 'Salvar Identidade Visual & Brasão'}</span>
+              </button>
             </div>
           </div>
         )}

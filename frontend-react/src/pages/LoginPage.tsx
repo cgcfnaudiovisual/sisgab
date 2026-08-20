@@ -91,6 +91,7 @@ export const LoginPage: React.FC = () => {
       if (base64) {
         localStorage.setItem('sisgab_custom_logo', base64);
         setLogoSrc(base64);
+        window.dispatchEvent(new Event('sisgab_logo_updated'));
         toast.success('Logo inicial personalizado com sucesso!');
         setLogoModalOpen(false);
       }
@@ -102,6 +103,7 @@ export const LoginPage: React.FC = () => {
     if (!customLogoUrl.trim()) return;
     localStorage.setItem('sisgab_custom_logo', customLogoUrl.trim());
     setLogoSrc(customLogoUrl.trim());
+    window.dispatchEvent(new Event('sisgab_logo_updated'));
     toast.success('Logo atualizado via URL!');
     setLogoModalOpen(false);
   };
@@ -109,6 +111,7 @@ export const LoginPage: React.FC = () => {
   const handleResetDefaultLogo = () => {
     localStorage.removeItem('sisgab_custom_logo');
     setLogoSrc(defaultBrasao);
+    window.dispatchEvent(new Event('sisgab_logo_updated'));
     toast.info('Brasão oficial padrão do CGCFN restaurado.');
     setLogoModalOpen(false);
   };
@@ -193,7 +196,9 @@ export const LoginPage: React.FC = () => {
               src={logoSrc}
               alt="Brasão Oficial CGCFN"
               onError={(e) => {
-                (e.currentTarget as HTMLImageElement).src = defaultBrasao;
+                const target = e.currentTarget as HTMLImageElement;
+                target.onerror = null;
+                target.src = defaultBrasao;
               }}
               className="w-32 h-32 mx-auto object-contain drop-shadow-[0_0_20px_rgba(197,160,89,0.7)] hover:scale-105 transition-transform duration-300 cursor-pointer"
               onClick={() => setLogoModalOpen(true)}

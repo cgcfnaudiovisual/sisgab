@@ -14,6 +14,7 @@ import {
 import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
+import defaultBrasao from '../../assets/brasaocgcfn.png';
 
 export const PublicSurveyView: React.FC = () => {
   const { token, id } = useParams<{ token?: string; id?: string }>();
@@ -82,8 +83,13 @@ export const PublicSurveyView: React.FC = () => {
       <div className="min-h-screen bg-[#040810] text-slate-100 p-4 sm:p-8 flex items-center justify-center selection:bg-[#c5a059]/30">
         <div className="max-w-md w-full p-8 rounded-3xl bg-[#0b1222] border-2 border-[#c5a059]/40 text-center space-y-4 shadow-2xl animate-in zoom-in-95">
           <img
-            src="/brasaocgcfn.png"
+            src={localStorage.getItem('sisgab_custom_logo') || defaultBrasao}
             alt="Brasão Oficial CGCFN"
+            onError={(e) => {
+              const target = e.currentTarget as HTMLImageElement;
+              target.onerror = null;
+              target.src = defaultBrasao;
+            }}
             className="w-20 h-20 mx-auto object-contain drop-shadow-[0_0_12px_rgba(197,160,89,0.8)]"
           />
           <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
@@ -107,8 +113,13 @@ export const PublicSurveyView: React.FC = () => {
         {/* Topo Oficial */}
         <header className="text-center space-y-2 pt-2">
           <img
-            src="/brasaocgcfn.png"
+            src={localStorage.getItem('sisgab_custom_logo') || defaultBrasao}
             alt="Brasão Oficial CGCFN"
+            onError={(e) => {
+              const target = e.currentTarget as HTMLImageElement;
+              target.onerror = null;
+              target.src = defaultBrasao;
+            }}
             className="w-20 h-20 sm:w-24 sm:h-24 mx-auto object-contain drop-shadow-[0_0_16px_rgba(197,160,89,0.75)]"
           />
           <div>
