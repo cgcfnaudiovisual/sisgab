@@ -269,14 +269,17 @@ export const SisgabTVPlayer: React.FC = () => {
     }
 
     try {
+      const rawHora = novaMissao.hora_evento || '10:00:00';
+      const safeHora = rawHora.length === 5 ? `${rawHora}:00` : rawHora;
+
       const { error } = await supabase.from('demandas_comunicacao').insert({
         titulo_evento: `⚡ ${novaMissao.titulo_evento.toUpperCase()}`,
         solicitante_nome: novaMissao.solicitante_nome,
         setor: novaMissao.setor,
         contato: 'Interno',
-        data_evento: novaMissao.data_evento,
-        hora_evento: novaMissao.hora_evento,
-        local_evento: novaMissao.local_evento,
+        data_evento: novaMissao.data_evento || getBrasiliaDateStr(),
+        hora_evento: safeHora,
+        local_evento: novaMissao.local_evento || 'Gabinete CGCFN',
         tipo_cobertura: novaMissao.tipo_cobertura,
         status: 'aprovado',
         sigiloso: novaMissao.sigiloso,

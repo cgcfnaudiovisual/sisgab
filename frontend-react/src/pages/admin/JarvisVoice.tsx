@@ -263,7 +263,7 @@ export const JarvisVoice: React.FC = () => {
         .eq('status_placa', 'pendente');
 
       // 3. Pronto de hoje
-      const { data: pres } = await supabase.from('presenca_diaria').select('*').eq('data', hoje);
+      const { data: pres } = await supabase.from('escala_diaria').select('*').eq('data_referencia', hoje);
 
       return {
         demandasSemana: demandas || [],
@@ -287,6 +287,9 @@ export const JarvisVoice: React.FC = () => {
     const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
     try {
+      const rawHora = draft.hora_evento || '10:00:00';
+      const safeHora = rawHora.length === 5 ? `${rawHora}:00` : rawHora;
+
       const { data, error } = await supabase
         .from('demandas_comunicacao')
         .insert({
@@ -295,7 +298,7 @@ export const JarvisVoice: React.FC = () => {
           contato: 'Gabinete CGCFN',
           titulo_evento: draft.titulo_evento.toUpperCase(),
           data_evento: draft.data_evento || getBrasiliaDateStr(),
-          hora_evento: draft.hora_evento || '10:00',
+          hora_evento: safeHora,
           local_evento: draft.local_evento || 'Fortaleza de São José - Ilha das Cobras',
           tipo_cobertura: draft.tipo_cobertura.length > 0 ? draft.tipo_cobertura : ['Fotografia'],
           status: 'pendente',

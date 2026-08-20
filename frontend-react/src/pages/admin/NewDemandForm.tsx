@@ -463,6 +463,8 @@ export const NewDemandForm: React.FC = () => {
       const coveragesArray = Array.isArray(formData.tipo_cobertura) && formData.tipo_cobertura.length > 0
         ? formData.tipo_cobertura
         : ['Fotografia'];
+      const finalMilitares = selectedMilitares.length > 0 ? JSON.stringify(selectedMilitares) : null;
+      const finalEncarregado = selectedMilitares.length > 0 ? String(selectedMilitares[0]) : null;
 
       if (editId) {
         const { error } = await supabase
@@ -482,8 +484,8 @@ export const NewDemandForm: React.FC = () => {
             sigiloso: !!formData.sigiloso,
             captacao_entrega: formData.captacao_entrega || 'apenas_captacao_bruto',
             produto_especifico: formData.observacoes || '',
-            notificar_militar_ids: selectedMilitares,
-            encarregado_id: selectedMilitares.length > 0 ? selectedMilitares[0] : null,
+            notificar_militar_ids: finalMilitares,
+            encarregado_id: finalEncarregado,
           })
           .eq('id', Number(editId));
 
@@ -534,8 +536,8 @@ export const NewDemandForm: React.FC = () => {
           captacao_entrega: formData.captacao_entrega || 'apenas_captacao_bruto',
           categoria_demanda: 'audiovisual',
           produto_especifico: formData.observacoes || '',
-          notificar_militar_ids: selectedMilitares,
-          encarregado_id: selectedMilitares.length > 0 ? selectedMilitares[0] : null,
+          notificar_militar_ids: finalMilitares,
+          encarregado_id: finalEncarregado,
         })
         .select();
 
@@ -571,7 +573,8 @@ export const NewDemandForm: React.FC = () => {
       }, 1200);
     } catch (err: any) {
       console.error('Erro ao submeter:', err);
-      toast.error(`Erro ao processar demanda: ${err?.message || err?.details || 'Falha no banco de dados.'}`);
+      const errMsg = err?.message || err?.details || err?.hint || (typeof err === 'string' ? err : 'Falha no banco de dados.');
+      toast.error(`Erro ao processar demanda: ${errMsg}`);
     } finally {
       setSubmitting(false);
     }

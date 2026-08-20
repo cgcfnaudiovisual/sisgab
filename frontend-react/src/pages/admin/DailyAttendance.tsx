@@ -261,22 +261,6 @@ export const DailyAttendance: React.FC = () => {
 
       if (error) throw error;
 
-      // Também sincroniza com presenca_diaria para integração 100% com o bot Telegram
-      try {
-        const payloadPresenca = registros.map((r) => ({
-          militar_id: r.militar_id,
-          nome_guerra: r.nome_guerra,
-          data: dataRef,
-          data_referencia: dataRef,
-          status: r.status,
-          observacao: r.detalhe || '',
-          updated_at: nowIso,
-        }));
-        await supabase.from('presenca_diaria').upsert(payloadPresenca);
-      } catch (pErr) {
-        console.warn('Sync presenca_diaria warning:', pErr);
-      }
-
       militaryAudio.playTacticalBeep();
       toast.success('Pronto das praças salvo com sucesso no banco de dados!');
     } catch (err: any) {
