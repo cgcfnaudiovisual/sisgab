@@ -409,14 +409,28 @@ export const NewDemandForm: React.FC = () => {
             score_esforco: score,
             sigiloso: formData.sigiloso,
             captacao_entrega: formData.captacao_entrega,
-            drive_url: formData.drive_url,
-            observacoes: formData.observacoes,
+            produto_especifico: formData.observacoes || '',
             notificar_militar_ids: selectedMilitares,
             encarregado_id: selectedMilitares.length > 0 ? selectedMilitares[0] : null,
           })
           .eq('id', Number(editId));
 
         if (error) throw error;
+
+        // Salvar link do Drive via API resiliente (usa campo autoridades como fallback)
+        if (formData.drive_url?.trim()) {
+          try {
+            await fetch('/api/drive/save_drive_link', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                demanda_id: Number(editId),
+                titulo_evento: formData.titulo_evento,
+                drive_url: formData.drive_url.trim(),
+              }),
+            });
+          } catch (_) { /* silencioso — dado não se perde, só não salva o link */ }
+        }
 
         militaryAudio.playTacticalBeep();
         toast.success(`Demanda #${editId} atualizada com sucesso!`, {
@@ -446,12 +460,26 @@ export const NewDemandForm: React.FC = () => {
           sigiloso: formData.sigiloso,
           status: 'pendente',
           captacao_entrega: formData.captacao_entrega,
-          drive_url: formData.drive_url,
-          observacoes: formData.observacoes,
+          produto_especifico: formData.observacoes || '',
           notificar_militar_ids: selectedMilitares,
           encarregado_id: selectedMilitares.length > 0 ? selectedMilitares[0] : null,
         })
         .select();
+
+      // Salvar link do Drive resilientemente após criação
+      if (formData.drive_url?.trim() && data && data[0]?.id) {
+        try {
+          await fetch('/api/drive/save_drive_link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              demanda_id: data[0].id,
+              titulo_evento: formData.titulo_evento,
+              drive_url: formData.drive_url.trim(),
+            }),
+          });
+        } catch (_) { /* silencioso */ }
+      }
 
       // Confetes comemorativos
       militaryAudio.playTacticalBeep();
@@ -473,6 +501,7 @@ export const NewDemandForm: React.FC = () => {
       setSubmitting(false);
     }
   };
+
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12">

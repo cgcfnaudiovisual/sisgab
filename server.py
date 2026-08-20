@@ -354,6 +354,26 @@ async def api_drive_create_event_folder(request: Request):
         print(f"[API_DRIVE_CREATE_ERR] {e}")
         return JSONResponse({'ok': False, 'error': str(e)}, status_code=500)
 
+@app.post("/api/drive/save_drive_link")
+async def api_drive_save_link(request: Request):
+    """Salva o link do Google Drive em uma demanda de forma resiliente (via campo autoridades se coluna drive_url não existir)."""
+    try:
+        body = await request.json()
+        demanda_id = body.get('demanda_id')
+        titulo = body.get('titulo_evento', '')
+        drive_url = body.get('drive_url', '').strip()
+
+        if not demanda_id or not drive_url:
+            return JSONResponse({'ok': False, 'error': 'demanda_id e drive_url são obrigatórios'}, status_code=400)
+
+        from database import salvar_demanda_drive_link
+        ok = await asyncio.to_thread(salvar_demanda_drive_link, int(demanda_id), titulo, drive_url)
+        return JSONResponse({'ok': ok})
+    except Exception as e:
+        print(f"[API_DRIVE_SAVE_LINK_ERR] {e}")
+        return JSONResponse({'ok': False, 'error': str(e)}, status_code=500)
+
+
 # ── SPA Catch-All: Entrega o React Router para todas as rotas ──
 @app.api_route("/{full_path:path}", methods=["GET", "HEAD"])
 async def serve_react_spa(full_path: str):
