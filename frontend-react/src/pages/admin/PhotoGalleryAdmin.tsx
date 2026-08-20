@@ -217,6 +217,16 @@ export const PhotoGalleryAdmin: React.FC = () => {
           setSelectedEventId(parsed[0].id);
         }
       }
+
+      // Tenta recuperar chave do Gemini salva nas configurações gerais
+      const { data: configData } = await supabase.from('config').select('*');
+      if (configData && configData.length > 0) {
+        const gemKey = configData.find((c: any) => c.chave === 'gemini_api_key' || c.chave === 'google_api_key')?.valor;
+        if (gemKey && typeof gemKey === 'string' && gemKey.trim().length > 5) {
+          setGeminiApiKey(gemKey.trim());
+          localStorage.setItem('sisgab_gemini_key', gemKey.trim());
+        }
+      }
     } catch (err) {
       console.warn('Erro ao carregar pautas da galeria:', err);
     } finally {
@@ -238,8 +248,8 @@ export const PhotoGalleryAdmin: React.FC = () => {
         const rawData: any[] = await res.json();
         const mapped: PhotoItem[] = rawData.map((d, idx) => {
           const photoId = d.id || `f_${idx + 1}`;
-          const aiMeta = cachedTagsMap[photoId] || (idx < 8 ? getMockInitialAiMeta(idx) : undefined);
-          const isDestaque = cachedDestaques.includes(photoId) || idx < 12;
+          const aiMeta = cachedTagsMap[photoId];
+          const isDestaque = cachedDestaques.includes(photoId);
 
           return {
             id: photoId,
@@ -253,8 +263,8 @@ export const PhotoGalleryAdmin: React.FC = () => {
             folder_type: isDestaque ? 'selecao' : 'local',
             is_selected_curation: isDestaque,
             is_destaque_top20: isDestaque,
-            similarity: 0.85 + (idx % 12) * 0.01,
-            matched_militar: idx % 4 === 0 ? 'Oficial Superior' : undefined,
+            similarity: undefined,
+            matched_militar: undefined,
             ai_tagged: !!aiMeta,
             ai_description: aiMeta?.descricao,
             elements: aiMeta?.elementos || [],
@@ -273,41 +283,6 @@ export const PhotoGalleryAdmin: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Mock de tags iniciais para enriquecer a experiência nos primeiros testes
-  const getMockInitialAiMeta = (idx: number): PhotoAiMetadata => {
-    const templates = [
-      {
-        descricao: 'Oficiais Superiores reunidos no Salão Nobre prestando continência ao Pavilhão Nacional.',
-        elementos: ['uniforme branco', 'medalhas', 'espada', 'bandeira nacional', 'salão nobre'],
-        cenario: 'Salão Nobre do CGCFN • Ilha das Cobras',
-        acoes: ['continência', 'solenidade militar', 'respeito'],
-        tags: ['continência', 'oficiais', 'salão nobre', 'bandeira', 'veteranos', 'solenidade', 'uniforme branco'],
-      },
-      {
-        descricao: 'Lancha de Ação Rápida dos Fuzileiros Navais navegando na Baía de Guanabara durante a Parada Naval.',
-        elementos: ['lancha blindada', 'baía de guanabara', 'colete tático', 'motor de popa', 'água'],
-        cenario: 'Baía de Guanabara • Parada Naval',
-        acoes: ['navegação', 'patrulha', 'desfile naval'],
-        tags: ['lancha', 'parada naval', 'baía de guanabara', 'mar', 'embarcação', 'fevereiro', 'ação rápida'],
-      },
-      {
-        descricao: 'Discurso de abertura do Comandante-Geral no auditório principal com tribuna de honra.',
-        elementos: ['microfone', 'tribuna de madeira', 'brasão cgcfn', 'telão de projeção'],
-        cenario: 'Auditório Principal do CGCFN',
-        acoes: ['discurso', 'pronunciamento oficial', 'aplauso'],
-        tags: ['discurso', 'comandante', 'tribuna', 'microfone', 'palco', 'auditório', 'cerimonial'],
-      },
-      {
-        descricao: 'Momento de confraternização e brinde no coquetel de encerramento do encontro.',
-        elementos: ['taças de brinde', 'mesa de recepção', 'iluminação cênica', 'terno'],
-        cenario: 'Área de Convivência e Recepção',
-        acoes: ['brinde', 'confraternização', 'conversa'],
-        tags: ['coquetel', 'brinde', 'recepção', 'confraternização', 'almoço', 'noite'],
-      },
-    ];
-    return templates[idx % templates.length];
   };
 
   // ── FILTRAGEM SEMÂNTICA MULTI-PARAMÉTRICA EM TEMPO REAL ──
@@ -461,6 +436,71 @@ export const PhotoGalleryAdmin: React.FC = () => {
     abortControllerRef.current = true;
     setIsBatchTagging(false);
     setIsTaggingPaused(false);
+  };
+
+  // ── MOTOR DE TAGUEAMENTO INDIVIDUAL (1 FOTO COM VISION AI) ──
+  const [isTaggingSingle, setIsTaggingSingle] = useState<string | null>(null);
+
+  const handleTagSinglePhoto = async (photo: PhotoItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+
+    const key = geminiApiKey.trim();
+    if (!key || key.length < 8) {
+      toast.error('Configure sua chave de API do Gemini para processar a visão computacional.');
+      setTaggerModalOpen(true);
+      return;
+    }
+
+    try {
+      setIsTaggingSingle(photo.id);
+      toast.loading(`Analisando foto "${photo.filename}" com Gemini Vision...`, { id: `tag_${photo.id}` });
+
+      const { base64, mimeType } = await imageToBase64(photo.thumbnail_url || photo.url);
+      const metadata = await analyzePhotoWithVision(base64, mimeType, key);
+
+      const cachedTagsRaw = localStorage.getItem(`sisgab_vision_tags_${selectedEventId}`);
+      const cachedTagsMap: Record<string, PhotoAiMetadata> = cachedTagsRaw ? JSON.parse(cachedTagsRaw) : {};
+      cachedTagsMap[photo.id] = metadata;
+      localStorage.setItem(`sisgab_vision_tags_${selectedEventId}`, JSON.stringify(cachedTagsMap));
+
+      // Atualiza estado local da foto em tempo real
+      setPhotos((prev) =>
+        prev.map((p) =>
+          p.id === photo.id
+            ? {
+                ...p,
+                ai_tagged: true,
+                ai_description: metadata.descricao,
+                elements: metadata.elementos,
+                scene: metadata.cenario,
+                actions: metadata.acoes,
+                tags: metadata.tags,
+                ai_status: 'tagged',
+              }
+            : p
+        )
+      );
+
+      if (lightboxPhoto && lightboxPhoto.id === photo.id) {
+        setLightboxPhoto({
+          ...lightboxPhoto,
+          ai_tagged: true,
+          ai_description: metadata.descricao,
+          elements: metadata.elementos,
+          scene: metadata.cenario,
+          actions: metadata.acoes,
+          tags: metadata.tags,
+          ai_status: 'tagged',
+        });
+      }
+
+      toast.success(`Foto "${photo.filename}" analisada e tagueada com sucesso!`, { id: `tag_${photo.id}` });
+    } catch (err: any) {
+      console.warn('Erro ao taguear foto individual:', err);
+      toast.error(`Erro ao analisar foto: ${err.message || 'Falha de conexão com a IA'}`, { id: `tag_${photo.id}` });
+    } finally {
+      setIsTaggingSingle(null);
+    }
   };
 
   // ── CURADORIA: ALTERNAR DESTAQUE TOP 20 / ESTRELA ──
@@ -793,21 +833,34 @@ export const PhotoGalleryAdmin: React.FC = () => {
 
                     {/* Metadados e Tags Semânticas da Foto */}
                     <div className="p-3 bg-slate-900/95 space-y-2 border-t border-slate-800">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-1">
                         <span className="text-[11px] font-bold text-slate-200 truncate">{photo.filename}</span>
                         {photo.ai_tagged ? (
-                          <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[9px] font-bold flex items-center gap-0.5 border border-purple-500/30">
+                          <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[9px] font-bold flex items-center gap-0.5 border border-purple-500/30 shrink-0">
                             <Sparkles className="w-2.5 h-2.5 text-amber-300" />
                             <span>IA</span>
                           </span>
                         ) : (
-                          <span className="text-[9px] text-slate-500">Sem tags</span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleTagSinglePhoto(photo, e)}
+                            disabled={isTaggingSingle === photo.id}
+                            className="px-2 py-0.5 rounded-md bg-purple-600/20 hover:bg-purple-600/35 text-purple-300 border border-purple-500/30 text-[9px] font-bold flex items-center gap-1 transition-all shrink-0 hover:scale-105"
+                            title="Analisar esta foto com Gemini Vision IA"
+                          >
+                            <Sparkles className="w-2.5 h-2.5 text-amber-300" />
+                            <span>{isTaggingSingle === photo.id ? '...' : 'Taguear IA'}</span>
+                          </button>
                         )}
                       </div>
 
-                      {photo.ai_description && (
+                      {photo.ai_description ? (
                         <p className="text-[10px] text-slate-400 line-clamp-2 leading-relaxed">
                           {photo.ai_description}
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-slate-600 italic">
+                          Aguardando análise de visão computacional...
                         </p>
                       )}
 
@@ -1076,17 +1129,28 @@ export const PhotoGalleryAdmin: React.FC = () => {
             </div>
 
             {/* Descrição e Tags Geradas pela IA */}
-            {lightboxPhoto.ai_description && (
+            {lightboxPhoto.ai_tagged && lightboxPhoto.ai_description ? (
               <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
-                <div className="flex items-center gap-1.5 text-[#00e5ff] font-bold text-xs">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                  <span>Análise de Visão Computacional:</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-[#00e5ff] font-bold text-xs">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                    <span>Análise de Visão Computacional (Gemini Vision AI):</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleTagSinglePhoto(lightboxPhoto)}
+                    disabled={isTaggingSingle === lightboxPhoto.id}
+                    className="text-[10px] text-purple-400 hover:text-purple-300 font-bold flex items-center gap-1"
+                  >
+                    <Sparkles className="w-3 h-3 text-amber-300" />
+                    <span>{isTaggingSingle === lightboxPhoto.id ? 'Reanalisando...' : 'Reanalisar com IA'}</span>
+                  </button>
                 </div>
                 <p className="text-slate-200 leading-relaxed text-xs">
                   {lightboxPhoto.ai_description}
                 </p>
 
-                {lightboxPhoto.tags && (
+                {lightboxPhoto.tags && lightboxPhoto.tags.length > 0 && (
                   <div className="flex items-center gap-1.5 flex-wrap pt-1">
                     {lightboxPhoto.tags.map((t, idx) => (
                       <span
@@ -1098,6 +1162,24 @@ export const PhotoGalleryAdmin: React.FC = () => {
                     ))}
                   </div>
                 )}
+              </div>
+            ) : (
+              <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <span className="text-slate-300 font-bold block text-xs">Fotografia Sem Análise de IA</span>
+                  <span className="text-[11px] text-slate-500">
+                    Processe agora com o Gemini Vision para extrair elementos, veículos, cenários e tags reais.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleTagSinglePhoto(lightboxPhoto)}
+                  disabled={isTaggingSingle === lightboxPhoto.id}
+                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-purple-600/30 transition-all hover:scale-105 shrink-0"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>{isTaggingSingle === lightboxPhoto.id ? 'Analisando Imagem...' : 'Analisar com Vision AI'}</span>
+                </button>
               </div>
             )}
 
