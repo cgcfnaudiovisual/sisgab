@@ -431,8 +431,28 @@ export const NewDemandForm: React.FC = () => {
       setSubmitting(true);
       const score = calculateScore();
 
-      const finalDataEvento = tipoData === 'sem_data' ? null : formData.data_evento;
-      const finalDataFim = tipoData === 'periodo' && formData.data_fim ? formData.data_fim : null;
+      // 1. Data do Evento (coluna DATE NOT NULL no PostgreSQL)
+      const dataFinal = (formData.data_evento && formData.data_evento !== 'SEM_DATA' && formData.data_evento.trim())
+        ? formData.data_evento.trim()
+        : getBrasiliaDateStr();
+
+      // 2. Data Fim (opcional, DATE NULL)
+      const dataFimFinal = (tipoData === 'periodo' && formData.data_fim && formData.data_fim.trim())
+        ? formData.data_fim.trim()
+        : null;
+
+      // 3. Hora do Evento (coluna TIME NOT NULL no PostgreSQL)
+      let horaFinal = '09:00:00';
+      if (formData.hora_evento && formData.hora_evento !== 'A DEFINIR' && formData.hora_evento.trim()) {
+        const h = formData.hora_evento.trim();
+        if (h.length === 5) {
+          horaFinal = `${h}:00`;
+        } else if (h.length >= 8) {
+          horaFinal = h.slice(0, 8);
+        }
+      } else if (tipoData === 'sem_data') {
+        horaFinal = '00:00:00';
+      }
 
       const cleanedAut = cleanAutoridadesText(formData.autoridades);
       const driveUrlTrimmed = formData.drive_url?.trim();
@@ -440,23 +460,27 @@ export const NewDemandForm: React.FC = () => {
         ? (cleanedAut ? `${cleanedAut} [DRIVE: ${driveUrlTrimmed}]` : `[DRIVE: ${driveUrlTrimmed}]`)
         : cleanedAut;
 
+      const coveragesArray = Array.isArray(formData.tipo_cobertura) && formData.tipo_cobertura.length > 0
+        ? formData.tipo_cobertura
+        : ['Fotografia'];
+
       if (editId) {
         const { error } = await supabase
           .from('demandas_comunicacao')
           .update({
-            solicitante_nome: formData.solicitante_nome,
-            setor: formData.setor,
-            contato: formData.contato || 'Gabinete CGCFN',
-            titulo_evento: formData.titulo_evento,
-            data_evento: finalDataEvento,
-            data_fim: finalDataFim,
-            hora_evento: tipoData === 'sem_data' ? 'A DEFINIR' : (formData.hora_evento || '09:00'),
-            local_evento: formData.local_evento || 'A Definir',
-            tipo_cobertura: formData.tipo_cobertura,
+            solicitante_nome: formData.solicitante_nome?.trim() || 'COMSOC / GABINETE',
+            setor: formData.setor?.trim() || 'Gabinete',
+            contato: formData.contato?.trim() || 'Gabinete CGCFN',
+            titulo_evento: formData.titulo_evento.trim(),
+            data_evento: dataFinal,
+            data_fim: dataFimFinal,
+            hora_evento: horaFinal,
+            local_evento: formData.local_evento?.trim() || 'A Definir',
+            tipo_cobertura: coveragesArray,
             autoridades: finalAutoridades,
             score_esforco: score,
-            sigiloso: formData.sigiloso,
-            captacao_entrega: formData.captacao_entrega,
+            sigiloso: !!formData.sigiloso,
+            captacao_entrega: formData.captacao_entrega || 'apenas_captacao_bruto',
             produto_especifico: formData.observacoes || '',
             notificar_militar_ids: selectedMilitares,
             encarregado_id: selectedMilitares.length > 0 ? selectedMilitares[0] : null,
@@ -473,7 +497,7 @@ export const NewDemandForm: React.FC = () => {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 demanda_id: Number(editId),
-                titulo_evento: formData.titulo_evento,
+                titulo_evento: formData.titulo_evento.trim(),
                 drive_url: driveUrlTrimmed,
               }),
             });
@@ -494,26 +518,28 @@ export const NewDemandForm: React.FC = () => {
       const { data, error } = await supabase
         .from('demandas_comunicacao')
         .insert({
-          solicitante_nome: formData.solicitante_nome,
-          setor: formData.setor,
-          contato: formData.contato || 'Gabinete CGCFN',
-          titulo_evento: formData.titulo_evento,
-          data_evento: finalDataEvento,
-          data_fim: finalDataFim,
-          hora_evento: tipoData === 'sem_data' ? 'A DEFINIR' : (formData.hora_evento || '09:00'),
-          local_evento: formData.local_evento || 'A Definir',
-          tipo_cobertura: formData.tipo_cobertura,
+          solicitante_nome: formData.solicitante_nome?.trim() || 'COMSOC / GABINETE',
+          setor: formData.setor?.trim() || 'Gabinete',
+          contato: formData.contato?.trim() || 'Gabinete CGCFN',
+          titulo_evento: formData.titulo_evento.trim(),
+          data_evento: dataFinal,
+          data_fim: dataFimFinal,
+          hora_evento: horaFinal,
+          local_evento: formData.local_evento?.trim() || 'A Definir',
+          tipo_cobertura: coveragesArray,
           autoridades: finalAutoridades,
           score_esforco: score,
-          sigiloso: formData.sigiloso,
+          sigiloso: !!formData.sigiloso,
           status: 'pendente',
-          captacao_entrega: formData.captacao_entrega,
+          captacao_entrega: formData.captacao_entrega || 'apenas_captacao_bruto',
           categoria_demanda: 'audiovisual',
           produto_especifico: formData.observacoes || '',
           notificar_militar_ids: selectedMilitares,
           encarregado_id: selectedMilitares.length > 0 ? selectedMilitares[0] : null,
         })
         .select();
+
+      if (error) throw error;
 
       // Salvar link do Drive resilientemente após criação
       if (driveUrlTrimmed && data && data[0]?.id) {
@@ -523,7 +549,7 @@ export const NewDemandForm: React.FC = () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               demanda_id: data[0].id,
-              titulo_evento: formData.titulo_evento,
+              titulo_evento: formData.titulo_evento.trim(),
               drive_url: driveUrlTrimmed,
             }),
           });
@@ -543,9 +569,9 @@ export const NewDemandForm: React.FC = () => {
       setTimeout(() => {
         navigate('/comsoc_homologar');
       }, 1200);
-    } catch (err) {
-      console.warn('Erro ao submeter:', err);
-      toast.error('Erro ao processar demanda no banco de dados.');
+    } catch (err: any) {
+      console.error('Erro ao submeter:', err);
+      toast.error(`Erro ao processar demanda: ${err?.message || err?.details || 'Falha no banco de dados.'}`);
     } finally {
       setSubmitting(false);
     }

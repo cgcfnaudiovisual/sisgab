@@ -330,16 +330,18 @@ async def api_drive_create_event_folder(request: Request):
         if not result:
             return JSONResponse({'ok': False, 'error': 'Falha ao criar pasta no Google Drive. Verifique as credenciais e a pasta mãe.'}, status_code=500)
 
-        # Se demanda_id foi informado, atualiza o drive_url na demanda automaticamente
+        # Se demanda_id foi informado, atualiza o drive_url na demanda automaticamente de forma resiliente
         if demanda_id:
             try:
-                from database import get_service_db_connection, get_db_connection
-                db = get_service_db_connection() or get_db_connection()
-                if db:
-                    db.table('demandas_comunicacao').update({
-                        'drive_url': result.get('evento_link', '')
-                    }).eq('id', int(demanda_id)).execute()
-                    print(f"[DRIVE_API] drive_url atualizado na demanda #{demanda_id}")
+                from database import salvar_demanda_drive_link
+                await asyncio.to_thread(
+                    salvar_demanda_drive_link,
+                    int(demanda_id),
+                    titulo,
+                    result.get('evento_link', ''),
+                    result.get('evento_folder_id', '')
+                )
+                print(f"[DRIVE_API] drive_url vinculado com sucesso na demanda #{demanda_id}")
             except Exception as e_db:
                 print(f"[DRIVE_API] Erro ao atualizar drive_url na demanda: {e_db}")
 

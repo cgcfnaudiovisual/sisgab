@@ -104,9 +104,15 @@ export const PhotoGalleryAdmin: React.FC = () => {
 
   // Estados Globais de Pautas e Eventos
   const [pautas, setPautas] = useState<PautaEvent[]>([]);
-  const [pautaFilter, setPautaFilter] = useState<'drive' | 'week' | 'month' | 'all'>('drive');
+  const [pautaFilter, setPautaFilter] = useState<'all' | 'drive' | 'sem_drive' | 'week' | 'month'>('all');
   const [selectedEventId, setSelectedEventId] = useState<number>(50);
   const [activeMainTab, setActiveMainTab] = useState<'locais' | 'drive' | 'selecao' | 'destaques' | 'tagueadas' | 'pessoal'>('locais');
+
+  // Estados de Gestão de Google Drive
+  const [creatingDrive, setCreatingDrive] = useState(false);
+  const [linkDriveModalOpen, setLinkDriveModalOpen] = useState(false);
+  const [linkDriveInput, setLinkDriveInput] = useState('');
+  const [savingDriveLink, setSavingDriveLink] = useState(false);
   
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [filteredPhotos, setFilteredPhotos] = useState<PhotoItem[]>([]);
@@ -224,32 +230,43 @@ export const PhotoGalleryAdmin: React.FC = () => {
     filterPhotosRealTime();
   }, [photos, searchQuery, selectedTagFilter, activeMainTab]);
 
-  // Carrega todas as pautas aprovadas e concluídas do Supabase
+  // Carrega todas as pautas aprovadas, concluídas e ativas do Supabase em ordem cronológica
   const loadPautasAndEvents = async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
         .from('demandas_comunicacao')
         .select('*')
-        .in('status', ['aprovada', 'concluida'])
-        .order('id', { ascending: false });
+        .in('status', ['aprovado', 'aprovada', 'concluida', 'pendente', 'em_andamento'])
+        .order('data_evento', { ascending: false });
 
       if (!error && data && data.length > 0) {
         const parsed: PautaEvent[] = data.map((d: any) => {
           let dfid = d.drive_folder_id || '';
-          const rawUrl = [d.drive_url, d.drive_link, d.autoridades, d.arquivo_url].filter(Boolean).join(' ');
-          if (!dfid && rawUrl) {
-            const m = rawUrl.match(/folders\/([a-zA-Z0-9_-]+)/) || rawUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
-            if (m) dfid = m[1];
-            else if (rawUrl.length in [28, 33, 34, 44] && !rawUrl.includes('/')) dfid = rawUrl.trim();
+          const rawUrl = [d.drive_url, d.drive_link, d.autoridades, d.arquivo_url, d.produto_especifico].filter(Boolean).join(' ');
+          let extractedUrl = '';
+          const mUrl = rawUrl.match(/https:\/\/drive\.google\.com[^\s\]]+/);
+          if (mUrl) {
+            extractedUrl = mUrl[0];
+            const mId = extractedUrl.match(/folders\/([a-zA-Z0-9_-]+)/) || extractedUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+            if (mId) dfid = mId[1];
+          } else if (rawUrl.includes('[DRIVE:')) {
+            const part = rawUrl.split('[DRIVE:')[1].split(']')[0].trim();
+            if (part.startsWith('http')) {
+              extractedUrl = part;
+              const mId = extractedUrl.match(/folders\/([a-zA-Z0-9_-]+)/);
+              if (mId) dfid = mId[1];
+            }
           }
+
+          const finalDriveUrl = extractedUrl || (dfid ? `https://drive.google.com/drive/folders/${dfid}` : undefined);
 
           return {
             id: d.id,
             titulo_evento: d.titulo_evento || 'Sem título',
-            data_evento: d.data_evento || '2026-02-15',
+            data_evento: d.data_evento || '2026-08-20',
             local_evento: d.local_evento || 'Gabinete CGCFN',
-            drive_url: dfid ? `https://drive.google.com/drive/folders/${dfid}` : (rawUrl.startsWith('http') ? rawUrl : undefined),
+            drive_url: finalDriveUrl,
             drive_folder_id: dfid || undefined,
             local_photos_count: d.id === 50 ? 697 : 0,
             status: d.status,
@@ -276,6 +293,110 @@ export const PhotoGalleryAdmin: React.FC = () => {
       console.warn('Erro ao carregar pautas da galeria:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Cria pasta oficial no Google Drive para a solenidade selecionada
+  const handleCreateDriveForCurrentPauta = async () => {
+    if (!currentPauta) return;
+    try {
+      setCreatingDrive(true);
+      toast.loading(`Criando pasta oficial no Google Drive para "${currentPauta.titulo_evento}"...`, { id: 'create_drive_galeria' });
+
+      const res = await fetch('/api/drive/create_event_folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          titulo_evento: currentPauta.titulo_evento,
+          data_evento: currentPauta.data_evento || '2026-08-20',
+          demanda_id: currentPauta.id,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.ok && json.evento_link) {
+        militaryAudio.playTacticalBeep();
+        toast.success('Pasta criada com sucesso no Google Drive!', {
+          id: 'create_drive_galeria',
+          description: 'Subpastas GERAL e SELEÇÃO estruturadas.',
+        });
+
+        // Atualiza estado local de pautas
+        setPautas((prev) =>
+          prev.map((p) =>
+            p.id === currentPauta.id
+              ? {
+                  ...p,
+                  drive_url: json.evento_link,
+                  drive_folder_id: json.evento_folder_id,
+                }
+              : p
+          )
+        );
+
+        // Recarrega fotos da galeria
+        loadEventPhotos(currentPauta.id);
+      } else {
+        toast.error(`Falha ao criar pasta: ${json.error || 'Erro desconhecido'}`, { id: 'create_drive_galeria' });
+      }
+    } catch (err: any) {
+      toast.error(`Erro ao comunicar com o servidor: ${err.message}`, { id: 'create_drive_galeria' });
+    } finally {
+      setCreatingDrive(false);
+    }
+  };
+
+  // Salva / Vincula link do Google Drive manualmente
+  const handleSaveDriveLinkManual = async () => {
+    if (!currentPauta || !linkDriveInput.trim()) {
+      toast.error('Informe uma URL válida do Google Drive.');
+      return;
+    }
+
+    try {
+      setSavingDriveLink(true);
+      toast.loading('Vinculando link do Google Drive à solenidade...', { id: 'save_drive_link' });
+
+      const res = await fetch('/api/drive/save_drive_link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          demanda_id: currentPauta.id,
+          titulo_evento: currentPauta.titulo_evento,
+          drive_url: linkDriveInput.trim(),
+        }),
+      });
+
+      const json = await res.json();
+      if (json.ok) {
+        militaryAudio.playTacticalBeep();
+        toast.success('Link do Google Drive vinculado com sucesso!', { id: 'save_drive_link' });
+
+        const m = linkDriveInput.match(/folders\/([a-zA-Z0-9_-]+)/) || linkDriveInput.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        const folderId = m ? m[1] : undefined;
+
+        setPautas((prev) =>
+          prev.map((p) =>
+            p.id === currentPauta.id
+              ? {
+                  ...p,
+                  drive_url: linkDriveInput.trim(),
+                  drive_folder_id: folderId,
+                }
+              : p
+          )
+        );
+
+        setLinkDriveModalOpen(false);
+        setLinkDriveInput('');
+        loadEventPhotos(currentPauta.id);
+      } else {
+        toast.error(`Falha ao vincular link: ${json.error || 'Erro desconhecido'}`, { id: 'save_drive_link' });
+      }
+    } catch (err: any) {
+      toast.error(`Erro de conexão: ${err.message}`, { id: 'save_drive_link' });
+    } finally {
+      setSavingDriveLink(false);
     }
   };
 
@@ -681,6 +802,9 @@ export const PhotoGalleryAdmin: React.FC = () => {
       if (pautaFilter === 'drive') {
         return !!p.drive_folder_id || !!p.drive_url || p.id === 50;
       }
+      if (pautaFilter === 'sem_drive') {
+        return !p.drive_folder_id && !p.drive_url && p.id !== 50;
+      }
       if (pautaFilter === 'week') {
         if (!p.data_evento) return false;
         const evDate = new Date(p.data_evento);
@@ -737,13 +861,23 @@ export const PhotoGalleryAdmin: React.FC = () => {
 
       {/* ── 2. SELETOR DE EVENTO + FILTROS DE PERÍODO + BUSCA SEMÂNTICA ── */}
       <div className="p-4 sm:p-5 rounded-3xl bg-[#0b1222] border border-slate-800 space-y-4 shadow-xl">
-        {/* Pílulas de Filtro de Eventos (Com Drive, Mês, Semana, Todos) */}
+        {/* Pílulas de Filtro de Eventos (Todas, Com Drive, Sem Drive, Mês, Semana) */}
         <div className="flex items-center justify-between gap-2 flex-wrap border-b border-slate-800/80 pb-3">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-[11px] font-bold text-slate-400 mr-1 flex items-center gap-1">
               <FolderOpen className="w-3.5 h-3.5 text-[#00e5ff]" />
               <span>Filtrar Solenidades:</span>
             </span>
+            <button
+              onClick={() => setPautaFilter('all')}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                pautaFilter === 'all'
+                  ? 'bg-slate-700 text-white font-black shadow-md'
+                  : 'bg-slate-900 border border-slate-800 text-slate-300 hover:border-slate-600'
+              }`}
+            >
+              📁 Todas ({pautas.length})
+            </button>
             <button
               onClick={() => setPautaFilter('drive')}
               className={`px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
@@ -752,9 +886,22 @@ export const PhotoGalleryAdmin: React.FC = () => {
                   : 'bg-slate-900 border border-slate-800 text-slate-300 hover:border-[#c5a059]'
               }`}
             >
-              <span>☁️ Com Fotos no Drive</span>
+              <span>☁️ Com Drive</span>
               <span className="px-1.5 py-0.2 rounded-full bg-slate-950/40 text-[10px]">
                 {pautas.filter((p) => p.drive_folder_id || p.drive_url || p.id === 50).length}
+              </span>
+            </button>
+            <button
+              onClick={() => setPautaFilter('sem_drive')}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                pautaFilter === 'sem_drive'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                  : 'bg-slate-900 border border-slate-800 text-slate-300 hover:border-amber-500/50'
+              }`}
+            >
+              <span>⚠️ Sem Drive</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-slate-950/40 text-[10px]">
+                {pautas.filter((p) => !p.drive_folder_id && !p.drive_url && p.id !== 50).length}
               </span>
             </button>
             <button
@@ -776,16 +923,6 @@ export const PhotoGalleryAdmin: React.FC = () => {
               }`}
             >
               🗓️ Esta Semana
-            </button>
-            <button
-              onClick={() => setPautaFilter('all')}
-              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                pautaFilter === 'all'
-                  ? 'bg-slate-700 text-white font-black shadow-md'
-                  : 'bg-slate-900 border border-slate-800 text-slate-300 hover:border-slate-600'
-              }`}
-            >
-              📁 Todas ({pautas.length})
             </button>
           </div>
 
@@ -861,28 +998,73 @@ export const PhotoGalleryAdmin: React.FC = () => {
                 <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
                   <span>Acervo: <strong className="text-[#00e5ff]">{photos.length} fotos indexadas</strong></span>
                   {currentPauta.drive_url ? (
-                    <span className="text-emerald-400 flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" />
+                    <span className="text-emerald-400 flex items-center gap-1 font-semibold">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>Google Drive Vinculado</span>
                     </span>
                   ) : (
-                    <span className="text-amber-400">Sem pasta Drive vinculada</span>
+                    <span className="text-amber-400 font-semibold flex items-center gap-1">
+                      <ShieldAlert className="w-3.5 h-3.5" />
+                      <span>Sem pasta Drive vinculada</span>
+                    </span>
                   )}
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-2 shrink-0 flex-wrap">
-              {currentPauta.drive_url && (
-                <a
-                  href={currentPauta.drive_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600 border border-blue-500/40 text-blue-300 hover:text-white font-bold text-[11px] flex items-center gap-1.5 transition-all shadow-sm"
-                >
-                  <ExternalLink className="w-3 h-3" />
-                  <span>Abrir no Google Drive</span>
-                </a>
+              {currentPauta.drive_url ? (
+                <>
+                  <a
+                    href={currentPauta.drive_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600 border border-blue-500/40 text-blue-300 hover:text-white font-bold text-[11px] flex items-center gap-1.5 transition-all shadow-sm"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    <span>Abrir no Google Drive</span>
+                  </a>
+                  <button
+                    onClick={() => {
+                      setLinkDriveInput(currentPauta.drive_url || '');
+                      setLinkDriveModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white font-bold text-[11px] flex items-center gap-1.5 transition-all"
+                  >
+                    <Link className="w-3 h-3 text-[#c5a059]" />
+                    <span>Alterar Link</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={handleCreateDriveForCurrentPauta}
+                    disabled={creatingDrive}
+                    className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:brightness-110 text-white font-bold text-[11px] flex items-center gap-1.5 transition-all shadow-sm disabled:opacity-50"
+                  >
+                    {creatingDrive ? (
+                      <>
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        <span>Criando Pasta...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Cloud className="w-3 h-3" />
+                        <span>Criar Pasta no Drive</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setLinkDriveInput('');
+                      setLinkDriveModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 hover:text-amber-200 font-bold text-[11px] flex items-center gap-1.5 transition-all"
+                  >
+                    <Link className="w-3 h-3 text-amber-400" />
+                    <span>Vincular Link</span>
+                  </button>
+                </>
               )}
               <a
                 href={`/evento/${currentPauta.id}`}
@@ -1020,7 +1202,7 @@ export const PhotoGalleryAdmin: React.FC = () => {
                     'Tente buscar por termos mais genéricos (ex: continência, lancha, oficial, salão nobre) ou limpe os filtros.'
                   )}
                 </p>
-                <div className="flex items-center justify-center gap-2 pt-2">
+                <div className="flex items-center justify-center gap-2 pt-2 flex-wrap">
                   {photos.length === 0 && currentPauta?.drive_url && (
                     <a
                       href={currentPauta.drive_url}
@@ -1032,6 +1214,40 @@ export const PhotoGalleryAdmin: React.FC = () => {
                       <span>Acessar Pasta no Google Drive</span>
                     </a>
                   )}
+
+                  {photos.length === 0 && !currentPauta?.drive_url && (
+                    <>
+                      <button
+                        onClick={handleCreateDriveForCurrentPauta}
+                        disabled={creatingDrive}
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:brightness-110 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-lg disabled:opacity-50"
+                      >
+                        {creatingDrive ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Criando Pasta Oficial no Drive...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Cloud className="w-3.5 h-3.5" />
+                            <span>Criar Pasta Oficial no Google Drive</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setLinkDriveInput('');
+                          setLinkDriveModalOpen(true);
+                        }}
+                        className="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center gap-1.5 transition-all"
+                      >
+                        <Link className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Vincular Link Existente do Drive</span>
+                      </button>
+                    </>
+                  )}
+
                   {photos.length > 0 && (
                     <button
                       onClick={() => {
@@ -1620,6 +1836,83 @@ export const PhotoGalleryAdmin: React.FC = () => {
                 className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
               >
                 Disparar no WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 9. MODAL DE VINCULAÇÃO MANUAL DE GOOGLE DRIVE ── */}
+      {linkDriveModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in">
+          <div className="max-w-md w-full p-6 rounded-3xl bg-[#0b1222] border-2 border-[#00e5ff]/60 space-y-4 shadow-2xl text-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Cloud className="w-5 h-5 text-[#00e5ff]" />
+                <h3 className="text-sm font-black text-white uppercase">Vincular Pasta do Google Drive</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setLinkDriveModalOpen(false);
+                  setLinkDriveInput('');
+                }}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div>
+              <p className="text-slate-300">
+                Solenidade: <strong className="text-white">{currentPauta?.titulo_evento}</strong>
+              </p>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Cole a URL pública ou compartilhada da pasta oficial do Google Drive para vincular à galeria:
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                URL da Pasta do Google Drive:
+              </label>
+              <input
+                type="url"
+                placeholder="https://drive.google.com/drive/folders/1aBcDeFgHiJkLmNoPqRsTuVwXyZ"
+                value={linkDriveInput}
+                onChange={(e) => setLinkDriveInput(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#00e5ff] shadow-inner"
+              />
+            </div>
+
+            <div className="pt-3 border-t border-slate-800 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setLinkDriveModalOpen(false);
+                  setLinkDriveInput('');
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 font-bold hover:text-white hover:bg-slate-800"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveDriveLinkManual}
+                disabled={savingDriveLink || !linkDriveInput.trim()}
+                className="flex-1 py-2.5 rounded-xl bg-[#00e5ff] hover:bg-[#00cce6] text-slate-950 font-black flex items-center justify-center gap-1.5 shadow-lg shadow-[#00e5ff]/20 disabled:opacity-50"
+              >
+                {savingDriveLink ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Salvando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Salvar e Vincular</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
