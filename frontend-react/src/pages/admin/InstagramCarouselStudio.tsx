@@ -47,6 +47,7 @@ import {
 import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { generateGeminiContent } from '../../utils/geminiClient';
+import { removeBackgroundAi } from '../../utils/backgroundRemover';
 import { supabase } from '../../api/supabase';
 
 // Formatos de Publicação
@@ -177,6 +178,8 @@ export interface CarouselSlide {
   gradAngle: number;
   texture: TextureType;
   imageSrc?: string;
+  originalImageSrc?: string;
+  isBgRemoved?: boolean;
   imageOpacity: number;
   overlayStrength: number;
   imageZoom?: number;
@@ -340,6 +343,13 @@ export const InstagramCarouselStudio: React.FC = () => {
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
   const [isOptimizingHeadline, setIsOptimizingHeadline] = useState(false);
   const [geminiApiKey, setGeminiApiKey] = useState<string>('');
+  
+  // Estado de Remoção de Fundo IA
+  const [isRemovingBg, setIsRemovingBg] = useState(false);
+  const [bgRemoveProgress, setBgRemoveProgress] = useState<{ percent: number; label: string }>({
+    percent: 0,
+    label: '',
+  });
 
   // Galeria de imagens
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
@@ -1180,6 +1190,48 @@ export const InstagramCarouselStudio: React.FC = () => {
     toast.success('Slide removido!');
   };
 
+  // Remoção de Fundo IA (Alta Fidelidade com WebAssembly/ONNX)
+  const handleRemoveBackground = async () => {
+    if (!activeSlide.imageSrc) {
+      toast.error('Nenhuma foto selecionada no slide atual!');
+      return;
+    }
+    setIsRemovingBg(true);
+    setBgRemoveProgress({ percent: 10, label: 'Iniciando IA de recorte...' });
+    try {
+      const original = activeSlide.originalImageSrc || activeSlide.imageSrc;
+      const transparentDataUrl = await removeBackgroundAi(original, (percent, label) => {
+        setBgRemoveProgress({ percent, label });
+      });
+
+      const updated = [...slides];
+      updated[currentSlideIndex] = {
+        ...updated[currentSlideIndex],
+        originalImageSrc: original,
+        imageSrc: transparentDataUrl,
+        isBgRemoved: true,
+      };
+      setSlides(updated);
+      toast.success('Fundo removido com IA de alta fidelidade!');
+    } catch (e: any) {
+      toast.error(`Falha ao remover fundo: ${e.message}`);
+    } finally {
+      setIsRemovingBg(false);
+    }
+  };
+
+  const handleRestoreBackground = () => {
+    if (!activeSlide.originalImageSrc) return;
+    const updated = [...slides];
+    updated[currentSlideIndex] = {
+      ...updated[currentSlideIndex],
+      imageSrc: activeSlide.originalImageSrc,
+      isBgRemoved: false,
+    };
+    setSlides(updated);
+    toast.success('Fundo original restaurado!');
+  };
+
   // Otimizar Título com IA (Gemini 3.7 Flash)
   const handleOptimizeHeadline = async () => {
     if (!geminiApiKey) {
@@ -1762,6 +1814,66 @@ Retorne ESTRITAMENTE um array JSON contendo objetos no seguinte formato:
 
             {activeSlide.imageSrc && (
               <div className="space-y-3 pt-3 border-t border-slate-900">
+                {/* 🪄 Ferramenta de Remoção de Fundo IA */}
+                <div className="p-3 rounded-2xl bg-gradient-to-r from-purple-950/40 via-indigo-950/40 to-blue-950/40 border border-purple-500/40 space-y-2 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-purple-300 text-xs flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+                      <span>Recorte IA de Alta Fidelidade (Alpha PNG)</span>
+                    </span>
+                    {activeSlide.isBgRemoved && (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-black border border-emerald-500/30">
+                        ✓ Fundo Removido
+                      </span>
+                    )}
+                  </div>
+
+                  {isRemovingBg ? (
+                    <div className="space-y-1.5 py-1">
+                      <div className="flex justify-between text-[11px] text-purple-200 font-bold">
+                        <span className="flex items-center gap-1.5">
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-purple-400" />
+                          <span>{bgRemoveProgress.label}</span>
+                        </span>
+                        <span className="font-mono">{bgRemoveProgress.percent}%</span>
+                      </div>
+                      <div className="w-full h-2 rounded-full bg-slate-900 overflow-hidden border border-purple-500/30">
+                        <div
+                          className="h-full bg-gradient-to-r from-purple-500 via-indigo-500 to-cyan-400 transition-all duration-300"
+                          style={{ width: `${bgRemoveProgress.percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  ) : activeSlide.isBgRemoved ? (
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleRestoreBackground}
+                        className="w-full py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Restaurar Fundo Original</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRemoveBackground}
+                        className="py-2 px-3 rounded-xl bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/50 text-purple-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shrink-0"
+                        title="Processar novamente"
+                      >
+                        <span>Re-processar</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleRemoveBackground}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs shadow-lg shadow-purple-600/25 flex items-center justify-center gap-2 transition-all hover:scale-[1.01]"
+                    >
+                      <Sparkles className="w-4 h-4 text-amber-300" />
+                      <span>Remover Fundo da Foto com IA</span>
+                    </button>
+                  )}
+                </div>
                 {/* 1. Zoom / Escala da Foto */}
                 <div className="space-y-1.5 p-3 rounded-xl bg-slate-900/70 border border-slate-800">
                   <div className="flex items-center justify-between text-[11px]">
