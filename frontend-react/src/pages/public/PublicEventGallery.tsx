@@ -46,10 +46,10 @@ export const PublicEventGallery: React.FC = () => {
   const urlFacialMode = searchParams.get('modo') === 'facial';
   const [showFacialFinder, setShowFacialFinder] = useState(urlFacialMode);
 
-  const [eventName, setEventName] = useState('ENCONTRO DE VETERANOS (OFICIAIS SUPERIORES)');
-  const [eventDate, setEventDate] = useState('14 de Agosto de 2026');
-  const [eventLocation, setEventLocation] = useState('CIASC • Fortaleza de São José');
-  const [driveUrl, setDriveUrl] = useState('https://drive.google.com/drive/folders/1cqK3F24QQCj5tgkXy-zJZoP1al-dF3Yv');
+  const [eventName, setEventName] = useState('');
+  const [eventDate, setEventDate] = useState('');
+  const [eventLocation, setEventLocation] = useState('');
+  const [driveUrl, setDriveUrl] = useState('');
 
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [filteredPhotos, setFilteredPhotos] = useState<PhotoItem[]>([]);

@@ -153,10 +153,17 @@ def get_event_drive_photos(event_id: str):
             
         import drive_service
         raw_photos = []
-        if _get_geral_photos:
-            raw_photos = _get_geral_photos(drive_folder_id)
+        try:
+            if _get_geral_photos:
+                raw_photos = _get_geral_photos(drive_folder_id)
+        except Exception as ex_g:
+            print(f"[WARN _get_geral_photos]: {ex_g}")
+
         if not raw_photos:
-            raw_photos = drive_service.list_files(drive_folder_id, mime_filter='image/', page_size=5000) or []
+            try:
+                raw_photos = drive_service.list_files(drive_folder_id, mime_filter='image/', page_size=5000) or []
+            except Exception as ex_l:
+                print(f"[WARN list_files]: {ex_l}")
             
         formatted_photos = []
         for p in raw_photos:
