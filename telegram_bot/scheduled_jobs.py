@@ -222,28 +222,55 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
             respondidos_nomes = set()
             respondidos_tids = set()
 
-            # 1. Checa escala_diaria (Supabase)
+            PENDING_STATUSES = {'', 'PEND', 'PENDENTE', 'NONE', 'NULL'}
+
+            # 1. Checa escala_diaria no Supabase (data_referencia ou data)
             try:
-                res_esc = conn.table('escala_diaria').select('nome, cargo').eq('data', hoje_str).execute()
+                # Tenta pelo formato novo (data_referencia, militar_id, status, nome_guerra)
+                res_esc = conn.table('escala_diaria').select('*').or_(f"data_referencia.eq.{hoje_str},data.eq.{hoje_str}").execute()
                 if res_esc and res_esc.data:
                     for item in res_esc.data:
-                        c_val = str(item.get('cargo') or '').strip().upper()
-                        if c_val and c_val not in ('PENDENTE', 'NONE', 'NULL', ''):
-                            n_val = str(item.get('nome') or '').strip()
-                            if n_val:
-                                respondidos_nomes.add(n_val.upper())
-                                clean_n = _clean_military_name(n_val)
-                                if clean_n: respondidos_nomes.add(clean_n)
-            except Exception:
-                pass
+                        st = str(item.get('status') or item.get('cargo') or '').strip().upper()
+                        if st and st not in PENDING_STATUSES:
+                            m_id = str(item.get('militar_id') or '').strip()
+                            n_g = str(item.get('nome_guerra') or item.get('nome') or '').strip()
+                            t_id = str(item.get('telegram_id') or '').strip()
+                            if m_id and m_id not in PENDING_STATUSES:
+                                respondidos_tids.add(m_id)
+                            if t_id and t_id.isdigit():
+                                respondidos_tids.add(t_id)
+                            if n_g:
+                                respondidos_nomes.add(n_g.upper())
+                                clean_n = _clean_military_name(n_g)
+                                if clean_n:
+                                    respondidos_nomes.add(clean_n)
+            except Exception as e_esc_chk:
+                # Fallback se a coluna data_referencia ou data for específica
+                try:
+                    res_esc_fb = conn.table('escala_diaria').select('*').execute()
+                    if res_esc_fb and res_esc_fb.data:
+                        for item in res_esc_fb.data:
+                            dt_item = str(item.get('data_referencia') or item.get('data') or '')[:10]
+                            if dt_item == hoje_str:
+                                st = str(item.get('status') or item.get('cargo') or '').strip().upper()
+                                if st and st not in PENDING_STATUSES:
+                                    m_id = str(item.get('militar_id') or '').strip()
+                                    n_g = str(item.get('nome_guerra') or item.get('nome') or '').strip()
+                                    if m_id: respondidos_tids.add(m_id)
+                                    if n_g:
+                                        respondidos_nomes.add(n_g.upper())
+                                        clean_n = _clean_military_name(n_g)
+                                        if clean_n: respondidos_nomes.add(clean_n)
+                except Exception:
+                    pass
 
-            # 2. Checa presenca_diaria (Supabase)
+            # 2. Checa presenca_diaria no Supabase
             try:
-                res_pr = conn.table('presenca_diaria').select('nome_guerra, telegram_id, user_id, militar_id, status').eq('data', hoje_str).execute()
+                res_pr = conn.table('presenca_diaria').select('*').eq('data', hoje_str).execute()
                 if res_pr and res_pr.data:
                     for p in res_pr.data:
                         st = str(p.get('status') or '').strip().upper()
-                        if st and st not in ('PENDENTE', 'NONE', 'NULL', ''):
+                        if st and st not in PENDING_STATUSES:
                             ng = str(p.get('nome_guerra') or '').strip()
                             p_tid = str(p.get('telegram_id') or '').strip()
                             p_uid = str(p.get('user_id') or '').strip()
@@ -258,15 +285,15 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
             except Exception:
                 pass
             
-            # 3. Checa presenca_diaria local (SQLite fallback)
+            # 3. Checa presenca_diaria e escala_diaria local (SQLite fallback)
             try:
                 from sqlite_adapter import LocalSQLiteClient
                 local_db = LocalSQLiteClient()
-                res_loc = local_db.table('presenca_diaria').select('nome_guerra, telegram_id, user_id, status').eq('data', hoje_str).execute()
+                res_loc = local_db.table('presenca_diaria').select('*').eq('data', hoje_str).execute()
                 if res_loc and res_loc.data:
                     for lp in res_loc.data:
                         st = str(lp.get('status') or '').strip().upper()
-                        if st and st not in ('PENDENTE', 'NONE', 'NULL', ''):
+                        if st and st not in PENDING_STATUSES:
                             ng = str(lp.get('nome_guerra') or '').strip()
                             p_tid = str(lp.get('telegram_id') or '').strip()
                             if ng:
@@ -277,20 +304,23 @@ async def trigger_10min_attendance_reminder(bot, force_now=False):
             except Exception:
                 pass
 
-            # 4. Afastados (Férias, Licença, Dispensa Médica)
+            # 4. Afastados (Férias, Licença, Dispensa Médica) com data_fim ativa
             try:
-                res_ext = conn.table('presenca_diaria').select('nome_guerra, telegram_id, data_fim').in_('status', ['FE', 'L', 'DM']).lte('data', hoje_str).execute()
+                res_ext = conn.table('presenca_diaria').select('*').in_('status', ['FE', 'L', 'DM', 'LE', 'LTS', 'DS']).execute()
                 if res_ext and res_ext.data:
                     for item in res_ext.data:
                         df = item.get('data_fim')
-                        if df and str(df)[:10] >= hoje_str:
+                        di = str(item.get('data') or item.get('data_referencia') or '')[:10]
+                        if df and str(df)[:10] >= hoje_str and di <= hoje_str:
                             ng_ext = str(item.get('nome_guerra') or '').strip()
                             e_tid = str(item.get('telegram_id') or '').strip()
+                            e_mid = str(item.get('militar_id') or '').strip()
                             if ng_ext:
                                 respondidos_nomes.add(ng_ext.upper())
                                 clean_ng = _clean_military_name(ng_ext)
                                 if clean_ng: respondidos_nomes.add(clean_ng)
                             if e_tid and e_tid.isdigit(): respondidos_tids.add(e_tid)
+                            if e_mid: respondidos_tids.add(e_mid)
             except Exception:
                 pass
                 

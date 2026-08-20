@@ -245,7 +245,8 @@ export const DailyAttendance: React.FC = () => {
   const handleSaveToSupabase = async () => {
     setSaving(true);
     try {
-      const payload = registros.map((r) => ({
+      const nowIso = new Date().toISOString();
+      const payloadEscala = registros.map((r) => ({
         data_referencia: dataRef,
         militar_id: r.militar_id,
         nome_guerra: r.nome_guerra,
@@ -254,14 +255,31 @@ export const DailyAttendance: React.FC = () => {
         status: r.status,
         detalhe: r.detalhe || null,
         atualizado_por: user?.nome_guerra || 'OPERADOR',
-        atualizado_em: new Date().toISOString(),
+        atualizado_em: nowIso,
       }));
 
-      const { error } = await supabase.from('escala_diaria').upsert(payload, {
+      const { error } = await supabase.from('escala_diaria').upsert(payloadEscala, {
         onConflict: 'data_referencia,militar_id',
       });
 
       if (error) throw error;
+
+      // Também sincroniza com presenca_diaria para integração 100% com o bot Telegram
+      try {
+        const payloadPresenca = registros.map((r) => ({
+          militar_id: r.militar_id,
+          nome_guerra: r.nome_guerra,
+          data: dataRef,
+          data_referencia: dataRef,
+          status: r.status,
+          observacao: r.detalhe || '',
+          updated_at: nowIso,
+        }));
+        await supabase.from('presenca_diaria').upsert(payloadPresenca);
+      } catch (pErr) {
+        console.warn('Sync presenca_diaria warning:', pErr);
+      }
+
       confetti({ particleCount: 60, spread: 60, origin: { y: 0.6 } });
       toast.success('Pronto das praças salvo com sucesso no banco de dados!');
     } catch (err: any) {
