@@ -73,7 +73,32 @@ async def startup_event():
         if _get_event_matrix:
             asyncio.create_task(asyncio.to_thread(_get_event_matrix, "50"))
     except Exception as e:
-        print(f"[SisGAB] ⚠️ Aviso na inicialização: {e}")
+        print(f"[SisGAB] ⚠️ Aviso na inicialização da IA: {e}")
+
+    try:
+        import telegram_bot
+        print("🤖 [SisGAB 2.0] Inicializando Bot do Telegram...", flush=True)
+        asyncio.create_task(telegram_bot.init_bot())
+    except Exception as e:
+        print(f"[SisGAB] ⚠️ Erro ao inicializar Telegram Bot: {e}", flush=True)
+
+    try:
+        from notifications_manager import AlertsManager, start_19h_briefing_scheduler, start_15h_demand_scheduler
+        AlertsManager.start_alerts_scheduler()
+        start_19h_briefing_scheduler()
+        start_15h_demand_scheduler()
+        print("⏰ [SisGAB 2.0] Agendadores de notificações (15h / 19h) ativos.", flush=True)
+    except Exception as e:
+        print(f"[SisGAB] ⚠️ Erro ao iniciar agendadores: {e}", flush=True)
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    try:
+        import telegram_bot
+        await telegram_bot.stop_bot()
+        print("🤖 [SisGAB 2.0] Bot do Telegram encerrado.", flush=True)
+    except Exception as e:
+        print(f"[SisGAB] Erro ao encerrar bot: {e}", flush=True)
 
 def get_event_drive_photos(event_id: str):
     """
@@ -268,9 +293,14 @@ async def api_portal_match(
 async def proxy_image(url: str = "", drive_id: str = ""):
     """Proxy CORS para download e conversão de fotos do Google Drive para uso em IA / Vision."""
     try:
-        target_url = url
-        if drive_id and not target_url:
-            target_url = f"https://drive.google.com/thumbnail?id={drive_id}&sz=w1000"
+        # Se drive_id não foi passado, tenta extrair de url
+        if not drive_id and url:
+            import re
+            m = re.search(r'/d/([a-zA-Z0-9_-]+)', url) or re.search(r'[?&]id=([a-zA-Z0-9_-]+)', url)
+            if m:
+                drive_id = m.group(1)
+
+        target_url = f"https://drive.google.com/thumbnail?id={drive_id}&sz=w1200" if drive_id else url
 
         if not target_url:
             return JSONResponse({'error': 'URL ou drive_id não informado'}, status_code=400)
@@ -282,11 +312,12 @@ async def proxy_image(url: str = "", drive_id: str = ""):
         try:
             async with httpx.AsyncClient(follow_redirects=True, timeout=20.0, headers=headers) as client:
                 resp = await client.get(target_url)
-                if resp.status_code == 200 and resp.content:
-                    media_type = resp.headers.get("content-type", "image/jpeg")
+                media_type = resp.headers.get("content-type", "")
+                # Aceita apenas se for imagem real e não HTML
+                if resp.status_code == 200 and resp.content and ("image" in media_type or resp.content.startswith(b'\xff\xd8') or resp.content.startswith(b'\x89PNG')):
                     return Response(
                         content=resp.content,
-                        media_type=media_type,
+                        media_type="image/jpeg" if not media_type or "html" in media_type else media_type,
                         headers={
                             "Access-Control-Allow-Origin": "*",
                             "Access-Control-Allow-Methods": "GET, OPTIONS",
