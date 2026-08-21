@@ -198,6 +198,274 @@ export const PhotoGalleryAdmin: React.FC = () => {
     });
   };
 
+  // ── ESTADOS DO GERENCIADOR DE CONTAS GOOGLE DRIVE & UPLOAD DIRETO ──
+  const [driveManagerModalOpen, setDriveManagerModalOpen] = useState(false);
+  const [driveAccountsData, setDriveAccountsData] = useState<{
+    active_mode: string;
+    connection_status: boolean;
+    connection_message: string;
+    has_oauth: boolean;
+    oauth_email?: string;
+    has_service_account: boolean;
+    sa_email?: string;
+    pastas_mae: Array<{ id: string; nome: string; folder_id: string; padrao?: boolean }>;
+  } | null>(null);
+  const [loadingDriveAccounts, setLoadingDriveAccounts] = useState(false);
+  const [oauthTokenInput, setOauthTokenInput] = useState('');
+  const [savingOAuthToken, setSavingOAuthToken] = useState(false);
+
+  // Upload Direto de Fotos via Web/Celular
+  const webUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const [isUploadingWeb, setIsUploadingWeb] = useState(false);
+  const [webUploadProgress, setWebUploadProgress] = useState({ current: 0, total: 0 });
+
+  const loadDriveAccountsInfo = async () => {
+    try {
+      setLoadingDriveAccounts(true);
+      const res = await fetch('/api/drive/accounts');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.ok) {
+          setDriveAccountsData(json);
+        }
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar dados de contas do Drive:', err);
+    } finally {
+      setLoadingDriveAccounts(false);
+    }
+  };
+
+  useEffect(() => {
+    if (driveManagerModalOpen) {
+      loadDriveAccountsInfo();
+    }
+  }, [driveManagerModalOpen]);
+
+  const handleSwitchDriveAuthMode = async (newMode: 'oauth' | 'service_account') => {
+    try {
+      militaryAudio.playTacticalBeep();
+      toast.loading(`Alternando modo ativo para ${newMode === 'oauth' ? 'Conta Pessoal (OAuth)' : 'Service Account (Robô)'}...`, { id: 'switch_drive' });
+      const res = await fetch('/api/drive/set_mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: newMode }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        toast.success(`Modo ativado: ${newMode === 'oauth' ? '🔑 OAuth 2.0 (Conta Pessoal)' : '🤖 Service Account'}!`, {
+          id: 'switch_drive',
+          description: json.message,
+        });
+        loadDriveAccountsInfo();
+      } else {
+        toast.error(`Erro: ${json.error}`, { id: 'switch_drive' });
+      }
+    } catch (err: any) {
+      toast.error(`Falha: ${err.message}`, { id: 'switch_drive' });
+    }
+  };
+
+  const handleSaveOAuthToken = async () => {
+    if (!oauthTokenInput.trim()) {
+      toast.warning('Cole o token JSON gerado para a conta do Google Drive.');
+      return;
+    }
+    try {
+      setSavingOAuthToken(true);
+      militaryAudio.playTacticalBeep();
+      toast.loading('Salvando e validando Token OAuth no servidor...', { id: 'save_token' });
+      let parsed = oauthTokenInput;
+      try {
+        parsed = JSON.parse(oauthTokenInput);
+      } catch (_) {}
+
+      const res = await fetch('/api/drive/save_oauth_token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: parsed }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        toast.success('Conta do Google Drive conectada com sucesso!', {
+          id: 'save_token',
+          description: json.message,
+        });
+        setOauthTokenInput('');
+        loadDriveAccountsInfo();
+      } else {
+        toast.error(`Falha ao conectar: ${json.error}`, { id: 'save_token' });
+      }
+    } catch (err: any) {
+      toast.error(`Erro: ${err.message}`, { id: 'save_token' });
+    } finally {
+      setSavingOAuthToken(false);
+    }
+  };
+
+  const handleDirectWebUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !selectedEventId || !currentPauta) return;
+
+    const total = files.length;
+    setIsUploadingWeb(true);
+    setWebUploadProgress({ current: 0, total });
+    militaryAudio.playTacticalBeep();
+    toast.info(`Iniciando upload de ${total} fotos para a pasta do evento no Drive...`);
+
+    let successCount = 0;
+    for (let i = 0; i < total; i++) {
+      const f = files[i];
+      setWebUploadProgress({ current: i + 1, total });
+      try {
+        const formData = new FormData();
+        formData.append('event_id', String(selectedEventId));
+        formData.append('file', f);
+
+        const res = await fetch('/api/drive/upload_photo', {
+          method: 'POST',
+          body: formData,
+        });
+        if (res.ok) {
+          successCount++;
+        }
+      } catch (err) {
+        console.warn(`Erro no upload da foto ${f.name}:`, err);
+      }
+    }
+
+    setIsUploadingWeb(false);
+    if (webUploadInputRef.current) {
+      webUploadInputRef.current.value = '';
+    }
+
+    militaryAudio.playTacticalBeep();
+    toast.success(`🎉 Upload concluído! ${successCount} de ${total} fotos salvas com sucesso!`);
+    loadEventPhotos(selectedEventId);
+  };
+
+  // ── ESTADOS DO MOTOR DE INDEXAÇÃO FACIAL NA VPS (LOW CPU) ──
+  const [aiIndexingStatus, setAiIndexingStatus] = useState<{
+    status: 'idle' | 'processing' | 'done' | 'error';
+    current: number;
+    total: number;
+    faces: number;
+    percent: number;
+    message: string;
+  }>({ status: 'idle', current: 0, total: 0, faces: 0, percent: 0, message: '' });
+  const [isStartingAiIndex, setIsStartingAiIndex] = useState(false);
+
+  // Polling de Status da IA Facial a cada 3s se estiver processando
+  useEffect(() => {
+    if (!selectedEventId) return;
+
+    let isMounted = true;
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch(`/api/ai/index_status?event_id=${selectedEventId}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.ok && json.status && isMounted) {
+            setAiIndexingStatus(json.status);
+          }
+        }
+      } catch (err) {
+        console.warn('Erro ao checar status de indexação:', err);
+      }
+    };
+
+    fetchStatus();
+    const interval = setInterval(() => {
+      if (aiIndexingStatus.status === 'processing' || isStartingAiIndex) {
+        fetchStatus();
+      }
+    }, 3000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [selectedEventId, aiIndexingStatus.status, isStartingAiIndex]);
+
+  const handleTriggerAiIndexing = async () => {
+    if (!selectedEventId || !currentPauta) return;
+    try {
+      setIsStartingAiIndex(true);
+      militaryAudio.playTacticalBeep();
+      toast.loading('Iniciando indexação facial com IA na VPS (Baixo consumo de CPU)...', { id: 'vps_ai_index' });
+
+      const res = await fetch('/api/ai/index_event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event_id: selectedEventId,
+          title: currentPauta.titulo_evento,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.ok) {
+        toast.success('Indexação facial iniciada em segundo plano na VPS!', {
+          id: 'vps_ai_index',
+          description: 'Você receberá uma notificação no Telegram assim que for concluída.',
+        });
+        setAiIndexingStatus((prev) => ({ ...prev, status: 'processing', message: 'Iniciando varredura...' }));
+      } else {
+        toast.error(`Falha: ${json.message || 'Erro desconhecido'}`, { id: 'vps_ai_index' });
+      }
+    } catch (err: any) {
+      toast.error(`Erro ao disparar indexação: ${err.message}`, { id: 'vps_ai_index' });
+    } finally {
+      setIsStartingAiIndex(false);
+    }
+  };
+
+  const matrixFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isUploadingMatrix, setIsUploadingMatrix] = useState(false);
+
+  const handleUploadMatrixFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedEventId) return;
+
+    try {
+      setIsUploadingMatrix(true);
+      militaryAudio.playTacticalBeep();
+      toast.loading(`Importando matriz IA (${(file.size / 1024).toFixed(0)} KB)...`, { id: 'matrix_upload' });
+
+      const formData = new FormData();
+      formData.append('event_id', String(selectedEventId));
+      formData.append('npz_file', file);
+
+      const res = await fetch('/api/ai/upload_matrix', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const json = await res.json();
+      if (json.ok) {
+        toast.success('🎉 Matriz de faces importada e ativada com sucesso!', {
+          id: 'matrix_upload',
+          description: 'O Portal de Convidados já está liberado para selfies nesta solenidade.',
+        });
+        setAiIndexingStatus({
+          status: 'done',
+          current: photos.length,
+          total: photos.length,
+          faces: photos.length,
+          percent: 100,
+          message: 'Matriz importada via GPU Studio.',
+        });
+      } else {
+        toast.error(`Falha no upload: ${json.message || 'Erro ao salvar matriz'}`, { id: 'matrix_upload' });
+      }
+    } catch (err: any) {
+      toast.error(`Erro ao enviar arquivo: ${err.message}`, { id: 'matrix_upload' });
+    } finally {
+      setIsUploadingMatrix(false);
+      if (matrixFileInputRef.current) matrixFileInputRef.current.value = '';
+    }
+  };
+
   const handleOpenPhoto = (photo: PhotoItem) => {
     recordAccessLog(photo, 'visualizacao');
     setLightboxPhoto(photo);
@@ -238,7 +506,7 @@ export const PhotoGalleryAdmin: React.FC = () => {
         .from('demandas_comunicacao')
         .select('*')
         .in('status', ['aprovado', 'aprovada', 'concluida', 'pendente', 'em_andamento'])
-        .order('data_evento', { ascending: false });
+        .order('data_evento', { ascending: true });
 
       if (!error && data && data.length > 0) {
         const parsed: PautaEvent[] = data.map((d: any) => {
@@ -795,10 +1063,10 @@ export const PhotoGalleryAdmin: React.FC = () => {
     { label: '👥 Veteranos', query: 'veteranos' },
   ];
 
-  // Filtro de Pautas por Período / Google Drive
+  // Filtro de Pautas por Período / Google Drive (Ordenado do mais recente ao mais posterior)
   const filteredPautas = useMemo(() => {
     const today = new Date();
-    return pautas.filter((p) => {
+    const list = pautas.filter((p) => {
       if (pautaFilter === 'drive') {
         return !!p.drive_folder_id || !!p.drive_url || p.id === 50;
       }
@@ -818,6 +1086,8 @@ export const PhotoGalleryAdmin: React.FC = () => {
       }
       return true;
     });
+
+    return [...list].sort((a, b) => (a.data_evento || '').localeCompare(b.data_evento || ''));
   }, [pautas, pautaFilter]);
 
   const currentPauta = pautas.find((p) => p.id === selectedEventId) || pautas[0];
@@ -1013,6 +1283,64 @@ export const PhotoGalleryAdmin: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              {/* Input invisível para upload de matriz .npz */}
+              <input
+                type="file"
+                ref={matrixFileInputRef}
+                accept=".npz"
+                className="hidden"
+                onChange={handleUploadMatrixFile}
+              />
+
+              {/* Botão de Upload de Matriz Local (.npz) */}
+              <button
+                onClick={() => matrixFileInputRef.current?.click()}
+                disabled={isUploadingMatrix || !selectedEventId}
+                title="Importar matriz gerada com GPU local pelo SisGAB GPU Studio"
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-[#c5a059] text-slate-200 hover:text-white font-bold text-[11px] flex items-center gap-1.5 transition-all shadow-sm disabled:opacity-50"
+              >
+                <Upload className="w-3.5 h-3.5 text-[#c5a059]" />
+                <span>{isUploadingMatrix ? 'Enviando Matriz...' : '📤 Importar Matriz (.npz)'}</span>
+              </button>
+
+              {/* Botão de Disparo / Status de Indexação Facial na VPS */}
+              {aiIndexingStatus.status === 'processing' ? (
+                <div className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-2">
+                  <RefreshCw className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-bold text-amber-300">
+                      Indexando Faces: {aiIndexingStatus.percent}% ({aiIndexingStatus.current}/{aiIndexingStatus.total})
+                    </span>
+                    <span className="text-[9px] text-slate-400">
+                      👥 {aiIndexingStatus.faces} rostos mapeados
+                    </span>
+                  </div>
+                </div>
+              ) : aiIndexingStatus.status === 'done' ? (
+                <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-[11px] font-bold text-emerald-300">
+                    IA Facial Pronta ({aiIndexingStatus.faces} faces)
+                  </span>
+                  <button
+                    onClick={handleTriggerAiIndexing}
+                    title="Reindexar acervo na VPS"
+                    className="ml-1 text-[10px] text-slate-400 hover:text-white underline"
+                  >
+                    Reindexar
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleTriggerAiIndexing}
+                  disabled={isStartingAiIndex || photos.length === 0}
+                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:brightness-110 text-white font-black text-[11px] flex items-center gap-1.5 transition-all shadow-md shadow-cyan-500/20 disabled:opacity-50"
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Indexar na VPS</span>
+                </button>
+              )}
+
               {currentPauta.drive_url ? (
                 <>
                   <a
@@ -1149,7 +1477,39 @@ export const PhotoGalleryAdmin: React.FC = () => {
         </div>
 
         {/* Ações Diretas */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Botão Gerenciador de Contas Drive */}
+          <button
+            onClick={() => setDriveManagerModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-emerald-400 text-emerald-400 text-xs font-bold transition-all shadow-md"
+            title="Gerenciar Contas e Autenticação do Google Drive (OAuth / Service Account)"
+          >
+            <Cloud className="w-3.5 h-3.5" />
+            <span>Contas Drive</span>
+          </button>
+
+          {/* Botão Upload de Fotos Web */}
+          <button
+            onClick={() => {
+              if (webUploadInputRef.current) {
+                webUploadInputRef.current.click();
+              }
+            }}
+            disabled={isUploadingWeb}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:brightness-110 text-white text-xs font-black transition-all shadow-md shadow-cyan-600/20 disabled:opacity-50"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>{isUploadingWeb ? `Enviando (${webUploadProgress.current}/${webUploadProgress.total})...` : 'Subir Fotos (Web/Celular)'}</span>
+          </button>
+          <input
+            type="file"
+            ref={webUploadInputRef}
+            onChange={handleDirectWebUpload}
+            multiple
+            accept="image/*"
+            className="hidden"
+          />
+
           <button
             onClick={() => setPortalModalOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-[#00e5ff] text-[#00e5ff] text-xs font-bold"
@@ -1768,15 +2128,19 @@ export const PhotoGalleryAdmin: React.FC = () => {
                 )}
 
                 <a
-                  href={lightboxPhoto.thumbnail_url || lightboxPhoto.url}
+                  href={
+                    lightboxPhoto.drive_file_id
+                      ? `https://drive.google.com/uc?export=download&id=${lightboxPhoto.drive_file_id}`
+                      : lightboxPhoto.drive_link || lightboxPhoto.url || lightboxPhoto.thumbnail_url
+                  }
                   download={lightboxPhoto.filename}
                   target="_blank"
                   rel="noreferrer"
                   onClick={() => recordAccessLog(lightboxPhoto, 'download_hd')}
-                  className="px-5 py-2 rounded-xl bg-[#c5a059] hover:bg-[#d6b26b] text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-lg shadow-[#c5a059]/25"
+                  className="px-5 py-2 rounded-xl bg-[#c5a059] hover:bg-[#d6b26b] text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-lg shadow-[#c5a059]/25 transition-all hover:scale-105"
                 >
                   <Download className="w-4 h-4" />
-                  <span>Baixar HD</span>
+                  <span>Baixar HD Original</span>
                 </a>
               </div>
             </div>
@@ -1913,6 +2277,138 @@ export const PhotoGalleryAdmin: React.FC = () => {
                     <span>Salvar e Vincular</span>
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 10. MODAL GERENCIADOR DE CONTAS GOOGLE DRIVE (MULTI-DRIVE & OAUTH 2.0) ── */}
+      {driveManagerModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in">
+          <div className="max-w-2xl w-full p-6 rounded-3xl bg-[#091326] border-2 border-emerald-500/50 space-y-5 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                  <Cloud className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white uppercase tracking-wider">
+                    Gerenciador Multi-Drive & OAuth 2.0
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Controle de autenticação para uploads (Conta Pessoal com Espaço / Service Account)
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setDriveManagerModalOpen(false)}
+                className="p-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Status da Conexão Atual */}
+            <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-300">Status da Conexão Ativa:</span>
+                <span className={`px-2 py-0.5 rounded font-black text-[10px] uppercase ${driveAccountsData?.connection_status ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'}`}>
+                  {driveAccountsData?.connection_status ? '🟢 CONECTADO' : '🔴 OFFLINE'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 font-mono">
+                {driveAccountsData?.connection_message || 'Verificando conexão...'}
+              </p>
+            </div>
+
+            {/* Seletor de Modo Ativo */}
+            <div className="space-y-2">
+              <label className="text-xs font-black text-[#00e5ff] uppercase tracking-wider">
+                Modo de Autenticação Ativo:
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Opção 1: OAuth 2.0 */}
+                <div
+                  onClick={() => handleSwitchDriveAuthMode('oauth')}
+                  className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                    driveAccountsData?.active_mode === 'oauth'
+                      ? 'bg-emerald-950/40 border-emerald-400 ring-2 ring-emerald-400/30'
+                      : 'bg-slate-900 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-black text-white">🔑 Conta Pessoal (OAuth 2.0)</span>
+                    {driveAccountsData?.active_mode === 'oauth' && (
+                      <span className="text-emerald-400 font-black text-[10px]">ATIVO</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Usa o espaço livre da sua conta @gmail.com (sem erro de cota). Ideal para fotos via Telegram e Web.
+                  </p>
+                </div>
+
+                {/* Opção 2: Service Account */}
+                <div
+                  onClick={() => handleSwitchDriveAuthMode('service_account')}
+                  className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                    driveAccountsData?.active_mode === 'service_account'
+                      ? 'bg-cyan-950/40 border-[#00e5ff] ring-2 ring-[#00e5ff]/30'
+                      : 'bg-slate-900 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-black text-white">🤖 Service Account (Robô)</span>
+                    {driveAccountsData?.active_mode === 'service_account' && (
+                      <span className="text-[#00e5ff] font-black text-[10px]">ATIVO</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Robô server-to-server com chave JSON. Ideal para Drives Compartilhados corporativos.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Painel de Configuração OAuth 2.0 */}
+            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-white flex items-center gap-1.5">
+                  <span>Conectar Nova Conta Pessoal (Google OAuth)</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {driveAccountsData?.has_oauth ? '✅ Token Armazenado' : '⚠️ Nenhum Token'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Cole o JSON de autorização da conta Google (Token de Acesso / Refresh Token) para uploads de alta capacidade:
+              </p>
+              <textarea
+                rows={3}
+                placeholder='Cole aqui o JSON do Token OAuth (ex: {"token": "...", "refresh_token": "...", "client_id": "..."})'
+                value={oauthTokenInput}
+                onChange={(e) => setOauthTokenInput(e.target.value)}
+                className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-[11px] placeholder-slate-600 focus:outline-none focus:border-emerald-400"
+              ></textarea>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleSaveOAuthToken}
+                  disabled={savingOAuthToken || !oauthTokenInput.trim()}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-600/20 disabled:opacity-50"
+                >
+                  {savingOAuthToken ? 'Salvando...' : 'Salvar e Ativar Conta'}
+                </button>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setDriveManagerModalOpen(false)}
+                className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs"
+              >
+                Fechar
               </button>
             </div>
           </div>

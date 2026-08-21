@@ -91,16 +91,57 @@ export interface RegistroPresenca {
 
 export type TarefaStatus = 'a_fazer' | 'em_andamento' | 'revisao' | 'concluido';
 export type TarefaPrioridade = 'alta' | 'media' | 'baixa';
+export type TarefaTipo = 
+  | 'producao_arte' 
+  | 'video_reels' 
+  | 'faxina_rotina' 
+  | 'manutencao_apoio' 
+  | 'impressao' 
+  | 'redacao' 
+  | 'brindes' 
+  | 'evento_cobertura' 
+  | 'outro';
+
+export interface TarefaAnexoMidia {
+  id: string;
+  nome: string;
+  url: string;
+  tipo: 'referencia' | 'previa_producao' | 'final_aprovada';
+  enviado_por: string;
+  enviado_em: string;
+  formato?: 'imagem' | 'video' | 'documento' | 'outro';
+  tamanho?: string;
+  versao?: number;
+}
+
+export interface TarefaApontamento {
+  id: string;
+  autor: string;
+  autor_posto?: string;
+  autor_foto?: string;
+  texto: string;
+  criado_em: string;
+  resolvido?: boolean;
+}
 
 export interface TarefaCOMSOC {
   id: number;
   titulo: string;
   descricao?: string;
   responsavel: string;
+  responsavel_id?: number | string | null;
+  solicitante_nome?: string;
+  solicitante_posto?: string;
+  solicitante_id?: number | string | null;
+  solicitante_foto?: string;
+  tipo_tarefa?: TarefaTipo;
   prioridade: TarefaPrioridade;
   status: TarefaStatus;
+  ordem_prioridade?: number;
   prazo?: string | null;
   demanda_id?: number | null;
+  anexos_midia?: TarefaAnexoMidia[];
+  apontamentos_ajuste?: TarefaApontamento[];
   criado_em: string;
   atualizado_em?: string | null;
 }

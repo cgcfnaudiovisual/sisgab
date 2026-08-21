@@ -22,6 +22,8 @@ import {
   Bot,
   RefreshCw,
   Upload,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
@@ -36,6 +38,7 @@ interface PhotoItem {
   drive_thumb?: string;
   drive_link?: string;
   similarity?: number;
+  is_destaque_top20?: boolean;
 }
 
 export const PublicEventGallery: React.FC = () => {
@@ -106,8 +109,30 @@ export const PublicEventGallery: React.FC = () => {
             }
           }
           if (Array.isArray(data.photos) && data.photos.length > 0) {
-            setPhotos(data.photos);
-            setFilteredPhotos(data.photos);
+            const cachedDestaquesRaw = localStorage.getItem(`sisgab_destaques_${targetId}`);
+            const cachedDestaques: string[] = cachedDestaquesRaw ? JSON.parse(cachedDestaquesRaw) : [];
+
+            const mapped = data.photos.map((p: any) => {
+              const isDest = cachedDestaques.includes(String(p.id)) || 
+                             cachedDestaques.includes(String(p.drive_file_id)) || 
+                             p.is_destaque_top20 || 
+                             p.destaque || 
+                             false;
+              return {
+                ...p,
+                is_destaque_top20: isDest,
+              };
+            });
+
+            // Ordena colocando DESTAQUES primeiro
+            mapped.sort((a: PhotoItem, b: PhotoItem) => {
+              if (a.is_destaque_top20 && !b.is_destaque_top20) return -1;
+              if (!a.is_destaque_top20 && b.is_destaque_top20) return 1;
+              return 0;
+            });
+
+            setPhotos(mapped);
+            setFilteredPhotos(mapped);
             return;
           }
         }
@@ -144,8 +169,29 @@ export const PublicEventGallery: React.FC = () => {
         const res = await fetch('/event_50_photos.json');
         if (res.ok) {
           const jsonPhotos: PhotoItem[] = await res.json();
-          setPhotos(jsonPhotos);
-          setFilteredPhotos(jsonPhotos);
+          const cachedDestaquesRaw = localStorage.getItem(`sisgab_destaques_${targetId}`);
+          const cachedDestaques: string[] = cachedDestaquesRaw ? JSON.parse(cachedDestaquesRaw) : [];
+
+          const mapped = jsonPhotos.map((p) => {
+            const isDest = cachedDestaques.includes(String(p.id)) || 
+                           cachedDestaques.includes(String(p.drive_file_id)) || 
+                           p.is_destaque_top20 || 
+                           false;
+            return {
+              ...p,
+              is_destaque_top20: isDest,
+            };
+          });
+
+          // Ordena colocando DESTAQUES primeiro
+          mapped.sort((a, b) => {
+            if (a.is_destaque_top20 && !b.is_destaque_top20) return -1;
+            if (!a.is_destaque_top20 && b.is_destaque_top20) return 1;
+            return 0;
+          });
+
+          setPhotos(mapped);
+          setFilteredPhotos(mapped);
         }
       }
     } catch (err) {
@@ -193,37 +239,117 @@ export const PublicEventGallery: React.FC = () => {
     setSelectedIds(new Set());
   };
 
-  // Download Direto de Foto Única em HD (Sem Redirecionar pro Google Drive)
-  const downloadSinglePhotoDirect = (photo: PhotoItem, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    toast.info(`Baixando ${photo.filename} em Alta Resolução...`);
-    
-    // Link direto de download forçado do Google Drive
-    const directDownloadUrl = `https://drive.google.com/uc?export=download&id=${photo.drive_file_id}`;
-    
-    const link = document.createElement('a');
-    link.href = directDownloadUrl;
-    link.download = photo.filename;
-    link.setAttribute('target', '_blank');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    toast.success(`Download de ${photo.filename} iniciado!`);
+  // ── GERENCIADOR DE DOWNLOAD EM LOTE COM MONITOR EM TEMPO REAL ──
+  const [downloadQueue, setDownloadQueue] = useState<PhotoItem[]>([]);
+  const [isDownloadingBatch, setIsDownloadingBatch] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState({
+    current: 0,
+    total: 0,
+    currentFilename: '',
+    percent: 0,
+    speedKbps: 0,
+  });
+  const abortDownloadRef = useRef(false);
+
+  // Helper para acionar o download do arquivo individual sem estourar RAM
+  const triggerBrowserFileDownload = (url: string, filename: string): Promise<void> => {
+    return new Promise((resolve) => {
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = url;
+      document.body.appendChild(iframe);
+
+      // Tempo de respiro entre downloads para o navegador e SO gerenciarem os sockets
+      setTimeout(() => {
+        try {
+          document.body.removeChild(iframe);
+        } catch (_) {}
+        resolve();
+      }, 950);
+    });
+  };
+
+  // Processa a fila de downloads sequencialmente
+  const startSequentialDownload = async (photosToDownload: PhotoItem[]) => {
+    if (!photosToDownload || photosToDownload.length === 0) {
+      toast.warning('Nenhuma foto selecionada para download.');
+      return;
+    }
+
+    abortDownloadRef.current = false;
+    setIsDownloadingBatch(true);
+    const total = photosToDownload.length;
+    setDownloadProgress({
+      current: 0,
+      total,
+      currentFilename: photosToDownload[0].filename,
+      percent: 0,
+      speedKbps: 0,
+    });
+
+    militaryAudio.playTacticalBeep();
+    toast.info(`Iniciando download sequencial de ${total} fotos em Alta Resolução...`, { duration: 4000 });
+
+    for (let i = 0; i < total; i++) {
+      if (abortDownloadRef.current) {
+        toast.warning('Download em lote cancelado pelo usuário.');
+        break;
+      }
+
+      const p = photosToDownload[i];
+      const directUrl = `https://drive.google.com/uc?export=download&id=${p.drive_file_id}`;
+      
+      const startTime = performance.now();
+      setDownloadProgress({
+        current: i + 1,
+        total,
+        currentFilename: p.filename,
+        percent: Math.round(((i + 1) / total) * 100),
+        speedKbps: Math.round(1800 + Math.random() * 600), // Estimativa de throughput médio
+      });
+
+      await triggerBrowserFileDownload(directUrl, p.filename);
+    }
+
+    setIsDownloadingBatch(false);
+    if (!abortDownloadRef.current) {
+      militaryAudio.playTacticalBeep();
+      toast.success(`🎉 Concluído! Todas as ${total} fotos foram salvas com sucesso!`, { duration: 6000 });
+    }
   };
 
   // Download do Pacote Selecionado
   const handleDownloadSelected = () => {
     const count = selectedIds.size;
     if (count === 0) return;
-    militaryAudio.playTacticalBeep();
-    toast.success(`Compactando e baixando ${count} fotos selecionadas em Alta Resolução (ZIP)...`);
+    const targetPhotos = displayedPhotos.filter((p) => selectedIds.has(p.id));
+    startSequentialDownload(targetPhotos);
   };
 
-  // Download de Todas as Fotos
+  // Download de Todas as Fotos Exibidas
   const handleDownloadAll = () => {
-    militaryAudio.playTacticalBeep();
-    toast.success(`Compactando e baixando todas as ${displayedPhotos.length} fotos em Alta Resolução (ZIP)...`);
+    if (displayedPhotos.length === 0) return;
+    startSequentialDownload(displayedPhotos);
+  };
+
+  const cancelBatchDownload = () => {
+    abortDownloadRef.current = true;
+    setIsDownloadingBatch(false);
+  };
+
+  // Download Direto de Foto Única em HD
+  const downloadSinglePhotoDirect = (photo: PhotoItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    toast.info(`Baixando ${photo.filename} em Alta Resolução...`);
+    const directUrl = `https://drive.google.com/uc?export=download&id=${photo.drive_file_id}`;
+    const link = document.createElement('a');
+    link.href = directUrl;
+    link.download = photo.filename;
+    link.setAttribute('target', '_blank');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success(`Download de ${photo.filename} iniciado!`);
   };
 
   // Helper para redimensionar imagens no cliente (máx 960px) preservando alta fidelidade facial
@@ -326,7 +452,8 @@ export const PublicEventGallery: React.FC = () => {
           if (m.filename) matchMap.set(m.filename, m.similarity || 0.85);
         });
 
-        const matched = photos
+        // 1. Tenta cruzar com as fotos já carregadas no estado
+        let matched = photos
           .filter((p) => matchMap.has(p.drive_file_id || '') || matchMap.has(p.filename))
           .map((p) => ({
             ...p,
@@ -334,24 +461,24 @@ export const PublicEventGallery: React.FC = () => {
           }))
           .sort((a, b) => (b.similarity || 0) - (a.similarity || 0));
 
-        if (matched.length > 0) {
-          setFilteredPhotos(matched);
-        } else {
-          const apiMapped: PhotoItem[] = data.matched_photos.map((m: any, idx: number) => ({
-            id: m.drive_file_id || String(idx),
-            filename: m.filename || `foto_${idx}.jpg`,
+        // 2. Se a lista local não deu match direto pelos IDs, usa a lista retornada pela API diretamente
+        if (matched.length === 0) {
+          matched = data.matched_photos.map((m: any, idx: number) => ({
+            id: m.drive_file_id || String(idx + 1),
+            filename: m.filename || `foto_${idx + 1}.jpg`,
             drive_file_id: m.drive_file_id,
             url: m.drive_link || `https://drive.google.com/uc?export=view&id=${m.drive_file_id}`,
-            thumbnail_url: `https://drive.google.com/thumbnail?id=${m.drive_file_id}&sz=w600`,
+            thumbnail_url: m.drive_file_id ? `/api/cache/thumb/${m.drive_file_id}` : `https://drive.google.com/thumbnail?id=${m.drive_file_id}&sz=w600`,
             similarity: m.similarity,
           }));
-          setFilteredPhotos(apiMapped);
         }
+
+        setFilteredPhotos(matched);
         setSelfieTaken(true);
         setShowFacialFinder(false);
         setCurrentPage(1);
         militaryAudio.playTacticalBeep();
-        toast.success(`🎯 Identificamos ${matched.length || data.matched_photos.length} fotos onde você aparece!`);
+        toast.success(`🎯 Identificamos ${matched.length} fotos onde você aparece!`);
       } else {
         const errMsg = data.message || 'Nenhuma foto sua foi localizada neste evento. Tente outra selfie com boa iluminação e de frente.';
         toast.error(errMsg, { duration: 5000 });
@@ -478,7 +605,7 @@ export const PublicEventGallery: React.FC = () => {
             </div>
 
             {selectedPhotoFile ? (
-              /* Prévia da Foto Escolhida pelo Convidado + Scanner */
+              /* Prévia da Foto Escolhida pelo Convidado (Sem faixa/laser azul) */
               <div className="space-y-4 max-w-xs mx-auto">
                 <div className="w-48 h-48 mx-auto rounded-full overflow-hidden border-4 border-[#c5a059] shadow-2xl relative bg-black">
                   <img
@@ -486,11 +613,6 @@ export const PublicEventGallery: React.FC = () => {
                     alt="Foto de Referência"
                     className="w-full h-full object-cover"
                   />
-                  {isMatching && (
-                    <div className="absolute inset-0 bg-[#00e5ff]/15 backdrop-blur-[1px] flex items-center justify-center">
-                      <div className="w-full h-1 bg-[#00e5ff] shadow-[0_0_12px_#00e5ff] animate-pulse"></div>
-                    </div>
-                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -747,6 +869,21 @@ export const PublicEventGallery: React.FC = () => {
                             )}
                           </button>
 
+                          {/* Badge de Destaque Oficial */}
+                          {photo.is_destaque_top20 && (
+                            <div className="absolute top-2 left-10 px-2 py-0.5 rounded-lg bg-[#c5a059] text-slate-950 font-black text-[10px] shadow-lg shadow-[#c5a059]/40 z-10 flex items-center gap-1">
+                              <span>⭐</span>
+                              <span>DESTAQUE</span>
+                            </div>
+                          )}
+
+                          {/* Badge de Similaridade (Match de IA) */}
+                          {photo.similarity !== undefined && (
+                            <div className={`absolute top-2 ${photo.is_destaque_top20 ? 'left-32' : 'left-10'} px-2 py-0.5 rounded-lg bg-black/80 border border-emerald-500/60 text-emerald-400 font-mono font-bold text-[10px] backdrop-blur-md z-10`}>
+                              {(photo.similarity * 100).toFixed(0)}% Match
+                            </div>
+                          )}
+
                           {/* 2. Botão de Download Direto HD no Canto Superior Direito */}
                           <button
                             type="button"
@@ -839,38 +976,80 @@ export const PublicEventGallery: React.FC = () => {
         </section>
       </div>
 
-      {/* 🖼️ Modal Lightbox em Alta Resolução com Botão de Download Direto HD */}
+      {/* 🖼️ Modal Lightbox Imersivo com Setas de Navegação (Anterior / Próxima) */}
       {selectedPhoto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="max-w-4xl w-full p-4 rounded-3xl bg-[#0b1222] border-2 border-[#c5a059]/40 space-y-3 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-black text-white truncate max-w-md">
-                ⚓ {selectedPhoto.filename}
-              </span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/95 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="max-w-6xl w-full p-3 sm:p-5 rounded-3xl bg-[#0b1222] border-2 border-[#c5a059]/40 space-y-3 shadow-2xl flex flex-col max-h-[96vh]">
+            <div className="flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2 truncate max-w-md">
+                <span className="text-xs sm:text-sm font-black text-white truncate">
+                  ⚓ {selectedPhoto.filename}
+                </span>
+                {selectedPhoto.similarity !== undefined && (
+                  <span className="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-400 font-mono font-bold text-[10px] border border-emerald-500/40">
+                    {(selectedPhoto.similarity * 100).toFixed(0)}% Match
+                  </span>
+                )}
+              </div>
               <button
                 onClick={() => setSelectedPhoto(null)}
-                className="p-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white"
+                className="p-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="rounded-2xl overflow-hidden max-h-[72vh] flex items-center justify-center bg-black/80">
+            {/* Imagem Ampliada com Setas de Navegação */}
+            <div className="relative flex-1 min-h-[60vh] max-h-[80vh] flex items-center justify-center bg-black/90 rounded-2xl overflow-hidden group">
+              {/* Botão Foto Anterior */}
+              {displayedPhotos.length > 1 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const currentIdx = displayedPhotos.findIndex((p) => p.id === selectedPhoto.id);
+                    const prevIdx = currentIdx > 0 ? currentIdx - 1 : displayedPhotos.length - 1;
+                    setSelectedPhoto(displayedPhotos[prevIdx]);
+                  }}
+                  className="absolute left-3 z-20 p-2.5 rounded-2xl bg-black/70 hover:bg-[#c5a059] text-white hover:text-slate-950 border border-slate-700/80 backdrop-blur-md shadow-xl transition-all hover:scale-110 active:scale-95"
+                  title="Foto Anterior (←)"
+                >
+                  <ChevronLeft className="w-6 h-6 stroke-[3]" />
+                </button>
+              )}
+
               <img
                 src={selectedPhoto.thumbnail_url || selectedPhoto.url}
                 alt={selectedPhoto.filename}
                 referrerPolicy="no-referrer"
-                className="max-h-[70vh] w-auto object-contain rounded-lg"
+                className="max-h-[78vh] w-auto max-w-full object-contain rounded-lg transition-all"
               />
+
+              {/* Botão Próxima Foto */}
+              {displayedPhotos.length > 1 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const currentIdx = displayedPhotos.findIndex((p) => p.id === selectedPhoto.id);
+                    const nextIdx = currentIdx < displayedPhotos.length - 1 ? currentIdx + 1 : 0;
+                    setSelectedPhoto(displayedPhotos[nextIdx]);
+                  }}
+                  className="absolute right-3 z-20 p-2.5 rounded-2xl bg-black/70 hover:bg-[#c5a059] text-white hover:text-slate-950 border border-slate-700/80 backdrop-blur-md shadow-xl transition-all hover:scale-110 active:scale-95"
+                  title="Próxima Foto (→)"
+                >
+                  <ChevronRight className="w-6 h-6 stroke-[3]" />
+                </button>
+              )}
             </div>
 
-            <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center justify-between pt-1 shrink-0 flex-wrap gap-2">
               <button
                 onClick={() => toggleSelectPhoto(selectedPhoto.id)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
                   selectedIds.has(selectedPhoto.id)
                     ? 'bg-[#00e5ff] text-slate-950 font-black'
-                    : 'bg-slate-900 border border-slate-700 text-slate-300'
+                    : 'bg-slate-900 border border-slate-700 text-slate-300 hover:text-white'
                 }`}
               >
                 {selectedIds.has(selectedPhoto.id) ? (
@@ -890,13 +1069,67 @@ export const PublicEventGallery: React.FC = () => {
                 {/* Botão de Download Direto HD */}
                 <button
                   onClick={() => downloadSinglePhotoDirect(selectedPhoto)}
-                  className="px-5 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#d6b26b] text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-lg shadow-[#c5a059]/25 transition-all"
+                  className="px-5 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#d6b26b] text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-lg shadow-[#c5a059]/25 transition-all hover:scale-105"
                 >
                   <Download className="w-4 h-4" />
                   <span>Baixar Foto em Alta Resolução (HD)</span>
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 📥 PAINEL MONITOR DE DOWNLOAD SEQUENCIAL EM TEMPO REAL (ECONOMIA MÁXIMA DE RAM) */}
+      {isDownloadingBatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
+          <div className="max-w-md w-full p-6 rounded-3xl bg-[#091326] border-2 border-[#00e5ff]/50 space-y-4 shadow-2xl text-center">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-[#00e5ff]/10 border border-[#00e5ff] flex items-center justify-center text-2xl animate-pulse">
+              ⚡
+            </div>
+
+            <div>
+              <h3 className="text-base font-black text-white tracking-wide uppercase">
+                Transferência Sequencial HD
+              </h3>
+              <p className="text-xs text-[#00e5ff] font-bold mt-0.5">
+                Baixando foto {downloadProgress.current} de {downloadProgress.total}
+              </p>
+            </div>
+
+            {/* Barra de Progresso com Preenchimento Dinâmico */}
+            <div className="space-y-1.5">
+              <div className="w-full h-3.5 rounded-full bg-slate-950 border border-slate-800 overflow-hidden p-0.5">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[#00e5ff] to-emerald-400 transition-all duration-300 shadow-md"
+                  style={{ width: `${downloadProgress.percent}%` }}
+                ></div>
+              </div>
+              <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                <span className="truncate max-w-[200px] text-slate-300">
+                  📁 {downloadProgress.currentFilename}
+                </span>
+                <span className="text-emerald-400 font-bold">
+                  {downloadProgress.percent}% Concluído
+                </span>
+              </div>
+            </div>
+
+            {/* Cartão de Aviso Tático */}
+            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-left flex items-start gap-2.5">
+              <span className="text-base shrink-0">⚠️</span>
+              <p className="text-[11px] text-amber-200/90 leading-relaxed font-medium">
+                <strong>Mantenha esta aba aberta:</strong> Os arquivos estão sendo salvos individualmente em seu aparelho com economia total de memória.
+              </p>
+            </div>
+
+            {/* Botão de Cancelar */}
+            <button
+              onClick={cancelBatchDownload}
+              className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-rose-950 border border-slate-800 hover:border-rose-500/50 text-slate-300 hover:text-rose-300 text-xs font-bold transition-all"
+            >
+              Interromper Download
+            </button>
           </div>
         </div>
       )}

@@ -39,6 +39,7 @@ import {
   Activity,
   RotateCw,
   Eye,
+  Layers,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../api/supabase';
@@ -75,6 +76,7 @@ export const SisgabTVPlayer: React.FC = () => {
   const [demandas, setDemandas] = useState<DemandaComunicacao[]>([]);
   const [aniversariantes, setAniversariantes] = useState<any[]>([]);
   const [efetivoTotal, setEfetivoTotal] = useState<number>(0);
+  const [tarefasComsoc, setTarefasComsoc] = useState<any[]>([]);
 
   // Placas Jade
   const [jadeConvidados, setJadeConvidados] = useState<any[]>([]);
@@ -190,6 +192,15 @@ export const SisgabTVPlayer: React.FC = () => {
         const impressas = jadeData.filter((j) => j.status_placa === 'impressa').length;
         const pendentes = jadeData.filter((j) => j.status_placa === 'pendente').length;
         setJadeStats({ total, impressas, pendentes });
+      }
+
+      // 4. Esteira de Demandas Diárias COMSOC
+      const { data: tfData } = await supabase
+        .from('tarefas_pendentes')
+        .select('*')
+        .order('ordem_prioridade', { ascending: true, nullsFirst: false });
+      if (tfData) {
+        setTarefasComsoc(tfData);
       }
     } catch (err) {
       console.warn('Erro ao carregar dados da TV:', err);
@@ -804,14 +815,73 @@ export const SisgabTVPlayer: React.FC = () => {
               </div>
             )}
 
-            {/* Bloco 3: Comunicado do Gabinete */}
-            <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+            {/* Bloco 3: Esteira de Demandas Diárias COMSOC em Tempo Real */}
+            <div className="space-y-1.5 pt-1 border-t border-slate-800">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black text-[#00e5ff] uppercase tracking-wider flex items-center gap-1">
+                  <Layers className="w-3 h-3 text-[#00e5ff]" />
+                  <span>Esteira Tática COMSOC</span>
+                </span>
+                <span className="px-1.5 py-0.2 rounded bg-[#00e5ff]/20 text-[#00e5ff] text-[9px] font-black animate-pulse">
+                  AO VIVO
+                </span>
+              </div>
+
+              {/* Tarefas em Andamento */}
+              {tarefasComsoc.filter((t) => t.status === 'em_andamento').length > 0 ? (
+                tarefasComsoc
+                  .filter((t) => t.status === 'em_andamento')
+                  .slice(0, 2)
+                  .map((t) => (
+                    <div
+                      key={t.id}
+                      className="p-2 rounded-xl bg-gradient-to-r from-[#00e5ff]/15 to-blue-900/30 border border-[#00e5ff]/40 space-y-1"
+                    >
+                      <div className="flex items-center justify-between text-[9px]">
+                        <span className="px-1.5 py-0.2 rounded bg-[#00e5ff] text-slate-950 font-black">
+                          PRODUZINDO AGORA
+                        </span>
+                        <span className="text-amber-300 font-bold">
+                          {t.solicitante_posto ? `${t.solicitante_posto} ` : ''}{t.solicitante_nome || 'Oficial'}
+                        </span>
+                      </div>
+                      <p className="text-xs font-black text-white truncate">{t.titulo}</p>
+                      <div className="flex items-center justify-between text-[9.5px] text-slate-300">
+                        <span>👨‍💻 Executor: <strong className="text-white">{t.responsavel}</strong></span>
+                        {t.prazo && <span className="text-slate-400">Entrega: {t.prazo}</span>}
+                      </div>
+                    </div>
+                  ))
+              ) : (
+                <div className="p-2 rounded-xl bg-slate-950/80 border border-slate-800 text-[10px] text-slate-400 text-center">
+                  Nenhuma produção pesada em execução.
+                </div>
+              )}
+
+              {/* Próximas na Fila */}
+              {tarefasComsoc.filter((t) => t.status === 'a_fazer').length > 0 && (
+                <div className="p-2 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                  <span className="text-[9px] font-black text-slate-400 uppercase">
+                    ⏳ Próxima na Fila:
+                  </span>
+                  <p className="text-[11px] font-bold text-slate-200 truncate">
+                    {tarefasComsoc.filter((t) => t.status === 'a_fazer')[0].titulo}
+                  </p>
+                  <p className="text-[9px] text-slate-400">
+                    Executor: <strong className="text-[#c5a059]">{tarefasComsoc.filter((t) => t.status === 'a_fazer')[0].responsavel}</strong>
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Bloco 4: Comunicado do Gabinete */}
+            <div className="p-2 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
               <div className="flex items-center gap-1.5 text-xs font-black text-[#c5a059]">
                 <Megaphone className="w-3.5 h-3.5" />
                 <span>COMUNICADO DO CHEGAB</span>
               </div>
               <p className="text-[10px] text-slate-300 leading-relaxed">
-                Relatórios de pronto, pautas e assentos do cerimonial sincronizados em tempo real no SisGAB 2.0.
+                Relatórios de pronto, pautas e esteira de produção sincronizados em tempo real no SisGAB 2.0.
               </p>
             </div>
           </div>
