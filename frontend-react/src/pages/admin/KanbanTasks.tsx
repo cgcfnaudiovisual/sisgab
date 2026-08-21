@@ -102,102 +102,70 @@ const TIPOS_TAREFA: Record<TarefaTipo, { label: string; icon: string; color: str
   outro: { label: 'Geral', icon: '⚡', color: 'text-slate-400 bg-slate-800 border-slate-700' },
 };
 
-const MOCK_TAREFAS_INICIAIS: TarefaCOMSOC[] = [
-  {
-    id: 1,
-    titulo: 'Edição do Vídeo Teaser da Banda Sinfônica (60s)',
-    descricao: 'Cortar os melhores momentos da apresentação no Theatro Municipal para o Instagram.',
-    responsavel: '3ºSG-FN-IF Souza',
-    solicitante_nome: 'Cap (FN) Bruno Tiago',
-    solicitante_posto: 'Cap (FN)',
-    tipo_tarefa: 'video_reels',
-    prioridade: 'alta',
-    status: 'em_andamento',
+interface TarefaPayloadMeta {
+  clean_descricao: string;
+  solicitante_nome: string;
+  solicitante_posto: string;
+  tipo_tarefa: TarefaTipo;
+  ordem_prioridade: number;
+  anexos_midia: TarefaAnexoMidia[];
+  apontamentos_ajuste: TarefaApontamento[];
+}
+
+const parseTarefaDescricao = (rawDesc: string | null | undefined): TarefaPayloadMeta => {
+  const result: TarefaPayloadMeta = {
+    clean_descricao: '',
+    solicitante_nome: 'Oficial Solicitante',
+    solicitante_posto: 'Oficial',
+    tipo_tarefa: 'producao_arte',
     ordem_prioridade: 1,
-    prazo: '2026-08-22',
-    anexos_midia: [
-      {
-        id: 'att_1',
-        nome: 'Briefing_Banda_Municipal.pdf',
-        url: 'https://drive.google.com',
-        tipo: 'referencia',
-        enviado_por: 'Cap (FN) Bruno Tiago',
-        enviado_em: new Date().toISOString(),
-        formato: 'documento',
-      },
-    ],
-    apontamentos_ajuste: [
-      {
-        id: 'apt_1',
-        autor: 'Cap (FN) Bruno Tiago',
-        texto: 'Atenção para dar destaque ao solo do Mestre de Banda na minutagem 00:30.',
-        criado_em: new Date().toISOString(),
-        resolvido: false,
-      },
-    ],
-    criado_em: new Date().toISOString(),
-  },
-  {
-    id: 2,
-    titulo: 'Diagramação do Informativo Mensal do CGCFN',
-    descricao: 'Montar layout das páginas 4 e 5 no Estúdio Gráfico e validar com CheGab.',
-    responsavel: '2ºSG-FN-CN Rodrigo',
-    solicitante_nome: 'CC (FN) Caldas',
-    solicitante_posto: 'CC (FN)',
-    tipo_tarefa: 'producao_arte',
-    prioridade: 'media',
-    status: 'a_fazer',
-    ordem_prioridade: 2,
-    prazo: '2026-08-25',
-    criado_em: new Date().toISOString(),
-  },
-  {
-    id: 3,
-    titulo: 'Manutenção e Cautela das Lentes 70-200mm e Drones',
-    descricao: 'Limpeza de sensores, calibração de hélices e checklist de baterias.',
-    responsavel: '2ºSG-FN Calaça',
-    solicitante_nome: '2ºSG-FN Calaça (Encarregado)',
-    solicitante_posto: '2ºSG',
-    tipo_tarefa: 'manutencao_apoio',
-    prioridade: 'alta',
-    status: 'em_andamento',
-    ordem_prioridade: 3,
-    prazo: '2026-08-22',
-    criado_em: new Date().toISOString(),
-  },
-  {
-    id: 4,
-    titulo: 'Curadoria de Fotos da Visita da Delegação Estrangeira',
-    descricao: 'Selecionar as 30 melhores fotos no acervo e marcar autoridades para homologação.',
-    responsavel: '1ºSG-FN-IF Barbosa',
-    solicitante_nome: 'CF (FN) Alexandre',
-    solicitante_posto: 'CF (FN)',
-    tipo_tarefa: 'evento_cobertura',
-    prioridade: 'alta',
-    status: 'revisao',
-    ordem_prioridade: 4,
-    prazo: '2026-08-21',
-    criado_em: new Date().toISOString(),
-  },
-  {
-    id: 5,
-    titulo: 'Criação de Artes para o Telão SisGAB TV (Aniversariantes)',
-    descricao: 'Atualizar os cartazes dos aniversariantes da semana de agosto.',
-    responsavel: '1ºTen (T) Mariana',
-    solicitante_nome: 'Gabinete CGCFN',
-    solicitante_posto: 'GAB',
-    tipo_tarefa: 'producao_arte',
-    prioridade: 'baixa',
-    status: 'concluido',
-    ordem_prioridade: 5,
-    prazo: '2026-08-17',
-    criado_em: new Date().toISOString(),
-  },
-];
+    anexos_midia: [],
+    apontamentos_ajuste: [],
+  };
+
+  if (!rawDesc) return result;
+
+  if (rawDesc.includes('[METADATA_COMSOC:')) {
+    try {
+      const parts = rawDesc.split('[METADATA_COMSOC:');
+      result.clean_descricao = parts[0].trim();
+      const metaJson = parts[1].split(']')[0].trim();
+      const parsed = JSON.parse(metaJson);
+      if (parsed.solicitante_nome) result.solicitante_nome = parsed.solicitante_nome;
+      if (parsed.solicitante_posto) result.solicitante_posto = parsed.solicitante_posto;
+      if (parsed.tipo_tarefa) result.tipo_tarefa = parsed.tipo_tarefa;
+      if (parsed.ordem_prioridade) result.ordem_prioridade = parsed.ordem_prioridade;
+      if (Array.isArray(parsed.anexos_midia)) result.anexos_midia = parsed.anexos_midia;
+      if (Array.isArray(parsed.apontamentos_ajuste)) result.apontamentos_ajuste = parsed.apontamentos_ajuste;
+    } catch {
+      result.clean_descricao = rawDesc;
+    }
+  } else {
+    result.clean_descricao = rawDesc;
+  }
+
+  return result;
+};
+
+const serializeTarefaDescricao = (
+  cleanDesc: string,
+  meta: Partial<TarefaPayloadMeta>
+): string => {
+  const payload = {
+    solicitante_nome: meta.solicitante_nome || 'Oficial Solicitante',
+    solicitante_posto: meta.solicitante_posto || 'Oficial',
+    tipo_tarefa: meta.tipo_tarefa || 'producao_arte',
+    ordem_prioridade: meta.ordem_prioridade || 1,
+    anexos_midia: meta.anexos_midia || [],
+    apontamentos_ajuste: meta.apontamentos_ajuste || [],
+  };
+  return `${cleanDesc || ''}\n\n[METADATA_COMSOC:${JSON.stringify(payload)}]`.trim();
+};
 
 export const KanbanTasks: React.FC = () => {
   const { user } = useAuth();
-  const [tarefas, setTarefas] = useState<TarefaCOMSOC[]>(MOCK_TAREFAS_INICIAIS);
+  const [tarefas, setTarefas] = useState<TarefaCOMSOC[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [efetivoList, setEfetivoList] = useState<MilitarEfetivo[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedResp, setSelectedResp] = useState<string>('todos');
@@ -234,7 +202,7 @@ export const KanbanTasks: React.FC = () => {
   }>({
     titulo: '',
     descricao: '',
-    responsavel: user?.nome_guerra ? user.nome_guerra : '2ºSG-FN Calaça',
+    responsavel: '2ºSG-FN Calaça',
     solicitante_nome: 'Cap (FN) Bruno Tiago',
     solicitante_posto: 'Cap (FN)',
     tipo_tarefa: 'producao_arte',
@@ -280,32 +248,40 @@ export const KanbanTasks: React.FC = () => {
 
   const loadTarefas = async () => {
     try {
+      setLoading(true);
       const { data, error } = await supabase
         .from('tarefas_pendentes')
         .select('*')
-        .order('ordem_prioridade', { ascending: true, nullsFirst: false });
+        .order('id', { ascending: true });
 
-      if (!error && data && data.length > 0) {
-        const mapped: TarefaCOMSOC[] = data.map((d: any, index: number) => ({
-          id: d.id,
-          titulo: d.titulo,
-          descricao: d.descricao,
-          responsavel: d.responsavel,
-          solicitante_nome: d.solicitante_nome || d.solicitante || 'Oficial Solicitante',
-          solicitante_posto: d.solicitante_posto || 'Oficial',
-          tipo_tarefa: (d.tipo_tarefa as TarefaTipo) || 'producao_arte',
-          prioridade: (d.prioridade as TarefaPrioridade) || 'media',
-          status: (d.status as TarefaStatus) || 'a_fazer',
-          ordem_prioridade: d.ordem_prioridade || index + 1,
-          prazo: d.prazo,
-          anexos_midia: typeof d.anexos_midia === 'string' ? JSON.parse(d.anexos_midia) : (d.anexos_midia || []),
-          apontamentos_ajuste: typeof d.apontamentos_ajuste === 'string' ? JSON.parse(d.apontamentos_ajuste) : (d.apontamentos_ajuste || []),
-          criado_em: d.criado_em,
-        }));
+      if (!error && data) {
+        const mapped: TarefaCOMSOC[] = data.map((d: any, index: number) => {
+          const meta = parseTarefaDescricao(d.descricao);
+          return {
+            id: d.id,
+            titulo: d.titulo,
+            descricao: meta.clean_descricao,
+            responsavel: d.responsavel || 'Militar ComSoc',
+            solicitante_nome: meta.solicitante_nome,
+            solicitante_posto: meta.solicitante_posto,
+            tipo_tarefa: meta.tipo_tarefa,
+            prioridade: (d.prioridade as TarefaPrioridade) || 'media',
+            status: (d.status as TarefaStatus) || 'a_fazer',
+            ordem_prioridade: meta.ordem_prioridade || index + 1,
+            prazo: d.prazo,
+            anexos_midia: meta.anexos_midia,
+            apontamentos_ajuste: meta.apontamentos_ajuste,
+            criado_em: d.criado_em,
+          };
+        });
         setTarefas(mapped);
+      } else {
+        setTarefas([]);
       }
     } catch {
-      // Fallback para os mocks
+      setTarefas([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -335,24 +311,25 @@ export const KanbanTasks: React.FC = () => {
     militaryAudio.playTacticalBeep();
 
     // 1. Atualização Otimista
-    setTarefas((prev) => {
-      const remaining = prev.filter((t) => t.id !== taskId);
-      const updatedTask: TarefaCOMSOC = { ...taskToMove, status: targetStatus };
+    const remaining = tarefas.filter((t) => t.id !== taskId);
+    const updatedTask: TarefaCOMSOC = { ...taskToMove, status: targetStatus };
 
-      if (targetTaskId && targetTaskId !== taskId) {
-        const targetIndex = remaining.findIndex((t) => t.id === targetTaskId);
-        if (targetIndex !== -1) {
-          remaining.splice(targetIndex, 0, updatedTask);
-          return remaining.map((t, idx) => ({ ...t, ordem_prioridade: idx + 1 }));
-        }
+    let newList: TarefaCOMSOC[] = [];
+    if (targetTaskId && targetTaskId !== taskId) {
+      const targetIndex = remaining.findIndex((t) => t.id === targetTaskId);
+      if (targetIndex !== -1) {
+        remaining.splice(targetIndex, 0, updatedTask);
+        newList = remaining.map((t, idx) => ({ ...t, ordem_prioridade: idx + 1 }));
+      } else {
+        newList = [updatedTask, ...remaining].map((t, idx) => ({ ...t, ordem_prioridade: idx + 1 }));
       }
-
+    } else {
       const colTasks = remaining.filter((t) => t.status === targetStatus);
       const otherTasks = remaining.filter((t) => t.status !== targetStatus);
-      const newColList = [updatedTask, ...colTasks];
+      newList = [...otherTasks, updatedTask, ...colTasks].map((t, idx) => ({ ...t, ordem_prioridade: idx + 1 }));
+    }
 
-      return [...otherTasks, ...newColList].map((t, idx) => ({ ...t, ordem_prioridade: idx + 1 }));
-    });
+    setTarefas(newList);
 
     if (targetStatus === 'concluido') {
       toast.success('🎯 Missão marcada como Concluída!');
@@ -360,12 +337,22 @@ export const KanbanTasks: React.FC = () => {
       toast.info(`Tarefa movida para "${COLUNAS.find((c) => c.id === targetStatus)?.title}".`);
     }
 
-    // 2. Persistência no Banco
+    // 2. Persistência no Banco com serialização de metadados
     try {
+      const serializedDesc = serializeTarefaDescricao(updatedTask.descricao || '', {
+        solicitante_nome: updatedTask.solicitante_nome,
+        solicitante_posto: updatedTask.solicitante_posto,
+        tipo_tarefa: updatedTask.tipo_tarefa,
+        ordem_prioridade: updatedTask.ordem_prioridade,
+        anexos_midia: updatedTask.anexos_midia,
+        apontamentos_ajuste: updatedTask.apontamentos_ajuste,
+      });
+
       await supabase
         .from('tarefas_pendentes')
         .update({
           status: targetStatus,
+          descricao: serializedDesc,
           atualizado_em: new Date().toISOString(),
         })
         .eq('id', taskId);
@@ -452,21 +439,25 @@ export const KanbanTasks: React.FC = () => {
     militaryAudio.playTacticalBeep();
     toast.success('🎉 Tarefa cadastrada com sucesso na esteira!');
 
+    const serializedDesc = serializeTarefaDescricao(newTarefa.descricao, {
+      solicitante_nome: newTarefa.solicitante_nome,
+      solicitante_posto: newTarefa.solicitante_posto,
+      tipo_tarefa: newTarefa.tipo_tarefa,
+      ordem_prioridade: 1,
+      anexos_midia: initialAnexos,
+      apontamentos_ajuste: [],
+    });
+
     try {
       const { data } = await supabase
         .from('tarefas_pendentes')
         .insert({
           titulo: newTarefa.titulo,
-          descricao: newTarefa.descricao,
+          descricao: serializedDesc,
           responsavel: newTarefa.responsavel,
-          solicitante_nome: newTarefa.solicitante_nome,
-          solicitante_posto: newTarefa.solicitante_posto,
-          tipo_tarefa: newTarefa.tipo_tarefa,
           prioridade: newTarefa.prioridade,
           status: newTarefa.status,
           prazo: newTarefa.prazo || null,
-          anexos_midia: JSON.stringify(initialAnexos),
-          apontamentos_ajuste: JSON.stringify([]),
         })
         .select();
 
@@ -510,10 +501,19 @@ export const KanbanTasks: React.FC = () => {
     setNovaMidiaNome('');
     toast.success('Mídia anexada com sucesso!');
 
+    const serializedDesc = serializeTarefaDescricao(updatedTask.descricao || '', {
+      solicitante_nome: updatedTask.solicitante_nome,
+      solicitante_posto: updatedTask.solicitante_posto,
+      tipo_tarefa: updatedTask.tipo_tarefa,
+      ordem_prioridade: updatedTask.ordem_prioridade,
+      anexos_midia: updatedAnexos,
+      apontamentos_ajuste: updatedTask.apontamentos_ajuste,
+    });
+
     try {
       await supabase
         .from('tarefas_pendentes')
-        .update({ anexos_midia: JSON.stringify(updatedAnexos) })
+        .update({ descricao: serializedDesc })
         .eq('id', mediaModalTask.id);
     } catch (e) {
       console.warn('Erro ao salvar anexo no Supabase:', e);
@@ -539,10 +539,19 @@ export const KanbanTasks: React.FC = () => {
     setNovoApontamento('');
     toast.info('Apontamento de ajuste registrado.');
 
+    const serializedDesc = serializeTarefaDescricao(updatedTask.descricao || '', {
+      solicitante_nome: updatedTask.solicitante_nome,
+      solicitante_posto: updatedTask.solicitante_posto,
+      tipo_tarefa: updatedTask.tipo_tarefa,
+      ordem_prioridade: updatedTask.ordem_prioridade,
+      anexos_midia: updatedTask.anexos_midia,
+      apontamentos_ajuste: updatedApontamentos,
+    });
+
     try {
       await supabase
         .from('tarefas_pendentes')
-        .update({ apontamentos_ajuste: JSON.stringify(updatedApontamentos) })
+        .update({ descricao: serializedDesc })
         .eq('id', mediaModalTask.id);
     } catch (e) {
       console.warn('Erro ao salvar apontamento:', e);
@@ -741,7 +750,11 @@ export const KanbanTasks: React.FC = () => {
 
               {/* Lista de Cards Reordenáveis */}
               <div className="space-y-3 flex-1 overflow-y-auto pr-1">
-                {colTasks.length > 0 ? (
+                {loading ? (
+                  <div className="h-32 flex items-center justify-center text-xs text-slate-500 animate-pulse">
+                    Carregando demandas do banco...
+                  </div>
+                ) : colTasks.length > 0 ? (
                   colTasks.map((task) => {
                     const prio = PRIORIDADES[task.prioridade];
                     const tipoInfo = TIPOS_TAREFA[task.tipo_tarefa || 'outro'];
@@ -880,7 +893,7 @@ export const KanbanTasks: React.FC = () => {
                 ) : (
                   <div className="h-32 flex flex-col items-center justify-center border-2 border-dashed border-slate-800/60 rounded-xl text-[11px] text-slate-500 gap-1">
                     <span>Nenhuma tarefa nesta etapa</span>
-                    <span className="text-[9.5px] opacity-60">Arraste um card para cá</span>
+                    <span className="text-[9.5px] opacity-60">Cadastre uma nova demanda acima</span>
                   </div>
                 )}
               </div>
