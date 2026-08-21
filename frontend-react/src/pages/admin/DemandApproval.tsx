@@ -33,6 +33,7 @@ import {
   Printer,
   Gift,
   Music,
+  Archive,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -45,7 +46,7 @@ export const DemandApproval: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [demandas, setDemandas] = useState<DemandaComunicacao[]>([]);
-  const [activeTab, setActiveTab] = useState<'pendente' | 'aprovado' | 'ajustes' | 'rejeitado' | 'todas'>('pendente');
+  const [activeTab, setActiveTab] = useState<'todas' | 'pendente_ajustes' | 'arquivadas'>('todas');
   const [viewMode, setViewMode] = useState<'cards' | 'tabela'>('cards');
   const [searchQuery, setSearchQuery] = useState('');
   const [serviceFilter, setServiceFilter] = useState<string>('todos');
@@ -256,16 +257,40 @@ export const DemandApproval: React.FC = () => {
     };
   }, []);
 
+  // Helper para obter emoji e label tático de serviços de cobertura
+  const getCoverageBadge = (c: string) => {
+    const lower = c.toLowerCase();
+    if (lower.includes('foto')) return { emoji: '📸', label: 'Fotografia Oficial' };
+    if (lower.includes('vídeo') || lower.includes('video')) return { emoji: '🎥', label: 'Vídeo / Gravação' };
+    if (lower.includes('drone')) return { emoji: '🛸', label: 'Drone' };
+    if (lower.includes('reels')) return { emoji: '📱', label: 'Reels / Redes' };
+    if (lower.includes('transmiss')) return { emoji: '📡', label: 'Transmissão Ao Vivo' };
+    if (lower.includes('design') || lower.includes('arte')) return { emoji: '🎨', label: 'Design Gráfico' };
+    if (lower.includes('impress')) return { emoji: '🖨️', label: 'Impressos' };
+    if (lower.includes('brinde') || lower.includes('kit') || lower.includes('lembranca')) return { emoji: '🪙', label: 'Kit Brinde RP' };
+    if (lower.includes('reda')) return { emoji: '✍️', label: 'Redação / Matéria' };
+    if (lower.includes('cerimon')) return { emoji: '🎤', label: 'Cerimonial' };
+    if (lower.includes('banda') || lower.includes('músic') || lower.includes('music')) return { emoji: '🎵', label: 'Banda de Música' };
+    return { emoji: '⚡', label: c };
+  };
+
   const loadDemandas = async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
         .from('demandas_comunicacao')
         .select('*')
-        .order('data_evento', { ascending: false, nullsFirst: false });
+        .order('data_evento', { ascending: true, nullsFirst: false });
 
       if (!error && data) {
-        setDemandas(data as DemandaComunicacao[]);
+        // Ordenação cronológica estrita crescente: datas reais primeiro (mais antiga para mais recente), e sem data no final
+        const sorted = [...data].sort((a: any, b: any) => {
+          const aDate = a.data_evento && a.data_evento !== 'SEM_DATA' ? a.data_evento : '9999-12-31';
+          const bDate = b.data_evento && b.data_evento !== 'SEM_DATA' ? b.data_evento : '9999-12-31';
+          if (aDate !== bDate) return aDate.localeCompare(bDate);
+          return (a.hora_evento || '00:00').localeCompare(b.hora_evento || '00:00');
+        });
+        setDemandas(sorted as DemandaComunicacao[]);
       }
     } catch {
       // Fallback
@@ -276,8 +301,9 @@ export const DemandApproval: React.FC = () => {
 
   // Helper para extrair URL do Drive de textos brutos
   const extractDriveUrl = (dem: DemandaComunicacao) => {
-    if (dem.drive_url && dem.drive_url.startsWith('http')) return dem.drive_url;
-    const combined = `${dem.observacoes || ''} ${dem.autoridades || ''}`;
+    if (dem.arquivo_url && String(dem.arquivo_url).startsWith('http')) return dem.arquivo_url;
+    if (dem.drive_url && String(dem.drive_url).startsWith('http')) return dem.drive_url;
+    const combined = `${dem.observacoes || ''} ${dem.autoridades || ''} ${dem.produto_especifico || ''}`;
     const match = combined.match(/https:\/\/drive\.google\.com[^\s\]]+/);
     return match ? match[0] : null;
   };
@@ -404,8 +430,17 @@ export const DemandApproval: React.FC = () => {
   // ── FILTROS E PESQUISA INTELIGENTE ──
   const filteredDemandas = useMemo(() => {
     return demandas.filter((d) => {
-      // Filtro por Aba de Status
-      if (activeTab !== 'todas' && d.status !== activeTab) return false;
+      const isArchived = ['concluida', 'concluido', 'arquivada', 'arquivado', 'rejeitado', 'rejeitada'].includes(d.status || '');
+      const isAguardando = ['pendente', 'ajustes'].includes(d.status || '');
+
+      // Filtro por Aba de Status Reestruturada
+      if (activeTab === 'todas') {
+        if (isArchived) return false;
+      } else if (activeTab === 'pendente_ajustes') {
+        if (!isAguardando) return false;
+      } else if (activeTab === 'arquivadas') {
+        if (!isArchived) return false;
+      }
 
       // Filtro por Categoria / Serviço / Drive
       if (serviceFilter !== 'todos') {
@@ -440,22 +475,37 @@ export const DemandApproval: React.FC = () => {
     });
   }, [demandas, activeTab, serviceFilter, searchQuery]);
 
-  // KPIs
-  const kpiPendentes = demandas.filter((d) => d.status === 'pendente').length;
-  const kpiAprovadas = demandas.filter((d) => d.status === 'aprovado').length;
-  const kpiAjustes = demandas.filter((d) => d.status === 'ajustes').length;
+  // KPIs Estruturados
+  const kpiHomologadas = useMemo(
+    () => demandas.filter((d) => ['aprovado', 'aprovada', 'em_andamento'].includes(d.status || '')).length,
+    [demandas]
+  );
+  const kpiAguardando = useMemo(
+    () => demandas.filter((d) => ['pendente', 'ajustes'].includes(d.status || '')).length,
+    [demandas]
+  );
+  const kpiArquivadas = useMemo(
+    () => demandas.filter((d) => ['concluida', 'concluido', 'arquivada', 'arquivado', 'rejeitado', 'rejeitada'].includes(d.status || '')).length,
+    [demandas]
+  );
+  const kpiTotalAtivas = useMemo(
+    () => demandas.filter((d) => !['concluida', 'concluido', 'arquivada', 'arquivado', 'rejeitado', 'rejeitada'].includes(d.status || '')).length,
+    [demandas]
+  );
 
   const hojeStr = getBrasiliaDateStr();
   const seteDiasStr = addDaysBrasilia(hojeStr, 7);
-  const kpiProximos7Dias = demandas.filter(
-    (d) => d.data_evento && d.data_evento >= hojeStr && d.data_evento <= seteDiasStr
-  ).length;
-
-  const totalScoreEsforco = useMemo(() => {
-    return demandas
-      .filter((d) => d.status === 'pendente' || d.status === 'aprovado')
-      .reduce((acc, curr) => acc + (Number(curr.score_esforco) || 1), 0);
-  }, [demandas]);
+  const kpiProximos7Dias = useMemo(
+    () =>
+      demandas.filter(
+        (d) =>
+          d.data_evento &&
+          d.data_evento >= hojeStr &&
+          d.data_evento <= seteDiasStr &&
+          !['concluida', 'concluido', 'arquivada', 'arquivado', 'rejeitado'].includes(d.status || '')
+      ).length,
+    [demandas, hojeStr, seteDiasStr]
+  );
 
   // Toggle Seleção
   const toggleSelect = (id: number) => {
@@ -489,7 +539,7 @@ export const DemandApproval: React.FC = () => {
         </div>
 
         {/* Botão de Ação Rápida em Lote */}
-        {selectedIds.length > 0 && activeTab === 'pendente' && (
+        {selectedIds.length > 0 && activeTab === 'pendente_ajustes' && (
           <button
             onClick={handleBatchApprove}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 transition-all animate-bounce"
@@ -500,29 +550,32 @@ export const DemandApproval: React.FC = () => {
         )}
       </div>
 
-      {/* ── BARRA DE KPIS TÁTICOS (RESUMO EXECUTIVO) ── */}
+      {/* ── BARRA DE KPIS TÁTICOS (RESUMO EXECUTIVO REESTRUTURADO) ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="p-3.5 rounded-2xl bg-[#0b1222] border border-amber-500/30 flex items-center justify-between shadow-md">
+        {/* 1º KPI: Homologadas / Ativas */}
+        <div className="p-3.5 rounded-2xl bg-[#0b1222] border border-emerald-500/30 flex items-center justify-between shadow-md hover:border-emerald-500/50 transition-all">
           <div className="space-y-0.5">
-            <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Aguardando Parecer</span>
-            <p className="text-xl font-black text-white">{kpiPendentes}</p>
-          </div>
-          <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-400">
-            <Clock className="w-4 h-4" />
-          </div>
-        </div>
-
-        <div className="p-3.5 rounded-2xl bg-[#0b1222] border border-emerald-500/30 flex items-center justify-between shadow-md">
-          <div className="space-y-0.5">
-            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Homologadas</span>
-            <p className="text-xl font-black text-white">{kpiAprovadas}</p>
+            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Homologadas / Ativas</span>
+            <p className="text-xl font-black text-white">{kpiHomologadas}</p>
           </div>
           <div className="w-9 h-9 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400">
             <CheckCircle2 className="w-4 h-4" />
           </div>
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-[#0b1222] border border-cyan-500/30 flex items-center justify-between shadow-md">
+        {/* 2º KPI: Aguardando Parecer / Revisão */}
+        <div className="p-3.5 rounded-2xl bg-[#0b1222] border border-amber-500/30 flex items-center justify-between shadow-md hover:border-amber-500/50 transition-all">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Aguardando Parecer</span>
+            <p className="text-xl font-black text-white">{kpiAguardando}</p>
+          </div>
+          <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-400">
+            <Clock className="w-4 h-4" />
+          </div>
+        </div>
+
+        {/* 3º KPI: Próximos 7 Dias */}
+        <div className="p-3.5 rounded-2xl bg-[#0b1222] border border-cyan-500/30 flex items-center justify-between shadow-md hover:border-cyan-500/50 transition-all">
           <div className="space-y-0.5">
             <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">Próximos 7 Dias</span>
             <p className="text-xl font-black text-white">{kpiProximos7Dias}</p>
@@ -532,13 +585,14 @@ export const DemandApproval: React.FC = () => {
           </div>
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-[#0b1222] border border-purple-500/30 flex items-center justify-between shadow-md">
+        {/* 4º KPI: Arquivadas / Concluídas */}
+        <div className="p-3.5 rounded-2xl bg-[#0b1222] border border-slate-700/50 flex items-center justify-between shadow-md hover:border-slate-600 transition-all">
           <div className="space-y-0.5">
-            <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">Score de Esforço</span>
-            <p className="text-xl font-black text-white">{totalScoreEsforco.toFixed(1)} <span className="text-xs font-normal text-slate-400">pts</span></p>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Missões Concluídas</span>
+            <p className="text-xl font-black text-white">{kpiArquivadas}</p>
           </div>
-          <div className="w-9 h-9 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400">
-            <TrendingUp className="w-4 h-4" />
+          <div className="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center text-slate-400">
+            <Archive className="w-4 h-4" />
           </div>
         </div>
       </div>
@@ -546,61 +600,52 @@ export const DemandApproval: React.FC = () => {
       {/* ── BARRA DE FERRAMENTAS: TABS, BUSCA, FILTROS E MODO DE VISUALIZAÇÃO ── */}
       <div className="p-4 rounded-2xl bg-[#0b1222] border border-slate-800 space-y-3.5 shadow-lg">
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-          {/* Tabs Principais com Badges */}
+          {/* Tabs Principais Reestruturadas */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
+            {/* Aba 1: Todas as Pautas (1ª Posição - Padrão) */}
             <button
-              onClick={() => { setActiveTab('pendente'); setSelectedIds([]); }}
+              onClick={() => { setActiveTab('todas'); setSelectedIds([]); }}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                activeTab === 'pendente'
+                activeTab === 'todas'
+                  ? 'bg-[#c5a059]/20 text-[#e5c07b] border border-[#c5a059]/50 shadow-xs'
+                  : 'bg-slate-900/60 text-slate-400 hover:text-slate-200 border border-slate-800'
+              }`}
+            >
+              <span>🌟 Todas as Pautas</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 text-[10px] font-bold">
+                {kpiTotalAtivas}
+              </span>
+            </button>
+
+            {/* Aba 2: Aguardando Parecer / Revisão (Unificado) */}
+            <button
+              onClick={() => { setActiveTab('pendente_ajustes'); setSelectedIds([]); }}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                activeTab === 'pendente_ajustes'
                   ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs'
                   : 'bg-slate-900/60 text-slate-400 hover:text-slate-200 border border-slate-800'
               }`}
             >
-              <span>Pendentes</span>
-              {kpiPendentes > 0 && (
+              <span>⏳ Aguardando Parecer / Revisão</span>
+              {kpiAguardando > 0 && (
                 <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black">
-                  {kpiPendentes}
+                  {kpiAguardando}
                 </span>
               )}
             </button>
 
+            {/* Aba 3: Arquivadas / Concluídas */}
             <button
-              onClick={() => { setActiveTab('aprovado'); setSelectedIds([]); }}
+              onClick={() => { setActiveTab('arquivadas'); setSelectedIds([]); }}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                activeTab === 'aprovado'
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs'
-                  : 'bg-slate-900/60 text-slate-400 hover:text-slate-200 border border-slate-800'
-              }`}
-            >
-              <span>Aprovadas</span>
-              <span className="text-[10px] opacity-70">({kpiAprovadas})</span>
-            </button>
-
-            <button
-              onClick={() => { setActiveTab('ajustes'); setSelectedIds([]); }}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                activeTab === 'ajustes'
+                activeTab === 'arquivadas'
                   ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-xs'
                   : 'bg-slate-900/60 text-slate-400 hover:text-slate-200 border border-slate-800'
               }`}
             >
-              <span>Em Ajustes</span>
-              {kpiAjustes > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-purple-500 text-white text-[10px] font-black">
-                  {kpiAjustes}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => { setActiveTab('todas'); setSelectedIds([]); }}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                activeTab === 'todas'
-                  ? 'bg-slate-800 text-white border border-slate-700 shadow-xs'
-                  : 'bg-slate-900/60 text-slate-400 hover:text-slate-200 border border-slate-800'
-              }`}
-            >
-              Todas as Pautas ({demandas.length})
+              <Archive className="w-3.5 h-3.5" />
+              <span>Arquivadas</span>
+              <span className="text-[10px] opacity-70">({kpiArquivadas})</span>
             </button>
           </div>
 
@@ -675,7 +720,7 @@ export const DemandApproval: React.FC = () => {
             ))}
           </div>
 
-          {activeTab === 'pendente' && filteredDemandas.length > 0 && (
+          {activeTab === 'pendente_ajustes' && filteredDemandas.length > 0 && (
             <button
               type="button"
               onClick={toggleSelectAll}
@@ -715,7 +760,7 @@ export const DemandApproval: React.FC = () => {
                     {/* Topo do Card: Seleção + Status + Data */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2 flex-wrap">
-                        {activeTab === 'pendente' && (
+                        {activeTab === 'pendente_ajustes' && (
                           <button
                             type="button"
                             onClick={() => toggleSelect(demanda.id)}
@@ -736,6 +781,8 @@ export const DemandApproval: React.FC = () => {
                               ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 animate-pulse'
                               : demanda.status === 'ajustes'
                               ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
+                              : ['concluida', 'concluido', 'arquivada', 'arquivado'].includes(demanda.status || '')
+                              ? 'bg-slate-800 text-slate-400 border border-slate-700'
                               : 'bg-red-500/15 text-red-400 border border-red-500/30'
                           }`}
                         >
@@ -927,21 +974,20 @@ export const DemandApproval: React.FC = () => {
         </div>
       )}
 
-      {/* ── MODO 2: VISUALIZAÇÃO EM TABELA TÁTICA COMPACTA ── */}
+      {/* ── MODO 2: VISUALIZAÇÃO EM TABELA TÁTICA COMPACTA & OTIMIZADA ── */}
       {viewMode === 'tabela' && (
         <div className="rounded-2xl bg-[#0b1222] border border-slate-800 overflow-hidden shadow-lg">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-300">
               <thead className="bg-slate-900/90 text-[11px] text-slate-400 uppercase font-black border-b border-slate-800 tracking-wider">
                 <tr>
-                  {activeTab === 'pendente' && <th className="p-3.5 w-10"></th>}
-                  <th className="p-3.5">Status</th>
-                  <th className="p-3.5">Pauta / Evento</th>
-                  <th className="p-3.5">Data / Hora</th>
-                  <th className="p-3.5">Local</th>
-                  <th className="p-3.5">Solicitante</th>
-                  <th className="p-3.5">Cobertura</th>
-                  <th className="p-3.5 text-right">Ações</th>
+                  {activeTab === 'pendente_ajustes' && <th className="p-2.5 w-8"></th>}
+                  <th className="p-2.5 w-24">Status</th>
+                  <th className="p-2.5 min-w-[200px]">Pauta / Evento</th>
+                  <th className="p-2.5 w-36">Data / Hora</th>
+                  <th className="p-2.5 min-w-[140px]">Local</th>
+                  <th className="p-2.5 w-28 text-center">Cobertura</th>
+                  <th className="p-2.5 text-right w-44">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
@@ -958,8 +1004,8 @@ export const DemandApproval: React.FC = () => {
                           isSelected ? 'bg-cyan-950/20' : ''
                         }`}
                       >
-                        {activeTab === 'pendente' && (
-                          <td className="p-3.5">
+                        {activeTab === 'pendente_ajustes' && (
+                          <td className="p-2.5">
                             <button
                               type="button"
                               onClick={() => toggleSelect(demanda.id)}
@@ -974,15 +1020,17 @@ export const DemandApproval: React.FC = () => {
                           </td>
                         )}
 
-                        <td className="p-3.5 whitespace-nowrap">
+                        <td className="p-2.5 whitespace-nowrap">
                           <span
                             className={`px-2 py-0.5 text-[10px] font-black rounded-md uppercase tracking-wider ${
                               demanda.status === 'aprovado'
                                 ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
                                 : demanda.status === 'pendente'
-                                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 animate-pulse'
                                 : demanda.status === 'ajustes'
                                 ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
+                                : ['concluida', 'concluido', 'arquivada', 'arquivado'].includes(demanda.status || '')
+                                ? 'bg-slate-800 text-slate-400 border border-slate-700'
                                 : 'bg-red-500/15 text-red-400 border border-red-500/30'
                             }`}
                           >
@@ -990,11 +1038,18 @@ export const DemandApproval: React.FC = () => {
                           </span>
                         </td>
 
-                        <td className="p-3.5 font-bold text-white max-w-xs truncate">
-                          {demanda.titulo_evento}
+                        <td className="p-2.5 font-bold text-white max-w-sm">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span>{demanda.titulo_evento}</span>
+                            {demanda.sigiloso && (
+                              <span className="px-1.5 py-0.2 rounded bg-red-500/20 text-red-400 border border-red-500/30 text-[9px] font-black">
+                                SIGILOSO
+                              </span>
+                            )}
+                          </div>
                         </td>
 
-                        <td className="p-3.5 whitespace-nowrap">
+                        <td className="p-2.5 whitespace-nowrap">
                           {demanda.data_fim && demanda.data_fim > demanda.data_evento ? (
                             <span className="text-purple-300 font-bold">
                               🗓️ {demanda.data_evento} até {demanda.data_fim}
@@ -1003,34 +1058,36 @@ export const DemandApproval: React.FC = () => {
                             <span className="text-amber-400 font-bold">⏳ A Definir</span>
                           ) : (
                             <span className="text-blue-300 font-bold">
-                              {demanda.data_evento} às {demanda.hora_evento || '09:00'}
+                              📅 {demanda.data_evento} às {demanda.hora_evento || '09:00'}
                             </span>
                           )}
                         </td>
 
-                        <td className="p-3.5 text-slate-300 max-w-[160px] truncate">
+                        <td className="p-2.5 text-slate-300 max-w-[180px] truncate">
                           {demanda.local_evento || 'Gabinete CGCFN'}
                         </td>
 
-                        <td className="p-3.5 whitespace-nowrap text-slate-300">
-                          {demanda.solicitante_nome} <span className="text-slate-500 text-[10px]">({demanda.setor})</span>
-                        </td>
-
-                        <td className="p-3.5">
-                          <div className="flex gap-1 flex-wrap max-w-[140px]">
-                            {coberturas.slice(0, 2).map((c, i) => (
-                              <span key={i} className="px-1.5 py-0.5 rounded bg-slate-900 text-[10px] text-slate-300">
-                                {c}
-                              </span>
-                            ))}
-                            {coberturas.length > 2 && (
-                              <span className="text-[10px] text-slate-500 font-bold">+{coberturas.length - 2}</span>
-                            )}
+                        {/* Cobertura / Serviços com Emojis Táticos e Tooltips */}
+                        <td className="p-2.5 text-center">
+                          <div className="flex gap-1 items-center justify-center flex-wrap">
+                            {coberturas.map((c, i) => {
+                              const badge = getCoverageBadge(c);
+                              return (
+                                <span
+                                  key={i}
+                                  title={`${badge.label} (${c})`}
+                                  className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-slate-900 border border-slate-800 text-xs hover:scale-110 hover:border-[#00e5ff]/50 transition-all cursor-help"
+                                >
+                                  {badge.emoji}
+                                </span>
+                              );
+                            })}
                           </div>
                         </td>
 
-                        <td className="p-3.5 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1.5">
+                        {/* Ações Rápidas */}
+                        <td className="p-2.5 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1">
                             <button
                               type="button"
                               onClick={() => handleOpenDetailModal(demanda, false)}
@@ -1094,27 +1151,22 @@ export const DemandApproval: React.FC = () => {
                                 </button>
                               </>
                             ) : ['aprovado', 'em_andamento'].includes(demanda.status || '') ? (
-                              <>
-                                <button
-                                  onClick={() => handleConclude(demanda)}
-                                  className="px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold hover:bg-emerald-500/30"
-                                  title="Concluir Demanda"
-                                >
-                                  Concluir
-                                </button>
-                                <button
-                                  onClick={() => handleReopen(demanda, 'pendente')}
-                                  className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-300 border border-slate-800 text-xs font-bold"
-                                >
-                                  Reabrir
-                                </button>
-                              </>
+                              <button
+                                onClick={() => handleConclude(demanda)}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold hover:bg-emerald-500/30 flex items-center gap-1"
+                                title="Concluir Demanda e Mover para Arquivadas"
+                              >
+                                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                <span>Concluir</span>
+                              </button>
                             ) : (
                               <button
                                 onClick={() => handleReopen(demanda, 'pendente')}
-                                className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-300 border border-slate-800 text-xs font-bold"
+                                className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-300 border border-slate-800 text-xs font-bold flex items-center gap-1"
+                                title="Reabrir Pauta para Avaliação Ativa"
                               >
-                                Reabrir
+                                <RotateCcw className="w-3 h-3" />
+                                <span>Reabrir</span>
                               </button>
                             )}
                           </div>
@@ -1124,8 +1176,8 @@ export const DemandApproval: React.FC = () => {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-500 text-xs">
-                      Nenhuma demanda encontrada.
+                    <td colSpan={7} className="p-8 text-center text-slate-500 text-xs">
+                      Nenhuma demanda encontrada para os filtros selecionados.
                     </td>
                   </tr>
                 )}

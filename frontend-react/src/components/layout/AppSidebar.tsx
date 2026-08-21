@@ -31,6 +31,9 @@ import {
   Award,
   Send,
   Terminal,
+  PanelLeftClose,
+  PanelLeftOpen,
+  ChevronLeft,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -247,9 +250,22 @@ import defaultBrasao from '../../assets/brasaocgcfn.png';
 interface AppSidebarProps {
   isOpen: boolean;
   onClose?: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+  isHovered?: boolean;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
-export const AppSidebar: React.FC<AppSidebarProps> = ({ isOpen, onClose }) => {
+export const AppSidebar: React.FC<AppSidebarProps> = ({
+  isOpen,
+  onClose,
+  isCollapsed = false,
+  onToggleCollapse,
+  isHovered = false,
+  onMouseEnter,
+  onMouseLeave,
+}) => {
   const location = useLocation();
   const { user, logout } = useAuth();
   const [logoSrc, setLogoSrc] = React.useState<string>(() => {
@@ -268,6 +284,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ isOpen, onClose }) => {
     };
   }, []);
 
+  const isVisibleDesktop = !isCollapsed || isHovered;
+
   return (
     <>
       {/* Mobile Backdrop */}
@@ -278,9 +296,21 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ isOpen, onClose }) => {
         />
       )}
 
+      {/* Desktop Hover Backdrop when collapsed */}
+      {isCollapsed && isHovered && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-40 hidden lg:block transition-opacity duration-300"
+          onClick={onMouseLeave}
+        />
+      )}
+
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 w-72 bg-[#080d1a] border-r border-[#c5a059]/20 flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+        className={`fixed top-0 bottom-0 left-0 z-50 w-72 bg-[#080d1a] border-r border-[#c5a059]/20 flex flex-col transition-all duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
+        } ${
+          isVisibleDesktop ? 'lg:translate-x-0 lg:shadow-2xl lg:shadow-black/90' : 'lg:-translate-x-full'
         }`}
       >
         {/* Top Branding */}
@@ -306,6 +336,18 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ isOpen, onClose }) => {
               <p className="text-[10px] text-slate-400 font-medium leading-none">Comunicação Social • CGCFN</p>
             </div>
           </div>
+
+          {/* Botão de Recolher / Fixar Sidebar (Desktop) */}
+          {onToggleCollapse && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="hidden lg:flex items-center justify-center w-8 h-8 rounded-lg bg-slate-900/80 hover:bg-[#c5a059]/20 text-slate-400 hover:text-[#e5c07b] border border-slate-800 hover:border-[#c5a059]/40 transition-all"
+              title={isCollapsed ? 'Fixar Barra Lateral Aberta' : 'Ocultar Barra Lateral (Hover na Borda)'}
+            >
+              {isCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+            </button>
+          )}
         </div>
 
         {/* Scrollable Navigation */}
