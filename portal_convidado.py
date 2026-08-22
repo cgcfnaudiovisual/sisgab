@@ -131,6 +131,7 @@ def _get_event_matrix(event_id: str) -> tuple[np.ndarray, list[dict]]:
         cache_dir = base_dir / 'data'
         cache_dir.mkdir(exist_ok=True)
         npz_path = cache_dir / f"event_embeddings_{event_id}.npz"
+        pkl_path = cache_dir / f"event_records_{event_id}.pkl"
         json_path = cache_dir / f"event_records_{event_id}.json"
 
         if npz_path.exists():
@@ -140,11 +141,26 @@ def _get_event_matrix(event_id: str) -> tuple[np.ndarray, list[dict]]:
                 matrix = np.array(data['matrix'], dtype=np.float32)
                 records = []
                 
-                # 1. Tenta carregar do json_path
-                if json_path.exists():
+                # 1. Tenta carregar do pkl_path (Ultra-rápido)
+                if pkl_path.exists():
+                    try:
+                        import pickle
+                        with open(pkl_path, 'rb') as f:
+                            records = pickle.load(f)
+                    except Exception:
+                        pass
+
+                # 2. Fallback: json_path
+                if not records and json_path.exists():
                     try:
                         with open(json_path, 'r', encoding='utf-8') as f:
                             records = json.load(f)
+                        try:
+                            import pickle
+                            with open(pkl_path, 'wb') as f_pkl:
+                                pickle.dump(records, f_pkl, protocol=pickle.HIGHEST_PROTOCOL)
+                        except Exception:
+                            pass
                     except Exception:
                         pass
                         
