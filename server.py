@@ -23,13 +23,22 @@ ASSETS_DIR = os.path.join(REACT_DIST_DIR, "assets")
 
 # ── Endpoints de Reconhecimento Facial Sob Demanda ──
 try:
-    from portal_convidado import _extract_selfie_embedding, _get_event_matrix, _get_selfie_app, _get_geral_photos
+    from portal_convidado import (
+        _extract_selfie_embedding,
+        _get_event_matrix,
+        _get_selfie_app,
+        _get_geral_photos,
+        _check_ai_idle_and_hibernate,
+        _touch_ai_activity
+    )
 except Exception as e_import:
     print(f"[WARN] Erro ao importar portal_convidado: {e_import}")
     _extract_selfie_embedding = None
     _get_event_matrix = None
     _get_selfie_app = None
     _get_geral_photos = None
+    _check_ai_idle_and_hibernate = None
+    _touch_ai_activity = None
 
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
@@ -59,22 +68,19 @@ async def lifespan(app_instance: FastAPI):
     t_bot = threading.Thread(target=_start_bot_in_thread, daemon=True, name="SisGAB-TelegramBot")
     t_bot.start()
 
-    # ── Pré-aquecimento da IA na RAM para Busca Instantânea (<0.5s) ──
-    def _warmup_ai_models():
-        try:
-            print("🧠 [SisGAB 2.0] Pré-aquecendo modelos de IA InsightFace na memória RAM...", flush=True)
-            if _get_selfie_app:
-                _get_selfie_app()
-                print("✅ [SisGAB 2.0] InsightFace ativo na RAM para respostas imediatas!", flush=True)
-            if _get_event_matrix:
-                for eid in ["50", "52"]:
-                    _get_event_matrix(eid)
-                print("✅ [SisGAB 2.0] Matrizes de biometria pré-carregadas na RAM!", flush=True)
-        except Exception as e:
-            print(f"[SisGAB AI WARMUP ERR] {e}", flush=True)
+    # ── Monitor de Inatividade e Auto-Sleep (Libera RAM após 15 min sem uso) ──
+    def _run_idle_monitor():
+        while True:
+            try:
+                time.sleep(60)
+                if _check_ai_idle_and_hibernate:
+                    _check_ai_idle_and_hibernate()
+            except Exception as e_idle:
+                print(f"[SisGAB IDLE MONITOR ERR] {e_idle}", flush=True)
 
-    t_warmup = threading.Thread(target=_warmup_ai_models, daemon=True, name="SisGAB-AIWarmup")
-    t_warmup.start()
+    t_idle = threading.Thread(target=_run_idle_monitor, daemon=True, name="SisGAB-AIIdleMonitor")
+    t_idle.start()
+    print("💤 [SisGAB 2.0] Monitor de Auto-Sleep facial ativo (libera RAM após 15 min de inatividade).", flush=True)
 
     yield
 

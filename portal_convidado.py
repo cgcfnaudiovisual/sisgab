@@ -47,13 +47,32 @@ def _get_brasao_cgcfn_src():
         pass
     return '/assets/brasao_cgcfn.png'
 
-# ── MOTOR INSIGHTFACE DEDICADO A SELFIES (Sub-200ms com det_size=224x224) ────
-_SELFIE_APP_SINGLETON = None
-_SELFIE_APP_LOCK = threading.Lock()
+# ── CONTROLE DE ATIVIDADE & HIBERNAÇÃO AUTOMÁTICA (AUTO-SLEEP) ───────────────
+_LAST_AI_ACTIVITY_TIME = 0.0
+_IDLE_TIMEOUT_SECONDS = 15 * 60 # 15 minutos de inatividade
+
+def _touch_ai_activity():
+    global _LAST_AI_ACTIVITY_TIME
+    _LAST_AI_ACTIVITY_TIME = time.time()
+
+def _check_ai_idle_and_hibernate():
+    global _SELFIE_APP_SINGLETON, _LAST_AI_ACTIVITY_TIME
+    if _SELFIE_APP_SINGLETON is None:
+        return
+    if _LAST_AI_ACTIVITY_TIME > 0 and (time.time() - _LAST_AI_ACTIVITY_TIME > _IDLE_TIMEOUT_SECONDS):
+        with _SELFIE_APP_LOCK:
+            if _SELFIE_APP_SINGLETON is not None:
+                print("[PORTAL_IA] 💤 Inatividade de 15 minutos detectada. Hibernando motor facial e liberando memória RAM...", flush=True)
+                _SELFIE_APP_SINGLETON = None
+                _EVENT_EMBEDDINGS_CACHE.clear()
+                import gc
+                gc.collect()
+                print("[PORTAL_IA] 🍃 Memória RAM liberada com sucesso (Motor em repouso)!", flush=True)
 
 def _get_selfie_app():
     """Retorna motor InsightFace ultrarrápido otimizado para CPU (det_size=320x320)."""
     global _SELFIE_APP_SINGLETON
+    _touch_ai_activity()
     if _SELFIE_APP_SINGLETON is not None:
         return _SELFIE_APP_SINGLETON
     with _SELFIE_APP_LOCK:

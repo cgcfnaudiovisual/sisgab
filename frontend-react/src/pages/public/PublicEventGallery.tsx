@@ -86,8 +86,10 @@ export const PublicEventGallery: React.FC = () => {
 
   const loadRealEventData = async () => {
     try {
-      setLoading(true);
       const targetId = Number(eventId) || 50;
+
+      // 🚀 Aquecimento Antecipado Silencioso (JIT Warmup ao abrir a página)
+      fetch(`/api/portal/warmup?event_id=${targetId}`, { method: 'POST' }).catch(() => {});
 
       // 1. Tenta carregar fotos e dados diretamente da API dinâmica do Google Drive do evento
       try {
