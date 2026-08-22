@@ -430,6 +430,26 @@ async def api_portal_photos(event_id: str):
         return JSONResponse({'ok': False, 'message': 'Evento não encontrado.', 'photos': []}, status_code=404)
     return JSONResponse(res)
 
+@app.api_route("/api/portal/warmup", methods=["GET", "POST"])
+async def api_portal_warmup(event_id: str = "50"):
+    """
+    Pré-aquecimento Just-in-Time (JIT) assíncrono disparado no clique do botão de selfie.
+    Carrega o modelo buffalo_m e a matriz do evento na RAM em background enquanto o usuário tira a foto.
+    """
+    def _do_warmup():
+        try:
+            if _get_selfie_app:
+                _get_selfie_app()
+            if _get_event_matrix and event_id:
+                _get_event_matrix(str(event_id))
+            return True
+        except Exception as e:
+            print(f"[WARMUP_ERR] {e}")
+            return False
+
+    asyncio.create_task(asyncio.to_thread(_do_warmup))
+    return JSONResponse({'ok': True, 'message': 'Aquecimento Just-in-Time iniciado em background.'})
+
 @app.post("/api/portal/match")
 async def api_portal_match(
     event_id: str = Form(...),

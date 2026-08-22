@@ -792,6 +792,8 @@ export const PublicEventGallery: React.FC = () => {
                 onClick={() => {
                   setShowFacialFinder(true);
                   setSelectedPhotoFile(null);
+                  const targetId = Number(eventId) === 1 ? 50 : (Number(eventId) || 50);
+                  fetch(`/api/portal/warmup?event_id=${targetId}`, { method: 'POST' }).catch(() => {});
                 }}
                 className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-[#00e5ff] text-[#00e5ff] text-xs font-bold transition-all hover:scale-105"
               >

@@ -62,7 +62,7 @@ def _get_selfie_app():
         try:
             from insightface.app import FaceAnalysis
             app_selfie = FaceAnalysis(
-                name='buffalo_l',
+                name='buffalo_m',
                 allowed_modules=['detection', 'recognition']
             )
             app_selfie.prepare(ctx_id=-1, det_size=(320, 320))
@@ -72,10 +72,10 @@ def _get_selfie_app():
             app_selfie.get(dummy)
             
             _SELFIE_APP_SINGLETON = app_selfie
-            print('[PORTAL_IA] 🚀 Motor Selfie Otimizado (buffalo_l, det_size=320x320) pronto em RAM!')
+            print('[PORTAL_IA] 🚀 Motor Selfie Otimizado (buffalo_m, det_size=320x320) pronto em RAM!')
             return _SELFIE_APP_SINGLETON
         except Exception as e:
-            print(f'[PORTAL_IA] ❌ Falha ao inicializar Motor Selfie: {e}')
+            print(f'[PORTAL_IA] ❌ Falha ao inicializar Motor Selfie buffalo_m: {e}')
             return None
 
 # Pré-inicialização sob demanda (sem thread eager para economizar RAM na VPS)
