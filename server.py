@@ -82,6 +82,22 @@ async def lifespan(app_instance: FastAPI):
     t_idle.start()
     print("💤 [SisGAB 2.0] Monitor de Auto-Sleep facial ativo (libera RAM após 15 min de inatividade).", flush=True)
 
+    # ── Pré-aquecimento em Background para Respostas Imediatas ──
+    def _do_initial_warmup():
+        try:
+            time.sleep(2)
+            print("🧠 [SisGAB 2.0] Pré-aquecendo motor facial buffalo_m e matrizes na RAM em background...", flush=True)
+            if _get_selfie_app:
+                _get_selfie_app()
+            if _get_event_matrix:
+                _get_event_matrix("50")
+            print("🚀 [SisGAB 2.0] IA de Biometria Facial 100% pronta na RAM para buscas instantâneas!", flush=True)
+        except Exception as e_w:
+            print(f"[SisGAB WARMUP ERR] {e_w}", flush=True)
+
+    t_warm = threading.Thread(target=_do_initial_warmup, daemon=True, name="SisGAB-AIWarmup")
+    t_warm.start()
+
     yield
 
     # ── SHUTDOWN ──
