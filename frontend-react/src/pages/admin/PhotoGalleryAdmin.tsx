@@ -2007,9 +2007,15 @@ export const PhotoGalleryAdmin: React.FC = () => {
 
       {/* ── 7. MODAL LIGHTBOX HD COM METADADOS COMPLETOS DA IA ── */}
       {lightboxPhoto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-in fade-in">
-          <div className="max-w-4xl w-full p-5 rounded-3xl bg-[#0b1222] border-2 border-[#c5a059]/50 space-y-4 shadow-2xl text-xs">
-            <div className="flex items-center justify-between">
+        <div
+          onClick={() => setLightboxPhoto(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/95 backdrop-blur-md animate-in fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-6xl w-full p-5 rounded-3xl bg-[#0b1222] border-2 border-[#c5a059]/50 space-y-4 shadow-2xl text-xs max-h-[95vh] flex flex-col"
+          >
+            <div className="flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2 truncate max-w-md">
                 <span className="text-xs font-black text-white truncate">
                   ⚓ {lightboxPhoto.filename}
@@ -2025,19 +2031,25 @@ export const PhotoGalleryAdmin: React.FC = () => {
               </button>
             </div>
 
-            {/* Imagem Ampliada */}
-            <div className="rounded-2xl overflow-hidden max-h-[60vh] flex items-center justify-center bg-black/90">
+            {/* Imagem Ampliada HD */}
+            <div className="relative flex-1 w-full min-h-0 flex items-center justify-center bg-black/95 rounded-2xl overflow-hidden p-2">
               <img
-                src={lightboxPhoto.thumbnail_url || lightboxPhoto.url}
+                src={
+                  lightboxPhoto.drive_file_id
+                    ? `https://drive.google.com/thumbnail?id=${lightboxPhoto.drive_file_id}&sz=w1920`
+                    : lightboxPhoto.url?.includes('sz=w600')
+                    ? lightboxPhoto.url.replace('sz=w600', 'sz=w1920')
+                    : lightboxPhoto.url || lightboxPhoto.thumbnail_url
+                }
                 alt={lightboxPhoto.filename}
                 referrerPolicy="no-referrer"
-                className="max-h-[58vh] w-auto object-contain rounded-lg"
+                className="h-full w-full max-h-[68vh] object-contain rounded-xl drop-shadow-2xl select-none"
               />
             </div>
 
             {/* Descrição e Tags Geradas pela IA */}
             {lightboxPhoto.ai_tagged && lightboxPhoto.ai_description ? (
-              <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
+              <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 space-y-2 shrink-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-[#00e5ff] font-bold text-xs">
                     <Sparkles className="w-3.5 h-3.5 text-amber-300" />

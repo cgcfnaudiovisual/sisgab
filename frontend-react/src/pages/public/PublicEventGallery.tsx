@@ -583,6 +583,21 @@ export const PublicEventGallery: React.FC = () => {
     return base.filter((p) => p.filename.toLowerCase().includes(searchQuery.toLowerCase()));
   }, [photos, selecaoPhotos, filteredPhotos, activeTab, searchQuery, selfieTaken]);
 
+  const getHdPhotoUrl = (photo: PhotoItem | null): string => {
+    if (!photo) return '';
+    const fid = photo.drive_file_id || photo.id;
+    if (fid && fid.length >= 25 && !fid.startsWith('/')) {
+      return `https://drive.google.com/thumbnail?id=${fid}&sz=w1920`;
+    }
+    if (photo.url && photo.url.startsWith('http')) {
+      if (photo.url.includes('sz=w600') || photo.url.includes('sz=w800') || photo.url.includes('sz=w1400')) {
+        return photo.url.replace(/sz=w\d+/, 'sz=w1920');
+      }
+      return photo.url;
+    }
+    return photo.thumbnail_url || photo.url;
+  };
+
   return (
     <div className="min-h-screen bg-[#040810] text-slate-100 p-4 sm:p-6 md:p-8 flex flex-col justify-between selection:bg-[#c5a059]/30 selection:text-[#e5c07b]">
       <div className="max-w-6xl w-full mx-auto space-y-6">
@@ -1075,13 +1090,24 @@ export const PublicEventGallery: React.FC = () => {
 
       {/* 🖼️ Modal Lightbox Imersivo com Setas de Navegação (Anterior / Próxima) */}
       {selectedPhoto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/95 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="max-w-6xl w-full p-3 sm:p-5 rounded-3xl bg-[#0b1222] border-2 border-[#c5a059]/40 space-y-3 shadow-2xl flex flex-col max-h-[96vh]">
+        <div
+          onClick={() => setSelectedPhoto(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/95 backdrop-blur-md animate-in fade-in duration-150"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-7xl w-full p-3 sm:p-5 rounded-3xl bg-[#0b1222] border-2 border-[#c5a059]/50 space-y-3 shadow-2xl flex flex-col h-[94vh] max-h-[96vh]"
+          >
             <div className="flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2 truncate max-w-md">
                 <span className="text-xs sm:text-sm font-black text-white truncate">
                   ⚓ {selectedPhoto.filename}
                 </span>
+                {(selectedPhoto.is_destaque_top20 || selectedPhoto.is_selecao || selectedPhoto.categoria === 'selecao') && (
+                  <span className="px-2 py-0.5 rounded bg-[#c5a059] text-slate-950 font-black text-[10px]">
+                    ⭐ SELEÇÃO
+                  </span>
+                )}
                 {selectedPhoto.similarity !== undefined && (
                   <span className="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-400 font-mono font-bold text-[10px] border border-emerald-500/40">
                     {(selectedPhoto.similarity * 100).toFixed(0)}% Match
@@ -1090,14 +1116,15 @@ export const PublicEventGallery: React.FC = () => {
               </div>
               <button
                 onClick={() => setSelectedPhoto(null)}
-                className="p-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-colors"
+                className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-colors"
+                title="Fechar (Esc)"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Imagem Ampliada com Setas de Navegação */}
-            <div className="relative flex-1 min-h-[60vh] max-h-[80vh] flex items-center justify-center bg-black/90 rounded-2xl overflow-hidden group">
+            {/* Imagem Ampliada em Tela Cheia com Setas de Navegação */}
+            <div className="relative flex-1 w-full min-h-0 flex items-center justify-center bg-black/95 rounded-2xl overflow-hidden group p-2">
               {/* Botão Foto Anterior */}
               {displayedPhotos.length > 1 && (
                 <button
@@ -1108,7 +1135,7 @@ export const PublicEventGallery: React.FC = () => {
                     const prevIdx = currentIdx > 0 ? currentIdx - 1 : displayedPhotos.length - 1;
                     setSelectedPhoto(displayedPhotos[prevIdx]);
                   }}
-                  className="absolute left-3 z-20 p-2.5 rounded-2xl bg-black/70 hover:bg-[#c5a059] text-white hover:text-slate-950 border border-slate-700/80 backdrop-blur-md shadow-xl transition-all hover:scale-110 active:scale-95"
+                  className="absolute left-3 sm:left-5 z-20 p-3 rounded-2xl bg-black/75 hover:bg-[#c5a059] text-white hover:text-slate-950 border border-slate-700/80 backdrop-blur-md shadow-2xl transition-all hover:scale-110 active:scale-95"
                   title="Foto Anterior (←)"
                 >
                   <ChevronLeft className="w-6 h-6 stroke-[3]" />
@@ -1116,10 +1143,10 @@ export const PublicEventGallery: React.FC = () => {
               )}
 
               <img
-                src={selectedPhoto.thumbnail_url || selectedPhoto.url}
+                src={getHdPhotoUrl(selectedPhoto)}
                 alt={selectedPhoto.filename}
                 referrerPolicy="no-referrer"
-                className="max-h-[78vh] w-auto max-w-full object-contain rounded-lg transition-all"
+                className="h-full w-full max-h-[78vh] object-contain rounded-xl transition-all select-none drop-shadow-2xl"
               />
 
               {/* Botão Próxima Foto */}
@@ -1132,7 +1159,7 @@ export const PublicEventGallery: React.FC = () => {
                     const nextIdx = currentIdx < displayedPhotos.length - 1 ? currentIdx + 1 : 0;
                     setSelectedPhoto(displayedPhotos[nextIdx]);
                   }}
-                  className="absolute right-3 z-20 p-2.5 rounded-2xl bg-black/70 hover:bg-[#c5a059] text-white hover:text-slate-950 border border-slate-700/80 backdrop-blur-md shadow-xl transition-all hover:scale-110 active:scale-95"
+                  className="absolute right-3 sm:right-5 z-20 p-3 rounded-2xl bg-black/75 hover:bg-[#c5a059] text-white hover:text-slate-950 border border-slate-700/80 backdrop-blur-md shadow-2xl transition-all hover:scale-110 active:scale-95"
                   title="Próxima Foto (→)"
                 >
                   <ChevronRight className="w-6 h-6 stroke-[3]" />
@@ -1166,7 +1193,7 @@ export const PublicEventGallery: React.FC = () => {
                 {/* Botão de Download Direto HD */}
                 <button
                   onClick={() => downloadSinglePhotoDirect(selectedPhoto)}
-                  className="px-5 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#d6b26b] text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-lg shadow-[#c5a059]/25 transition-all hover:scale-105"
+                  className="px-5 py-2.5 rounded-xl bg-[#c5a059] hover:bg-[#d6b26b] text-slate-950 font-black text-xs flex items-center gap-2 shadow-lg shadow-[#c5a059]/25 transition-all hover:scale-105"
                 >
                   <Download className="w-4 h-4" />
                   <span>Baixar Foto em Alta Resolução (HD)</span>
