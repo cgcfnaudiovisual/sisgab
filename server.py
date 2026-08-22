@@ -59,6 +59,23 @@ async def lifespan(app_instance: FastAPI):
     t_bot = threading.Thread(target=_start_bot_in_thread, daemon=True, name="SisGAB-TelegramBot")
     t_bot.start()
 
+    # ── Pré-aquecimento da IA na RAM para Busca Instantânea (<0.5s) ──
+    def _warmup_ai_models():
+        try:
+            print("🧠 [SisGAB 2.0] Pré-aquecendo modelos de IA InsightFace na memória RAM...", flush=True)
+            if _get_selfie_app:
+                _get_selfie_app()
+                print("✅ [SisGAB 2.0] InsightFace ativo na RAM para respostas imediatas!", flush=True)
+            if _get_event_matrix:
+                for eid in ["50", "52"]:
+                    _get_event_matrix(eid)
+                print("✅ [SisGAB 2.0] Matrizes de biometria pré-carregadas na RAM!", flush=True)
+        except Exception as e:
+            print(f"[SisGAB AI WARMUP ERR] {e}", flush=True)
+
+    t_warmup = threading.Thread(target=_warmup_ai_models, daemon=True, name="SisGAB-AIWarmup")
+    t_warmup.start()
+
     yield
 
     # ── SHUTDOWN ──

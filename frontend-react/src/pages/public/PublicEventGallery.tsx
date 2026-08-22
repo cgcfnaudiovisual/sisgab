@@ -460,10 +460,15 @@ export const PublicEventGallery: React.FC = () => {
       formData.append('event_id', String(targetId));
       formData.append('file', blob, 'selfie.jpg');
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
+
       const res = await fetch('/api/portal/match', {
         method: 'POST',
         body: formData,
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       const data = await res.json();
       if (data.ok && Array.isArray(data.matched_photos) && data.matched_photos.length > 0) {
