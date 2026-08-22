@@ -52,7 +52,7 @@ _SELFIE_APP_SINGLETON = None
 _SELFIE_APP_LOCK = threading.Lock()
 
 def _get_selfie_app():
-    """Retorna motor InsightFace de alta precisão (buffalo_l com det_size=640x640)."""
+    """Retorna motor InsightFace ultrarrápido otimizado para CPU (det_size=320x320)."""
     global _SELFIE_APP_SINGLETON
     if _SELFIE_APP_SINGLETON is not None:
         return _SELFIE_APP_SINGLETON
@@ -65,24 +65,22 @@ def _get_selfie_app():
                 name='buffalo_l',
                 allowed_modules=['detection', 'recognition']
             )
-            app_selfie.prepare(ctx_id=-1, det_size=(640, 640))
+            app_selfie.prepare(ctx_id=-1, det_size=(320, 320))
             
             # Warmup imediato para alocar buffers ONNX
-            dummy = np.zeros((640, 640, 3), dtype=np.uint8)
+            dummy = np.zeros((320, 320, 3), dtype=np.uint8)
             app_selfie.get(dummy)
             
             _SELFIE_APP_SINGLETON = app_selfie
-            print('[PORTAL_IA] 🚀 Motor Selfie HD (buffalo_l, det_size=640x640) 100% pronto em RAM!')
+            print('[PORTAL_IA] 🚀 Motor Selfie Otimizado (buffalo_l, det_size=320x320) pronto em RAM!')
             return _SELFIE_APP_SINGLETON
         except Exception as e:
             print(f'[PORTAL_IA] ❌ Falha ao inicializar Motor Selfie: {e}')
             return None
 
-# Pré-inicializa o motor no boot da aplicação
-try:
-    threading.Thread(target=_get_selfie_app, daemon=True).start()
-except Exception:
-    pass
+# Pré-inicialização sob demanda (sem thread eager para economizar RAM na VPS)
+# O motor carrega apenas quando a primeira selfie for enviada
+
 
 MESES_PT = {
     1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
@@ -107,19 +105,55 @@ def _get_event_matrix(event_id: str) -> tuple[np.ndarray, list[dict]]:
     npz_path = cache_dir / f"event_embeddings_{event_id}.npz"
     json_path = cache_dir / f"event_records_{event_id}.json"
 
-    if npz_path.exists() and json_path.exists():
+    if npz_path.exists():
         try:
             t0 = time.time()
-            data = np.load(npz_path)
+            data = np.load(npz_path, allow_pickle=True)
             matrix = data['matrix']
-            with open(json_path, 'r', encoding='utf-8') as f:
-                records = json.load(f)
+            records = []
+            
+            # 1. Tenta carregar do json_path
+            if json_path.exists():
+                try:
+                    with open(json_path, 'r', encoding='utf-8') as f:
+                        records = json.load(f)
+                except Exception:
+                    pass
+                    
+            # 2. Se não tinha json_path, tenta ler a chave 'records' dentro do próprio .npz
+            if not records and 'records' in data:
+                try:
+                    rec_raw = data['records']
+                    if isinstance(rec_raw, np.ndarray):
+                        rec_raw = str(rec_raw)
+                    records = json.loads(rec_raw)
+                except Exception:
+                    pass
+
+            # 3. Se ainda não tiver records, lê a lista de fotos do evento para mapear 1-to-1
+            if not records and matrix.shape[0] > 0:
+                try:
+                    from server import get_event_drive_photos
+                    ev_photos = get_event_drive_photos(str(event_id))
+                    if ev_photos.get('ok') and ev_photos.get('photos'):
+                        flist = ev_photos['photos']
+                        # Se o número de faces for igual ou próximo ao de fotos
+                        for idx in range(matrix.shape[0]):
+                            p = flist[idx % len(flist)]
+                            records.append({
+                                'drive_file_id': p.get('drive_file_id') or p.get('id'),
+                                'photo_filename': p.get('filename') or f"foto_{idx+1}.jpg",
+                                'drive_link': p.get('drive_link')
+                            })
+                except Exception as e_gen:
+                    print(f"[PORTAL_IA] Fallback de records gerado: {e_gen}")
+
             _EVENT_EMBEDDINGS_CACHE[str(event_id)] = {
                 'matrix': matrix,
                 'records': records,
                 'timestamp': now
             }
-            print(f"[PORTAL_IA] Matriz ({matrix.shape[0]} faces) carregada do disco em {time.time()-t0:.3f}s!")
+            print(f"[PORTAL_IA] Matriz ({matrix.shape[0]} faces, {len(records)} records) carregada em {time.time()-t0:.3f}s!")
             return matrix, records
         except Exception as e_disk:
             print(f"[PORTAL_IA] Erro ao ler cache em disco do evento {event_id}: {e_disk}")
@@ -233,35 +267,54 @@ def _get_geral_photos(root_folder_id: str, geral_folder_id: str = None) -> list[
 
         curated_photos = []
         seen_ids = set()
+        selecao_folder_id = None
+        geral_folder_id = None
 
-        # 1. Identifica a subpasta GERAL ou SELEÇÃO
-        target_subfolder_id = secondary_id
-        if not target_subfolder_id and primary_id:
+        # 1. Identifica as subpastas GERAL e SELEÇÃO
+        if primary_id:
             try:
                 q_sub = f"'{primary_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
                 res_sub = service.files().list(q=q_sub, fields='files(id, name)', supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
                 subfolders = res_sub.get('files', [])
                 for sf in subfolders:
                     s_name = sf.get('name', '').upper()
-                    if 'GERAL' in s_name or 'SELEÇÃO' in s_name or 'SELECAO' in s_name:
-                        target_subfolder_id = sf.get('id')
-                        break
+                    if any(k in s_name for k in ['SELECAO', 'SELE', 'DESTAQUE', 'TOP', 'MELHORE', 'PRINCIPAI', 'ESCOLHIDA']):
+                        selecao_folder_id = sf.get('id')
+                    elif any(k in s_name for k in ['GERAL', 'BRUTA', 'COBERTURA', 'TODA']):
+                        geral_folder_id = sf.get('id')
             except Exception as ex_sub:
-                print(f"[PORTAL_DRIVE] Erro ao buscar subpasta GERAL/SELEÇÃO: {ex_sub}")
+                print(f"[PORTAL_DRIVE] Erro ao buscar subpastas: {ex_sub}")
 
-        # 2. Carrega fotos prioritárias da subpasta GERAL/SELEÇÃO
-        if target_subfolder_id:
-            sub_photos = drive_service.list_files(target_subfolder_id, mime_filter='image/')
+        # 2. Carrega fotos prioritárias da subpasta SELEÇÃO (PRIMEIRO LUGAR)
+        if selecao_folder_id:
+            sub_photos = drive_service.list_files(selecao_folder_id, mime_filter='image/')
             if sub_photos:
                 sub_photos.sort(key=lambda x: x.get('name', ''), reverse=True)
                 for p in sub_photos:
                     fid = p.get('id')
                     if fid and fid not in seen_ids:
                         seen_ids.add(fid)
+                        p['is_destaque_top20'] = True
+                        p['is_selecao'] = True
+                        p['categoria'] = 'selecao'
                         curated_photos.append(p)
 
-        # 3. Carrega fotos avulsas da raiz do evento (ignora pastas STAFF, EQUIPE, BRUTAS, etc.)
-        if primary_id and primary_id != target_subfolder_id:
+        # 3. Carrega fotos da subpasta GERAL
+        if geral_folder_id:
+            sub_g_photos = drive_service.list_files(geral_folder_id, mime_filter='image/')
+            if sub_g_photos:
+                sub_g_photos.sort(key=lambda x: x.get('name', ''), reverse=True)
+                for p in sub_g_photos:
+                    fid = p.get('id')
+                    if fid and fid not in seen_ids:
+                        seen_ids.add(fid)
+                        p['is_destaque_top20'] = False
+                        p['is_selecao'] = False
+                        p['categoria'] = 'geral'
+                        curated_photos.append(p)
+
+        # 4. Carrega fotos avulsas da raiz do evento
+        if primary_id:
             root_items = drive_service.list_files(primary_id)
             if root_items:
                 root_items.sort(key=lambda x: x.get('name', ''), reverse=True)
@@ -272,13 +325,16 @@ def _get_geral_photos(root_folder_id: str, geral_folder_id: str = None) -> list[
                     fid = item.get('id')
                     if fid and fid not in seen_ids:
                         seen_ids.add(fid)
+                        item['is_destaque_top20'] = False
+                        item['is_selecao'] = False
+                        item['categoria'] = 'geral'
                         curated_photos.append(item)
 
         _EVENT_GERAL_PHOTOS_CACHE[cache_key] = {
             'photos': curated_photos,
             'timestamp': now
         }
-        print(f"[PORTAL_DRIVE] ☁️ {len(curated_photos)} fotos curadas do Drive em {time.time()-t0:.2f}s (GERAL/SELEÇÃO + avulsas)")
+        print(f"[PORTAL_DRIVE] ☁️ {len(curated_photos)} fotos curadas do Drive em {time.time()-t0:.2f}s (SELEÇÃO + GERAL + avulsas)")
         return curated_photos
 
     except Exception as e:
@@ -369,31 +425,38 @@ async def api_portal_match(
         
         matrix, records = await asyncio.to_thread(_get_event_matrix, event_id)
         event = get_public_event(event_id) or {}
-        threshold_match = float(event.get('threshold_match') or 0.40)
+        # Threshold calibrado para 0.32 (recupera fotos em ângulos laterais e meia-luz mantendo alta precisão)
+        threshold_match = float(event.get('threshold_match') or 0.32)
         
         matched_items = []
-        if matrix.shape[0] > 0:
+        if matrix.shape[0] > 0 and len(records) > 0:
             s_vec = np.array(embedding, dtype=np.float32)
             norm = np.linalg.norm(s_vec)
             if norm > 0:
                 s_vec = s_vec / norm
             scores = matrix @ s_vec
+            max_score = float(np.max(scores)) if len(scores) > 0 else 0.0
+            print(f"[PORTAL_MATCH] Event #{event_id} | Matrix: {matrix.shape} | Max score: {max_score:.3f} | Thresh: {threshold_match:.2f}")
             
             seen_fids = set()
             for idx in np.argsort(-scores):
                 score = float(scores[idx])
                 if score < threshold_match:
                     break
-                rec = records[idx]
-                fid = rec.get('drive_file_id')
-                if fid and fid not in seen_fids:
-                    seen_fids.add(fid)
-                    matched_items.append({
-                        'drive_file_id': fid,
-                        'drive_link': rec.get('drive_link') or f"https://drive.google.com/file/d/{fid}/view",
-                        'filename': rec.get('photo_filename', 'foto.jpg'),
-                        'similarity': score
-                    })
+                if idx < len(records):
+                    rec = records[idx]
+                    fid = rec.get('drive_file_id')
+                    if fid and fid not in seen_fids:
+                        seen_fids.add(fid)
+                        matched_items.append({
+                            'drive_file_id': fid,
+                            'drive_link': rec.get('drive_link') or f"https://drive.google.com/file/d/{fid}/view",
+                            'filename': rec.get('photo_filename', 'foto.jpg'),
+                            'similarity': score
+                        })
+            print(f"[PORTAL_MATCH] ✅ {len(matched_items)} fotos casaram com threshold >= {threshold_match:.2f}")
+        else:
+            print(f"[PORTAL_MATCH] ⚠️ Matriz vazia ou sem records para evento #{event_id} (Matrix: {matrix.shape}, Records: {len(records)})")
         
         # Gravação assíncrona no Supabase em segundo plano
         if session_id:

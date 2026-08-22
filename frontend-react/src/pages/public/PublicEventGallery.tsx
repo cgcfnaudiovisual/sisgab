@@ -39,6 +39,9 @@ interface PhotoItem {
   drive_link?: string;
   similarity?: number;
   is_destaque_top20?: boolean;
+  is_selecao?: boolean;
+  categoria?: 'selecao' | 'geral' | string;
+  origem_pasta?: string;
 }
 
 export const PublicEventGallery: React.FC = () => {
@@ -59,6 +62,7 @@ export const PublicEventGallery: React.FC = () => {
   const [selectedPhoto, setSelectedPhoto] = useState<PhotoItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'selecao' | 'todas'>('selecao');
   
   // Seleção múltipla de fotos
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -112,24 +116,31 @@ export const PublicEventGallery: React.FC = () => {
             const cachedDestaquesRaw = localStorage.getItem(`sisgab_destaques_${targetId}`);
             const cachedDestaques: string[] = cachedDestaquesRaw ? JSON.parse(cachedDestaquesRaw) : [];
 
-            const mapped = data.photos.map((p: any) => {
+            const mapped: PhotoItem[] = data.photos.map((p: any) => {
               const isDest = cachedDestaques.includes(String(p.id)) || 
                              cachedDestaques.includes(String(p.drive_file_id)) || 
                              p.is_destaque_top20 || 
+                             p.is_selecao ||
                              p.destaque || 
+                             p.categoria === 'selecao' ||
                              false;
               return {
                 ...p,
                 is_destaque_top20: isDest,
+                is_selecao: isDest,
+                categoria: isDest ? 'selecao' : (p.categoria || 'geral'),
               };
             });
 
-            // Ordena colocando DESTAQUES primeiro
+            // Ordena colocando SELEÇÃO / DESTAQUES no topo
             mapped.sort((a: PhotoItem, b: PhotoItem) => {
               if (a.is_destaque_top20 && !b.is_destaque_top20) return -1;
               if (!a.is_destaque_top20 && b.is_destaque_top20) return 1;
               return 0;
             });
+
+            const hasSelecao = mapped.some((p) => p.is_destaque_top20 || p.is_selecao || p.categoria === 'selecao');
+            setActiveTab(hasSelecao ? 'selecao' : 'todas');
 
             setPhotos(mapped);
             setFilteredPhotos(mapped);
@@ -318,6 +329,16 @@ export const PublicEventGallery: React.FC = () => {
     }
   };
 
+  // Download da Seleção Oficial / Destaques
+  const handleDownloadSelecao = () => {
+    const targetPhotos = photos.filter((p) => p.is_destaque_top20 || p.is_selecao || p.categoria === 'selecao');
+    if (targetPhotos.length === 0) {
+      toast.warning('Nenhuma foto encontrada na pasta Seleção.');
+      return;
+    }
+    startSequentialDownload(targetPhotos);
+  };
+
   // Download do Pacote Selecionado
   const handleDownloadSelected = () => {
     const count = selectedIds.size;
@@ -328,8 +349,8 @@ export const PublicEventGallery: React.FC = () => {
 
   // Download de Todas as Fotos Exibidas
   const handleDownloadAll = () => {
-    if (displayedPhotos.length === 0) return;
-    startSequentialDownload(displayedPhotos);
+    if (photos.length === 0) return;
+    startSequentialDownload(photos);
   };
 
   const cancelBatchDownload = () => {
@@ -539,9 +560,23 @@ export const PublicEventGallery: React.FC = () => {
     toast.info('Exibindo todo o acervo do evento.');
   };
 
-  const displayedPhotos = filteredPhotos.filter((p) =>
-    searchQuery ? p.filename.toLowerCase().includes(searchQuery.toLowerCase()) : true
-  );
+  const selecaoPhotos = React.useMemo(() => {
+    return photos.filter((p) => p.is_destaque_top20 || p.is_selecao || p.categoria === 'selecao');
+  }, [photos]);
+
+  const displayedPhotos = React.useMemo(() => {
+    if (selfieTaken) {
+      return filteredPhotos.filter((p) =>
+        searchQuery ? p.filename.toLowerCase().includes(searchQuery.toLowerCase()) : true
+      );
+    }
+    let base = photos;
+    if (activeTab === 'selecao' && selecaoPhotos.length > 0) {
+      base = selecaoPhotos;
+    }
+    if (!searchQuery.trim()) return base;
+    return base.filter((p) => p.filename.toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [photos, selecaoPhotos, filteredPhotos, activeTab, searchQuery, selfieTaken]);
 
   return (
     <div className="min-h-screen bg-[#040810] text-slate-100 p-4 sm:p-6 md:p-8 flex flex-col justify-between selection:bg-[#c5a059]/30 selection:text-[#e5c07b]">
@@ -725,7 +760,7 @@ export const PublicEventGallery: React.FC = () => {
                 {selfieTaken ? '🎯 SUAS FOTOS IDENTIFICADAS (IA)' : 'REGISTRO FOTOGRÁFICO OFICIAL COMSOC'}
               </p>
               <p className="text-xs text-slate-300">
-                {displayedPhotos.length} fotos em alta resolução prontas para visualização e download direto.
+                {displayedPhotos.length} fotos {activeTab === 'selecao' && selecaoPhotos.length > 0 && !selfieTaken ? 'na Seleção Oficial' : 'no acervo'} prontas para visualização e download em HD.
               </p>
             </div>
           </div>
@@ -738,10 +773,10 @@ export const PublicEventGallery: React.FC = () => {
                   setShowFacialFinder(true);
                   setSelectedPhotoFile(null);
                 }}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d6b26b] hover:brightness-110 text-slate-950 font-black text-xs shadow-lg shadow-[#c5a059]/25 transition-all hover:scale-105 active:scale-95"
+                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-[#00e5ff] text-[#00e5ff] text-xs font-bold transition-all hover:scale-105"
               >
-                <Bot className="w-4 h-4" />
-                <span>Localizar Minhas Fotos (Foto / Selfie)</span>
+                <Bot className="w-4 h-4 text-[#00e5ff]" />
+                <span>Localizar Minhas Fotos (Selfie)</span>
               </button>
             ) : (
               <button
@@ -753,16 +788,28 @@ export const PublicEventGallery: React.FC = () => {
               </button>
             )}
 
-            {/* BOTÃO 2: BAIXAR PACOTE COMPLETO */}
+            {/* BOTÃO 2: BAIXAR SELEÇÃO OFICIAL (SE HOUVER FOTOS EM SELEÇÃO) */}
+            {selecaoPhotos.length > 0 && (
+              <button
+                onClick={handleDownloadSelecao}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d6b26b] hover:brightness-110 text-slate-950 font-black text-xs shadow-lg shadow-[#c5a059]/25 transition-all hover:scale-105 active:scale-95"
+                title="Baixar todas as fotos selecionadas e destaques do evento em alta resolução"
+              >
+                <Sparkles className="w-4 h-4 text-slate-950" />
+                <span>Baixar Seleção ({selecaoPhotos.length} Fotos)</span>
+              </button>
+            )}
+
+            {/* BOTÃO 3: BAIXAR PACOTE COMPLETO */}
             <button
               onClick={handleDownloadAll}
               className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-[#c5a059] text-white font-bold text-xs shadow-md transition-all hover:scale-105 active:scale-95"
             >
               <Download className="w-4 h-4 text-[#c5a059]" />
-              <span>Baixar Pacote ({displayedPhotos.length} Fotos)</span>
+              <span>Baixar Pacote ({photos.length} Fotos)</span>
             </button>
 
-            {/* BOTÃO 3: ABRIR GOOGLE DRIVE */}
+            {/* BOTÃO 4: ABRIR GOOGLE DRIVE */}
             {driveUrl && (
               <a
                 href={driveUrl}
@@ -776,6 +823,51 @@ export const PublicEventGallery: React.FC = () => {
             )}
           </div>
         </div>
+
+        {/* ── BARRA DE CATEGORIAS: SELEÇÃO & DESTAQUES VS ACERVO COMPLETO ── */}
+        {!selfieTaken && (
+          <div className="flex items-center justify-center sm:justify-start gap-2 p-1.5 rounded-2xl bg-[#09101f] border border-slate-800/80">
+            <button
+              onClick={() => {
+                setActiveTab('selecao');
+                setCurrentPage(1);
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${
+                activeTab === 'selecao'
+                  ? 'bg-gradient-to-r from-[#c5a059] to-[#d6b26b] text-slate-950 shadow-md shadow-[#c5a059]/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>⭐ SELEÇÃO & DESTAQUES</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === 'selecao' ? 'bg-slate-950/30 text-slate-950' : 'bg-slate-800 text-slate-300'
+              }`}>
+                {selecaoPhotos.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveTab('todas');
+                setCurrentPage(1);
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${
+                activeTab === 'todas'
+                  ? 'bg-[#00e5ff] text-slate-950 shadow-md shadow-[#00e5ff]/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              }`}
+            >
+              <Images className="w-3.5 h-3.5" />
+              <span>📸 ACERVO COMPLETO</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === 'todas' ? 'bg-slate-950/30 text-slate-950' : 'bg-slate-800 text-slate-300'
+              }`}>
+                {photos.length}
+              </span>
+            </button>
+          </div>
+        )}
 
         {/* ── BARRA DE SELEÇÃO MÚLTIPLA & AÇÕES (QUANDO HÁ FOTOS SELECIONADAS) ── */}
         <div className="p-3.5 rounded-2xl bg-[#0b1222] border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
@@ -869,17 +961,17 @@ export const PublicEventGallery: React.FC = () => {
                             )}
                           </button>
 
-                          {/* Badge de Destaque Oficial */}
-                          {photo.is_destaque_top20 && (
+                          {/* Badge de Seleção / Destaque Oficial */}
+                          {(photo.is_destaque_top20 || photo.is_selecao || photo.categoria === 'selecao') && (
                             <div className="absolute top-2 left-10 px-2 py-0.5 rounded-lg bg-[#c5a059] text-slate-950 font-black text-[10px] shadow-lg shadow-[#c5a059]/40 z-10 flex items-center gap-1">
                               <span>⭐</span>
-                              <span>DESTAQUE</span>
+                              <span>SELEÇÃO</span>
                             </div>
                           )}
 
                           {/* Badge de Similaridade (Match de IA) */}
                           {photo.similarity !== undefined && (
-                            <div className={`absolute top-2 ${photo.is_destaque_top20 ? 'left-32' : 'left-10'} px-2 py-0.5 rounded-lg bg-black/80 border border-emerald-500/60 text-emerald-400 font-mono font-bold text-[10px] backdrop-blur-md z-10`}>
+                            <div className={`absolute top-2 ${photo.is_destaque_top20 || photo.is_selecao || photo.categoria === 'selecao' ? 'left-32' : 'left-10'} px-2 py-0.5 rounded-lg bg-black/80 border border-emerald-500/60 text-emerald-400 font-mono font-bold text-[10px] backdrop-blur-md z-10`}>
                               {(photo.similarity * 100).toFixed(0)}% Match
                             </div>
                           )}
