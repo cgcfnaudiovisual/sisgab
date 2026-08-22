@@ -366,10 +366,10 @@ def _extract_selfie_embedding(image_bytes: bytes) -> tuple[bool, str, np.ndarray
     if img_bgr is None:
         return False, "❌ Não foi possível carregar a imagem enviada.", None
 
-    # Redimensiona mantendo resolução suficiente para o detector (máx 1024px)
+    # Redimensiona mantendo resolução ideal para selfie rápida e leve (máx 640px)
     h, w = img_bgr.shape[:2]
-    if max(h, w) > 1024:
-        scale = 1024.0 / max(h, w)
+    if max(h, w) > 640:
+        scale = 640.0 / max(h, w)
         import cv2
         img_bgr = cv2.resize(img_bgr, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
@@ -382,10 +382,10 @@ def _extract_selfie_embedding(image_bytes: bytes) -> tuple[bool, str, np.ndarray
         faces = app_face.get(img_bgr)
         print(f'[PORTAL_IA] ⚡ Detecção facial HD em {time.time()-t0:.3f}s → {len(faces)} rosto(s)')
 
-        # Se não detectou na primeira tentativa, tenta com escala adaptativa
-        if not faces and max(h, w) > 640:
+        # Se não detectou na primeira tentativa, tenta com 480px
+        if not faces and max(h, w) > 480:
             import cv2
-            scale2 = 640.0 / max(h, w)
+            scale2 = 480.0 / max(h, w)
             img_smaller = cv2.resize(img_bgr, (int(w * scale2), int(h * scale2)))
             faces = app_face.get(img_smaller)
             print(f'[PORTAL_IA] ⚡ Detecção fallback multi-escala → {len(faces)} rosto(s)')
