@@ -601,194 +601,47 @@ export const PublicEventGallery: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#040810] text-slate-100 p-4 sm:p-6 md:p-8 flex flex-col justify-between selection:bg-[#c5a059]/30 selection:text-[#e5c07b]">
-      <div className="max-w-6xl w-full mx-auto space-y-6">
-        {/* ⚓ Topo Imponente: Brasão Oficial CGCFN e Identificação do Evento Real */}
-        <header className="text-center space-y-2 pt-2">
-          <img
-            src={
-              (() => {
-                const custom = localStorage.getItem('sisgab_custom_logo');
-                if (custom && custom !== 'null' && custom !== 'undefined' && custom.trim() !== '') {
-                  return custom;
-                }
-                return defaultBrasao || '/brasaocgcfn.png';
-              })()
-            }
-            alt="Brasão Oficial CGCFN"
-            onError={(e) => {
-              const target = e.currentTarget as HTMLImageElement;
-              if (target.src.includes('/brasaocgcfn.png')) return;
-              target.onerror = null;
-              target.src = '/brasaocgcfn.png';
-            }}
-            className="w-24 h-24 sm:w-28 sm:h-28 mx-auto object-contain drop-shadow-[0_0_20px_rgba(197,160,89,0.75)]"
-          />
-          <div>
-            <span className="text-[11px] font-black text-[#c5a059] tracking-widest uppercase">
-              MARINHA DO BRASIL • COMANDO-GERAL DO CORPO DE FUZILEIROS NAVAIS
-            </span>
-            <h1 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight mt-1">
-              {eventName}
-            </h1>
-            <div className="flex items-center justify-center gap-2 text-xs text-slate-400 mt-1">
-              <span>📅 {eventDate}</span>
-              <span>•</span>
-              <span className="text-[#00e5ff] font-semibold">📍 {eventLocation}</span>
-            </div>
-          </div>
-        </header>
-
-        {/* ── PAINEL DE RECONHECIMENTO FACIAL (EXPANSÍVEL POR BOTÃO OU URL) ── */}
-        {showFacialFinder && !selfieTaken && (
-          <div className="p-6 rounded-3xl bg-gradient-to-b from-[#0e172a] via-[#09101f] to-[#040810] border-2 border-[#c5a059]/50 text-center space-y-4 shadow-2xl shadow-black/80 animate-in fade-in">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
-              <div className="flex items-center gap-2 text-[#e5c07b]">
-                <Bot className="w-5 h-5 text-[#c5a059]" />
-                <span className="text-xs font-black uppercase tracking-wider">
-                  Localizador Facial Inteligente • Biometria CGCFN
-                </span>
-              </div>
-              <button
-                onClick={() => {
-                  stopCamera();
-                  setSelectedPhotoFile(null);
-                  setShowFacialFinder(false);
-                }}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {selectedPhotoFile ? (
-              /* Prévia da Foto Escolhida pelo Convidado (Sem faixa/laser azul) */
-              <div className="space-y-4 max-w-xs mx-auto">
-                <div className="w-48 h-48 mx-auto rounded-full overflow-hidden border-4 border-[#c5a059] shadow-2xl relative bg-black">
-                  <img
-                    src={selectedPhotoFile}
-                    alt="Foto de Referência"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs font-bold text-[#e5c07b]">
-                    {isMatching ? '🔍 Analisando biometria facial no acervo...' : 'Foto carregada'}
-                  </p>
-
-                  <div className="flex items-center justify-center gap-2">
-                    <button
-                      type="button"
-                      disabled={isMatching}
-                      onClick={() => setSelectedPhotoFile(null)}
-                      className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs disabled:opacity-50"
-                    >
-                      Voltar
-                    </button>
-                    <label className="cursor-pointer px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-bold text-xs">
-                      <span>Trocar Foto</span>
-                      <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-                    </label>
-                    <button
-                      disabled={isMatching}
-                      onClick={handleMatchUploadedPhoto}
-                      className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d6b26b] hover:brightness-110 text-slate-950 font-black text-xs shadow-lg shadow-[#c5a059]/25 disabled:opacity-50"
-                    >
-                      {isMatching ? 'Processando...' : 'Localizar Fotos'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : cameraActive ? (
-              /* Câmera / Webcam Ativa */
-              <div className="space-y-4 max-w-xs mx-auto">
-                <div className="w-48 h-48 mx-auto rounded-full overflow-hidden border-4 border-[#c5a059] shadow-2xl relative bg-black">
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover scale-x-[-1]"
-                  />
-                </div>
-                <div className="flex items-center justify-center gap-2">
-                  <button
-                    onClick={stopCamera}
-                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={captureSelfie}
-                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d6b26b] hover:brightness-110 text-slate-950 font-black text-xs shadow-lg shadow-[#c5a059]/25"
-                  >
-                    Capturar e Localizar
-                  </button>
-                </div>
-
-                {/* Opção Alternativa Rápida para Carregar Arquivo se a Câmera falhar ou preferir galeria */}
-                <div className="pt-2 border-t border-slate-800/80">
-                  <label className="cursor-pointer px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-[#c5a059] text-slate-300 hover:text-white font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all shadow-md">
-                    <Upload className="w-3.5 h-3.5 text-[#c5a059]" />
-                    <span>Câmera não funcionou? Escolher Foto do Celular / Arquivo</span>
-                    <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-                  </label>
-                </div>
-              </div>
-            ) : (
-              /* Escolha entre Câmera Selfie ou Upload da Galeria (Design Sóbrio & Militar) */
-              <div className="space-y-4 py-2">
-                <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
-                  Tire uma selfie ou selecione uma foto do rosto para que a IA analise o acervo e entregue instantaneamente apenas as fotos em que você aparece.
-                </p>
-                <div className="flex items-center justify-center gap-3 flex-wrap pt-1">
-                  <button
-                    onClick={startCamera}
-                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d6b26b] hover:brightness-110 text-slate-950 font-black text-xs shadow-lg shadow-[#c5a059]/20 transition-all inline-flex items-center gap-2"
-                  >
-                    <Camera className="w-4 h-4" />
-                    <span>Tirar Selfie com Câmera</span>
-                  </button>
-                  <label className="cursor-pointer px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-[#c5a059]/60 hover:border-[#00e5ff] text-[#e5c07b] hover:text-white font-bold text-xs shadow-lg transition-all inline-flex items-center gap-2">
-                    <Upload className="w-4 h-4 text-[#c5a059]" />
-                    <span>Escolher Foto do Celular / PC</span>
-                    <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-                  </label>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Loading de Busca Biometrica */}
-        {isMatching && (
-          <div className="py-8 text-center space-y-3">
-            <div className="w-10 h-10 mx-auto border-3 border-[#c5a059] border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-xs font-bold text-[#e5c07b]">
-              Processando biometria e buscando suas fotos no acervo do evento...
-            </p>
-          </div>
-        )}
-
-        {/* 🎖️ Barra de Ações & Controles do Portal */}
-        <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-[#0d1628] via-[#0b1222] to-[#0d1628] border border-[#c5a059]/40 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xl">
+    <div className="min-h-screen bg-[#040810] text-slate-100 p-3 sm:p-5 md:p-6 flex flex-col justify-between selection:bg-[#c5a059]/30 selection:text-[#e5c07b]">
+      <div className="max-w-7xl w-full mx-auto space-y-4">
+        {/* ⚓ Topo Compacto & Imponente: Brasão Oficial CGCFN e Identificação do Evento */}
+        <header className="flex flex-col sm:flex-row items-center justify-between gap-4 py-2 px-4 rounded-2xl bg-gradient-to-r from-[#0d1628]/80 via-[#0b1222]/90 to-[#0d1628]/80 border border-[#c5a059]/30 backdrop-blur-sm shadow-xl">
           <div className="flex items-center gap-3 text-center sm:text-left">
-            <div className="w-12 h-12 rounded-2xl bg-[#c5a059]/10 border border-[#c5a059] flex items-center justify-center text-xl shrink-0">
-              ⚓
-            </div>
+            <img
+              src={
+                (() => {
+                  const custom = localStorage.getItem('sisgab_custom_logo');
+                  if (custom && custom !== 'null' && custom !== 'undefined' && custom.trim() !== '') {
+                    return custom;
+                  }
+                  return defaultBrasao || '/brasaocgcfn.png';
+                })()
+              }
+              alt="Brasão Oficial CGCFN"
+              onError={(e) => {
+                const target = e.currentTarget as HTMLImageElement;
+                if (target.src.includes('/brasaocgcfn.png')) return;
+                target.onerror = null;
+                target.src = '/brasaocgcfn.png';
+              }}
+              className="w-12 h-12 sm:w-14 sm:h-14 object-contain drop-shadow-[0_0_12px_rgba(197,160,89,0.6)] shrink-0"
+            />
             <div>
-              <p className="text-xs font-black text-[#e5c07b] uppercase tracking-wider">
-                {selfieTaken ? '🎯 SUAS FOTOS IDENTIFICADAS (IA)' : 'REGISTRO FOTOGRÁFICO OFICIAL COMSOC'}
-              </p>
-              <p className="text-xs text-slate-300">
-                {displayedPhotos.length} fotos {activeTab === 'selecao' && selecaoPhotos.length > 0 && !selfieTaken ? 'na Seleção Oficial' : 'no acervo'} prontas para visualização e download em HD.
-              </p>
+              <span className="text-[10px] font-black text-[#c5a059] tracking-wider uppercase block">
+                MARINHA DO BRASIL • COMANDO-GERAL DO CORPO DE FUZILEIROS NAVAIS
+              </span>
+              <h1 className="text-base sm:text-lg md:text-xl font-black text-white uppercase tracking-tight leading-tight">
+                {eventName}
+              </h1>
+              <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5 flex-wrap">
+                <span>📅 {eventDate}</span>
+                <span>•</span>
+                <span className="text-[#00e5ff] font-semibold">📍 {eventLocation}</span>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-center flex-wrap">
-            {/* BOTÃO 1: RECONHECIMENTO FACIAL */}
+          {/* Botão Rápido de Selfie no Header (Sempre Visível) */}
+          <div className="flex items-center gap-2 shrink-0">
             {!selfieTaken ? (
               <button
                 onClick={() => {
@@ -797,7 +650,7 @@ export const PublicEventGallery: React.FC = () => {
                   const targetId = Number(eventId) === 1 ? 50 : (Number(eventId) || 50);
                   fetch(`/api/portal/warmup?event_id=${targetId}`, { method: 'POST' }).catch(() => {});
                 }}
-                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-[#00e5ff] text-[#00e5ff] text-xs font-bold transition-all hover:scale-105"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-[#00e5ff]/20 to-[#00b4d8]/20 hover:from-[#00e5ff]/30 hover:to-[#00b4d8]/30 border border-[#00e5ff]/60 text-[#00e5ff] hover:text-white text-xs font-black transition-all hover:scale-105 shadow-lg shadow-[#00e5ff]/10"
               >
                 <Bot className="w-4 h-4 text-[#00e5ff]" />
                 <span>Localizar Minhas Fotos (Selfie)</span>
@@ -805,91 +658,223 @@ export const PublicEventGallery: React.FC = () => {
             ) : (
               <button
                 onClick={resetToAllPhotos}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-[#00e5ff] text-[#00e5ff] text-xs font-bold transition-all"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 hover:border-[#00e5ff] text-[#00e5ff] text-xs font-bold transition-all"
               >
                 <RefreshCw className="w-4 h-4" />
                 <span>Ver Todas as {photos.length} Fotos</span>
               </button>
             )}
+          </div>
+        </header>
 
-            {/* BOTÃO 2: BAIXAR SELEÇÃO OFICIAL (SE HOUVER FOTOS EM SELEÇÃO) */}
+        {/* 🎖️ BARRA DE COMANDO UNIFICADA: Categorias + Contadores + Downloads em 1 Linha */}
+        <div className="p-2 sm:p-2.5 rounded-2xl bg-[#09101f] border border-slate-800/80 flex flex-col md:flex-row items-center justify-between gap-2 shadow-lg">
+          {/* Lado Esquerdo: Abas de Categoria */}
+          <div className="flex items-center gap-1.5 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+            {!selfieTaken ? (
+              <>
+                {selecaoPhotos.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setActiveTab('selecao');
+                      setCurrentPage(1);
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all shrink-0 ${
+                      activeTab === 'selecao'
+                        ? 'bg-gradient-to-r from-[#c5a059] to-[#d6b26b] text-slate-950 shadow-md shadow-[#c5a059]/20'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                    }`}
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>SELEÇÃO & DESTAQUES</span>
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                      activeTab === 'selecao' ? 'bg-slate-950/30 text-slate-950' : 'bg-slate-800 text-slate-300'
+                    }`}>
+                      {selecaoPhotos.length}
+                    </span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => {
+                    setActiveTab('todas');
+                    setCurrentPage(1);
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all shrink-0 ${
+                    activeTab === 'todas'
+                      ? 'bg-[#00e5ff] text-slate-950 shadow-md shadow-[#00e5ff]/20'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                  }`}
+                >
+                  <Images className="w-3.5 h-3.5" />
+                  <span>ACERVO COMPLETO</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                    activeTab === 'todas' ? 'bg-slate-950/30 text-slate-950' : 'bg-slate-800 text-slate-300'
+                  }`}>
+                    {photos.length}
+                  </span>
+                </button>
+              </>
+            ) : (
+              <div className="flex items-center gap-2 px-2 py-1">
+                <span className="text-xs font-black text-[#e5c07b]">
+                  🎯 {displayedPhotos.length} fotos encontradas onde você aparece
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Lado Direito: Botões de Download do Acervo */}
+          <div className="flex items-center gap-1.5 w-full md:w-auto justify-end flex-wrap">
             {selecaoPhotos.length > 0 && (
               <button
                 onClick={handleDownloadSelecao}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d6b26b] hover:brightness-110 text-slate-950 font-black text-xs shadow-lg shadow-[#c5a059]/25 transition-all hover:scale-105 active:scale-95"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d6b26b] hover:brightness-110 text-slate-950 font-black text-xs shadow-md shadow-[#c5a059]/20 transition-all hover:scale-105"
                 title="Baixar todas as fotos selecionadas e destaques do evento em alta resolução"
               >
-                <Sparkles className="w-4 h-4 text-slate-950" />
-                <span>Baixar Seleção ({selecaoPhotos.length} Fotos)</span>
+                <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+                <span>Baixar Seleção ({selecaoPhotos.length})</span>
               </button>
             )}
 
-            {/* BOTÃO 3: BAIXAR PACOTE COMPLETO */}
             <button
               onClick={handleDownloadAll}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-[#c5a059] text-white font-bold text-xs shadow-md transition-all hover:scale-105 active:scale-95"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-[#c5a059] text-slate-200 font-bold text-xs shadow-sm transition-all hover:scale-105"
             >
-              <Download className="w-4 h-4 text-[#c5a059]" />
-              <span>Baixar Pacote ({photos.length} Fotos)</span>
+              <Download className="w-3.5 h-3.5 text-[#c5a059]" />
+              <span>Baixar Pacote ({photos.length})</span>
             </button>
 
-            {/* BOTÃO 4: ABRIR GOOGLE DRIVE */}
             {driveUrl && (
               <a
                 href={driveUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-[#00e5ff] text-slate-300 text-xs font-bold transition-all"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-[#00e5ff] text-slate-300 text-xs font-bold transition-all"
+                title="Abrir pasta no Google Drive"
               >
-                <FolderOpen className="w-4 h-4" />
+                <FolderOpen className="w-3.5 h-3.5" />
                 <span>Drive</span>
               </a>
             )}
           </div>
         </div>
 
-        {/* ── BARRA DE CATEGORIAS: SELEÇÃO & DESTAQUES VS ACERVO COMPLETO ── */}
-        {!selfieTaken && (
-          <div className="flex items-center justify-center sm:justify-start gap-2 p-1.5 rounded-2xl bg-[#09101f] border border-slate-800/80">
-            <button
-              onClick={() => {
-                setActiveTab('selecao');
-                setCurrentPage(1);
-              }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                activeTab === 'selecao'
-                  ? 'bg-gradient-to-r from-[#c5a059] to-[#d6b26b] text-slate-950 shadow-md shadow-[#c5a059]/20'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>⭐ SELEÇÃO & DESTAQUES</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'selecao' ? 'bg-slate-950/30 text-slate-950' : 'bg-slate-800 text-slate-300'
-              }`}>
-                {selecaoPhotos.length}
-              </span>
-            </button>
+        {/* ── MODAL FLUTUANTE DE RECONHECIMENTO FACIAL (SOBREPÕE SUAVEMENTE SEM EMPURRAR A TELA) ── */}
+        {showFacialFinder && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
+            <div className="bg-[#0b1329] border-2 border-[#c5a059]/70 rounded-3xl max-w-md w-full p-6 text-center space-y-4 shadow-2xl shadow-black relative">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2 text-[#e5c07b]">
+                  <Bot className="w-5 h-5 text-[#c5a059]" />
+                  <span className="text-xs font-black uppercase tracking-wider">
+                    Localizador Facial • Biometria CGCFN
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    stopCamera();
+                    setSelectedPhotoFile(null);
+                    setShowFacialFinder(false);
+                  }}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-            <button
-              onClick={() => {
-                setActiveTab('todas');
-                setCurrentPage(1);
-              }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                activeTab === 'todas'
-                  ? 'bg-[#00e5ff] text-slate-950 shadow-md shadow-[#00e5ff]/20'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
-              }`}
-            >
-              <Images className="w-3.5 h-3.5" />
-              <span>📸 ACERVO COMPLETO</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'todas' ? 'bg-slate-950/30 text-slate-950' : 'bg-slate-800 text-slate-300'
-              }`}>
-                {photos.length}
-              </span>
-            </button>
+              {isMatching ? (
+                /* Estado: Processando Biometria */
+                <div className="py-10 text-center space-y-4">
+                  <div className="w-12 h-12 mx-auto border-3 border-[#c5a059] border-t-transparent rounded-full animate-spin"></div>
+                  <div>
+                    <p className="text-sm font-black text-[#e5c07b]">Analisando biometria facial...</p>
+                    <p className="text-xs text-slate-400 mt-1">Cruzando seu rosto com o acervo fotográfico do evento.</p>
+                  </div>
+                </div>
+              ) : selectedPhotoFile ? (
+                /* Estado: Foto Carregada */
+                <div className="space-y-4">
+                  <div className="w-40 h-40 mx-auto rounded-full overflow-hidden border-4 border-[#c5a059] shadow-2xl relative bg-black">
+                    <img
+                      src={selectedPhotoFile}
+                      alt="Foto de Referência"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  <p className="text-xs font-bold text-[#e5c07b]">Foto pronta para busca</p>
+
+                  <div className="flex items-center justify-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPhotoFile(null)}
+                      className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs"
+                    >
+                      Voltar
+                    </button>
+                    <label className="cursor-pointer px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-bold text-xs">
+                      <span>Trocar Foto</span>
+                      <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                    </label>
+                    <button
+                      onClick={handleMatchUploadedPhoto}
+                      className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d6b26b] hover:brightness-110 text-slate-950 font-black text-xs shadow-lg shadow-[#c5a059]/25"
+                    >
+                      Localizar Fotos
+                    </button>
+                  </div>
+                </div>
+              ) : cameraActive ? (
+                /* Estado: Câmera Ativa */
+                <div className="space-y-4">
+                  <div className="w-44 h-44 mx-auto rounded-full overflow-hidden border-4 border-[#c5a059] shadow-2xl relative bg-black">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover scale-x-[-1]"
+                    />
+                  </div>
+                  <div className="flex items-center justify-center gap-2">
+                    <button
+                      onClick={stopCamera}
+                      className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={captureSelfie}
+                      className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d6b26b] hover:brightness-110 text-slate-950 font-black text-xs shadow-lg shadow-[#c5a059]/25"
+                    >
+                      Capturar e Localizar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Estado Inicial: Escolha entre Câmera ou Arquivo */
+                <div className="space-y-4 py-2">
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    Tire uma selfie ou envie uma foto do rosto para encontrar instantaneamente todas as fotos em que você aparece neste evento.
+                  </p>
+                  <div className="flex flex-col gap-2.5 pt-1">
+                    <button
+                      onClick={startCamera}
+                      className="w-full py-3 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#d6b26b] hover:brightness-110 text-slate-950 font-black text-xs shadow-lg shadow-[#c5a059]/20 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Camera className="w-4 h-4" />
+                      <span>Tirar Selfie com a Câmera</span>
+                    </button>
+                    <label className="cursor-pointer w-full py-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-[#c5a059]/60 hover:border-[#00e5ff] text-[#e5c07b] hover:text-white font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-2">
+                      <Upload className="w-4 h-4 text-[#c5a059]" />
+                      <span>Escolher Foto do Celular / PC</span>
+                      <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
