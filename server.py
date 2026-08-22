@@ -9,8 +9,8 @@ import numpy as np
 from pathlib import Path
 from contextlib import asynccontextmanager
 import uvicorn
-from fastapi import FastAPI, Request, UploadFile, File, Form
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, Request, UploadFile, File, Form, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -439,11 +439,13 @@ async def api_portal_photos(event_id: str):
 @app.api_route("/api/portal/warmup", methods=["GET", "POST"])
 async def api_portal_warmup(event_id: str = "50"):
     """
-    Pré-aquecimento Just-in-Time (JIT) assíncrono disparado no clique do botão de selfie.
-    Carrega o modelo buffalo_m e a matriz do evento na RAM em background enquanto o usuário tira a foto.
+    Pré-aquecimento Just-in-Time (JIT) assíncrono disparado ao entrar na galeria.
+    Carrega o modelo buffalo_m e a matriz do evento na RAM em background de forma controlada.
     """
     def _do_warmup():
         try:
+            if _touch_ai_activity:
+                _touch_ai_activity()
             if _get_selfie_app:
                 _get_selfie_app()
             if _get_event_matrix and event_id:
@@ -454,7 +456,7 @@ async def api_portal_warmup(event_id: str = "50"):
             return False
 
     asyncio.create_task(asyncio.to_thread(_do_warmup))
-    return JSONResponse({'ok': True, 'message': 'Aquecimento Just-in-Time iniciado em background.'})
+    return JSONResponse({'ok': True, 'message': 'Aquecimento Just-in-Time ativo.'})
 
 @app.post("/api/portal/match")
 async def api_portal_match(
@@ -1001,6 +1003,179 @@ async def api_drive_save_oauth_token(request: Request):
         return JSONResponse({'ok': True, 'connection_ok': ok, 'message': msg})
     except Exception as e:
         print(f"[API_DRIVE_SAVE_TOKEN_ERR] {e}")
+        return JSONResponse({'ok': False, 'error': str(e)}, status_code=500)
+
+
+# ── FASE 3: INTEGRAÇÃO META GRAPH API (INSTAGRAM DIRECT PUBLISHING) ──
+
+@app.get("/api/instagram/config")
+async def api_instagram_get_config():
+    """Retorna o status da integração com a Meta Graph API / Instagram Graph API."""
+    try:
+        from database import get_service_db_connection, get_db_connection
+        db = get_service_db_connection() or get_db_connection()
+        
+        has_token = False
+        account_id = None
+        username = None
+        
+        if db:
+            res_t = db.table('config').select('valor').eq('chave', 'instagram_access_token').execute()
+            if res_t.data and res_t.data[0].get('valor'):
+                has_token = True
+            
+            res_a = db.table('config').select('valor').eq('chave', 'instagram_business_account_id').execute()
+            if res_a.data and res_a.data[0].get('valor'):
+                account_id = res_a.data[0]['valor']
+
+            res_u = db.table('config').select('valor').eq('chave', 'instagram_username').execute()
+            if res_u.data and res_u.data[0].get('valor'):
+                username = res_u.data[0]['valor']
+
+        return JSONResponse({
+            'ok': True,
+            'is_configured': has_token and (account_id is not None),
+            'account_id': account_id,
+            'username': username or 'COMSOC / CGCFN Oficial'
+        })
+    except Exception as e:
+        return JSONResponse({'ok': False, 'error': str(e)}, status_code=500)
+
+
+@app.post("/api/instagram/config")
+async def api_instagram_save_config(request: Request):
+    """Salva credenciais da Meta Graph API (Access Token de Longa Duração e Business Account ID)."""
+    try:
+        body = await request.json()
+        token = body.get('access_token', '').strip()
+        account_id = body.get('business_account_id', '').strip()
+        username = body.get('username', '').strip()
+
+        from database import get_service_db_connection, get_db_connection
+        db = get_service_db_connection() or get_db_connection()
+        if db:
+            if token:
+                db.table('config').upsert({'chave': 'instagram_access_token', 'valor': token}, on_conflict='chave').execute()
+            if account_id:
+                db.table('config').upsert({'chave': 'instagram_business_account_id', 'valor': account_id}, on_conflict='chave').execute()
+            if username:
+                db.table('config').upsert({'chave': 'instagram_username', 'valor': username}, on_conflict='chave').execute()
+
+        return JSONResponse({'ok': True, 'message': 'Configurações da Meta API salvas com sucesso!'})
+    except Exception as e:
+        return JSONResponse({'ok': False, 'error': str(e)}, status_code=500)
+
+
+@app.post("/api/instagram/publish")
+async def api_instagram_publish_post(request: Request):
+    """
+    Publica uma foto ou carrossel diretamente no Instagram via Meta Graph API oficial.
+    Fluxo: Container Creation -> Media Publish -> Status
+    """
+    try:
+        body = await request.json()
+        image_url = body.get('image_url', '').strip()
+        caption = body.get('caption', '').strip()
+        is_carousel = body.get('is_carousel', False)
+        children_urls = body.get('children_urls', [])
+
+        from database import get_service_db_connection, get_db_connection
+        db = get_service_db_connection() or get_db_connection()
+        
+        token = None
+        account_id = None
+        if db:
+            r_tok = db.table('config').select('valor').eq('chave', 'instagram_access_token').execute()
+            if r_tok.data and r_tok.data[0].get('valor'):
+                token = r_tok.data[0]['valor']
+            
+            r_acc = db.table('config').select('valor').eq('chave', 'instagram_business_account_id').execute()
+            if r_acc.data and r_acc.data[0].get('valor'):
+                account_id = r_acc.data[0]['valor']
+
+        if not token or not account_id:
+            return JSONResponse({
+                'ok': False,
+                'error': 'Meta Graph API não configurada. Insira o Access Token e o Instagram Business ID no Painel Admin.'
+            }, status_code=400)
+
+        # 1. Cria Container de Mídia na Meta API
+        import urllib.parse
+        import urllib.request
+
+        container_url = f"https://graph.facebook.com/v19.0/{account_id}/media"
+        
+        params = {
+            'access_token': token,
+            'caption': caption
+        }
+
+        if is_carousel and len(children_urls) > 1:
+            # Cria containers filhos
+            child_ids = []
+            for c_url in children_urls[:10]:
+                c_params = urllib.parse.urlencode({
+                    'image_url': c_url,
+                    'is_carousel_item': 'true',
+                    'access_token': token
+                }).encode('utf-8')
+                req_c = urllib.request.Request(container_url, data=c_params)
+                with urllib.request.urlopen(req_c, timeout=15) as resp_c:
+                    res_c_json = json.loads(resp_c.read().decode('utf-8'))
+                    if 'id' in res_c_json:
+                        child_ids.append(res_c_json['id'])
+
+            if not child_ids:
+                return JSONResponse({'ok': False, 'error': 'Falha ao criar itens do carrossel na Meta API.'}, status_code=500)
+
+            # Container mestre do carrossel
+            params['media_type'] = 'CAROUSEL'
+            params['children'] = ','.join(child_ids)
+        else:
+            params['image_url'] = image_url
+
+        data_post = urllib.parse.urlencode(params).encode('utf-8')
+        req = urllib.request.Request(container_url, data=data_post)
+
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            res_json = json.loads(resp.read().decode('utf-8'))
+            creation_id = res_json.get('id')
+
+        if not creation_id:
+            return JSONResponse({'ok': False, 'error': 'Não foi possível obter o Creation ID da Meta API.'}, status_code=500)
+
+        # 2. Publica o Container
+        publish_url = f"https://graph.facebook.com/v19.0/{account_id}/media_publish"
+        pub_params = urllib.parse.urlencode({
+            'creation_id': creation_id,
+            'access_token': token
+        }).encode('utf-8')
+
+        req_pub = urllib.request.Request(publish_url, data=pub_params)
+        with urllib.request.urlopen(req_pub, timeout=20) as resp_pub:
+            pub_json = json.loads(resp_pub.read().decode('utf-8'))
+            post_id = pub_json.get('id')
+
+        # 3. Notifica a equipe via Telegram
+        try:
+            from notifications_manager import notify_telegram
+            notify_telegram(
+                f"🚀 *NOVO POST PUBLICADO NO INSTAGRAM OFICIAL*\n\n"
+                f"📸 Solenidade/Evento: *{caption[:60]}...*\n"
+                f"🆔 Post ID Meta: `{post_id}`\n\n"
+                f"⚓ _SisGAB — Gestão de Mídia Social Agressiva_",
+                category='social_media'
+            )
+        except Exception as e_notif:
+            print(f"[INSTA_NOTIF_WARN] {e_notif}")
+
+        return JSONResponse({
+            'ok': True,
+            'post_id': post_id,
+            'message': 'Post publicado no Instagram com sucesso!'
+        })
+    except Exception as e:
+        print(f"[API_INSTAGRAM_PUBLISH_ERR] {e}")
         return JSONResponse({'ok': False, 'error': str(e)}, status_code=500)
 
 

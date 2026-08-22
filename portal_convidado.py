@@ -111,73 +111,79 @@ MESES_PT = {
 
 _EVENT_EMBEDDINGS_CACHE = {}
 _EVENT_GERAL_PHOTOS_CACHE = {}
+_EVENT_MATRIX_LOCK = threading.Lock()
 
 def _get_event_matrix(event_id: str) -> tuple[np.ndarray, list[dict]]:
-    """Carrega matriz NxD de embeddings do evento com cache em RAM e arquivo binário em disco (.npz)."""
+    """Carrega matriz NxD de embeddings do evento com cache em RAM e proteção de concorrência."""
     now = time.time()
     if str(event_id) in _EVENT_EMBEDDINGS_CACHE:
         cache = _EVENT_EMBEDDINGS_CACHE[str(event_id)]
         if now - cache['timestamp'] < 86400:
             return cache['matrix'], cache['records']
 
-    base_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-    cache_dir = base_dir / 'data'
-    cache_dir.mkdir(exist_ok=True)
-    npz_path = cache_dir / f"event_embeddings_{event_id}.npz"
-    json_path = cache_dir / f"event_records_{event_id}.json"
+    with _EVENT_MATRIX_LOCK:
+        if str(event_id) in _EVENT_EMBEDDINGS_CACHE:
+            cache = _EVENT_EMBEDDINGS_CACHE[str(event_id)]
+            if now - cache['timestamp'] < 86400:
+                return cache['matrix'], cache['records']
 
-    if npz_path.exists():
-        try:
-            t0 = time.time()
-            data = np.load(npz_path, allow_pickle=True)
-            matrix = data['matrix']
-            records = []
-            
-            # 1. Tenta carregar do json_path
-            if json_path.exists():
-                try:
-                    with open(json_path, 'r', encoding='utf-8') as f:
-                        records = json.load(f)
-                except Exception:
-                    pass
-                    
-            # 2. Se não tinha json_path, tenta ler a chave 'records' dentro do próprio .npz
-            if not records and 'records' in data:
-                try:
-                    rec_raw = data['records']
-                    if isinstance(rec_raw, np.ndarray):
-                        rec_raw = str(rec_raw)
-                    records = json.loads(rec_raw)
-                except Exception:
-                    pass
+        base_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+        cache_dir = base_dir / 'data'
+        cache_dir.mkdir(exist_ok=True)
+        npz_path = cache_dir / f"event_embeddings_{event_id}.npz"
+        json_path = cache_dir / f"event_records_{event_id}.json"
 
-            # 3. Se ainda não tiver records, lê a lista de fotos do evento para mapear 1-to-1
-            if not records and matrix.shape[0] > 0:
-                try:
-                    from server import get_event_drive_photos
-                    ev_photos = get_event_drive_photos(str(event_id))
-                    if ev_photos.get('ok') and ev_photos.get('photos'):
-                        flist = ev_photos['photos']
-                        # Se o número de faces for igual ou próximo ao de fotos
-                        for idx in range(matrix.shape[0]):
-                            p = flist[idx % len(flist)]
-                            records.append({
-                                'drive_file_id': p.get('drive_file_id') or p.get('id'),
-                                'photo_filename': p.get('filename') or f"foto_{idx+1}.jpg",
-                                'drive_link': p.get('drive_link')
-                            })
-                except Exception as e_gen:
-                    print(f"[PORTAL_IA] Fallback de records gerado: {e_gen}")
+        if npz_path.exists():
+            try:
+                t0 = time.time()
+                data = np.load(npz_path, mmap_mode='r')
+                matrix = np.array(data['matrix'], dtype=np.float32)
+                records = []
+                
+                # 1. Tenta carregar do json_path
+                if json_path.exists():
+                    try:
+                        with open(json_path, 'r', encoding='utf-8') as f:
+                            records = json.load(f)
+                    except Exception:
+                        pass
+                        
+                # 2. Se não tinha json_path, tenta ler a chave 'records' dentro do próprio .npz
+                if not records and 'records' in data:
+                    try:
+                        rec_raw = data['records']
+                        if isinstance(rec_raw, np.ndarray):
+                            rec_raw = str(rec_raw)
+                        records = json.loads(rec_raw)
+                    except Exception:
+                        pass
 
-            _EVENT_EMBEDDINGS_CACHE[str(event_id)] = {
-                'matrix': matrix,
-                'records': records,
-                'timestamp': now
-            }
-            print(f"[PORTAL_IA] Matriz ({matrix.shape[0]} faces, {len(records)} records) carregada em {time.time()-t0:.3f}s!")
-            return matrix, records
-        except Exception as e_disk:
-            print(f"[PORTAL_IA] Erro ao ler cache em disco do evento {event_id}: {e_disk}")
+                # 3. Se ainda não tiver records, lê a lista de fotos do evento para mapear 1-to-1
+                if not records and matrix.shape[0] > 0:
+                    try:
+                        from server import get_event_drive_photos
+                        ev_photos = get_event_drive_photos(str(event_id))
+                        if ev_photos.get('ok') and ev_photos.get('photos'):
+                            flist = ev_photos['photos']
+                            for idx in range(matrix.shape[0]):
+                                p = flist[idx % len(flist)]
+                                records.append({
+                                    'drive_file_id': p.get('drive_file_id') or p.get('id'),
+                                    'photo_filename': p.get('filename') or f"foto_{idx+1}.jpg",
+                                    'drive_link': p.get('drive_link')
+                                })
+                    except Exception as e_gen:
+                        print(f"[PORTAL_IA] Fallback de records gerado: {e_gen}")
+
+                _EVENT_EMBEDDINGS_CACHE[str(event_id)] = {
+                    'matrix': matrix,
+                    'records': records,
+                    'timestamp': now
+                }
+                print(f"[PORTAL_IA] Matriz ({matrix.shape[0]} faces, {len(records)} records) carregada em {time.time()-t0:.3f}s!")
+                return matrix, records
+            except Exception as e_disk:
+                print(f"[PORTAL_IA] Erro ao ler cache em disco do evento {event_id}: {e_disk}")
 
     try:
         from database import get_service_db_connection, get_db_connection
