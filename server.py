@@ -478,7 +478,7 @@ async def api_portal_match(
             return JSONResponse({'ok': False, 'message': msg})
         
         matrix, records = await asyncio.to_thread(_get_event_matrix, str(event_id))
-        threshold_match = 0.38
+        threshold_match = 0.32
         
         matched_items = []
         if matrix is not None and len(matrix.shape) == 2 and matrix.shape[0] > 0:
@@ -508,7 +508,8 @@ async def api_portal_match(
         return JSONResponse({
             'ok': True,
             'count': len(matched_items),
-            'matched_photos': matched_items
+            'matched_photos': matched_items,
+            'matches': matched_items
         })
     except Exception as e:
         print(f"[API_PORTAL_MATCH_ERR] {e}")
