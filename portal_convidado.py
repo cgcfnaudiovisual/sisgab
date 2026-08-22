@@ -47,7 +47,9 @@ def _get_brasao_cgcfn_src():
         pass
     return '/assets/brasao_cgcfn.png'
 
-# ── CONTROLE DE ATIVIDADE & HIBERNAÇÃO AUTOMÁTICA (AUTO-SLEEP) ───────────────
+# ── MOTOR INSIGHTFACE & CONTROLE DE AUTO-SLEEP ─────────────────────────────
+_SELFIE_APP_SINGLETON = None
+_SELFIE_APP_LOCK = threading.Lock()
 _LAST_AI_ACTIVITY_TIME = 0.0
 _IDLE_TIMEOUT_SECONDS = 15 * 60 # 15 minutos de inatividade
 
